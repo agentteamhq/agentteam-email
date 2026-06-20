@@ -1,0 +1,5 @@
+["core/default-headers"]
+enabled = ["receiver", "main", "sender"]
+addMissing = ["message-id", "date"]
+futureDate = false
+xOriginatingIP = true

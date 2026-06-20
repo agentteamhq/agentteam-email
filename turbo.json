@@ -1,0 +1,94 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": [
+    ".env"
+  ],
+  "globalEnv": [
+    "NODE_ENV",
+    "NODE_OPTIONS",
+    "NODE_COMPILE_CACHE",
+    "PATH",
+    "PUBLIC_HOSTNAME",
+    "BUILD_MINIFY",
+    "BUILD_SOURCEMAPS",
+    "BUILD_REACT_PROFILER",
+    "BUILD_ANALYZE_BUNDLE",
+    "ANALYZE_ROLLUP",
+    "DOCKER_HOST",
+    "TESTCONTAINERS_HOST_OVERRIDE",
+    "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE",
+    "TESTCONTAINERS_RYUK_DISABLED"
+  ],
+  "tasks": {
+    "build": {
+      "cache": true,
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        "dist/**",
+        ".cache/**"
+      ]
+    },
+    "clean": {
+      "cache": false
+    },
+    "dev": {
+      "cache": false,
+      "dependsOn": [
+        "^dev:build"
+      ],
+      "interruptible": true,
+      "persistent": true
+    },
+    "dev:build": {
+      "dependsOn": [
+        "^dev:build",
+        "build"
+      ],
+      "outputs": [
+        "dist/**"
+      ]
+    },
+    "format": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": []
+    },
+    "lint": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": []
+    },
+    "preview": {
+      "cache": false,
+      "dependsOn": [
+        "build",
+        "^build"
+      ],
+      "outputs": [],
+      "persistent": true
+    },
+    "test": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": []
+    },
+    "test:integration": {
+      "cache": false,
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": []
+    },
+    "typecheck": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": []
+    }
+  }
+}

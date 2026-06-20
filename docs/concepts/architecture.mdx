@@ -1,0 +1,28 @@
+---
+title: "Architecture"
+description: "The runtime parts and network boundaries for AgentTeam Email."
+---
+
+AgentTeam Email has one public application boundary: the authenticated web
+server from `apps/web-server`.
+
+## Runtime parts
+
+- web server from `apps/web-server`
+- internal mail control service from `apps/mail-control-service`
+- Cloudflare Email Worker from `apps/cloudflare-email-worker`
+- internal MongoDB and Redis
+- internal WildDuck, Haraka, Rspamd, and ZoneMTA
+- R2-compatible archive storage
+
+## Network boundaries
+
+Browsers and public API clients reach only the authenticated web server.
+
+The web server reaches the mail control service over the internal network.
+
+The mail control service, WildDuck, Haraka, ZoneMTA, Rspamd, MongoDB, Redis, and
+internal SMTP listeners are not public services.
+
+Mail administration, message review, Cloudflare integration, and credential
+management belong behind the authenticated web server.

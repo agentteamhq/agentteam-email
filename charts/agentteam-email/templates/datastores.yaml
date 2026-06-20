@@ -1,0 +1,254 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.names.mongodb }}
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.mongodb "component" "database") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+{{ include "agentteam-email.selectorLabels" (dict "root" . "name" .Values.names.mongodb) | nindent 4 }}
+  ports:
+    - name: mongo
+      port: 27017
+      targetPort: mongo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.names.mongodb }}
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.mongodb "component" "database") | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+{{ include "agentteam-email.selectorLabels" (dict "root" . "name" .Values.names.mongodb) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.mongodb "component" "database") | nindent 8 }}
+    spec:
+      securityContext:
+{{ toYaml .Values.podSecurityContext | nindent 8 }}
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
+      containers:
+        - name: mongodb
+          image: {{ include "agentteam-email.image" .Values.images.mongodb | quote }}
+          imagePullPolicy: {{ .Values.images.mongodb.pullPolicy }}
+{{ include "agentteam-email.securityContext" . | nindent 10 }}
+          command:
+            - mongod
+            - --config
+            - /etc/mongod.conf
+          ports:
+            - name: mongo
+              containerPort: 27017
+          startupProbe:
+            tcpSocket:
+              port: mongo
+            failureThreshold: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            tcpSocket:
+              port: mongo
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: mongo
+            periodSeconds: 20
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: mongodb-data
+              mountPath: /data/db
+            - name: mongodb-config
+              mountPath: /etc/mongod.conf
+              subPath: mongod.conf
+          {{- with .Values.resources.mongodb }}
+          resources:
+{{ toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: mongodb-data
+{{ include "agentteam-email.storageVolumeSource" (dict "root" . "name" "mongodb") | nindent 10 }}
+        - name: mongodb-config
+          configMap:
+            name: atemail-mongodb-config
+{{ include "agentteam-email.podScheduling" . | nindent 6 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.names.redis }}
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.redis "component" "cache") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+{{ include "agentteam-email.selectorLabels" (dict "root" . "name" .Values.names.redis) | nindent 4 }}
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.names.redis }}
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.redis "component" "cache") | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+{{ include "agentteam-email.selectorLabels" (dict "root" . "name" .Values.names.redis) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.redis "component" "cache") | nindent 8 }}
+    spec:
+      securityContext:
+{{ toYaml .Values.podSecurityContext | nindent 8 }}
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
+      containers:
+        - name: redis
+          image: {{ include "agentteam-email.image" .Values.images.redis | quote }}
+          imagePullPolicy: {{ .Values.images.redis.pullPolicy }}
+{{ include "agentteam-email.securityContext" . | nindent 10 }}
+          command:
+            - redis-server
+            - /usr/local/etc/redis/redis.conf
+          ports:
+            - name: redis
+              containerPort: 6379
+          startupProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            failureThreshold: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            periodSeconds: 20
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+            - name: redis-config
+              mountPath: /usr/local/etc/redis/redis.conf
+              subPath: redis.conf
+          {{- with .Values.resources.redis }}
+          resources:
+{{ toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: redis-data
+{{ include "agentteam-email.storageVolumeSource" (dict "root" . "name" "redis") | nindent 10 }}
+        - name: redis-config
+          configMap:
+            name: atemail-redis-config
+{{ include "agentteam-email.podScheduling" . | nindent 6 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.names.rspamd }}
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.rspamd "component" "mail-filter") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+{{ include "agentteam-email.selectorLabels" (dict "root" . "name" .Values.names.rspamd) | nindent 4 }}
+  ports:
+    - name: http
+      port: 11333
+      targetPort: rspamd
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.names.rspamd }}
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.rspamd "component" "mail-filter") | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+{{ include "agentteam-email.selectorLabels" (dict "root" . "name" .Values.names.rspamd) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.rspamd "component" "mail-filter") | nindent 8 }}
+    spec:
+      securityContext:
+{{ toYaml .Values.podSecurityContext | nindent 8 }}
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
+      containers:
+        - name: rspamd
+          image: {{ include "agentteam-email.image" .Values.images.rspamd | quote }}
+          imagePullPolicy: {{ .Values.images.rspamd.pullPolicy }}
+{{ include "agentteam-email.securityContext" . | nindent 10 }}
+          ports:
+            - name: rspamd
+              containerPort: 11333
+          readinessProbe:
+            tcpSocket:
+              port: rspamd
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: rspamd
+            periodSeconds: 20
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: rspamd-data
+              mountPath: /var/lib/rspamd
+            - name: rspamd-config
+              mountPath: /etc/rspamd/local.d
+          {{- with .Values.resources.rspamd }}
+          resources:
+{{ toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: rspamd-data
+{{ include "agentteam-email.storageVolumeSource" (dict "root" . "name" "rspamd") | nindent 10 }}
+        - name: rspamd-config
+          configMap:
+            name: atemail-rspamd-config
+{{ include "agentteam-email.podScheduling" . | nindent 6 }}

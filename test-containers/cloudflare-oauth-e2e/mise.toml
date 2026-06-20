@@ -1,0 +1,4 @@
+[tasks.test]
+description = "Run the fake Cloudflare OAuth/API E2E harness"
+dir = "{{config_root}}"
+run = "pnpm test:cloudflare-oauth"

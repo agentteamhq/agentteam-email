@@ -1,0 +1,20 @@
+AgentTeam Email has been rendered for namespace {{ include "agentteam-email.namespace" . }}.
+
+Core rollout checks:
+  kubectl rollout status deployment/{{ .Values.names.mongodb }} -n {{ include "agentteam-email.namespace" . }} --timeout=180s
+  kubectl rollout status deployment/{{ .Values.names.redis }} -n {{ include "agentteam-email.namespace" . }} --timeout=180s
+  kubectl rollout status deployment/{{ .Values.names.wildduck }} -n {{ include "agentteam-email.namespace" . }} --timeout=180s
+  kubectl rollout status deployment/{{ .Values.names.haraka }} -n {{ include "agentteam-email.namespace" . }} --timeout=180s
+  kubectl rollout status deployment/{{ .Values.names.zonemta }} -n {{ include "agentteam-email.namespace" . }} --timeout=180s
+  kubectl rollout status deployment/{{ .Values.names.mailControlService }} -n {{ include "agentteam-email.namespace" . }} --timeout=180s
+  kubectl rollout status deployment/{{ .Values.names.webServer }} -n {{ include "agentteam-email.namespace" . }} --timeout=180s
+
+Tunnel mode: {{ .Values.tunnel.provider }}
+{{- if eq .Values.tunnel.provider "cloudflared" }}
+Cloudflared rollout check:
+  kubectl rollout status deployment/{{ .Values.names.cloudflared }} -n {{ include "agentteam-email.namespace" . }} --timeout=180s
+{{- end }}
+
+The Cloudflare Email Worker should send inbound notifications to the full
+tunnel.externalUrl value:
+  {{ .Values.tunnel.externalUrl.value }}

@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "jsx": "preserve",
+    "lib": ["ESNext", "DOM", "DOM.Iterable", "DOM.AsyncIterable"],
+    "paths": {
+      "@/*": ["./src/*"],
+      "#runtime-public-env": ["./src/runtime-public-env"]
+    },
+    "types": ["node", "vite/client", "@responsive-image/vite-plugin/client", "react", "react-dom"]
+  },
+  "exclude": ["dist", "node_modules"],
+  "extends": "../../tsconfig.base.json",
+  "include": ["src/**/*", ".storybook/**/*.ts", "vite.config.ts", "vite.node-entry.config.ts", "vitest.storybook.config.ts"]
+}

@@ -1,0 +1,191 @@
+{
+  "name": "@main/backend",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/src/index.d.ts",
+        "import": "./dist/index.mjs"
+      },
+      "default": "./dist/index.mjs"
+    },
+    "./vars.public": {
+      "import": {
+        "types": "./dist/src/vars.public.d.ts",
+        "import": "./dist/vars.public.mjs"
+      },
+      "default": "./dist/vars.public.mjs"
+    },
+    "./vars.build": {
+      "import": {
+        "types": "./dist/src/vars.build.d.ts",
+        "import": "./dist/vars.build.mjs"
+      },
+      "default": "./dist/vars.build.mjs"
+    },
+    "./server-only": {
+      "import": {
+        "types": "./dist/src/server-only.d.ts",
+        "import": "./dist/server-only.mjs"
+      },
+      "default": "./dist/server-only.mjs"
+    },
+    "./routes/signin": {
+      "import": {
+        "types": "./dist/src/routes/signin.d.ts",
+        "import": "./dist/signin.mjs"
+      },
+      "default": "./dist/signin.mjs"
+    },
+    "./routes/webapp": {
+      "import": {
+        "types": "./dist/src/routes/webapp.d.ts",
+        "import": "./dist/webapp.mjs"
+      },
+      "default": "./dist/webapp.mjs"
+    }
+  },
+  "sideEffects": true,
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "vite build && tsc --emitDeclarationOnly --declaration --declarationMap --noEmit false --noCheck --outDir dist && api-extractor run --local --verbose",
+    "clean": "rimraf --glob dist .turbo node_modules/.cache node_modules/.vite* .eslintcache *.tsbuildinfo",
+    "dev": "vite build --watch",
+    "format": "pnpm run lint --fix && pnpm exec prettier --write ./src",
+    "lint": "eslint --quiet ${ESLINT_CACHE_FLAG:---cache} --concurrency ${ESLINT_CONCURRENCY:-auto} --config ./eslint.config.mjs ./src",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "typecheck:debug": "tsc --noEmit --listFiles"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@agendajs/mongo-backend": "catalog:",
+    "@better-auth-ui/core": "catalog:",
+    "@better-auth-ui/react": "catalog:",
+    "@better-auth/api-key": "catalog:",
+    "@better-auth/core": "catalog:",
+    "@better-auth/mongo-adapter": "catalog:",
+    "@better-auth/oauth-provider": "catalog:",
+    "@better-auth/passkey": "catalog:",
+    "@better-auth/utils": "catalog:",
+    "@better-fetch/fetch": "catalog:",
+    "@casl/ability": "catalog:",
+    "@date-fns/tz": "catalog:",
+    "@date-fns/utc": "catalog:",
+    "@elysiajs/openapi": "catalog:",
+    "@main/common": "workspace:*",
+    "@main/db": "workspace:*",
+    "@noble/ciphers": "catalog:",
+    "@noble/hashes": "catalog:",
+    "@react-email/components": "catalog:",
+    "@react-email/render": "catalog:",
+    "@scure/base": "catalog:",
+    "@sinclair/typebox": "catalog:",
+    "@tanstack/react-query": "catalog:",
+    "@types/debug": "catalog:",
+    "@types/lodash.startcase": "catalog:",
+    "@types/node": "catalog:",
+    "@types/nodemailer": "catalog:",
+    "@types/react": "catalog:",
+    "agenda": "catalog:",
+    "better-auth": "catalog:",
+    "better-auth-audit-logs": "catalog:",
+    "better-call": "catalog:",
+    "cloudflare": "catalog:",
+    "clsx": "catalog:",
+    "cookie-es": "catalog:",
+    "csrf": "catalog:",
+    "d3-scale": "catalog:",
+    "d3-shape": "catalog:",
+    "date-fns": "catalog:",
+    "debug": "catalog:",
+    "elysia": "catalog:",
+    "file-type": "catalog:",
+    "immer": "catalog:",
+    "jose": "catalog:",
+    "lodash.startcase": "catalog:",
+    "magic-string": "catalog:",
+    "mongodb": "catalog:",
+    "mongoose": "catalog:",
+    "nodemailer": "catalog:",
+    "openapi-fetch": "catalog:",
+    "openapi-types": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "safe-stable-stringify": "catalog:",
+    "tailwind-merge": "catalog:",
+    "tailwindcss": "catalog:",
+    "type-fest": "catalog:",
+    "uglify-js": "catalog:",
+    "unique-names-generator": "catalog:",
+    "uuid": "catalog:",
+    "vite": "catalog:",
+    "ws": "catalog:",
+    "zod": "catalog:"
+  },
+  "peerDependencies": {
+    "@agendajs/mongo-backend": "*",
+    "@better-auth-ui/core": "*",
+    "@better-auth-ui/react": "*",
+    "@better-auth/api-key": "*",
+    "@better-auth/core": "*",
+    "@better-auth/mongo-adapter": "*",
+    "@better-auth/oauth-provider": "*",
+    "@better-auth/passkey": "*",
+    "@better-auth/utils": "*",
+    "@better-fetch/fetch": "*",
+    "@casl/ability": "*",
+    "@date-fns/tz": "*",
+    "@date-fns/utc": "*",
+    "@elysiajs/openapi": "*",
+    "@main/common": "workspace:*",
+    "@main/db": "workspace:*",
+    "@noble/ciphers": "*",
+    "@noble/hashes": "*",
+    "@react-email/components": "*",
+    "@react-email/render": "*",
+    "@scure/base": "*",
+    "@sinclair/typebox": "*",
+    "@tanstack/react-query": "*",
+    "@types/lodash.startcase": "*",
+    "agenda": "*",
+    "better-auth": "*",
+    "better-auth-audit-logs": "*",
+    "better-call": "*",
+    "cloudflare": "*",
+    "clsx": "*",
+    "cookie-es": "*",
+    "csrf": "*",
+    "d3-scale": "*",
+    "d3-shape": "*",
+    "date-fns": "*",
+    "debug": "*",
+    "elysia": "*",
+    "file-type": "*",
+    "immer": "*",
+    "jose": "*",
+    "lodash.startcase": "*",
+    "magic-string": "*",
+    "mongodb": "*",
+    "mongoose": "*",
+    "nodemailer": "*",
+    "openapi-fetch": "*",
+    "openapi-types": "*",
+    "react": "*",
+    "react-dom": "*",
+    "safe-stable-stringify": "*",
+    "tailwind-merge": "*",
+    "tailwindcss": "*",
+    "type-fest": "*",
+    "uglify-js": "*",
+    "unique-names-generator": "*",
+    "uuid": "*",
+    "ws": "*",
+    "zod": "*"
+  }
+}

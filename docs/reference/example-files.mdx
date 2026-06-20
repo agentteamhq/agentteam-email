@@ -1,0 +1,57 @@
+---
+title: "Example files"
+description: "How this docs site stores static example files and renders them in pages."
+---
+
+import EmailRoutingExample from "/snippets/generated/examples/self-host/email-routing-json.mdx";
+
+Canonical example files live under `examples/` in the Mintlify docs root. They
+are committed as normal flat files and Mintlify serves supported static files
+from the same path on the deployed docs site.
+
+For example, this repository stores the Email Routing example at:
+
+```text
+docs/examples/self-host/email-routing.json
+```
+
+Helm values examples are stored at:
+
+```text
+docs/examples/helm/
+```
+
+On the deployed site, the raw file is available at:
+
+```text
+/examples/self-host/email-routing.json
+```
+
+Use the raw file path when users need to download or copy the file directly:
+
+[Open the raw Email Routing example](/examples/self-host/email-routing.json)
+
+[Open the raw Helm basic values example](/examples/helm/values-basic.yaml)
+
+## Render an example in a page
+
+Mintlify does not support importing `.json` files directly into MDX as raw
+content. To render a canonical example file as a code block, regenerate the MDX
+snippet:
+
+```bash
+mise run //docs:snippets
+```
+
+Then import the generated snippet into the page:
+
+```mdx title="reference/example-files.mdx"
+import EmailRoutingExample from "/snippets/generated/examples/self-host/email-routing-json.mdx";
+
+<EmailRoutingExample />
+```
+
+The rendered code viewer below is generated from
+`docs/examples/self-host/email-routing.json`.
+
+<EmailRoutingExample />

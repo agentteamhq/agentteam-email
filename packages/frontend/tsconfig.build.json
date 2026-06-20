@@ -1,0 +1,14 @@
+{
+  "exclude": [
+    "dist",
+    "node_modules",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/**/*.spec.ts",
+    "src/**/*.spec.tsx",
+    "src/**/*.stories.ts",
+    "src/**/*.stories.tsx"
+  ],
+  "extends": "./tsconfig.json",
+  "include": ["src/**/*"]
+}

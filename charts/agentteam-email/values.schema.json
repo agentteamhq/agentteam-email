@@ -1,0 +1,215 @@
+{
+  "$defs": {
+    "image": {
+      "properties": {
+        "digest": { "minLength": 1, "type": "string" },
+        "pullPolicy": { "minLength": 1, "type": "string" },
+        "repository": { "minLength": 1, "type": "string" },
+        "tag": { "minLength": 1, "type": "string" }
+      },
+      "type": "object"
+    },
+    "keyRef": {
+      "additionalProperties": false,
+      "properties": {
+        "key": { "minLength": 1, "type": "string" },
+        "name": { "minLength": 1, "type": "string" }
+      },
+      "required": ["name", "key"],
+      "type": "object"
+    },
+    "persistentService": {
+      "properties": {
+        "accessModes": {
+          "items": { "minLength": 1, "type": "string" },
+          "minItems": 1,
+          "type": "array"
+        },
+        "existingClaim": { "type": "string" },
+        "size": { "minLength": 1, "type": "string" }
+      },
+      "type": "object"
+    },
+    "valueSource": {
+      "anyOf": [{ "required": ["value"] }, { "required": ["valueFrom"] }],
+      "properties": {
+        "value": { "type": ["string", "number", "boolean"] },
+        "valueFrom": {
+          "additionalProperties": false,
+          "oneOf": [{ "required": ["secretKeyRef"] }, { "required": ["configMapKeyRef"] }],
+          "properties": {
+            "configMapKeyRef": { "$ref": "#/$defs/keyRef" },
+            "secretKeyRef": { "$ref": "#/$defs/keyRef" }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "additionalProperties": true,
+  "properties": {
+    "affinity": { "type": "object" },
+    "bundledConfig": {
+      "properties": {
+        "enabled": { "type": "boolean" }
+      },
+      "type": "object"
+    },
+    "cloudflare": {
+      "properties": {
+        "accountId": { "$ref": "#/$defs/valueSource" },
+        "apiBaseUrl": { "minLength": 1, "type": "string" },
+        "apiToken": { "$ref": "#/$defs/valueSource" },
+        "worker": {
+          "properties": {
+            "archiveBucket": { "$ref": "#/$defs/valueSource" },
+            "scriptName": { "minLength": 1, "type": "string" }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "cloudflared": {
+      "properties": {
+        "metricsPort": { "maximum": 65535, "minimum": 1, "type": "integer" },
+        "replicas": { "minimum": 0, "type": "integer" },
+        "tunnelToken": { "$ref": "#/$defs/valueSource" }
+      },
+      "type": "object"
+    },
+    "containerSecurityContext": { "type": "object" },
+    "controlApi": {
+      "properties": {
+        "token": { "$ref": "#/$defs/valueSource" }
+      },
+      "type": "object"
+    },
+    "extraEnv": { "type": "object" },
+    "extraLabels": {
+      "properties": {
+        "cloudflared": { "additionalProperties": { "type": "string" }, "type": "object" },
+        "mailControlService": { "additionalProperties": { "type": "string" }, "type": "object" },
+        "namespace": { "additionalProperties": { "type": "string" }, "type": "object" },
+        "webServer": { "additionalProperties": { "type": "string" }, "type": "object" },
+        "wildduck": { "additionalProperties": { "type": "string" }, "type": "object" }
+      },
+      "type": "object"
+    },
+    "extraVolumeMounts": { "type": "object" },
+    "extraVolumes": { "type": "object" },
+    "fullnameOverride": { "type": "string" },
+    "images": {
+      "properties": {
+        "cloudflared": { "$ref": "#/$defs/image" },
+        "haraka": { "$ref": "#/$defs/image" },
+        "mailControlService": { "$ref": "#/$defs/image" },
+        "mongodb": { "$ref": "#/$defs/image" },
+        "redis": { "$ref": "#/$defs/image" },
+        "rspamd": { "$ref": "#/$defs/image" },
+        "tailscale": { "$ref": "#/$defs/image" },
+        "webServer": { "$ref": "#/$defs/image" },
+        "wildduck": { "$ref": "#/$defs/image" },
+        "zonemta": { "$ref": "#/$defs/image" }
+      },
+      "type": "object"
+    },
+    "ingress": { "type": "object" },
+    "mailRuntime": {
+      "properties": {
+        "feedbackMailboxPassword": { "$ref": "#/$defs/valueSource" },
+        "loopSecret": { "$ref": "#/$defs/valueSource" },
+        "zonemtaRelayPassword": { "$ref": "#/$defs/valueSource" }
+      },
+      "type": "object"
+    },
+    "nameOverride": { "type": "string" },
+    "names": { "type": "object" },
+    "namespace": {
+      "properties": {
+        "create": { "type": "boolean" },
+        "name": { "minLength": 1, "type": "string" }
+      },
+      "type": "object"
+    },
+    "nodeSelector": { "type": "object" },
+    "objectStorage": {
+      "properties": {
+        "accessKeyId": { "$ref": "#/$defs/valueSource" },
+        "bucket": { "$ref": "#/$defs/valueSource" },
+        "endpoint": { "$ref": "#/$defs/valueSource" },
+        "region": { "$ref": "#/$defs/valueSource" },
+        "secretAccessKey": { "$ref": "#/$defs/valueSource" }
+      },
+      "type": "object"
+    },
+    "outbound": {
+      "properties": {
+        "provider": { "$ref": "#/$defs/valueSource" }
+      },
+      "type": "object"
+    },
+    "persistence": {
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "harakaQueue": { "$ref": "#/$defs/persistentService" },
+        "mongodb": { "$ref": "#/$defs/persistentService" },
+        "redis": { "$ref": "#/$defs/persistentService" },
+        "rspamd": { "$ref": "#/$defs/persistentService" },
+        "storageClassName": { "type": "string" }
+      },
+      "type": "object"
+    },
+    "podSecurityContext": { "type": "object" },
+    "publicHostname": { "minLength": 1, "type": "string" },
+    "resources": { "type": "object" },
+    "service": { "type": "object" },
+    "ses": {
+      "properties": {
+        "accessKeyId": { "$ref": "#/$defs/valueSource" },
+        "region": { "$ref": "#/$defs/valueSource" },
+        "secretAccessKey": { "$ref": "#/$defs/valueSource" }
+      },
+      "type": "object"
+    },
+    "tailscale": {
+      "properties": {
+        "authKey": { "$ref": "#/$defs/valueSource" },
+        "certDomain": { "type": "string" },
+        "hostname": { "minLength": 1, "type": "string" },
+        "localAddrPort": { "minLength": 1, "type": "string" }
+      },
+      "type": "object"
+    },
+    "tolerations": { "type": "array" },
+    "tunnel": {
+      "properties": {
+        "externalUrl": { "$ref": "#/$defs/valueSource" },
+        "hmacSecret": { "$ref": "#/$defs/valueSource" },
+        "listenUrl": { "$ref": "#/$defs/valueSource" },
+        "provider": {
+          "enum": ["none", "tailscale", "cloudflared"],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "webServer": {
+      "properties": {
+        "authSecret": { "$ref": "#/$defs/valueSource" },
+        "encryptionKey": { "$ref": "#/$defs/valueSource" }
+      },
+      "type": "object"
+    },
+    "wildduck": {
+      "properties": {
+        "accessControlSecret": { "$ref": "#/$defs/valueSource" },
+        "adminAccessToken": { "$ref": "#/$defs/valueSource" }
+      },
+      "type": "object"
+    }
+  },
+  "type": "object"
+}

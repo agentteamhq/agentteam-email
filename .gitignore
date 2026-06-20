@@ -1,0 +1,120 @@
+**/.nodecc/
+**/tmp/
+**/*.tmp
+**/dist/
+# Do not ignore generic bin/ paths: some source assets live under imagefs .../bin.
+# Build artifacts must be redirected to dist/ (already ignored above).
+# **/bin/
+
+# OS files
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+*~
+*.swp
+*.swo
+.directory
+
+# JavaScript / Node.js
+node_modules/
+*.tsbuildinfo
+.npm/
+.pnpm-store/
+.yarn/
+.eslintcache
+.parcel-cache/
+.turbo/
+.vite/
+.vite-temp/
+.vitest/
+storybook-static/
+.playwright-cli/
+playwright-report/
+test-results/
+coverage/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+.eggs/
+.venv/
+venv/
+.uv/
+.python-version
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+*.cover
+*.coverage
+.coverage.*
+
+# Go
+.gocache/
+**/.gocache/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+vendor/.git
+
+# Archives
+*.tar
+*.tar.gz
+*.tgz
+*.tar.bz2
+*.tar.xz
+*.zip
+*.rar
+*.7z
+*.gz
+*.bz2
+*.xz
+*.zst
+
+# Binaries / media
+*.bin
+*.o
+*.a
+*.lib
+*.out
+*.class
+*.jar
+*.war
+*.wasm
+
+# Editors / IDEs
+.idea/
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.settings/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Logs
+*.log
+logs/
+
+# Misc
+.cache/
+/data/
+*.pid
+
+.tmp.json

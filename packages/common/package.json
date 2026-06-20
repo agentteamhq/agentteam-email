@@ -1,0 +1,53 @@
+{
+  "name": "@main/common",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/src/index.d.ts",
+        "import": "./dist/index.mjs"
+      },
+      "default": "./dist/index.mjs"
+    }
+  },
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "vite build && tsc --emitDeclarationOnly --declaration --declarationMap --noEmit false --noCheck --outDir dist && api-extractor run --local --verbose",
+    "clean": "rimraf --glob dist .turbo node_modules/.cache node_modules/.vite* .eslintcache *.tsbuildinfo",
+    "dev": "vite build --watch",
+    "format": "pnpm run lint --fix && pnpm exec prettier --write ./src",
+    "lint": "eslint --quiet ${ESLINT_CACHE_FLAG:---cache} --concurrency ${ESLINT_CONCURRENCY:-auto} ./src",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "typecheck:debug": "tsc --noEmit --listFiles"
+  },
+  "devDependencies": {
+    "@date-fns/tz": "catalog:",
+    "@date-fns/utc": "catalog:",
+    "@scure/base": "catalog:",
+    "@types/node": "catalog:",
+    "cookie-es": "catalog:",
+    "date-fns": "catalog:",
+    "debug": "catalog:",
+    "type-fest": "catalog:",
+    "uuid": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "@date-fns/tz": "*",
+    "@date-fns/utc": "*",
+    "@scure/base": "*",
+    "cookie-es": "*",
+    "date-fns": "*",
+    "debug": "*",
+    "type-fest": "*",
+    "uuid": "*"
+  }
+}

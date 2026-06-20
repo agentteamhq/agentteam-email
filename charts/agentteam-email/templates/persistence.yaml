@@ -1,0 +1,24 @@
+{{- if .Values.persistence.enabled }}
+{{- range $name := list "mongodb" "redis" "rspamd" "harakaQueue" }}
+{{- $claim := required (printf "persistence.%s is required" $name) (index $.Values.persistence $name) }}
+{{- if not $claim.existingClaim }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "agentteam-email.generatedClaimName" (dict "root" $ "name" $name) }}
+  namespace: {{ include "agentteam-email.namespace" $ }}
+  labels:
+{{ include "agentteam-email.labels" $ | nindent 4 }}
+spec:
+  accessModes:
+{{ toYaml (default (list "ReadWriteOnce") $claim.accessModes) | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ required (printf "persistence.%s.size is required" $name) $claim.size | quote }}
+  {{- with $.Values.persistence.storageClassName }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+---
+{{- end }}
+{{- end }}
+{{- end }}

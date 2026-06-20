@@ -1,0 +1,109 @@
+# ============================================
+# Complete Development Environment
+# ============================================
+FROM node:24.16.0-bookworm AS build
+
+ENV CI=true
+ARG NODE_OPTIONS="--max-old-space-size=4096 --max-semi-space-size=256"
+ENV NODE_OPTIONS=${NODE_OPTIONS}
+ARG ANALYZE_ROLLUP=false
+ENV ANALYZE_ROLLUP=${ANALYZE_ROLLUP}
+ARG NODE_ENV=production
+ENV NODE_ENV=${NODE_ENV}
+ARG PUBLIC_HOSTNAME
+ENV PUBLIC_HOSTNAME=${PUBLIC_HOSTNAME}
+ARG TURBO_CONCURRENCY
+ENV TURBO_CONCURRENCY=${TURBO_CONCURRENCY}
+ARG ESLINT_CONCURRENCY=auto
+ENV ESLINT_CONCURRENCY=${ESLINT_CONCURRENCY}
+ARG ESLINT_CACHE_FLAG=--cache
+ENV ESLINT_CACHE_FLAG=${ESLINT_CACHE_FLAG}
+# Set pnpm store inside build directory to avoid filesystem/bind mount issues
+ENV PNPM_HOME="/build/.pnpm-home"
+ENV PNPM_STORE_DIR="/build/.pnpm-store"
+
+WORKDIR /build
+
+RUN corepack enable
+
+# Copy lockfiles and root package metadata for dependency fetching.
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+
+# Copy all package.json files preserving directory structure
+RUN --mount=type=bind,source=apps,target=/tmp/apps \
+  find /tmp/apps -maxdepth 2 -name package.json -exec sh -c 'mkdir -p "/build/apps/$(dirname "${1#/tmp/apps/}")" && cp "$1" "/build/apps/${1#/tmp/apps/}"' _ {} \;
+
+RUN --mount=type=bind,source=packages,target=/tmp/packages \
+  find /tmp/packages -maxdepth 2 -name package.json -exec sh -c 'mkdir -p "/build/packages/$(dirname "${1#/tmp/packages/}")" && cp "$1" "/build/packages/${1#/tmp/packages/}"' _ {} \;
+
+RUN --mount=type=bind,source=.,target=/tmp/repo \
+  if [ -d /tmp/repo/test-containers ]; then \
+    find /tmp/repo/test-containers -maxdepth 2 -name package.json -exec sh -c 'mkdir -p "/build/test-containers/$(dirname "${1#/tmp/repo/test-containers/}")" && cp "$1" "/build/test-containers/${1#/tmp/repo/test-containers/}"' _ {} \; ; \
+  fi
+
+# Fetch all dependencies with cache
+RUN pnpm fetch --frozen-lockfile
+
+# Copy repo into container
+COPY . .
+
+# Install dependencies offline (already fetched)
+RUN pnpm install --recursive --offline --frozen-lockfile --prod=false
+
+# Build the application
+# RUN test -n "$PUBLIC_HOSTNAME"
+RUN pnpm turbo run typecheck --no-cache --output-logs=full --log-order=stream --ui=stream --summarize=false && \
+  pnpm turbo run build --no-cache --output-logs=full --log-order=stream --ui=stream --summarize=false && \
+  pnpm --filter-prod @main/web-server --prod deploy ./pnpmdeploy
+
+# ============================================
+# Production Runtime
+# ============================================
+FROM node:24.16.0-alpine3.23 AS runtime
+
+
+ARG PUBLIC_HOSTNAME
+# Build arguments for dynamic labels
+ARG BUILD_DATE
+ARG VCS_REF
+ARG VERSION
+ARG PORT=4321
+ENV PORT=${PORT}
+ARG NODE_ENV=production
+ENV NODE_ENV=${NODE_ENV}
+ENV PUBLIC_HOSTNAME=${PUBLIC_HOSTNAME}
+
+LABEL "org.opencontainers.image.title"="AgentTeam Email Web Server" \
+  "org.opencontainers.image.description"="Public web server for AgentTeam Email browser and API traffic" \
+  "org.opencontainers.image.authors"="AgentTeam" \
+  "org.opencontainers.image.url"="https://www.agentteam.email" \
+  "org.opencontainers.image.source"="https://github.com/agentteamhq/agentteam-email" \
+  "org.opencontainers.image.documentation"="https://agentteamemail.mintlify.com" \
+  "org.opencontainers.image.vendor"="AgentTeam" \
+  "org.opencontainers.image.licenses"="MIT" \
+  "org.opencontainers.image.ref.name"="atemail-web-server" \
+  "org.opencontainers.image.created"="${BUILD_DATE}" \
+  "org.opencontainers.image.revision"="${VCS_REF}" \
+  "org.opencontainers.image.version"="${VERSION}"
+
+# Install curl for healthchecks
+RUN apk add --no-cache curl
+
+RUN mkdir -p /pnpmdeploy/
+
+# Copy built application
+COPY --from=build /build/pnpmdeploy /pnpmdeploy/
+
+# Runtime configuration
+EXPOSE 4321
+
+WORKDIR /pnpmdeploy/
+
+RUN printf '%s\n' \
+  "#!/bin/sh" \
+  "set -e" \
+  "exec node /pnpmdeploy/dist/index.mjs" \
+  > /startup.sh \
+  && chmod +x /startup.sh
+
+ENTRYPOINT ["/startup.sh"]

@@ -1,0 +1,101 @@
+{{- if .Values.bundledConfig.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: atemail-mongodb-config
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.mongodb "component" "database") | nindent 4 }}
+data:
+{{ include "agentteam-email.configDataFromGlob" (dict "root" . "glob" "files/config/mongodb/*") | nindent 2 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: atemail-redis-config
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.redis "component" "cache") | nindent 4 }}
+data:
+{{ include "agentteam-email.configDataFromGlob" (dict "root" . "glob" "files/config/redis/*") | nindent 2 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: atemail-haraka-config
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.haraka "component" "mail-ingest") | nindent 4 }}
+data:
+{{ include "agentteam-email.configDataFromGlob" (dict "root" . "glob" "files/config/haraka/*") | nindent 2 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: atemail-rspamd-config
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.rspamd "component" "mail-filter") | nindent 4 }}
+data:
+{{ include "agentteam-email.configDataFromGlob" (dict "root" . "glob" "files/config/rspamd/local.d/*") | nindent 2 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: atemail-wildduck-config
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.wildduck "component" "mail-store") | nindent 4 }}
+data:
+{{ include "agentteam-email.configDataFromGlob" (dict "root" . "glob" "files/config/wildduck/**") | nindent 2 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: atemail-zonemta-root-config
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.zonemta "component" "mail-send") | nindent 4 }}
+data:
+{{ include "agentteam-email.configDataFromGlob" (dict "root" . "glob" "files/config/zonemta/*.toml") | nindent 2 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: atemail-zonemta-interfaces-config
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.zonemta "component" "mail-send") | nindent 4 }}
+data:
+{{ include "agentteam-email.configDataFromGlob" (dict "root" . "glob" "files/config/zonemta/interfaces/*") | nindent 2 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: atemail-zonemta-zones-config
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.zonemta "component" "mail-send") | nindent 4 }}
+data:
+{{ include "agentteam-email.configDataFromGlob" (dict "root" . "glob" "files/config/zonemta/zones/*") | nindent 2 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: atemail-zonemta-plugins-config
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.zonemta "component" "mail-send") | nindent 4 }}
+data:
+{{ include "agentteam-email.configDataFromGlob" (dict "root" . "glob" "files/config/zonemta/plugins/*.toml") | nindent 2 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: atemail-zonemta-plugin-code
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.zonemta "component" "mail-send") | nindent 4 }}
+data:
+{{ include "agentteam-email.configDataFromGlob" (dict "root" . "glob" "files/config/zonemta/plugins/*.js") | nindent 2 }}
+{{- end }}

@@ -1,0 +1,174 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.names.mailControlService }}
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.mailControlService "component" "control") | nindent 4 }}
+{{- with .Values.extraLabels.mailControlService }}
+{{ toYaml . | nindent 4 }}
+{{- end }}
+spec:
+  type: ClusterIP
+  selector:
+{{ include "agentteam-email.selectorLabels" (dict "root" . "name" .Values.names.mailControlService) | nindent 4 }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+    - name: smtp
+      port: 2587
+      targetPort: smtp
+    - name: admin
+      port: 8081
+      targetPort: admin
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.names.mailControlService }}
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.mailControlService "component" "control") | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+{{ include "agentteam-email.selectorLabels" (dict "root" . "name" .Values.names.mailControlService) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.mailControlService "component" "control") | nindent 8 }}
+{{- with .Values.extraLabels.mailControlService }}
+{{ toYaml . | nindent 8 }}
+{{- end }}
+    spec:
+      serviceAccountName: {{ .Values.names.mailControlServiceAccount }}
+      securityContext:
+{{ toYaml .Values.podSecurityContext | nindent 8 }}
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
+      containers:
+        - name: mail-control-service
+          image: {{ include "agentteam-email.image" .Values.images.mailControlService | quote }}
+          imagePullPolicy: {{ .Values.images.mailControlService.pullPolicy }}
+{{ include "agentteam-email.securityContext" . | nindent 10 }}
+          args:
+            - -admin-listen-address
+            - :8081
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: admin
+              containerPort: 8081
+            - name: smtp
+              containerPort: 2587
+          env:
+            - name: AGENTTEAM_EMAIL_WILDDUCK_MONGODB_URI
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENTTEAM_EMAIL_WILDDUCK_MONGODB_URI") | nindent 14 }}
+            - name: AGENTTEAM_EMAIL_CONTROL_MONGODB_URI
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENTTEAM_EMAIL_CONTROL_MONGODB_URI") | nindent 14 }}
+            - name: AGENT_MAIL_R2_ENDPOINT
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_R2_ENDPOINT") | nindent 14 }}
+            - name: AGENT_MAIL_R2_REGION
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_R2_REGION") | nindent 14 }}
+            - name: AGENT_MAIL_R2_BUCKET
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_R2_BUCKET") | nindent 14 }}
+            - name: AGENT_MAIL_R2_ACCESS_KEY_ID
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_R2_ACCESS_KEY_ID") | nindent 14 }}
+            - name: AGENT_MAIL_R2_SECRET_ACCESS_KEY
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_R2_SECRET_ACCESS_KEY") | nindent 14 }}
+            - name: AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN") | nindent 14 }}
+            - name: AGENT_MAIL_ZONEMTA_RELAY_PASSWORD
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_ZONEMTA_RELAY_PASSWORD") | nindent 14 }}
+            - name: AGENT_MAIL_FEEDBACK_MAILBOX_PASSWORD
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_FEEDBACK_MAILBOX_PASSWORD") | nindent 14 }}
+            - name: AGENT_MAIL_CF_TUNNEL_LISTEN_URL
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_CF_TUNNEL_LISTEN_URL") | nindent 14 }}
+            - name: AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL") | nindent 14 }}
+            - name: AGENT_MAIL_CF_TUNNEL_HMAC_SECRET
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_CF_TUNNEL_HMAC_SECRET") | nindent 14 }}
+            - name: AGENT_MAIL_OUTBOUND_PROVIDER
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_OUTBOUND_PROVIDER") | nindent 14 }}
+            - name: AGENT_MAIL_CONTROL_API_TOKEN
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_CONTROL_API_TOKEN") | nindent 14 }}
+            - name: AGENT_MAIL_CLOUDFLARE_API_BASE_URL
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_CLOUDFLARE_API_BASE_URL") | nindent 14 }}
+            - name: AGENT_MAIL_CLOUDFLARE_ACCOUNT_ID
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_CLOUDFLARE_ACCOUNT_ID") | nindent 14 }}
+            - name: AGENT_MAIL_CLOUDFLARE_WORKER_SCRIPT_NAME
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_CLOUDFLARE_WORKER_SCRIPT_NAME") | nindent 14 }}
+            - name: AGENT_MAIL_CLOUDFLARE_WORKER_ARCHIVE_BUCKET
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_CLOUDFLARE_WORKER_ARCHIVE_BUCKET") | nindent 14 }}
+            - name: AGENT_MAIL_CLOUDFLARE_API_TOKEN
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_CLOUDFLARE_API_TOKEN") | nindent 14 }}
+            {{- if eq .Values.outbound.provider.value "ses" }}
+            - name: AGENT_MAIL_AWS_REGION
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_AWS_REGION") | nindent 14 }}
+            - name: AGENT_MAIL_AWS_ACCESS_KEY_ID
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_AWS_ACCESS_KEY_ID") | nindent 14 }}
+            - name: AGENT_MAIL_AWS_SECRET_ACCESS_KEY
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_AWS_SECRET_ACCESS_KEY") | nindent 14 }}
+            {{- end }}
+          {{- with .Values.extraEnv.mailControlService }}
+{{ toYaml . | nindent 12 }}
+          {{- end }}
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - wget -qO- http://127.0.0.1:8080/healthz >/dev/null
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - wget -qO- http://127.0.0.1:8080/healthz >/dev/null
+            periodSeconds: 20
+            timeoutSeconds: 5
+          {{- with .Values.extraVolumeMounts.mailControlService }}
+          volumeMounts:
+{{ toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.resources.mailControlService }}
+          resources:
+{{ toYaml . | nindent 12 }}
+          {{- end }}
+        - name: fastpath-gate
+          image: {{ include "agentteam-email.image" .Values.images.mailControlService | quote }}
+          imagePullPolicy: {{ .Values.images.mailControlService.pullPolicy }}
+{{ include "agentteam-email.securityContext" . | nindent 10 }}
+          command:
+            - /usr/local/bin/agent-mail-control-service
+            - fastpath-gate
+          ports:
+            - name: fastpath-gate
+              containerPort: 9003
+          readinessProbe:
+            tcpSocket:
+              port: fastpath-gate
+            initialDelaySeconds: 2
+            periodSeconds: 5
+            timeoutSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: fastpath-gate
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+      {{- if .Values.extraVolumes.mailControlService }}
+      volumes:
+        {{- with .Values.extraVolumes.mailControlService }}
+{{ toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+{{ include "agentteam-email.podScheduling" . | nindent 6 }}

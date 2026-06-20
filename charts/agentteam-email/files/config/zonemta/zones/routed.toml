@@ -1,0 +1,14 @@
+[routed]
+preferIPv6 = false
+ignoreIPv6 = true
+processes = 1
+connections = 1
+pool = "default"
+host = "{{ .Values.names.mailControlService }}.{{ include "agentteam-email.namespace" . }}.svc.cluster.local"
+port = 2587
+ignoreTLS = true
+secure = false
+
+[routed.auth]
+user = "zonemta"
+pass = {{ include "agentteam-email.requiredBundledConfigValue" (dict "source" .Values.mailRuntime.zonemtaRelayPassword "name" "mailRuntime.zonemtaRelayPassword") | quote }}

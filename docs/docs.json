@@ -1,0 +1,42 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "AgentTeam Email",
+  "colors": {
+    "primary": "#111827"
+  },
+  "metadata": {
+    "timestamp": true
+  },
+  "navigation": {
+    "groups": [
+      {
+        "group": "Get started",
+        "pages": ["index", "get-started/quickstart"]
+      },
+      {
+        "group": "Concepts",
+        "pages": ["concepts/architecture"]
+      },
+      {
+        "group": "Guides",
+        "pages": [
+          "guides/self-hosting",
+          "guides/self-host/docker-compose",
+          "guides/self-host/helm",
+          "guides/self-host/cloudflare-authentication",
+          "guides/self-host/tailscale",
+          "guides/self-host/cloudflared"
+        ]
+      },
+      {
+        "group": "Reference",
+        "pages": ["reference/configuration", "reference/example-files", "reference/api"]
+      },
+      {
+        "group": "Operations",
+        "pages": ["operations/validation"]
+      }
+    ]
+  }
+}

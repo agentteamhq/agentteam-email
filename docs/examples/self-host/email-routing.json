@@ -1,0 +1,15 @@
+{
+  "zones": [
+    {
+      "zone_name": "company.example"
+    }
+  ],
+  "routes": [
+    {
+      "enabled": true,
+      "mode": "catch-all",
+      "zone_name": "company.example",
+      "address": "inbound@company.example"
+    }
+  ]
+}

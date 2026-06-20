@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM", "DOM.Iterable", "DOM.AsyncIterable"],
+    "types": ["vite/client"]
+  },
+  "exclude": ["dist", "node_modules", "src/**/_*.ts"],
+  "extends": "../../tsconfig.base.json",
+  "include": ["src/**/*", "./types.d.ts"]
+}

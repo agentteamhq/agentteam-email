@@ -1,0 +1,74 @@
+{
+  "name": "@main/db",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/src/index.d.ts",
+        "import": "./dist/index.mjs"
+      },
+      "default": "./dist/index.mjs"
+    }
+  },
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "vite build && tsc --emitDeclarationOnly --declaration --declarationMap --noEmit false --noCheck --outDir dist && api-extractor run --local --verbose",
+    "clean": "rimraf --glob dist .turbo node_modules/.cache node_modules/.vite* .eslintcache *.tsbuildinfo",
+    "dev": "vite build --watch",
+    "format": "pnpm run lint --fix && pnpm exec prettier --write ./src ./vitest.config.ts",
+    "lint": "eslint --quiet ${ESLINT_CACHE_FLAG:---cache} --concurrency ${ESLINT_CONCURRENCY:-auto} ./src ./vitest.config.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "typecheck:debug": "tsc --noEmit --listFiles"
+  },
+  "devDependencies": {
+    "@better-auth/core": "catalog:",
+    "@better-auth/mongo-adapter": "catalog:",
+    "@casl/ability": "catalog:",
+    "@date-fns/tz": "catalog:",
+    "@date-fns/utc": "catalog:",
+    "@main/common": "workspace:*",
+    "@scure/base": "catalog:",
+    "@types/debug": "catalog:",
+    "@types/node": "catalog:",
+    "cookie-es": "catalog:",
+    "d3-scale": "catalog:",
+    "d3-shape": "catalog:",
+    "date-fns": "catalog:",
+    "debug": "catalog:",
+    "immer": "catalog:",
+    "mongodb": "catalog:",
+    "mongoose": "catalog:",
+    "type-fest": "catalog:",
+    "uuid": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "zod": "catalog:"
+  },
+  "peerDependencies": {
+    "@better-auth/core": "*",
+    "@better-auth/mongo-adapter": "*",
+    "@casl/ability": "*",
+    "@date-fns/tz": "*",
+    "@date-fns/utc": "*",
+    "@main/common": "workspace:*",
+    "@scure/base": "*",
+    "cookie-es": "*",
+    "d3-scale": "*",
+    "d3-shape": "*",
+    "date-fns": "*",
+    "debug": "*",
+    "immer": "*",
+    "mongodb": "*",
+    "mongoose": "*",
+    "type-fest": "*",
+    "uuid": "*",
+    "zod": "*"
+  }
+}

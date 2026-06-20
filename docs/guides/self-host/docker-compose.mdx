@@ -1,0 +1,123 @@
+---
+title: 'Docker Compose'
+description: 'Run the self-hosted AgentTeam Email stack on one host.'
+---
+
+The root `compose.yaml` is the supported single-host runtime shape. It runs the
+web server, mail control service, MongoDB, Redis, WildDuck, Haraka,
+Rspamd, and ZoneMTA on one Compose network.
+
+## Images
+
+First-party images are published under the public repository namespace:
+
+```text
+ghcr.io/agentteamhq/agentteam-email/atemail-mail-control-service
+ghcr.io/agentteamhq/agentteam-email/atemail-web-server
+```
+
+Compose uses `latest` unless `AGENTTEAM_EMAIL_VERSION` is set. The default
+Compose pull policy is `always` so a normal `docker compose up -d` refreshes
+the selected tag. Override `AGENTTEAM_EMAIL_PULL_POLICY` when operating against
+a locally built or explicitly pinned image.
+
+Third-party service images are pinned directly in `compose.yaml` so Renovate
+can update them through Docker Compose dependency detection.
+
+## Runtime User
+
+All containers run as uid `1000` and gid `1000` by default.
+
+```dotenv
+AGENTTEAM_EMAIL_UID=1000
+AGENTTEAM_EMAIL_GID=1000
+```
+
+Set both values only when your runtime storage setup requires a different
+container identity.
+
+## Persistent Data
+
+Compose stores service data in named volumes:
+
+- `mongodb-data`
+- `redis-data`
+- `rspamd-data`
+- `haraka-queue`
+
+The no-DB variant only declares `rspamd-data` and `haraka-queue`.
+
+## Configuration
+
+Runtime config is split by ownership:
+
+- `compose.yaml`: service graph, frontend port publication, volumes, image refs, and the
+  supported environment interface. Compose-owned daemon config is embedded as
+  inline Compose `configs` so a single checked-in file defines the single-host
+  runtime.
+- `.env`: deployment-specific secrets, public URLs, Cloudflare account values,
+  object-storage credentials, tunnel configuration, and the frontend port override
+
+Start from `docs/examples/compose/.env.example` and populate every required
+placeholder. Do not commit `.env`.
+
+Required operator-owned values include:
+
+- `PUBLIC_HOSTNAME`
+- `BETTER_AUTH_SECRET`
+- `ENCRYPT_SECRET_KEY`
+- `AGENTTEAM_EMAIL_APP_MONGODB_URI`
+- `AGENTTEAM_EMAIL_WILDDUCK_MONGODB_URI`
+- `AGENTTEAM_EMAIL_CONTROL_MONGODB_URI`
+- `AGENTTEAM_EMAIL_REDIS_URL`
+- `AGENT_MAIL_CONTROL_API_TOKEN`
+- `AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN`
+- `AGENT_MAIL_WILDDUCK_ACCESS_CONTROL_SECRET`
+- `AGENT_MAIL_LOOP_SECRET`
+- `AGENT_MAIL_ZONEMTA_RELAY_PASSWORD`
+- `AGENT_MAIL_FEEDBACK_MAILBOX_PASSWORD`
+- `AGENT_MAIL_R2_ENDPOINT`
+- `AGENT_MAIL_R2_BUCKET`
+- `AGENT_MAIL_R2_ACCESS_KEY_ID`
+- `AGENT_MAIL_R2_SECRET_ACCESS_KEY`
+- `AGENT_MAIL_CLOUDFLARE_ACCOUNT_ID`
+- `AGENT_MAIL_CLOUDFLARE_API_TOKEN`
+- `AGENT_MAIL_CLOUDFLARE_WORKER_ARCHIVE_BUCKET`
+- `AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL`
+- `AGENT_MAIL_CF_TUNNEL_HMAC_SECRET`
+
+## Run
+
+```bash
+docker compose up -d
+```
+
+To pin a release, set `AGENTTEAM_EMAIL_VERSION` in `.env` before starting the
+stack.
+
+Wait for the main services:
+
+```bash
+docker compose ps
+```
+
+Open the frontend at `PUBLIC_HOSTNAME`.
+
+## No-DB Compose
+
+Use `compose.no-db.yaml` when MongoDB and Redis are supplied outside this
+Compose file:
+
+```bash
+docker compose -f compose.no-db.yaml up -d
+```
+
+The external MongoDB and Redis endpoints are configured with full connection
+URLs:
+
+```dotenv
+AGENTTEAM_EMAIL_APP_MONGODB_URI=mongodb://user:password@mongodb.example:27017/agentteam_email?authSource=admin&tls=true
+AGENTTEAM_EMAIL_WILDDUCK_MONGODB_URI=mongodb://user:password@mongodb.example:27017/wildduck?authSource=admin&tls=true
+AGENTTEAM_EMAIL_CONTROL_MONGODB_URI=mongodb://user:password@mongodb.example:27017/agent_mail_control?authSource=admin&tls=true
+AGENTTEAM_EMAIL_REDIS_URL=rediss://:password@redis.example:6379/3
+```

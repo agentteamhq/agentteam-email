@@ -1,0 +1,18 @@
+["modules/@zone-eu/zonemta-wildduck"]
+enabled = ["receiver", "main", "sender"]
+interfaces = ["feeder", "maildrop"]
+hostname = "{{ .Values.names.zonemta }}.{{ include "agentteam-email.namespace" . }}.svc.cluster.local"
+disableUploads = false
+uploadAll = true
+
+["modules/@zone-eu/zonemta-wildduck".srs]
+enabled = true
+secret = {{ include "agentteam-email.requiredBundledConfigValue" (dict "source" .Values.mailRuntime.loopSecret "name" "mailRuntime.loopSecret") | quote }}
+rewriteDomain = "agent-mail.invalid"
+
+["modules/@zone-eu/zonemta-wildduck".dkim]
+signTransportDomain = false
+
+["modules/@zone-eu/zonemta-wildduck".gelf]
+enabled = false
+component = "mta"

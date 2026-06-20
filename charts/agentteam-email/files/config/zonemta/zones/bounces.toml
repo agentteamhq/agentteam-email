@@ -1,0 +1,17 @@
+[bounces]
+preferIPv6 = false
+ignoreIPv6 = true
+processes = 1
+connections = 1
+pool = "default"
+# ZoneMTA's MX connector resolves zone.host through DNS resolution that does
+# not honor Kubernetes short-name search behavior. Use the service FQDN so
+# generated bounces and DSNs reach the mail-control-service SMTP relay listener.
+host = "{{ .Values.names.mailControlService }}.{{ include "agentteam-email.namespace" . }}.svc.cluster.local"
+port = 2587
+ignoreTLS = true
+secure = false
+
+[bounces.auth]
+user = "zonemta"
+pass = {{ include "agentteam-email.requiredBundledConfigValue" (dict "source" .Values.mailRuntime.zonemtaRelayPassword "name" "mailRuntime.zonemtaRelayPassword") | quote }}

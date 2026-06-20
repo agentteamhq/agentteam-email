@@ -1,0 +1,25 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "aliases": {
+    "components": "packages/frontend/src/components",
+    "hooks": "packages/frontend/src/hooks",
+    "lib": "packages/frontend/src/lib",
+    "ui": "packages/frontend/src/components/ui",
+    "utils": "packages/frontend/src/lib/utils"
+  },
+  "iconLibrary": "phosphor",
+  "registries": {
+    "@ai-elements": "https://registry.ai-sdk.dev/{name}.json",
+    "@better-auth-ui": "https://better-auth-ui.com/r/{name}.json"
+  },
+  "rsc": false,
+  "style": "new-york",
+  "tailwind": {
+    "baseColor": "zinc",
+    "config": "",
+    "css": "packages/frontend/src/global.css",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "tsx": true
+}

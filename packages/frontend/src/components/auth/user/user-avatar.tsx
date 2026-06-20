@@ -1,0 +1,93 @@
+'use client'
+
+import type { User } from 'better-auth'
+import { useAuth, useSession } from '@better-auth-ui/react'
+import { UserIcon as User2 } from '@phosphor-icons/react'
+import type { ReactNode } from 'react'
+
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
+
+export type UserAvatarProps = {
+  className?: string
+  fallback?: ReactNode
+  isPending?: boolean
+  /** @remarks `User` */
+  user?: User
+}
+
+/**
+ * Display a user's avatar using session information or an explicit user prop.
+ *
+ * Renders a circular avatar that shows the user's image when available, a fallback node if provided, or the user's first two initials; while the session is loading (or when `isPending` is true) and no `user` prop is supplied, renders a skeleton placeholder.
+ *
+ * @param className - Additional CSS classes applied to the avatar container
+ * @param user - Optional user object to display instead of the session user
+ * @param isPending - When true, treat the component as loading and show the skeleton if no `user` is provided
+ * @param fallback - Node to render inside the avatar fallback area before initials or the default icon
+ * @returns The avatar element to render (JSX)
+ */
+export function UserAvatar({ className, user, isPending, fallback }: UserAvatarProps) {
+  if (isPending && !user) {
+    return <UserAvatarSkeleton className={className} />
+  }
+
+  if (user) {
+    return (
+      <ResolvedUserAvatar
+        className={className}
+        fallback={fallback}
+        user={user}
+      />
+    )
+  }
+
+  return (
+    <SessionUserAvatar
+      className={className}
+      fallback={fallback}
+    />
+  )
+}
+
+function SessionUserAvatar({ className, fallback }: Pick<UserAvatarProps, 'className' | 'fallback'>) {
+  const { authClient } = useAuth()
+  const { data: session, isPending: sessionPending } = useSession(authClient)
+
+  if (sessionPending) {
+    return <UserAvatarSkeleton className={className} />
+  }
+
+  return (
+    <ResolvedUserAvatar
+      className={className}
+      fallback={fallback}
+      user={session?.user}
+    />
+  )
+}
+
+function ResolvedUserAvatar({ className, fallback, user: resolvedUser }: UserAvatarProps) {
+  const initials = (resolvedUser?.name || resolvedUser?.email)?.slice(0, 2).toUpperCase()
+
+  return (
+    <Avatar className={cn('bg-muted text-foreground size-8 rounded-full text-sm', className)}>
+      <AvatarImage
+        src={resolvedUser?.image ?? undefined}
+        alt={resolvedUser?.name || resolvedUser?.email}
+      />
+
+      <AvatarFallback
+        className='text-muted-foreground!'
+        delayMs={resolvedUser?.image ? 600 : undefined}
+      >
+        {fallback || initials || <User2 className='size-4' />}
+      </AvatarFallback>
+    </Avatar>
+  )
+}
+
+function UserAvatarSkeleton({ className }: Pick<UserAvatarProps, 'className'>) {
+  return <Skeleton className={cn('size-8 rounded-full', className)} />
+}

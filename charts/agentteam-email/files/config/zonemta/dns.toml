@@ -1,0 +1,5 @@
+caching = true
+cacheTTL = 600
+nameservers = []
+blockDomains = []
+blockLocalAddresses = false

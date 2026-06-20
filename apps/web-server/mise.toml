@@ -1,0 +1,14 @@
+[tasks."image:build"]
+description = "Build the web server container image"
+dir = "{{config_root}}/../.."
+run = '''
+: "${WT:?missing WT}"
+image_tag="${AGENTTEAM_EMAIL_KIND_IMAGE_TAG:-stage}"
+image_repository="${AGENTTEAM_EMAIL_KIND_WEB_SERVER_IMAGE_REPOSITORY:-atemail.${WT}.web-server}"
+web_server_port="${AGENTTEAM_EMAIL_KIND_WEB_SERVER_PORT:-23100}"
+"${CONTAINER_ENGINE}" build \
+  -f apps/web-server/Containerfile \
+  --build-arg "PUBLIC_HOSTNAME=http://127.0.0.1:${web_server_port}" \
+  -t "${image_repository}:${image_tag}" \
+  .
+'''

@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "semi": false,
+  "singleQuote": true,
+  "insertFinalNewline": true,
+  "printWidth": 110,
+  "trailingComma": "none",
+  "bracketSpacing": true,
+  "singleAttributePerLine": true,
+  "arrowParens": "always",
+  "endOfLine": "lf",
+  "experimentalTailwindcss": {
+    "stylesheet": "./packages/frontend/src/global.css",
+    "attributes": ["class", "className"],
+    "functions": ["clsx", "cn", "tw"],
+    "preserveWhitespace": false
+  },
+  "ignorePatterns": ["*.lock", ".vscode/*", "*.json", "*.yaml", "*.yml"],
+  "experimentalSortPackageJson": {
+    "sortScripts": true
+  },
+  "overrides": [
+    {
+      "files": ["eslint.config.mjs"],
+      "options": {
+        "semi": true
+      }
+    }
+  ]
+}

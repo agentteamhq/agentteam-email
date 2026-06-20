@@ -1,0 +1,5 @@
+[tasks.test]
+description = "Run the auth E2E harness"
+depends = ["//:db:setup", "//:mail:start"]
+dir = "{{config_root}}"
+run = "pnpm test:auth"

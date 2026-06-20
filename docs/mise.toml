@@ -1,0 +1,25 @@
+[tools]
+"npm:mint" = "4.2.632"
+
+[tasks.dev]
+description = "Preview the Mintlify docs locally"
+run = "mint dev"
+
+[tasks.snippets]
+description = "Regenerate Mintlify snippets from canonical docs example files"
+run = "node scripts/generate-example-snippets.mjs"
+
+[tasks.validate]
+description = "Validate the Mintlify docs build"
+depends = ["snippets"]
+run = "mint validate"
+
+[tasks."broken-links"]
+description = "Check Mintlify docs internal links and anchors"
+depends = ["snippets"]
+run = "mint broken-links --check-anchors"
+
+[tasks.check]
+description = "Run Mintlify docs validation and link checks"
+depends = ["validate", "broken-links"]
+run = "true"

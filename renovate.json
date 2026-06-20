@@ -1,0 +1,96 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [":dependencyDashboard"],
+  "includePaths": [
+    "renovate.json",
+    "package.json",
+    "pnpm-workspace.yaml",
+    "pnpm-lock.yaml",
+    "mise.toml",
+    "turbo.json",
+    "api-extractor.base.json",
+    "tsconfig.json",
+    "tsconfig.base.json",
+    "components.json",
+    "apps/**",
+    "packages/**",
+    "test-containers/**",
+    "scripts/**"
+  ],
+  "ignorePaths": [
+    "**/.git/**",
+    "**/.turbo/**",
+    "**/.nodecc/**",
+    "**/.eslintcache",
+    "**/.vite*/**",
+    "**/*.tsbuildinfo",
+    "**/build/**",
+    "**/coverage/**",
+    "**/dist/**",
+    "**/node_modules/**",
+    "**/playwright-report/**",
+    "**/storybook-static/**",
+    "**/test-results/**",
+    "**/tmp/**"
+  ],
+  "timezone": "America/Los_Angeles",
+  "schedule": ["after 2am and before 4am on tuesday"],
+  "minimumReleaseAge": "10 days",
+  "dependencyDashboard": true,
+  "dependencyDashboardTitle": "Renovate Dependency Dashboard",
+  "fetchChangeLogs": "off",
+  "automerge": false,
+  "rebaseWhen": "behind-base-branch",
+  "rangeStrategy": "pin",
+  "rollbackPrs": true,
+  "lockFileMaintenance": {
+    "enabled": false
+  },
+  "prConcurrentLimit": 1,
+  "prHourlyLimit": 1,
+  "branchConcurrentLimit": 1,
+  "dockerfile": {
+    "managerFilePatterns": [
+      "/(^|/)([Dd]ocker|[Cc]ontainer)file(\\.[^/]+)?$/"
+    ]
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Update annotated ARG and ENV pins in container build files.",
+      "managerFilePatterns": [
+        "/(^|/)([Dd]ocker|[Cc]ontainer)file(\\.[^/]+)?$/"
+      ],
+      "matchStrings": [
+        "#\\s*renovate:\\s+datasource=(?<datasource>[a-z0-9_.-]+)\\s+depName=(?<depName>[^\\s]+)(?:\\s+packageName=(?<packageName>[^\\s]+))?(?:\\s+versioning=(?<versioning>[^\\s]+))?(?:\\s+extractVersion=(?<extractVersion>[^\\s]+))?(?:\\s+registryUrl=(?<registryUrl>https?://[^\\s]+))?\\s*\\n\\s*(?:ARG|ENV)\\s+[A-Za-z0-9_]+=[\"']?(?<currentValue>[^\\s\"'\\\\]+)[\"']?"
+      ]
+    },
+    {
+      "customType": "regex",
+      "description": "Update annotated full Docker image pins in YAML, TOML, shell, env, and text config.",
+      "managerFilePatterns": ["/(^|/).+\\.(ya?ml|toml|env|sh|txt)$/"],
+      "matchStrings": [
+        "#\\s*renovate:\\s+datasource=(?<datasource>docker)\\s+depName=(?<depName>[^\\s]+)(?:\\s+packageName=(?<packageName>[^\\s]+))?(?:\\s+versioning=(?<versioning>[^\\s]+))?(?:\\s+extractVersion=(?<extractVersion>[^\\s]+))?(?:\\s+registryUrl=(?<registryUrl>https?://[^\\s]+))?\\s*\\n\\s*[A-Za-z0-9_.-]+\\s*[:=]\\s*[\"']?[^\\s\"'#]+:(?<currentValue>[^\\s\"'#:@]+)[\"']?"
+      ]
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Ignore workspace peer dependency contracts; runtime versions are resolved through direct dependencies or the pnpm catalog.",
+      "matchManagers": ["npm"],
+      "matchFileNames": [
+        "package.json",
+        "apps/**/package.json",
+        "packages/**/package.json",
+        "test-containers/**/package.json"
+      ],
+      "matchDepTypes": ["peerDependencies"],
+      "enabled": false
+    },
+    {
+      "description": "Keep major updates in the dependency dashboard until explicitly approved.",
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    }
+  ]
+}

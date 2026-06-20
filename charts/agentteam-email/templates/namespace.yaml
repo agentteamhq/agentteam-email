@@ -1,0 +1,11 @@
+{{- if .Values.namespace.create }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.labels" . | nindent 4 }}
+{{- with .Values.extraLabels.namespace }}
+{{ toYaml . | nindent 4 }}
+{{- end }}
+{{- end }}

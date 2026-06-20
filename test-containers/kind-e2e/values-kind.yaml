@@ -1,0 +1,79 @@
+namespace:
+  create: true
+  name: atemail-main
+
+publicHostname: http://127.0.0.1:23100
+
+images:
+  mailControlService:
+    repository: atemail.main.mail-control-service
+    tag: stage
+    pullPolicy: IfNotPresent
+  webServer:
+    repository: atemail.main.web-server
+    tag: stage
+    pullPolicy: IfNotPresent
+
+webServer:
+  authSecret:
+    value: kind-e2e-better-auth-secret
+  encryptionKey:
+    value: a2luZC1lMmUtZW5jcnlwdGlvbi1rZXktMzJi
+
+controlApi:
+  token:
+    value: kind-e2e-control-api-token
+
+wildduck:
+  adminAccessToken:
+    value: kind-e2e-wildduck-admin-token
+  accessControlSecret:
+    value: kind-e2e-wildduck-access-control-secret
+
+mailRuntime:
+  loopSecret:
+    value: kind-e2e-mail-loop-secret
+  zonemtaRelayPassword:
+    value: kind-e2e-zonemta-relay-password
+  feedbackMailboxPassword:
+    value: kind-e2e-feedback-mailbox-password
+
+objectStorage:
+  endpoint:
+    value: https://kind-e2e-r2.invalid
+  bucket:
+    value: kind-e2e-archive
+  accessKeyId:
+    value: kind-e2e-r2-access-key
+  secretAccessKey:
+    value: kind-e2e-r2-secret-key
+
+cloudflare:
+  accountId:
+    value: kind-e2e-cloudflare-account-id
+  apiToken:
+    value: kind-e2e-cloudflare-api-token
+  worker:
+    scriptName: kind-e2e-agent-mail-ingress
+    archiveBucket:
+      value: kind-e2e-archive
+
+tunnel:
+  provider: none
+  externalUrl:
+    value: https://kind-e2e-mail-ingress.invalid/agent-mail/ingest/v1
+  hmacSecret:
+    value: kind-e2e-fastpath-hmac-secret
+
+ingress:
+  enabled: false
+
+persistence:
+  mongodb:
+    size: 1Gi
+  redis:
+    size: 512Mi
+  rspamd:
+    size: 512Mi
+  harakaQueue:
+    size: 512Mi

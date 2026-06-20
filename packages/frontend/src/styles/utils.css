@@ -1,0 +1,61 @@
+/* Anchor name (applied to the anchor element) */
+@utility anchor-* {
+  anchor-name: --value([*]);
+}
+
+/* Position anchor (applied to the floating element) */
+@utility anchor-to-* {
+  visibility: hidden;
+  @supports (position-anchor: --test) {
+    visibility: visible;
+    position-anchor: --value([ *]);
+  }
+}
+
+/* Anchor positioning functions */
+@utility anchor-top-* {
+  top: anchor(--value([*]));
+}
+
+@utility anchor-bottom-* {
+  bottom: anchor(--value([*]));
+}
+
+@utility anchor-left-* {
+  left: anchor(--value([*]));
+}
+
+@utility anchor-right-* {
+  right: anchor(--value([*]));
+}
+
+/* Position relative to anchor's edges */
+@utility top-anchor-* {
+  top: anchor(--value('top', 'bottom', 'center'));
+}
+
+@utility bottom-anchor-* {
+  bottom: anchor(--value('top', 'bottom', 'center'));
+}
+
+@utility left-anchor-* {
+  left: anchor(--value('left', 'right', 'center'));
+}
+
+@utility right-anchor-* {
+  right: anchor(--value('left', 'right', 'center'));
+}
+
+@utility anchor-right-of {
+  position: absolute;
+  left: round(anchor(right), 1px);
+  top: round(anchor(center), 1px);
+  translate: 0 -50%;
+}
+
+@utility anchor-above {
+  position: absolute;
+  left: round(anchor(center), 1px);
+  bottom: round(anchor(top), 1px);
+  translate: -50% 0;
+}

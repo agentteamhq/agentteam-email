@@ -1,0 +1,17 @@
+{
+  "name": "@main/cloudflare-oauth-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "test": "pnpm run test:cloudflare-oauth",
+    "test:cloudflare-oauth": "node ./cloudflare-oauth-flow.e2e.mjs",
+    "test:dev": "pnpm run test:cloudflare-oauth"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "oidc-provider": "catalog:",
+    "testcontainers": "catalog:"
+  }
+}

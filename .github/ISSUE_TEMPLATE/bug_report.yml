@@ -1,0 +1,68 @@
+name: Bug Report
+description: Report a reproducible problem in AgentTeam Email.
+title: '[Bug]: '
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Do not include secrets, credentials, tokens,
+        private hostnames, private repository names, or private operational
+        details. Report security issues through SECURITY.md instead of a public
+        issue.
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What is broken?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Steps, sample inputs, or conditions that reproduce the issue.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected And Actual Behavior
+      description: What did you expect, and what happened instead?
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Optional.
+      options:
+        - App
+        - Deployment
+        - Docs
+        - Development
+        - Other
+  - type: textarea
+    id: environment
+    attributes:
+      label: System And Runtime Details
+      description: Version, commit, OS, browser, deployment mode, container engine, and how AgentTeam Email is running.
+      placeholder: |
+        - AgentTeam Email version or commit:
+        - OS:
+        - Browser:
+        - Deployment mode: Compose, Helm, local dev, or hosted
+        - Container engine: Podman or Docker
+        - Runtime: foreground process, background service, container, Kubernetes, or other
+        - Relevant command:
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs Or Screenshots
+      description: Include sanitized logs, screenshots, or command output.
+      render: text
+    validations:
+      required: false

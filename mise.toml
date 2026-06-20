@@ -1,0 +1,171 @@
+monorepo_root = true
+
+[settings]
+python.uv_venv_auto = true
+experimental = true
+node.corepack = true
+unix_default_inline_shell_args = "bash -euo pipefail -c"
+
+[tools]
+go = "1.26.4"
+node = "24.16.0"
+"npm:pnpm" = "11.4.0"
+podman = "5.8.2"
+kubectl = "1.36.1"
+kind = "0.32.0"
+helm = "4.2.0"
+shellcheck = "0.11.0"
+yamllint = "1.38.0"
+
+[monorepo]
+config_roots = [
+  "docs",
+  "charts",
+  "apps/mail-control-service",
+  "apps/web-server",
+  "test-containers/*",
+]
+
+[env]
+CONTAINER_ENGINE = "podman"
+_.file = ".env"
+# renovate: datasource=docker depName=docker.io/library/mongo versioning=docker
+AGENTTEAM_EMAIL_DEV_MONGO_IMAGE = "docker.io/library/mongo:8.2.7"
+# renovate: datasource=docker depName=docker.io/axllent/mailpit versioning=docker
+AGENTTEAM_EMAIL_DEV_MAILPIT_IMAGE = "docker.io/axllent/mailpit:v1.30.1"
+
+[tasks."clean:tmp"]
+description = "Remove contents of tmp/ directories under the workspace root"
+dir = "{{config_root}}"
+run = '''
+find . -type d -name tmp -not -path '*/node_modules/*' -not -path '*/.git/*' | while read -r d; do
+  echo "[clean:tmp] clearing ${d}"
+  find "${d:?}" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+done
+'''
+
+[tasks.dev]
+description = "Run the local frontend/server dev graph"
+run = "pnpm dev"
+
+[tasks.build]
+description = "Build all workspace packages"
+run = "pnpm build"
+
+[tasks.typecheck]
+description = "Typecheck all workspace packages"
+run = "pnpm typecheck"
+
+[tasks.lint]
+description = "Lint all workspace packages"
+run = "pnpm lint"
+
+[tasks."lint:yaml"]
+description = "Lint static YAML files"
+run = '''
+git ls-files -z --cached --others --exclude-standard \
+  '*.yaml' \
+  '*.yml' \
+  ':!:charts/agentteam-email/templates/**' \
+  ':!:pnpm-lock.yaml' \
+  | xargs -0 -r yamllint -d '{extends: relaxed, rules: {line-length: disable}}'
+'''
+
+[tasks.test]
+description = "Run repo unit tests"
+run = [
+  { task = "//apps/mail-control-service:test" },
+  "pnpm test",
+]
+
+[tasks.typegen]
+description = "Regenerate committed service-boundary contracts"
+depends = ["typegen:rpc-openapi"]
+
+[tasks."typegen:rpc-openapi"]
+description = "Regenerate the committed RPC OpenAPI schema"
+run = "node scripts/generate-rpc-openapi.mjs"
+
+[tasks."test:e2e"]
+description = "Run all end-to-end test-container flows"
+depends = [
+  "//test-containers/auth-e2e:test",
+  "//test-containers/cloudflare-oauth-e2e:test",
+  "//test-containers/kind-e2e:test",
+]
+run = "true"
+
+[tasks."db:setup"]
+description = "Start the configured dev MongoDB database"
+run = [
+  { task = "db:start" },
+  "printf 'MongoDB is ready. No schema migration is required.\\n'",
+]
+
+[tasks."db:start"]
+description = "Start MongoDB container"
+run = "bash scripts/dev-mongo.sh start"
+
+[tasks."db:stop"]
+description = "Stop MongoDB container"
+run = "bash scripts/dev-mongo.sh stop"
+
+[tasks."db:status"]
+description = "Check MongoDB container status"
+run = "bash scripts/dev-mongo.sh status"
+
+[tasks."db:logs"]
+description = "Tail MongoDB container logs"
+run = "bash scripts/dev-mongo.sh logs"
+
+[tasks."db:shell"]
+description = "Open interactive mongosh shell to dev database"
+run = "bash scripts/dev-mongo.sh shell"
+
+[tasks."mail:start"]
+description = "Start Mailpit container"
+run = """
+container_name="agentteam-email-mailpit"
+mkdir -p ~/.local/share/agentteam-email/mailpit
+"${CONTAINER_ENGINE}" rm -f "${container_name}" >/dev/null 2>&1 || true
+"${CONTAINER_ENGINE}" run -d --name "${container_name}" \
+  -e MP_MAX_MESSAGES=500 \
+  -e MP_DATABASE=/data/mailpit.db \
+  -e MP_SMTP_AUTH_ACCEPT_ANY=1 \
+  -e MP_SMTP_AUTH_ALLOW_INSECURE=1 \
+  -p 8025:8025 \
+  -p 1025:1025 \
+  -v ~/.local/share/agentteam-email/mailpit:/data:Z \
+  "${AGENTTEAM_EMAIL_DEV_MAILPIT_IMAGE}"
+echo "Mailpit started - Web UI: http://localhost:8025 | SMTP: localhost:1025"
+"""
+
+[tasks."mail:stop"]
+description = "Stop Mailpit container"
+run = '''
+"${CONTAINER_ENGINE}" rm -f agentteam-email-mailpit
+'''
+
+[tasks."mail:status"]
+description = "Check Mailpit container status"
+run = '''
+"${CONTAINER_ENGINE}" ps -a --filter name=agentteam-email-mailpit --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+'''
+
+[tasks."mail:logs"]
+description = "Tail Mailpit container logs"
+run = '''
+"${CONTAINER_ENGINE}" logs -f agentteam-email-mailpit
+'''
+
+[tasks.deploy]
+description = "Build, deploy, and start production server locally"
+run = "./apps/web-server/deploy-local.sh deploy"
+
+[tasks."deploy:build"]
+description = "Build and deploy locally without starting the server"
+run = "./apps/web-server/deploy-local.sh build"
+
+[tasks."deploy:start"]
+description = "Start deployed server in foreground"
+run = "./apps/web-server/deploy-local.sh start"

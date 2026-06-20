@@ -1,0 +1,69 @@
+namespace:
+  create: true
+  name: agentteam-email
+
+publicHostname: https://mail.company.example
+
+webServer:
+  authSecret:
+    value: '<random-secret>'
+  encryptionKey:
+    value: '<base64url-32-byte-key>'
+
+controlApi:
+  token:
+    value: '<random-control-token>'
+
+wildduck:
+  adminAccessToken:
+    value: '<random-wildduck-token>'
+  accessControlSecret:
+    value: '<random-wildduck-secret>'
+
+mailRuntime:
+  loopSecret:
+    value: '<random-mail-loop-secret>'
+  zonemtaRelayPassword:
+    value: '<random-zonemta-relay-password>'
+  feedbackMailboxPassword:
+    value: '<random-feedback-mailbox-password>'
+
+objectStorage:
+  endpoint:
+    value: 'https://<account-id>.r2.cloudflarestorage.com'
+  region:
+    value: auto
+  bucket:
+    value: company-agent-mail-archive
+  accessKeyId:
+    value: '<r2-access-key>'
+  secretAccessKey:
+    value: '<r2-secret-key>'
+
+cloudflare:
+  apiBaseUrl: https://api.cloudflare.com/client/v4
+  accountId:
+    value: '<cloudflare-account-id>'
+  apiToken:
+    value: '<cloudflare-token>'
+  worker:
+    scriptName: agent-mail-ingress
+    archiveBucket:
+      value: company-agent-mail-archive
+
+tunnel:
+  provider: cloudflared
+  listenUrl:
+    value: http://0.0.0.0:8080
+  externalUrl:
+    value: https://mail-ingress.company.example/agent-mail/ingest/v1
+  hmacSecret:
+    value: '<random-fast-path-secret>'
+
+cloudflared:
+  tunnelToken:
+    value: '<cloudflared-tunnel-token>'
+
+outbound:
+  provider:
+    value: cloudflare

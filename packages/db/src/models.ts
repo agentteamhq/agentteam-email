@@ -1,0 +1,132 @@
+import type { Connection, Model, Schema } from 'mongoose'
+
+import {
+  accountSchema,
+  apikeySchema,
+  auditLogSchema,
+  invitationSchema,
+  jwkSchema,
+  memberSchema,
+  oauthAccessTokenSchema,
+  oauthClientSchema,
+  oauthConsentSchema,
+  oauthRefreshTokenSchema,
+  organizationSchema,
+  sessionSchema,
+  subscriptionSchema,
+  teamSchema,
+  twoFactorSchema,
+  userSchema,
+  verificationSchema,
+  type AccountDocument,
+  type ApiKeyDocument,
+  type AuditLogDocument,
+  type InvitationDocument,
+  type JwkDocument,
+  type MemberDocument,
+  type OAuthAccessTokenDocument,
+  type OAuthClientDocument,
+  type OAuthConsentDocument,
+  type OAuthRefreshTokenDocument,
+  type OrganizationDocument,
+  type SessionDocument,
+  type SubscriptionDocument,
+  type TeamDocument,
+  type TwoFactorDocument,
+  type UserDocument,
+  type VerificationDocument
+} from './schema/better-auth'
+import {
+  cloudflareConnectionSchema,
+  cloudflareOAuthConnectionIntentSchema,
+  cloudflareOAuthGrantSchema,
+  type CloudflareConnectionDocument,
+  type CloudflareOAuthConnectionIntentDocument,
+  type CloudflareOAuthGrantDocument
+} from './schema/cloudflare'
+import {
+  actorSchema,
+  policyAuditEntrySchema,
+  subjectPolicySchema,
+  type ActorDocument,
+  type PolicyAuditEntryDocument,
+  type SubjectPolicyDocument
+} from './schema/permissions'
+
+export type AppModel<TDocument> = Model<TDocument, {}, {}, {}, TDocument>
+
+export type AppModels = {
+  account: AppModel<AccountDocument>
+  actor: AppModel<ActorDocument>
+  apikey: AppModel<ApiKeyDocument>
+  auditLog: AppModel<AuditLogDocument>
+  cloudflareConnection: AppModel<CloudflareConnectionDocument>
+  cloudflareOAuthConnectionIntent: AppModel<CloudflareOAuthConnectionIntentDocument>
+  cloudflareOAuthGrant: AppModel<CloudflareOAuthGrantDocument>
+  invitation: AppModel<InvitationDocument>
+  jwk: AppModel<JwkDocument>
+  member: AppModel<MemberDocument>
+  oauthAccessToken: AppModel<OAuthAccessTokenDocument>
+  oauthClient: AppModel<OAuthClientDocument>
+  oauthConsent: AppModel<OAuthConsentDocument>
+  oauthRefreshToken: AppModel<OAuthRefreshTokenDocument>
+  organization: AppModel<OrganizationDocument>
+  policyAuditEntry: AppModel<PolicyAuditEntryDocument>
+  session: AppModel<SessionDocument>
+  subjectPolicy: AppModel<SubjectPolicyDocument>
+  subscription: AppModel<SubscriptionDocument>
+  team: AppModel<TeamDocument>
+  twoFactor: AppModel<TwoFactorDocument>
+  user: AppModel<UserDocument>
+  verification: AppModel<VerificationDocument>
+}
+
+export function createAppModels(connection: Connection): AppModels {
+  return {
+    account: connectionModel(connection, 'account', accountSchema),
+    actor: connectionModel(connection, 'actor', actorSchema),
+    apikey: connectionModel(connection, 'apikey', apikeySchema),
+    auditLog: connectionModel(connection, 'auditLog', auditLogSchema),
+    cloudflareConnection: connectionModel(
+      connection,
+      'cloudflareConnection',
+      cloudflareConnectionSchema
+    ),
+    cloudflareOAuthConnectionIntent: connectionModel(
+      connection,
+      'cloudflareOAuthConnectionIntent',
+      cloudflareOAuthConnectionIntentSchema
+    ),
+    cloudflareOAuthGrant: connectionModel(
+      connection,
+      'cloudflareOAuthGrant',
+      cloudflareOAuthGrantSchema
+    ),
+    invitation: connectionModel(connection, 'invitation', invitationSchema),
+    jwk: connectionModel(connection, 'jwk', jwkSchema),
+    member: connectionModel(connection, 'member', memberSchema),
+    oauthAccessToken: connectionModel(connection, 'oauthAccessToken', oauthAccessTokenSchema),
+    oauthClient: connectionModel(connection, 'oauthClient', oauthClientSchema),
+    oauthConsent: connectionModel(connection, 'oauthConsent', oauthConsentSchema),
+    oauthRefreshToken: connectionModel(connection, 'oauthRefreshToken', oauthRefreshTokenSchema),
+    organization: connectionModel(connection, 'organization', organizationSchema),
+    policyAuditEntry: connectionModel(connection, 'policyAuditEntry', policyAuditEntrySchema),
+    session: connectionModel(connection, 'session', sessionSchema),
+    subjectPolicy: connectionModel(connection, 'subjectPolicy', subjectPolicySchema),
+    subscription: connectionModel(connection, 'subscription', subscriptionSchema),
+    team: connectionModel(connection, 'team', teamSchema),
+    twoFactor: connectionModel(connection, 'twoFactor', twoFactorSchema),
+    user: connectionModel(connection, 'user', userSchema),
+    verification: connectionModel(connection, 'verification', verificationSchema)
+  }
+}
+
+function connectionModel<TDocument>(
+  connection: Connection,
+  name: string,
+  schema: Schema<TDocument>
+): AppModel<TDocument> {
+  return connection.models[name]
+    ? connection.model<TDocument, AppModel<TDocument>>(name)
+    : connection.model<TDocument, AppModel<TDocument>>(name, schema)
+}

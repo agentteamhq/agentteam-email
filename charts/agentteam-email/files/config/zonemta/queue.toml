@@ -1,0 +1,4 @@
+instanceId = "agent-mail"
+collection = "zone-queue"
+gfs = "mail"
+disableGC = false

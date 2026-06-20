@@ -1,0 +1,215 @@
+namespace:
+  create: true
+  name: agentteam-email
+
+nameOverride: ''
+fullnameOverride: ''
+
+extraLabels:
+  namespace: {}
+  mailControlService: {}
+  webServer: {}
+  wildduck: {}
+  cloudflared: {}
+
+names:
+  mailControlService: atemail-mail-control-service
+  mailControlServiceAccount: atemail-mail-control-service
+  webServer: atemail-web-server
+  webServerServiceAccount: atemail-web-server
+  mongodb: mongodb
+  redis: redis
+  rspamd: rspamd
+  wildduck: wildduck
+  wildduckApi: wildduck-api
+  wildduckImap: wildduck-imap
+  haraka: haraka
+  zonemta: zonemta
+  zonemtaApi: zonemta-api
+  zonemtaFeeder: zonemta-feeder
+  zonemtaDsn: zonemta-dsn
+  tailscaleState: atemail-tailscale-state
+  tailscaleServe: atemail-tailscale-serve
+  cloudflared: atemail-cloudflared
+
+images:
+  mailControlService:
+    repository: ghcr.io/agentteamhq/agentteam-email/atemail-mail-control-service
+    pullPolicy: Always
+  webServer:
+    repository: ghcr.io/agentteamhq/agentteam-email/atemail-web-server
+    pullPolicy: Always
+  mongodb:
+    repository: docker.io/library/mongo
+    tag: '8.3.2'
+    pullPolicy: IfNotPresent
+  redis:
+    repository: docker.io/library/redis
+    tag: '8.6.3'
+    pullPolicy: IfNotPresent
+  rspamd:
+    repository: docker.io/rspamd/rspamd
+    tag: '4.1.0'
+    pullPolicy: IfNotPresent
+  wildduck:
+    repository: ghcr.io/zone-eu/wildduck
+    tag: '1.48.2'
+    pullPolicy: IfNotPresent
+  haraka:
+    repository: ghcr.io/zone-eu/haraka-plugin-wildduck
+    tag: '5.8.41'
+    pullPolicy: IfNotPresent
+  zonemta:
+    repository: ghcr.io/zone-eu/zonemta-wildduck
+    tag: '1.32.30'
+    pullPolicy: IfNotPresent
+  tailscale:
+    repository: ghcr.io/tailscale/tailscale
+    tag: 'v1.96.5'
+    pullPolicy: IfNotPresent
+  cloudflared:
+    repository: docker.io/cloudflare/cloudflared
+    tag: '2026.6.1'
+    pullPolicy: IfNotPresent
+
+webServer:
+  authSecret: {}
+  encryptionKey: {}
+
+controlApi:
+  token: {}
+
+wildduck:
+  adminAccessToken: {}
+  accessControlSecret: {}
+
+mailRuntime:
+  loopSecret: {}
+  zonemtaRelayPassword: {}
+  feedbackMailboxPassword: {}
+
+objectStorage:
+  endpoint: {}
+  region:
+    value: auto
+  bucket: {}
+  accessKeyId: {}
+  secretAccessKey: {}
+
+cloudflare:
+  apiBaseUrl: https://api.cloudflare.com/client/v4
+  accountId: {}
+  apiToken: {}
+  worker:
+    scriptName: agent-mail-ingress
+    archiveBucket: {}
+
+tunnel:
+  provider: none
+  listenUrl:
+    value: http://0.0.0.0:8080
+  externalUrl: {}
+  hmacSecret: {}
+
+tailscale:
+  hostname: agent-mail-ingress
+  certDomain: ''
+  localAddrPort: '[::]:9002'
+
+cloudflared:
+  replicas: 1
+  metricsPort: 2000
+
+outbound:
+  provider:
+    value: cloudflare
+
+ses: {}
+
+bundledConfig:
+  enabled: true
+
+persistence:
+  enabled: true
+  storageClassName: ''
+  mongodb:
+    size: 20Gi
+    accessModes:
+      - ReadWriteOnce
+    existingClaim: ''
+  redis:
+    size: 2Gi
+    accessModes:
+      - ReadWriteOnce
+    existingClaim: ''
+  rspamd:
+    size: 1Gi
+    accessModes:
+      - ReadWriteOnce
+    existingClaim: ''
+  harakaQueue:
+    size: 5Gi
+    accessModes:
+      - ReadWriteOnce
+    existingClaim: ''
+
+service:
+  webServer:
+    type: ClusterIP
+    port: 80
+
+ingress:
+  enabled: false
+  className: ''
+  annotations: {}
+  hosts:
+    - host: ''
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  mailControlService: {}
+  webServer: {}
+  mongodb: {}
+  redis: {}
+  rspamd: {}
+  wildduck: {}
+  haraka: {}
+  zonemta: {}
+  tailscale:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+  cloudflared: {}
+
+podSecurityContext:
+  fsGroup: 1000
+  fsGroupChangePolicy: OnRootMismatch
+
+containerSecurityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  runAsNonRoot: true
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+extraEnv:
+  mailControlService: []
+  webServer: []
+  wildduck: []
+  tailscale: []
+
+extraVolumes:
+  mailControlService: []
+  webServer: []
+
+extraVolumeMounts:
+  mailControlService: []
+  webServer: []

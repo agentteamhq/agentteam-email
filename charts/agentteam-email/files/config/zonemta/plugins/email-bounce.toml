@@ -1,0 +1,8 @@
+["core/email-bounce"]
+enabled = "main"
+sendingZone = "bounces"
+disableInterfaces = ["forwarder"]
+
+["core/email-bounce".mailerDaemon]
+name = "Mail Delivery Subsystem"
+address = "mailer-daemon@agent-mail.invalid"

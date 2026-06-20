@@ -1,0 +1,9 @@
+@font-face {
+  font-family: 'Instrument Serif';
+  font-style: normal;
+  font-weight: 400;
+  src: url(src/fonts/instrument-serif/instrument-serif-regular-subset.woff2) format('woff2');
+  unicode-range:
+    U+0020-007F, U+00A9, U+00AE, U+00B0, U+20BC, U+2010, U+2013, U+2014, U+2018, U+2019, U+201A, U+201C,
+    U+201D, U+201E, U+2039, U+203A, U+2026, U+2022;
+}

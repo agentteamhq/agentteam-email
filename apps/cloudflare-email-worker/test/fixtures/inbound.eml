@@ -1,0 +1,20 @@
+From: Sender Example <sender@example.net>
+To: agent@example.com
+Subject: Worker Fixture
+Message-ID: <fixture-message-id@example.net>
+Date: Sat, 18 Apr 2026 12:00:00 +0000
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="inbound-fixture-boundary"
+
+--inbound-fixture-boundary
+Content-Type: text/plain; charset=utf-8
+
+Fixture body for agent-mail ingress testing.
+
+--inbound-fixture-boundary
+Content-Type: text/plain; charset=utf-8; name="inbound-fixture.txt"
+Content-Disposition: attachment; filename="inbound-fixture.txt"
+Content-Transfer-Encoding: base64
+
+aW5ib3VuZCBhdHRhY2htZW50
+--inbound-fixture-boundary--

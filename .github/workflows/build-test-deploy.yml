@@ -1,0 +1,265 @@
+name: Build, Test & Deploy
+
+on:
+  push:
+    branches: ['main']
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+  packages: write
+  attestations: write
+
+env:
+  DO_NOT_TRACK: 1
+  ASTRO_TELEMETRY_DISABLED: 1
+  BETTER_AUTH_TELEMETRY: 0
+  PUBLIC_HOSTNAME: ${{ vars.PUBLIC_HOSTNAME }}
+
+jobs:
+  build_test_publish:
+    name: Build, Test and Publish
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve release version
+        id: release
+        run: |
+          is_release=false
+          is_stable=false
+          version=not-a-release
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            tag="${GITHUB_REF_NAME}"
+            if [[ ! "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
+              echo "release tags must be vX.Y.Z or vX.Y.Z-prerelease" >&2
+              exit 1
+            fi
+            version="${tag#v}"
+            is_release=true
+            if [[ "${version}" != *-* ]]; then
+              is_stable=true
+            fi
+          elif [[ "${GITHUB_REF_NAME}" != "main" ]]; then
+            echo "workflow_dispatch must run from main or a release tag" >&2
+            exit 1
+          fi
+          {
+            echo "is_release=${is_release}"
+            echo "is_stable=${is_stable}"
+            echo "version=${version}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set up Helm
+        if: steps.release.outputs.is_release == 'true'
+        uses: azure/setup-helm@v4
+        with:
+          version: v4.2.0
+
+      - name: Set up crane
+        if: steps.release.outputs.is_release == 'true'
+        uses: imjasonh/setup-crane@v0.5
+
+      - name: Require public hostname
+        run: ': "${PUBLIC_HOSTNAME:?PUBLIC_HOSTNAME repository variable is required}"'
+
+      - name: Build complete development environment image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/web-server/Containerfile
+          target: build
+          load: true
+          tags: atemail-web-server:build
+          build-args: |
+            PUBLIC_HOSTNAME=${{ env.PUBLIC_HOSTNAME }}
+          cache-from: |
+            type=gha,scope=prod-web-server
+            type=registry,ref=ghcr.io/${{ github.repository }}/atemail-web-server:latest
+          cache-to: type=gha,mode=max,scope=prod-web-server
+
+      - name: Build web server production runtime dist stage for testing
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/web-server/Containerfile
+          load: true
+          tags: atemail-web-server:test
+          build-args: |
+            PUBLIC_HOSTNAME=${{ env.PUBLIC_HOSTNAME }}
+          cache-from: |
+            type=gha,scope=prod-web-server
+            type=registry,ref=ghcr.io/${{ github.repository }}/atemail-web-server:latest
+          cache-to: type=gha,mode=max,scope=prod-web-server
+
+      - name: Build mail control service production runtime image for testing
+        uses: docker/build-push-action@v6
+        with:
+          context: ./apps/mail-control-service
+          file: ./apps/mail-control-service/Containerfile
+          load: true
+          tags: atemail-mail-control-service:test
+          cache-from: |
+            type=gha,scope=prod-mail-control-service
+            type=registry,ref=ghcr.io/${{ github.repository }}/atemail-mail-control-service:latest
+          cache-to: type=gha,mode=max,scope=prod-mail-control-service
+
+      - name: Run unit and integration tests
+        run: |
+          docker run \
+            -e CI=true \
+            -e DEBUG='*' \
+            -e DOCKER_IMAGE=atemail-web-server:test \
+            -v $PWD:$PWD \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            atemail-web-server:build \
+            pnpm run test
+
+      - name: Declare web server docker image meta tags
+        id: meta_web_server
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            name=ghcr.io/${{ github.repository }}/atemail-web-server
+          tags: |
+            type=edge,branch=main
+            type=sha,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=${{ steps.release.outputs.version }},enable=${{ steps.release.outputs.is_release == 'true' }}
+            type=raw,value=latest,enable=${{ steps.release.outputs.is_stable == 'true' }}
+          flavor: |
+            latest=false
+
+      - name: Declare mail control service docker image meta tags
+        id: meta_mail_control_service
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            name=ghcr.io/${{ github.repository }}/atemail-mail-control-service
+          tags: |
+            type=edge,branch=main
+            type=sha,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=${{ steps.release.outputs.version }},enable=${{ steps.release.outputs.is_release == 'true' }}
+            type=raw,value=latest,enable=${{ steps.release.outputs.is_stable == 'true' }}
+          flavor: |
+            latest=false
+
+      - name: Auth to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve published image metadata
+        id: image_metadata
+        env:
+          IS_RELEASE: ${{ steps.release.outputs.is_release }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          version=edge
+          if [[ "${IS_RELEASE}" == "true" ]]; then
+            version="${RELEASE_VERSION}"
+          fi
+          {
+            echo "build_date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo "vcs_ref=${GITHUB_SHA}"
+            echo "version=${version}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Publish web server production image (multi-arch)
+        id: publish_web_server
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/web-server/Containerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta_web_server.outputs.tags }}
+          labels: ${{ steps.meta_web_server.outputs.labels }}
+          build-args: |
+            BUILD_DATE=${{ steps.image_metadata.outputs.build_date }}
+            PUBLIC_HOSTNAME=${{ env.PUBLIC_HOSTNAME }}
+            VCS_REF=${{ steps.image_metadata.outputs.vcs_ref }}
+            VERSION=${{ steps.image_metadata.outputs.version }}
+          cache-from: |
+            type=gha,scope=prod-web-server
+            type=registry,ref=ghcr.io/${{ github.repository }}/atemail-web-server:latest
+          cache-to: |
+            type=gha,mode=max,scope=prod-web-server
+
+      - name: Attest web server production image
+        uses: actions/attest@v4
+        with:
+          subject-name: ghcr.io/${{ github.repository }}/atemail-web-server
+          subject-digest: ${{ steps.publish_web_server.outputs.digest }}
+          push-to-registry: true
+
+      - name: Publish mail control service production image (multi-arch)
+        id: publish_mail_control_service
+        uses: docker/build-push-action@v6
+        with:
+          context: ./apps/mail-control-service
+          file: ./apps/mail-control-service/Containerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta_mail_control_service.outputs.tags }}
+          labels: ${{ steps.meta_mail_control_service.outputs.labels }}
+          build-args: |
+            BUILD_DATE=${{ steps.image_metadata.outputs.build_date }}
+            VCS_REF=${{ steps.image_metadata.outputs.vcs_ref }}
+            VERSION=${{ steps.image_metadata.outputs.version }}
+          cache-from: |
+            type=gha,scope=prod-mail-control-service
+            type=registry,ref=ghcr.io/${{ github.repository }}/atemail-mail-control-service:latest
+          cache-to: |
+            type=gha,mode=max,scope=prod-mail-control-service
+
+      - name: Attest mail control service production image
+        uses: actions/attest@v4
+        with:
+          subject-name: ghcr.io/${{ github.repository }}/atemail-mail-control-service
+          subject-digest: ${{ steps.publish_mail_control_service.outputs.digest }}
+          push-to-registry: true
+
+      - name: Auth Helm to GitHub Container Registry
+        if: steps.release.outputs.is_release == 'true'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | helm registry login ghcr.io \
+                --username "${{ github.actor }}" \
+                --password-stdin
+
+      - name: Publish Helm chart
+        id: publish_helm_chart
+        if: steps.release.outputs.is_release == 'true'
+        env:
+          CHART_SUBJECT_NAME: ghcr.io/${{ github.repository_owner }}/agentteam-email
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          mkdir -p tmp/helm-package
+          helm package charts/agentteam-email \
+            --version "${VERSION}" \
+            --app-version "${VERSION}" \
+            --destination tmp/helm-package
+          helm push "tmp/helm-package/agentteam-email-${VERSION}.tgz" \
+            "oci://ghcr.io/${{ github.repository_owner }}"
+          chart_digest="$(crane digest "${CHART_SUBJECT_NAME}:${VERSION}")"
+          {
+            echo "subject_name=${CHART_SUBJECT_NAME}"
+            echo "subject_digest=${chart_digest}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Attest Helm chart
+        if: steps.release.outputs.is_release == 'true'
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ steps.publish_helm_chart.outputs.subject_name }}
+          subject-digest: ${{ steps.publish_helm_chart.outputs.subject_digest }}
+          push-to-registry: true

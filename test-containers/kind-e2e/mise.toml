@@ -1,0 +1,13 @@
+[tasks."images:build"]
+description = "Build repo-owned container images for kind E2E"
+depends = [
+  "//apps/mail-control-service:image:build",
+  "//apps/web-server:image:build",
+]
+run = "true"
+
+[tasks.test]
+description = "Run the Helm/kind end-to-end harness"
+depends = [":images:build"]
+dir = "{{config_root}}"
+run = "pnpm test:kind"

@@ -1,0 +1,31 @@
+---
+title: "Quickstart"
+description: "Start with the current self-hosting documentation and validation workflow."
+---
+
+The public self-hosting interface is still being normalized. Start by reviewing
+the target runtime shape, then choose Compose for a single host or Helm for
+Kubernetes.
+
+## Read first
+
+1. Review the [architecture](/concepts/architecture).
+2. Configure [Docker Compose self-hosting](/guides/self-host/docker-compose) or
+   [Helm self-hosting](/guides/self-host/helm).
+3. Configure [Cloudflare authentication and routing](/guides/self-host/cloudflare-authentication).
+4. Choose exactly one fast-path tunnel:
+   [Tailscale](/guides/self-host/tailscale) or [Cloudflare Tunnel](/guides/self-host/cloudflared).
+
+## Local docs preview
+
+From the repository root:
+
+```bash
+mise run //docs:dev
+```
+
+Validate docs changes before publishing:
+
+```bash
+mise run //docs:check
+```

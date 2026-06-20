@@ -1,0 +1,11 @@
+name = "agent-mail-ingress"
+main = "src/index.js"
+compatibility_date = "2026-04-18"
+workers_dev = false
+
+[[send_email]]
+name = "EMAIL"
+
+[[r2_buckets]]
+binding = "ARCHIVE_BUCKET"
+bucket_name = "agent-mail-archive"

@@ -1,0 +1,99 @@
+[tools]
+podman = "5.8.2"
+node = "24.16.0"
+
+[settings]
+node.corepack = true
+unix_default_inline_shell_args = "bash -euo pipefail -c"
+
+[tasks.build]
+description = "Bundle the Cloudflare worker with Vite"
+run = """
+repo_root="$(git rev-parse --show-toplevel)"
+cd "${repo_root}"
+corepack pnpm install
+corepack pnpm --filter agent-mail-cloudflare-worker run build
+"""
+
+[tasks."test:unit"]
+description = "Run Cloudflare worker unit tests in one run directory"
+run = """
+run_id="run-$(date +%Y%m%d-%H%M%S)"
+worker_root="$PWD"
+repo_root="$(git rev-parse --show-toplevel)"
+run_dir="${worker_root}/tmp/${run_id}"
+mkdir -p "${run_dir}"
+printf '%s\n' "${run_dir}" > "${run_dir}/run-dir.txt"
+echo "[test] run directory: ${run_dir}"
+cd "${repo_root}"
+corepack pnpm install
+echo "[test] running node --test"
+set +e
+corepack pnpm --filter agent-mail-cloudflare-worker exec node --test --test-reporter tap 2>&1 | tee "${run_dir}/node-test.tap"
+test_status="${PIPESTATUS[0]}"
+set -e
+passed=$(grep -c "^ok " "${run_dir}/node-test.tap" || true)
+failed=$(grep -c "^not ok " "${run_dir}/node-test.tap" || true)
+skipped=$(grep -c "# SKIP" "${run_dir}/node-test.tap" || true)
+total=$((passed + failed))
+printf "total=%s\npassed=%s\nfailed=%s\nskipped=%s\n" "$total" "$passed" "$failed" "$skipped" | tee "${run_dir}/node-test-summary.txt"
+if [ "${test_status}" -ne 0 ] || [ "${failed}" -ne 0 ]; then
+  exit 1
+fi
+echo "[test] node test completed"
+echo "[test] completed"
+echo "${run_dir}"
+"""
+
+[tasks.test]
+description = "Run Cloudflare worker unit tests"
+depends = ["test:unit"]
+run = "true"
+
+[tasks.start]
+description = "Run the Cloudflare ingress worker locally with wrangler dev"
+run = """
+repo_root="$(git rev-parse --show-toplevel)"
+cd "${repo_root}"
+corepack pnpm install
+corepack pnpm --filter agent-mail-cloudflare-worker run dev
+"""
+
+[tasks.stop]
+description = "Delete the deployed Cloudflare ingress worker script"
+run = """
+: "${AGENT_MAIL_CLOUDFLARE_API_TOKEN:?missing AGENT_MAIL_CLOUDFLARE_API_TOKEN}"
+: "${AGENT_MAIL_CLOUDFLARE_ACCOUNT_ID:?missing AGENT_MAIL_CLOUDFLARE_ACCOUNT_ID}"
+repo_root="$(git rev-parse --show-toplevel)"
+cd "${repo_root}"
+corepack pnpm install
+(
+  cd apps/cloudflare-email-worker
+  node ./scripts/delete-worker.mjs
+)
+"""
+
+[tasks.status]
+description = "Show deployed Cloudflare ingress worker status"
+run = """
+: "${AGENT_MAIL_CLOUDFLARE_API_TOKEN:?missing AGENT_MAIL_CLOUDFLARE_API_TOKEN}"
+: "${AGENT_MAIL_CLOUDFLARE_ACCOUNT_ID:?missing AGENT_MAIL_CLOUDFLARE_ACCOUNT_ID}"
+repo_root="$(git rev-parse --show-toplevel)"
+cd "${repo_root}"
+corepack pnpm install
+(
+  cd apps/cloudflare-email-worker
+  node ./scripts/status.mjs
+)
+"""
+
+[tasks.logs]
+description = "Tail Cloudflare ingress worker logs"
+run = """
+export CLOUDFLARE_API_TOKEN="${AGENT_MAIL_CLOUDFLARE_API_TOKEN:?missing AGENT_MAIL_CLOUDFLARE_API_TOKEN}"
+export CLOUDFLARE_ACCOUNT_ID="${AGENT_MAIL_CLOUDFLARE_ACCOUNT_ID:?missing AGENT_MAIL_CLOUDFLARE_ACCOUNT_ID}"
+repo_root="$(git rev-parse --show-toplevel)"
+cd "${repo_root}"
+corepack pnpm install
+corepack pnpm --filter agent-mail-cloudflare-worker run tail
+"""

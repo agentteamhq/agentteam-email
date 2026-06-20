@@ -1,0 +1,14 @@
+FROM node:24.16.0-bookworm-slim
+
+WORKDIR /app
+
+# renovate: datasource=npm depName=oidc-provider versioning=npm
+ARG OIDC_PROVIDER_VERSION=9.8.4
+
+RUN npm install --omit=dev --no-audit --no-fund "oidc-provider@${OIDC_PROVIDER_VERSION}"
+
+COPY server.mjs /app/server.mjs
+
+EXPOSE 8788
+
+CMD ["node", "/app/server.mjs"]

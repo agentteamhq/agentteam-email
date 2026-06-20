@@ -1,0 +1,3 @@
+mongo = "mongodb://{{ .Values.names.mongodb }}:27017/wildduck?directConnection=true&maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000"
+redis = "redis://{{ .Values.names.redis }}:6379/3"
+sender = "wildduck"

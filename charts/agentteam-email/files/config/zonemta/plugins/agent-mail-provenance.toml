@@ -1,0 +1,2 @@
+[agent-mail-provenance]
+enabled = ["sender"]

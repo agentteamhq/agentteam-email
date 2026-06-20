@@ -1,0 +1,46 @@
+import { createFileRoute } from '@tanstack/react-router'
+import type { AuthRouteState } from '@main/backend/routes/webapp'
+
+import { throwRouteRedirect } from '../lib/route-redirect'
+import { resolveFrontendServerRouteContext } from '../server-route-context'
+import { SignUpRouteScreen } from '../screens/signup-route-screen'
+import { SITE_STRINGS, formatSiteTitle } from '../strings'
+
+const defaultSignUpRouteState: AuthRouteState = {
+  flash: null,
+  redirectTo: '/dashboard/',
+  shouldRedirectToDashboard: false,
+  user: null
+}
+
+export const Route = createFileRoute('/signup')({
+  head: () => ({
+    meta: [
+      {
+        title: formatSiteTitle('Create account')
+      },
+      {
+        name: 'description',
+        content: `Create a ${SITE_STRINGS.BRAND_NAME} account to manage outbound and reply workflows.`
+      }
+    ]
+  }),
+  loader: async (loaderInput) => {
+    const serverRouteContext = resolveFrontendServerRouteContext(loaderInput)
+
+    if (serverRouteContext?.serverRouteHandlers.loadSignUpRoute) {
+      const routeState = await serverRouteContext.serverRouteHandlers.loadSignUpRoute(
+        serverRouteContext.request
+      )
+
+      if (routeState.shouldRedirectToDashboard) {
+        throwRouteRedirect('/dashboard/')
+      }
+
+      return routeState
+    }
+
+    return defaultSignUpRouteState
+  },
+  component: SignUpRouteScreen
+})

@@ -1,0 +1,15 @@
+apiVersion: v2
+name: agentteam-email
+description: Self-hosted AgentTeam Email mail control service, mail stack, and web server.
+type: application
+version: 0.0.0-dev
+keywords:
+  - email
+  - self-hosted
+  - cloudflare
+  - wildduck
+home: https://github.com/agentteamhq/agentteam-email
+sources:
+  - https://github.com/agentteamhq/agentteam-email
+maintainers:
+  - name: AgentTeam

@@ -1,0 +1,39 @@
+name = "Agent Mail ZoneMTA"
+ident = "agent-mail-zonemta"
+corePluginsPath = "./node_modules/@zone-eu/zone-mta/plugins/"
+
+[log]
+level = "info"
+
+[dbs]
+# @include "dbs-{env}.toml"
+
+[queue]
+# @include "queue.toml"
+
+[dns]
+# @include "dns.toml"
+
+[mtaSts]
+# ZoneMTA relays to the mail-control-service SMTP relay listener, not final-recipient MX hosts.
+# Recipient-domain MTA-STS policy is handled downstream of the control service.
+enabled = false
+
+[api]
+port = 12080
+host = "0.0.0.0"
+
+[smtpInterfaces]
+# @include "interfaces/*.toml"
+
+[plugins]
+# @include "plugins/*.toml"
+
+[pools]
+# @include "pools.toml"
+
+[zones]
+# @include "zones/*.toml"
+
+[domainConfig]
+# @include "domains.toml"

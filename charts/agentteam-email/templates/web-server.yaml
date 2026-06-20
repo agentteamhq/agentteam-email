@@ -1,0 +1,198 @@
+{{- if eq .Values.tunnel.provider "tailscale" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.names.tailscaleServe }}
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.webServer "component" "tailscale") | nindent 4 }}
+data:
+  serve.json: |
+    {
+      "TCP": {
+        "443": {
+          "TCPForward": "127.0.0.1:4321",
+          "TerminateTLS": "${TS_CERT_DOMAIN}"
+        }
+      },
+      "AllowFunnel": {
+        "${TS_CERT_DOMAIN}:443": true
+      }
+    }
+---
+{{ end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.names.webServer }}
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.webServer "component" "web-server") | nindent 4 }}
+{{- with .Values.extraLabels.webServer }}
+{{ toYaml . | nindent 4 }}
+{{- end }}
+spec:
+  type: {{ .Values.service.webServer.type }}
+  selector:
+{{ include "agentteam-email.selectorLabels" (dict "root" . "name" .Values.names.webServer) | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.webServer.port }}
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.names.webServer }}
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.webServer "component" "web-server") | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+{{ include "agentteam-email.selectorLabels" (dict "root" . "name" .Values.names.webServer) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.webServer "component" "web-server") | nindent 8 }}
+{{- with .Values.extraLabels.webServer }}
+{{ toYaml . | nindent 8 }}
+{{- end }}
+    spec:
+      serviceAccountName: {{ .Values.names.webServerServiceAccount }}
+      securityContext:
+{{ toYaml .Values.podSecurityContext | nindent 8 }}
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
+      containers:
+        - name: web-server
+          image: {{ include "agentteam-email.image" .Values.images.webServer | quote }}
+          imagePullPolicy: {{ .Values.images.webServer.pullPolicy }}
+{{ include "agentteam-email.securityContext" . | nindent 10 }}
+          ports:
+            - name: http
+              containerPort: 4321
+          env:
+            - name: NODE_ENV
+{{- include "agentteam-email.envFor" (dict "root" . "name" "NODE_ENV") | nindent 14 }}
+            - name: PORT
+{{- include "agentteam-email.envFor" (dict "root" . "name" "PORT") | nindent 14 }}
+            - name: FRONTEND_HOST
+{{- include "agentteam-email.envFor" (dict "root" . "name" "FRONTEND_HOST") | nindent 14 }}
+            - name: PUBLIC_HOSTNAME
+{{- include "agentteam-email.envFor" (dict "root" . "name" "PUBLIC_HOSTNAME") | nindent 14 }}
+            - name: DATABASE_URL
+{{- include "agentteam-email.envFor" (dict "root" . "name" "DATABASE_URL") | nindent 14 }}
+            - name: MONGODB_URI
+{{- include "agentteam-email.envFor" (dict "root" . "name" "MONGODB_URI") | nindent 14 }}
+            - name: MONGODB_DATABASE
+{{- include "agentteam-email.envFor" (dict "root" . "name" "MONGODB_DATABASE") | nindent 14 }}
+            - name: TMP_DIR
+{{- include "agentteam-email.envFor" (dict "root" . "name" "TMP_DIR") | nindent 14 }}
+            - name: BETTER_AUTH_SECRET
+{{- include "agentteam-email.envFor" (dict "root" . "name" "BETTER_AUTH_SECRET") | nindent 14 }}
+            - name: ENCRYPT_SECRET_KEY
+{{- include "agentteam-email.envFor" (dict "root" . "name" "ENCRYPT_SECRET_KEY") | nindent 14 }}
+          {{- with .Values.extraEnv.webServer }}
+{{ toYaml . | nindent 12 }}
+          {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 5
+          {{- with .Values.extraVolumeMounts.webServer }}
+          volumeMounts:
+{{ toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.resources.webServer }}
+          resources:
+{{ toYaml . | nindent 12 }}
+          {{- end }}
+        {{- if eq .Values.tunnel.provider "tailscale" }}
+        - name: tailscale
+          image: {{ include "agentteam-email.image" .Values.images.tailscale | quote }}
+          imagePullPolicy: {{ .Values.images.tailscale.pullPolicy }}
+{{ include "agentteam-email.securityContext" . | nindent 10 }}
+          ports:
+            - name: tailscale
+              containerPort: 9002
+          env:
+            - name: TS_AUTHKEY
+{{- include "agentteam-email.envFor" (dict "root" . "name" "TS_AUTHKEY") | nindent 14 }}
+            - name: TS_HOSTNAME
+              value: {{ .Values.tailscale.hostname | quote }}
+            - name: TS_CERT_DOMAIN
+              value: {{ required "tailscale.certDomain is required when tunnel.provider=tailscale" .Values.tailscale.certDomain | quote }}
+            - name: TS_KUBE_SECRET
+              value: {{ .Values.names.tailscaleState | quote }}
+            - name: TS_SERVE_CONFIG
+              value: /etc/tailscale/serve/serve.json
+            - name: TS_USERSPACE
+              value: "true"
+            - name: TS_AUTH_ONCE
+              value: "true"
+            - name: TS_SOCKET
+              value: /tmp/tailscale/tailscaled.sock
+            - name: TS_ENABLE_HEALTH_CHECK
+              value: "true"
+            - name: TS_LOCAL_ADDR_PORT
+              value: {{ .Values.tailscale.localAddrPort | quote }}
+            - name: HOME
+              value: /tmp/tailscale
+            - name: XDG_CACHE_HOME
+              value: /tmp/tailscale/cache
+          {{- with .Values.extraEnv.tailscale }}
+{{ toYaml . | nindent 12 }}
+          {{- end }}
+          readinessProbe:
+            tcpSocket:
+              port: tailscale
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: tailscale
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: tailscale-socket
+              mountPath: /tmp/tailscale
+            - name: tailscale-socket
+              mountPath: /var/run/tailscale
+            - name: tailscale-serve-config
+              mountPath: /etc/tailscale/serve
+              readOnly: true
+          {{- with .Values.resources.tailscale }}
+          resources:
+{{ toYaml . | nindent 12 }}
+          {{- end }}
+        {{- end }}
+      {{- if or (eq .Values.tunnel.provider "tailscale") .Values.extraVolumes.webServer }}
+      volumes:
+        {{- if eq .Values.tunnel.provider "tailscale" }}
+        - name: tailscale-socket
+          emptyDir: {}
+        - name: tailscale-serve-config
+          configMap:
+            name: {{ .Values.names.tailscaleServe }}
+        {{- end }}
+        {{- with .Values.extraVolumes.webServer }}
+{{ toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+{{ include "agentteam-email.podScheduling" . | nindent 6 }}

@@ -1,0 +1,48 @@
+[tasks.fmt]
+description = "Format Go source files"
+dir = "{{config_root}}"
+run = "find . -name '*.go' -not -path './vendor/*' -exec gofmt -w {} +"
+
+[tasks."fmt:check"]
+description = "Check Go source formatting"
+dir = "{{config_root}}"
+run = '''
+unformatted="$(find . -name '*.go' -not -path './vendor/*' -exec gofmt -l {} +)"
+if [ -n "${unformatted}" ]; then
+  printf 'Go files need gofmt:\n%s\n' "${unformatted}" >&2
+  exit 1
+fi
+'''
+
+[tasks."mod:tidy"]
+description = "Tidy Go module files"
+dir = "{{config_root}}"
+run = "go mod tidy"
+
+[tasks."mod:check"]
+description = "Check Go module tidiness"
+dir = "{{config_root}}"
+run = "go mod tidy -diff"
+
+[tasks."image:build"]
+description = "Build the Mail Control Service container image"
+dir = "{{config_root}}"
+run = '''
+: "${WT:?missing WT}"
+image_tag="${AGENTTEAM_EMAIL_KIND_IMAGE_TAG:-stage}"
+image_repository="${AGENTTEAM_EMAIL_KIND_MAIL_CONTROL_SERVICE_IMAGE_REPOSITORY:-atemail.${WT}.mail-control-service}"
+"${CONTAINER_ENGINE}" build \
+  -f Containerfile \
+  -t "${image_repository}:${image_tag}" \
+  .
+'''
+
+[tasks.test]
+description = "Run Mail Control Service Go tests"
+dir = "{{config_root}}"
+run = "go test ./..."
+
+[tasks.check]
+description = "Run Mail Control Service Go formatting, module, and test checks"
+depends = [":fmt:check", ":mod:check", ":test"]
+run = "true"

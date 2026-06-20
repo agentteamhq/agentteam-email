@@ -1,0 +1,18 @@
+enabled = true
+port = 10143
+host = "0.0.0.0"
+secure = false
+
+maxMB = 25
+retention = 30
+maxConnections = 15
+disableRetention = false
+disableSTARTTLS = true
+enableCompression = false
+useProxy = false
+ignoredHosts = []
+
+[setup]
+hostname = "{{ .Values.names.wildduckImap }}.{{ include "agentteam-email.namespace" . }}.svc.cluster.local"
+secure = false
+port = 143

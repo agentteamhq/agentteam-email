@@ -1,0 +1,17 @@
+{
+  "name": "@main/auth-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "test": "pnpm run test:auth",
+    "test:auth": "bash -c 'set -a; [ ! -f ../../.env ] || . ../../.env; set +a; exec node ./auth-flow.e2e.mjs'",
+    "test:dev": "pnpm run test:auth"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "mongodb": "catalog:",
+    "playwright": "catalog:"
+  }
+}

@@ -1,0 +1,48 @@
+ident = "agent-mail-wildduck"
+processes = 1
+
+[dbs]
+# @include "dbs.toml"
+
+[attachments]
+# @include "attachments.toml"
+
+[log]
+level = "info"
+
+[log.gelf]
+enabled = false
+component = "wildduck"
+
+[imap]
+# @include "imap.toml"
+
+[tls]
+# @include "tls.toml"
+
+[lmtp]
+# @include "lmtp.toml"
+
+[pop3]
+# @include "pop3.toml"
+
+[api]
+# @include "api.toml"
+
+[sender]
+# @include "sender.toml"
+
+[dkim]
+# @include "dkim.toml"
+
+[acme]
+# @include "acme.toml"
+
+[plugins]
+# @include "plugins.toml"
+
+[tasks]
+enabled = true
+
+[webhooks]
+enabled = false

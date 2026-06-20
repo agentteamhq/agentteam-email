@@ -1,0 +1,11 @@
+[feeder]
+enabled = true
+processes = 1
+maxSize = 10485760
+host = "0.0.0.0"
+port = 2525
+authentication = false
+maxRecipients = 1000
+starttls = false
+secure = false
+default = ["0.0.0.0"]

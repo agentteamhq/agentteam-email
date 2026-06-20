@@ -1,0 +1,46 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "ignorePatterns": ["dist/**", "node_modules/**", "**/*.cjs", "**/*.js", "**/*.json", "**/_*", "tmp/**"],
+  "overrides": [
+    {
+      "files": ["**/*.test.ts", "**/*.spec.ts"],
+      "rules": {
+        "eslint/no-console": "off"
+      }
+    }
+  ],
+  "plugins": ["eslint", "unicorn", "react", "react-perf", "typescript", "import", "vitest", "node"],
+  "rules": {
+    "no-unused-vars": "off",
+    "eslint/curly": "error",
+    "eslint/eqeqeq": "warn",
+    "eslint/no-console": "warn",
+    "eslint/no-eval": "error",
+    "eslint/no-global-assign": "error",
+
+    "eslint/no-shadow": "error",
+    "eslint/no-template-curly-in-string": "error",
+    "eslint/no-undef-init": "error",
+    "eslint/no-unused-vars": "allow",
+    "eslint/no-useless-return": "warn",
+    "eslint/no-void": "error",
+    "eslint/prefer-const": "warn",
+    "import/no-commonjs": "error",
+    "import/no-cycle": ["error", { "maxDepth": 3 }],
+    "react-perf/jsx-no-jsx-as-prop": "warn",
+    "react-perf/jsx-no-new-array-as-prop": "warn",
+    "react-perf/jsx-no-new-function-as-prop": "warn",
+    "react-perf/jsx-no-new-object-as-prop": "warn",
+    "react/exhaustive-deps": "error",
+    "react/jsx-no-undef": "error",
+    "react/react-in-jsx-scope": "off",
+
+    "react/rules-of-hooks": "error",
+    "typescript/no-explicit-any": "warn",
+    "typescript/no-non-null-assertion": "off"
+  }
+}

@@ -1,0 +1,762 @@
+# Docker Compose self-hosting env example:
+# docs/examples/compose/.env.example
+name: agentteam-email
+
+x-runtime: &runtime
+  user: "${AGENTTEAM_EMAIL_UID:-1000}:${AGENTTEAM_EMAIL_GID:-1000}"
+  pull_policy: "${AGENTTEAM_EMAIL_PULL_POLICY:-always}"
+
+x-control-env: &control-env
+  AGENTTEAM_EMAIL_WILDDUCK_MONGODB_URI: "${AGENTTEAM_EMAIL_WILDDUCK_MONGODB_URI:-mongodb://mongodb:27017/wildduck?directConnection=true&maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000}"
+  AGENTTEAM_EMAIL_CONTROL_MONGODB_URI: "${AGENTTEAM_EMAIL_CONTROL_MONGODB_URI:-mongodb://mongodb:27017/agent_mail_control?directConnection=true&maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000}"
+  AGENT_MAIL_R2_ENDPOINT: "${AGENT_MAIL_R2_ENDPOINT:?missing AGENT_MAIL_R2_ENDPOINT}"
+  AGENT_MAIL_R2_REGION: "${AGENT_MAIL_R2_REGION:-auto}"
+  AGENT_MAIL_R2_BUCKET: "${AGENT_MAIL_R2_BUCKET:?missing AGENT_MAIL_R2_BUCKET}"
+  AGENT_MAIL_R2_ACCESS_KEY_ID: "${AGENT_MAIL_R2_ACCESS_KEY_ID:?missing AGENT_MAIL_R2_ACCESS_KEY_ID}"
+  AGENT_MAIL_R2_SECRET_ACCESS_KEY: "${AGENT_MAIL_R2_SECRET_ACCESS_KEY:?missing AGENT_MAIL_R2_SECRET_ACCESS_KEY}"
+  AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN: "${AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN:?missing AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN}"
+  AGENT_MAIL_OUTBOUND_PROVIDER: "${AGENT_MAIL_OUTBOUND_PROVIDER:-cloudflare}"
+  AGENT_MAIL_CONTROL_API_TOKEN: "${AGENT_MAIL_CONTROL_API_TOKEN:?missing AGENT_MAIL_CONTROL_API_TOKEN}"
+  AGENT_MAIL_ZONEMTA_RELAY_PASSWORD: "${AGENT_MAIL_ZONEMTA_RELAY_PASSWORD:?missing AGENT_MAIL_ZONEMTA_RELAY_PASSWORD}"
+  AGENT_MAIL_FEEDBACK_MAILBOX_PASSWORD: "${AGENT_MAIL_FEEDBACK_MAILBOX_PASSWORD:?missing AGENT_MAIL_FEEDBACK_MAILBOX_PASSWORD}"
+  AGENT_MAIL_CF_TUNNEL_LISTEN_URL: "${AGENT_MAIL_CF_TUNNEL_LISTEN_URL:-http://0.0.0.0:8080}"
+  AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL: "${AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL:?missing AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL}"
+  AGENT_MAIL_CF_TUNNEL_HMAC_SECRET: "${AGENT_MAIL_CF_TUNNEL_HMAC_SECRET:?missing AGENT_MAIL_CF_TUNNEL_HMAC_SECRET}"
+  AGENT_MAIL_CLOUDFLARE_API_BASE_URL: "${AGENT_MAIL_CLOUDFLARE_API_BASE_URL:-https://api.cloudflare.com/client/v4}"
+  AGENT_MAIL_CLOUDFLARE_ACCOUNT_ID: "${AGENT_MAIL_CLOUDFLARE_ACCOUNT_ID:?missing AGENT_MAIL_CLOUDFLARE_ACCOUNT_ID}"
+  AGENT_MAIL_CLOUDFLARE_API_TOKEN: "${AGENT_MAIL_CLOUDFLARE_API_TOKEN:?missing AGENT_MAIL_CLOUDFLARE_API_TOKEN}"
+  AGENT_MAIL_CLOUDFLARE_WORKER_SCRIPT_NAME: "${AGENT_MAIL_CLOUDFLARE_WORKER_SCRIPT_NAME:-agent-mail-ingress}"
+  AGENT_MAIL_CLOUDFLARE_WORKER_ARCHIVE_BUCKET: "${AGENT_MAIL_CLOUDFLARE_WORKER_ARCHIVE_BUCKET:?missing AGENT_MAIL_CLOUDFLARE_WORKER_ARCHIVE_BUCKET}"
+  AGENT_MAIL_AWS_REGION: "${AGENT_MAIL_AWS_REGION:-}"
+  AGENT_MAIL_AWS_ACCESS_KEY_ID: "${AGENT_MAIL_AWS_ACCESS_KEY_ID:-}"
+  AGENT_MAIL_AWS_SECRET_ACCESS_KEY: "${AGENT_MAIL_AWS_SECRET_ACCESS_KEY:-}"
+
+services:
+  mongodb:
+    <<: *runtime
+    image: "docker.io/library/mongo:8.3.2"
+    command:
+      - mongod
+      - --config
+      - /etc/mongod.conf
+    volumes:
+      - mongodb-data:/data/db
+    configs:
+      - source: mongodb-mongod-conf
+        target: /etc/mongod.conf
+    healthcheck:
+      test: ["CMD", "sh", "-c", "mongosh --quiet --eval 'db.adminCommand({ ping: 1 })'"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+  redis:
+    <<: *runtime
+    image: "docker.io/library/redis:8.6.3"
+    command:
+      - redis-server
+      - /usr/local/etc/redis/redis.conf
+    volumes:
+      - redis-data:/data
+    configs:
+      - source: redis-conf
+        target: /usr/local/etc/redis/redis.conf
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+  rspamd:
+    <<: *runtime
+    image: "docker.io/rspamd/rspamd:4.1.0"
+    volumes:
+      - rspamd-data:/var/lib/rspamd
+    configs:
+      - source: rspamd-worker-controller
+        target: /etc/rspamd/local.d/worker-controller.inc
+      - source: rspamd-worker-normal
+        target: /etc/rspamd/local.d/worker-normal.inc
+      - source: rspamd-worker-proxy
+        target: /etc/rspamd/local.d/worker-proxy.inc
+    healthcheck:
+      test: ["CMD", "sh", "-c", "rspamc -h localhost:11333 </dev/null || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+  zonemta:
+    <<: *runtime
+    image: "ghcr.io/zone-eu/zonemta-wildduck:1.32.30"
+    environment:
+      NODE_ENV: production
+    configs:
+      - source: zonemta-main
+        target: /app/config/zonemta.toml
+      - source: zonemta-dbs-production
+        target: /app/config/dbs-production.toml
+      - source: zonemta-dns
+        target: /app/config/dns.toml
+      - source: zonemta-domains
+        target: /app/config/domains.toml
+      - source: zonemta-pools
+        target: /app/config/pools.toml
+      - source: zonemta-queue
+        target: /app/config/queue.toml
+      - source: zonemta-interface-feeder
+        target: /app/config/interfaces/feeder.toml
+      - source: zonemta-interface-dsn
+        target: /app/config/interfaces/dsn.toml
+      - source: zonemta-plugin-agent-mail-provenance
+        target: /app/config/plugins/agent-mail-provenance.toml
+      - source: zonemta-plugin-default-headers
+        target: /app/config/plugins/default-headers.toml
+      - source: zonemta-plugin-email-bounce
+        target: /app/config/plugins/email-bounce.toml
+      - source: zonemta-plugin-wildduck
+        target: /app/config/plugins/wildduck.toml
+      - source: zonemta-zone-bounces
+        target: /app/config/zones/bounces.toml
+      - source: zonemta-zone-default
+        target: /app/config/zones/default.toml
+      - source: zonemta-zone-routed
+        target: /app/config/zones/routed.toml
+      - source: zonemta-agent-mail-provenance-js
+        target: /app/plugins/agent-mail-provenance.js
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      atemail-mail-control-service:
+        condition: service_healthy
+    restart: unless-stopped
+
+  haraka:
+    <<: *runtime
+    image: "ghcr.io/zone-eu/haraka-plugin-wildduck:5.8.41"
+    volumes:
+      - haraka-queue:/app/queue
+    configs:
+      - source: haraka-connection
+        target: /app/config/connection.ini
+      - source: haraka-databytes
+        target: /app/config/databytes
+      - source: haraka-host-list
+        target: /app/config/host_list
+      - source: haraka-log
+        target: /app/config/log.ini
+      - source: haraka-me
+        target: /app/config/me
+      - source: haraka-plugins
+        target: /app/config/plugins
+      - source: haraka-rspamd
+        target: /app/config/rspamd.ini
+      - source: haraka-smtp
+        target: /app/config/smtp.ini
+      - source: haraka-smtpgreeting
+        target: /app/config/smtpgreeting
+      - source: haraka-tls
+        target: /app/config/tls.ini
+      - source: haraka-wildduck
+        target: /app/config/wildduck.yaml
+    depends_on:
+      wildduck:
+        condition: service_healthy
+      rspamd:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/10025 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+  wildduck:
+    <<: *runtime
+    image: "ghcr.io/zone-eu/wildduck:1.48.2"
+    environment:
+      APPCONF_api_accessToken: "${AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN:?missing AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN}"
+      APPCONF_api_accessControl_secret: "${AGENT_MAIL_WILDDUCK_ACCESS_CONTROL_SECRET:?missing AGENT_MAIL_WILDDUCK_ACCESS_CONTROL_SECRET}"
+      APPCONF_api_host: 0.0.0.0
+      APPCONF_api_port: "8080"
+      APPCONF_dbs_mongo: "${AGENTTEAM_EMAIL_WILDDUCK_MONGODB_URI:-mongodb://mongodb:27017/wildduck?directConnection=true&maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000}"
+      APPCONF_dbs_redis: "${AGENTTEAM_EMAIL_REDIS_URL:-redis://redis:6379/3}"
+      APPCONF_imap_host: 0.0.0.0
+      APPCONF_imap_port: "10143"
+      APPCONF_imap_secure: "false"
+      APPCONF_imap_disableSTARTTLS: "true"
+      APPCONF_imap_setup_hostname: wildduck
+      APPCONF_imap_setup_secure: "false"
+      APPCONF_imap_setup_port: "10143"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "sh",
+          "-c",
+          "wget -qO- --header=\"X-Access-Token: ${AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN}\" http://localhost:8080/health || exit 1"
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+    restart: unless-stopped
+
+  atemail-mail-control-service:
+    <<: *runtime
+    image: "ghcr.io/agentteamhq/agentteam-email/atemail-mail-control-service:${AGENTTEAM_EMAIL_VERSION:-latest}"
+    environment:
+      <<: *control-env
+    command:
+      - -admin-listen-address
+      - :8081
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      wildduck:
+        condition: service_healthy
+      haraka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget -qO- http://localhost:8081/healthz >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  atemail-web-server:
+    <<: *runtime
+    image: "ghcr.io/agentteamhq/agentteam-email/atemail-web-server:${AGENTTEAM_EMAIL_VERSION:-latest}"
+    ports:
+      - "${FRONTEND_PORT:-23100}:4321"
+    environment:
+      NODE_ENV: production
+      PORT: "4321"
+      FRONTEND_HOST: 0.0.0.0
+      PUBLIC_HOSTNAME: "${PUBLIC_HOSTNAME:?missing PUBLIC_HOSTNAME}"
+      DATABASE_URL: "${AGENTTEAM_EMAIL_APP_MONGODB_URI:-mongodb://mongodb:27017/agentteam_email?directConnection=true}"
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?missing BETTER_AUTH_SECRET}"
+      ENCRYPT_SECRET_KEY: "${ENCRYPT_SECRET_KEY:?missing ENCRYPT_SECRET_KEY}"
+      AGENT_MAIL_CONTROL_API_BASE_URL: "http://atemail-mail-control-service:8081"
+      AGENT_MAIL_CONTROL_API_TOKEN: "${AGENT_MAIL_CONTROL_API_TOKEN:?missing AGENT_MAIL_CONTROL_API_TOKEN}"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      atemail-mail-control-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget -qO- http://localhost:4321/health >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+  # Optional ingress: uncomment one tunnel service when using Tailscale Funnel
+  # or Cloudflare Tunnel for external access to this Compose stack.
+  # tailscale:
+  #   <<: *runtime
+  #   image: "ghcr.io/tailscale/tailscale:v1.96.5"
+  #   environment:
+  #     TS_AUTHKEY: "${TS_AUTHKEY:?missing TS_AUTHKEY}"
+  #     TS_HOSTNAME: "${TS_HOSTNAME:-agentteam-email}"
+  #     TS_SERVE_CONFIG: /etc/tailscale/serve/serve.json
+  #     TS_USERSPACE: "true"
+  #     TS_AUTH_ONCE: "true"
+  #     TS_ENABLE_HEALTH_CHECK: "true"
+  #     TS_LOCAL_ADDR_PORT: "[::]:9002"
+  #   volumes:
+  #     - tailscale-state:/var/lib/tailscale
+  #   restart: unless-stopped
+
+  # cloudflared:
+  #   <<: *runtime
+  #   image: "docker.io/cloudflare/cloudflared:2026.6.1"
+  #   command:
+  #     - tunnel
+  #     - --no-autoupdate
+  #     - run
+  #   environment:
+  #     TUNNEL_TOKEN: "${TUNNEL_TOKEN:?missing TUNNEL_TOKEN}"
+  #   restart: unless-stopped
+
+configs:
+  mongodb-mongod-conf:
+    content: |
+      storage:
+        dbPath: /data/db
+        wiredTiger:
+          engineConfig:
+            cacheSizeGB: 0.256
+            configString: "eviction=(threads_min=1,threads_max=1),prefetch=(available=false,default=false)"
+
+      net:
+        bindIpAll: true
+        # Sized above the summed Agent Mail client pools so diagnostics and burst
+        # work can connect while ZoneMTA, Haraka, WildDuck, and atemail-mail-control-service run.
+        maxIncomingConnections: 64
+        unixDomainSocket:
+          enabled: false
+
+      setParameter:
+        diagnosticDataCollectionEnabled: false
+
+  redis-conf:
+    content: |
+      bind 0.0.0.0
+      protected-mode no
+      port 6379
+      databases 4
+
+      daemonize no
+      loglevel notice
+      logfile ""
+
+      appendonly yes
+      appendfsync everysec
+      save ""
+
+      io-threads 1
+
+      dir /data
+
+  rspamd-worker-controller:
+    content: |
+      enabled = false;
+
+  rspamd-worker-normal:
+    content: |
+      bind_socket = "*:11333";
+      count = 1;
+
+  rspamd-worker-proxy:
+    content: |
+      enabled = false;
+
+  haraka-connection:
+    content: |
+      ;
+      [main]
+
+      ; Spooling
+      ; Save memory by spooling large messages to disk
+      ; directory to create temporary spool files in (default: /tmp - see https://github.com/haraka/message-stream)
+      ; spool_dir=/var/spool/haraka
+      ; Specify -1 to never spool to disk (default)
+      ; Specify 0 to always spool to disk
+      ; Otherwise specify a size in bytes, once reached the
+      ; message will be spooled to disk to save memory.
+      ; spool_after=
+
+      ; Require senders to conform to RFC 1869 and RFC 821 when sending the MAIL FROM and RCPT TO commands. In particular, the inclusion of spurious spaces or missing angle brackets will be rejected.
+      ; strict_rfc1869 = false
+
+      ; Advertise support for SMTPUTF8 (RFC-6531)
+      ; smtputf8=true
+
+
+      [haproxy]
+      ; Array: hosts or CIDRs that Haraka should enable the PROXY protocol from. See docs/HAProxy for format
+      hosts[] =
+      ; hosts[] = 192.0.2.4
+      ; hosts[] = 192.0.2.5
+      ; hosts[] = [2001:db8::1]
+      ; hosts[] = [2001:db8::2]
+
+
+      [headers]
+      ; add_received=true
+      ; clean_auth_results=true
+
+      ; show_version=true
+
+      max_lines=1000
+
+      max_received=100
+
+
+      [max]
+      ; Integer. The maximum SIZE of an email
+      bytes=26214400
+
+      ; Integer. Limit a potential denial of service in potentially hostile emails.
+      mime_parts=1000
+
+      ; Integer. The maximum length of lines in SMTP session commands (e.g. RCPT, HELO etc). Defaults to 512 (bytes) as mandated by RFC 5321 section 4.5.3.1.4. Clients exceeding this limit will be immediately disconnected with a "521 Command line too long" error.
+      line_length=512
+
+      ; Integer. The maximum length of lines in the DATA section of emails. Defaults to 992 (bytes), the limit set by Sendmail. When this limit is exceeded the three bytes "\r\n " (0x0d 0x0a 0x20) are inserted into the stream to "fix" it. This has the potential to "break" some email, but makes it more likely to be accepted by upstream/downstream services, and is the same behaviour as Sendmail. Also when the data line length limit is exceeded `transaction.notes.data_line_length_exceeded` is set to `true`.
+      data_line_length=992
+
+
+      [message]
+      ; Array. The greeting used when a client connects.
+      ; greeting[]=My Custom
+      ; greeting[]=Greeting Message
+
+      helo=Haraka is at your service.
+
+      ; String. Override the default connection close message.
+      close=closing connection. Have a jolly good day.
+
+
+      [uuid]
+      ; integer, how many UUID chars to show.
+      ; 0 = none, 6 is enough to be unique per day, 40 will include the
+      ;     full connection and transaction UUID
+      banner_chars=6
+
+      ; include N characters of the uuid (in brackets) at the start of each line of the deny message
+      deny_chars=0
+
+  haraka-databytes:
+    content: "26214400\n"
+
+  haraka-host-list:
+    content: "490321cadd7b\n"
+
+  haraka-log:
+    content: |
+      [main]
+
+      ; level=data, protocol, debug, info, notice, warn, error, crit, alert, emerg
+      level=info
+
+      ; prepend timestamps to log entries? This setting does NOT affect logs emitted
+      ; by logging plugins (like syslog).
+      timestamps=false
+
+      ;  format=default, logfmt, json
+      format=default
+
+  haraka-me:
+    content: "example.com\n"
+
+  haraka-plugins:
+    content: |
+      rspamd
+      wildduck
+
+  haraka-rspamd:
+    content: |
+      host = rspamd
+      port = 11333
+      add_headers = always
+
+      [dkim]
+      enabled = true
+
+      [header]
+      bar = X-Rspamd-Bar
+      report = X-Rspamd-Report
+      score = X-Rspamd-Score
+      spam = X-Rspamd-Spam
+
+      [check]
+      authenticated = true
+      private_ip = true
+
+      [reject]
+      spam = false
+
+      [soft_reject]
+      enabled = false
+
+      [rmilter_headers]
+      enabled = true
+
+      [spambar]
+      positive = +
+      negative = -
+      neutral = /
+
+  haraka-smtp:
+    content: |
+      listen=0.0.0.0:10025
+      nodes=1
+      inactivity_time=300
+
+  haraka-smtpgreeting:
+    content: "Agent Mail Ingest SMTP\n"
+
+  haraka-tls:
+    content: |
+      [main]
+      key=
+      cert=
+
+  haraka-wildduck:
+    content: |
+      redis: '${AGENTTEAM_EMAIL_REDIS_URL:-redis://redis:6379/3}'
+
+      mongo:
+        url: '${AGENTTEAM_EMAIL_WILDDUCK_MONGODB_URI:-mongodb://mongodb:27017/wildduck?directConnection=true&maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000}'
+        # Regression guard: Haraka performs inbound storage and native forwarding.
+        # Its outbound sender DB must match ZoneMTA [dbs].sender, or WildDuck target
+        # forwarding is queued into an undrained upstream-default database.
+        sender: 'wildduck'
+
+      sender:
+        zone: 'default'
+        collection: 'zone-queue'
+        gfs: 'mail'
+        loopSecret: '${AGENT_MAIL_LOOP_SECRET:?missing AGENT_MAIL_LOOP_SECRET}'
+
+      attachments:
+        type: 'gridstore'
+        bucket: 'attachments'
+        decodeBase64: true
+
+      limits:
+        windowSize: 3600
+        rcptIp: 100
+        rcptWindowSize: 60
+        rcpt: 60
+
+      rspamd:
+        forwardSkip: 10
+        blacklist:
+          - DMARC_POLICY_REJECT
+        responses:
+          DMARC_POLICY_REJECT: "Unauthenticated email from {host} is not accepted due to domain's DMARC policy"
+
+      auth:
+        dns:
+          maxLookups: 50
+        minBitLength: 1024
+
+      originalRcptHeader: 'X-Zone-Original-Rcpt'
+
+  zonemta-main:
+    content: |
+      name = "Agent Mail ZoneMTA"
+      ident = "agent-mail-zonemta"
+      corePluginsPath = "./node_modules/@zone-eu/zone-mta/plugins/"
+
+      [log]
+      level = "info"
+
+      [dbs]
+      # @include "dbs-{env}.toml"
+
+      [queue]
+      # @include "queue.toml"
+
+      [dns]
+      # @include "dns.toml"
+
+      [mtaSts]
+      # ZoneMTA relays to the mail-control-service SMTP relay listener, not final-recipient MX hosts.
+      # Recipient-domain MTA-STS policy is handled downstream of the control service.
+      enabled = false
+
+      [api]
+      port = 12080
+      host = "0.0.0.0"
+
+      [smtpInterfaces]
+      # @include "interfaces/*.toml"
+
+      [plugins]
+      # @include "plugins/*.toml"
+
+      [pools]
+      # @include "pools.toml"
+
+      [zones]
+      # @include "zones/*.toml"
+
+      [domainConfig]
+      # @include "domains.toml"
+
+  zonemta-dbs-production:
+    content: |
+      mongo = "${AGENTTEAM_EMAIL_WILDDUCK_MONGODB_URI:-mongodb://mongodb:27017/wildduck?directConnection=true&maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000}"
+      redis = "${AGENTTEAM_EMAIL_REDIS_URL:-redis://redis:6379/3}"
+      sender = "wildduck"
+
+  zonemta-dns:
+    content: |
+      caching = true
+      cacheTTL = 600
+      nameservers = []
+      blockDomains = []
+      blockLocalAddresses = false
+
+  zonemta-domains:
+    content: |
+      default = ["0.0.0.0"]
+
+  zonemta-pools:
+    content: |
+      [default]
+
+  zonemta-queue:
+    content: |
+      instanceId = "agent-mail"
+      collection = "zone-queue"
+      gfs = "mail"
+      disableGC = false
+
+  zonemta-interface-feeder:
+    content: |
+      [feeder]
+      enabled = true
+      processes = 1
+      maxSize = 10485760
+      host = "0.0.0.0"
+      port = 2525
+      authentication = false
+      maxRecipients = 1000
+      starttls = false
+      secure = false
+      default = ["0.0.0.0"]
+
+  zonemta-interface-dsn:
+    content: |
+      # System DSNs use MAIL FROM:<> and must bypass the WildDuck MSA plugin.
+      # Do not add this interface to the wildduck plugin interface list; feeder-style
+      # MSA handling rejects null reverse-path mail before it can reach the
+      # mail-control-service SMTP relay listener.
+      [dsn]
+      enabled = true
+      processes = 1
+      maxSize = 10485760
+      host = "0.0.0.0"
+      port = 2526
+      authentication = false
+      maxRecipients = 1
+      starttls = false
+      secure = false
+      default = ["0.0.0.0"]
+
+  zonemta-plugin-agent-mail-provenance:
+    content: |
+      [agent-mail-provenance]
+      enabled = ["sender"]
+
+  zonemta-plugin-default-headers:
+    content: |
+      ["core/default-headers"]
+      enabled = ["receiver", "main", "sender"]
+      addMissing = ["message-id", "date"]
+      futureDate = false
+      xOriginatingIP = true
+
+  zonemta-plugin-email-bounce:
+    content: |
+      ["core/email-bounce"]
+      enabled = "main"
+      sendingZone = "bounces"
+      disableInterfaces = ["forwarder"]
+
+      ["core/email-bounce".mailerDaemon]
+      name = "Mail Delivery Subsystem"
+      address = "mailer-daemon@agent-mail.invalid"
+
+  zonemta-plugin-wildduck:
+    content: |
+      ["modules/@zone-eu/zonemta-wildduck"]
+      enabled = ["receiver", "main", "sender"]
+      interfaces = ["feeder", "maildrop"]
+      hostname = "zonemta"
+      disableUploads = false
+      uploadAll = true
+
+      ["modules/@zone-eu/zonemta-wildduck".srs]
+      enabled = true
+      secret = "${AGENT_MAIL_LOOP_SECRET:?missing AGENT_MAIL_LOOP_SECRET}"
+      rewriteDomain = "agent-mail.invalid"
+
+      ["modules/@zone-eu/zonemta-wildduck".dkim]
+      signTransportDomain = false
+
+      ["modules/@zone-eu/zonemta-wildduck".gelf]
+      enabled = false
+      component = "mta"
+
+  zonemta-zone-bounces:
+    content: |
+      [bounces]
+      preferIPv6 = false
+      ignoreIPv6 = true
+      processes = 1
+      connections = 1
+      pool = "default"
+      host = "atemail-mail-control-service"
+      port = 2587
+      ignoreTLS = true
+      secure = false
+
+      [bounces.auth]
+      user = "zonemta"
+      pass = "${AGENT_MAIL_ZONEMTA_RELAY_PASSWORD:?missing AGENT_MAIL_ZONEMTA_RELAY_PASSWORD}"
+
+  zonemta-zone-default:
+    content: |
+      [default]
+      preferIPv6 = false
+      ignoreIPv6 = true
+      processes = 1
+      connections = 1
+      pool = "default"
+      host = "atemail-mail-control-service"
+      port = 2587
+      ignoreTLS = true
+      secure = false
+
+      [default.auth]
+      user = "zonemta"
+      pass = "${AGENT_MAIL_ZONEMTA_RELAY_PASSWORD:?missing AGENT_MAIL_ZONEMTA_RELAY_PASSWORD}"
+
+  zonemta-zone-routed:
+    content: |
+      [routed]
+      preferIPv6 = false
+      ignoreIPv6 = true
+      processes = 1
+      connections = 1
+      pool = "default"
+      host = "atemail-mail-control-service"
+      port = 2587
+      ignoreTLS = true
+      secure = false
+
+      [routed.auth]
+      user = "zonemta"
+      pass = "${AGENT_MAIL_ZONEMTA_RELAY_PASSWORD:?missing AGENT_MAIL_ZONEMTA_RELAY_PASSWORD}"
+
+  zonemta-agent-mail-provenance-js:
+    content: |
+      "use strict";
+
+      module.exports.title = "Agent Mail Provenance";
+
+      module.exports.init = (app, done) => {
+          app.addHook("sender:headers", (delivery, connection, next) => {
+              delivery.headers.add("X-Agent-Mail-ZoneMTA-Queue-ID", delivery.id, 0);
+              next();
+          });
+
+          done();
+      };
+
+volumes:
+  mongodb-data:
+  redis-data:
+  rspamd-data:
+  haraka-queue:

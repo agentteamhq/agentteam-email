@@ -1,0 +1,15 @@
+# System DSNs use MAIL FROM:<> and must bypass the WildDuck MSA plugin.
+# Do not add this interface to the wildduck plugin interface list; feeder-style
+# MSA handling rejects null reverse-path mail before it can reach the provider
+# relay.
+[dsn]
+enabled = true
+processes = 1
+maxSize = 10485760
+host = "0.0.0.0"
+port = 2526
+authentication = false
+maxRecipients = 1
+starttls = false
+secure = false
+default = ["0.0.0.0"]

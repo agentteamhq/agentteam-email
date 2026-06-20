@@ -1,0 +1,360 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.names.wildduckApi }}
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.wildduckApi "component" "mail-store") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+{{ include "agentteam-email.selectorLabels" (dict "root" . "name" .Values.names.wildduck) | nindent 4 }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: api
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.names.wildduckImap }}
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.wildduckImap "component" "mail-store") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+{{ include "agentteam-email.selectorLabels" (dict "root" . "name" .Values.names.wildduck) | nindent 4 }}
+  ports:
+    - name: imap
+      port: 143
+      targetPort: imap
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.names.wildduck }}
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.wildduck "component" "mail-store") | nindent 4 }}
+{{- with .Values.extraLabels.wildduck }}
+{{ toYaml . | nindent 4 }}
+{{- end }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+{{ include "agentteam-email.selectorLabels" (dict "root" . "name" .Values.names.wildduck) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.wildduck "component" "mail-store") | nindent 8 }}
+{{- with .Values.extraLabels.wildduck }}
+{{ toYaml . | nindent 8 }}
+{{- end }}
+    spec:
+      securityContext:
+{{ toYaml .Values.podSecurityContext | nindent 8 }}
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
+      containers:
+        - name: wildduck
+          image: {{ include "agentteam-email.image" .Values.images.wildduck | quote }}
+          imagePullPolicy: {{ .Values.images.wildduck.pullPolicy }}
+{{ include "agentteam-email.securityContext" . | nindent 10 }}
+          ports:
+            - name: api
+              containerPort: 8080
+            - name: imap
+              containerPort: 10143
+          env:
+            - name: APPCONF_api_accessToken
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN") | nindent 14 }}
+            - name: APPCONF_api_accessControl_secret
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_WILDDUCK_ACCESS_CONTROL_SECRET") | nindent 14 }}
+          {{- with .Values.extraEnv.wildduck }}
+{{ toYaml . | nindent 12 }}
+          {{- end }}
+          startupProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - 'wget -qO- --header="X-Access-Token: ${APPCONF_api_accessToken}" http://127.0.0.1:8080/health >/dev/null'
+            failureThreshold: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - 'wget -qO- --header="X-Access-Token: ${APPCONF_api_accessToken}" http://127.0.0.1:8080/health >/dev/null'
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - 'wget -qO- --header="X-Access-Token: ${APPCONF_api_accessToken}" http://127.0.0.1:8080/health >/dev/null'
+            periodSeconds: 20
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: wildduck-config
+              mountPath: /wildduck/config
+          {{- with .Values.resources.wildduck }}
+          resources:
+{{ toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: wildduck-config
+          configMap:
+            name: atemail-wildduck-config
+{{ include "agentteam-email.podScheduling" . | nindent 6 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.names.haraka }}
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.haraka "component" "mail-ingest") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+{{ include "agentteam-email.selectorLabels" (dict "root" . "name" .Values.names.haraka) | nindent 4 }}
+  ports:
+    - name: smtp
+      port: 25
+      targetPort: smtp
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.names.haraka }}
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.haraka "component" "mail-ingest") | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+{{ include "agentteam-email.selectorLabels" (dict "root" . "name" .Values.names.haraka) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.haraka "component" "mail-ingest") | nindent 8 }}
+    spec:
+      securityContext:
+{{ toYaml .Values.podSecurityContext | nindent 8 }}
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
+      containers:
+        - name: haraka
+          image: {{ include "agentteam-email.image" .Values.images.haraka | quote }}
+          imagePullPolicy: {{ .Values.images.haraka.pullPolicy }}
+{{ include "agentteam-email.securityContext" . | nindent 10 }}
+          ports:
+            - name: smtp
+              containerPort: 10025
+          readinessProbe:
+            tcpSocket:
+              port: smtp
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: smtp
+            periodSeconds: 20
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: haraka-config
+              mountPath: /app/config
+            - name: haraka-queue
+              mountPath: /app/queue
+          {{- with .Values.resources.haraka }}
+          resources:
+{{ toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: haraka-config
+          configMap:
+            name: atemail-haraka-config
+        - name: haraka-queue
+{{ include "agentteam-email.storageVolumeSource" (dict "root" . "name" "harakaQueue") | nindent 10 }}
+{{ include "agentteam-email.podScheduling" . | nindent 6 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.names.zonemtaApi }}
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.zonemta "component" "mail-send") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+{{ include "agentteam-email.selectorLabels" (dict "root" . "name" .Values.names.zonemta) | nindent 4 }}
+  ports:
+    - name: http
+      port: 12080
+      targetPort: api
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.names.zonemtaFeeder }}
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.zonemta "component" "mail-send") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+{{ include "agentteam-email.selectorLabels" (dict "root" . "name" .Values.names.zonemta) | nindent 4 }}
+  ports:
+    - name: smtp
+      port: 2525
+      targetPort: feeder
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.names.zonemtaDsn }}
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.zonemta "component" "mail-send") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+{{ include "agentteam-email.selectorLabels" (dict "root" . "name" .Values.names.zonemta) | nindent 4 }}
+  ports:
+    - name: smtp
+      port: 2526
+      targetPort: dsn
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.names.zonemta }}
+  namespace: {{ include "agentteam-email.namespace" . }}
+  labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.zonemta "component" "mail-send") | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+{{ include "agentteam-email.selectorLabels" (dict "root" . "name" .Values.names.zonemta) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.zonemta "component" "mail-send") | nindent 8 }}
+    spec:
+      securityContext:
+{{ toYaml .Values.podSecurityContext | nindent 8 }}
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
+      containers:
+        - name: zonemta
+          image: {{ include "agentteam-email.image" .Values.images.zonemta | quote }}
+          imagePullPolicy: {{ .Values.images.zonemta.pullPolicy }}
+{{ include "agentteam-email.securityContext" . | nindent 10 }}
+          ports:
+            - name: api
+              containerPort: 12080
+            - name: feeder
+              containerPort: 2525
+            - name: dsn
+              containerPort: 2526
+          readinessProbe:
+            tcpSocket:
+              port: api
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: api
+            periodSeconds: 20
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: zonemta-root-config
+              mountPath: /app/config/zonemta.toml
+              subPath: zonemta.toml
+            - name: zonemta-root-config
+              mountPath: /app/config/dbs-production.toml
+              subPath: dbs-production.toml
+            - name: zonemta-root-config
+              mountPath: /app/config/queue.toml
+              subPath: queue.toml
+            - name: zonemta-root-config
+              mountPath: /app/config/dns.toml
+              subPath: dns.toml
+            - name: zonemta-root-config
+              mountPath: /app/config/pools.toml
+              subPath: pools.toml
+            - name: zonemta-root-config
+              mountPath: /app/config/domains.toml
+              subPath: domains.toml
+            - name: zonemta-interfaces-config
+              mountPath: /app/config/interfaces/feeder.toml
+              subPath: feeder.toml
+            - name: zonemta-interfaces-config
+              mountPath: /app/config/interfaces/dsn.toml
+              subPath: dsn.toml
+            - name: zonemta-zones-config
+              mountPath: /app/config/zones/default.toml
+              subPath: default.toml
+            - name: zonemta-zones-config
+              mountPath: /app/config/zones/bounces.toml
+              subPath: bounces.toml
+            - name: zonemta-zones-config
+              mountPath: /app/config/zones/routed.toml
+              subPath: routed.toml
+            - name: zonemta-plugins-config
+              mountPath: /app/config/plugins/wildduck.toml
+              subPath: wildduck.toml
+            - name: zonemta-plugins-config
+              mountPath: /app/config/plugins/default-headers.toml
+              subPath: default-headers.toml
+            - name: zonemta-plugins-config
+              mountPath: /app/config/plugins/email-bounce.toml
+              subPath: email-bounce.toml
+            - name: zonemta-plugins-config
+              mountPath: /app/config/plugins/agent-mail-provenance.toml
+              subPath: agent-mail-provenance.toml
+            - name: zonemta-plugin-code
+              mountPath: /app/plugins/agent-mail-provenance.js
+              subPath: agent-mail-provenance.js
+          {{- with .Values.resources.zonemta }}
+          resources:
+{{ toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: zonemta-root-config
+          configMap:
+            name: atemail-zonemta-root-config
+        - name: zonemta-interfaces-config
+          configMap:
+            name: atemail-zonemta-interfaces-config
+        - name: zonemta-zones-config
+          configMap:
+            name: atemail-zonemta-zones-config
+        - name: zonemta-plugins-config
+          configMap:
+            name: atemail-zonemta-plugins-config
+        - name: zonemta-plugin-code
+          configMap:
+            name: atemail-zonemta-plugin-code
+{{ include "agentteam-email.podScheduling" . | nindent 6 }}
