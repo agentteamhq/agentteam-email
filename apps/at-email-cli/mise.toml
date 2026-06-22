@@ -1,0 +1,139 @@
+[tools]
+goreleaser = "2.16.0"
+
+[tasks.fmt]
+description = "Format at-email CLI Go source files"
+dir = "{{config_root}}"
+run = "find . -name '*.go' -not -path './vendor/*' -exec gofmt -w {} +"
+
+[tasks."fmt:check"]
+description = "Check at-email CLI Go source formatting"
+dir = "{{config_root}}"
+run = '''
+unformatted="$(find . -name '*.go' -not -path './vendor/*' -exec gofmt -l {} +)"
+if [ -n "${unformatted}" ]; then
+  printf 'Go files need gofmt:\n%s\n' "${unformatted}" >&2
+  exit 1
+fi
+'''
+
+[tasks."mod:tidy"]
+description = "Tidy at-email CLI Go module files"
+dir = "{{config_root}}"
+run = "go mod tidy"
+
+[tasks."mod:check"]
+description = "Check at-email CLI Go module tidiness"
+dir = "{{config_root}}"
+run = "go mod tidy -diff"
+
+[tasks.test]
+description = "Run at-email CLI Go tests"
+dir = "{{config_root}}"
+run = "go test ./..."
+
+[tasks."image:test"]
+description = "Run at-email CLI tests inside the container build stage"
+dir = "{{config_root}}"
+run = '''
+: "${WT:?missing WT}"
+engine="${CONTAINER_ENGINE:-podman}"
+image_tag="${AT_EMAIL_CLI_TEST_IMAGE_TAG:-stage}"
+image_repository="${AT_EMAIL_CLI_TEST_IMAGE_REPOSITORY:-atemail.${WT}.at-email-cli-test}"
+"${engine}" build \
+  -f Containerfile \
+  --target test \
+  -t "${image_repository}:${image_tag}" \
+  .
+'''
+
+[tasks."image:build"]
+description = "Build the at-email CLI container image"
+dir = "{{config_root}}"
+run = '''
+: "${WT:?missing WT}"
+engine="${CONTAINER_ENGINE:-podman}"
+image_tag="${AT_EMAIL_CLI_IMAGE_TAG:-stage}"
+image_repository="${AT_EMAIL_CLI_IMAGE_REPOSITORY:-atemail.${WT}.at-email-cli}"
+"${engine}" build \
+  -f Containerfile \
+  -t "${image_repository}:${image_tag}" \
+  .
+'''
+
+[tasks."release:check"]
+description = "Check at-email CLI GoReleaser configuration"
+dir = "{{config_root}}"
+run = "goreleaser check"
+
+[tasks."release:snapshot"]
+description = "Build at-email CLI snapshot release artifacts under dist/"
+dir = "{{config_root}}"
+run = "goreleaser release --snapshot --clean"
+
+[tasks."npm:generate"]
+description = "Generate at-email CLI npm packages from a snapshot release"
+dir = "{{config_root}}"
+depends = [":release:snapshot"]
+run = "node npm/generate-npm-packages.mjs"
+
+[tasks."npm:check"]
+description = "Validate generated at-email CLI npm package manifests and wrapper behavior"
+dir = "{{config_root}}"
+depends = [":npm:generate"]
+run = "node npm/validate-npm-packages.mjs"
+
+[tasks."npm:pack"]
+description = "Pack generated at-email CLI npm packages into release tarballs"
+dir = "{{config_root}}"
+depends = [":npm:generate"]
+run = "node npm/pack-npm-packages.mjs"
+
+[tasks."npm:smoke:linux"]
+description = "Smoke-test generated npm packages on glibc and musl Linux Node images"
+dir = "{{config_root}}"
+depends = [":npm:generate"]
+run = "node npm/smoke-npm-linux.mjs"
+
+[tasks."release:npm:check"]
+description = "Build, validate, pack, and smoke-test at-email CLI npm distribution packages"
+depends = [":npm:check", ":npm:pack", ":npm:smoke:linux"]
+run = "true"
+
+[tasks."plugins:generate"]
+description = "Generate at-email CLI plugin bundles from a snapshot release"
+dir = "{{config_root}}"
+depends = [":release:snapshot"]
+run = "node plugins/generate-plugin-bundles.mjs"
+
+[tasks."plugins:check"]
+description = "Validate generated at-email CLI plugin bundle manifests and skill copies"
+dir = "{{config_root}}"
+depends = [":plugins:generate"]
+run = "node plugins/validate-plugin-bundles.mjs"
+
+[tasks."plugins:pack"]
+description = "Pack generated at-email CLI plugin bundles into release tarballs"
+dir = "{{config_root}}"
+depends = [":plugins:generate"]
+run = "node plugins/pack-plugin-bundles.mjs"
+
+[tasks."release:plugins:check"]
+description = "Build, validate, and pack at-email CLI plugin distribution bundles"
+depends = [":plugins:check", ":plugins:pack"]
+run = "true"
+
+[tasks."skills:sync"]
+description = "Sync the root discoverable at-email CLI skill from the embedded skill"
+dir = "{{config_root}}"
+run = "node skills/sync-skill-discovery.mjs"
+
+[tasks."skills:check"]
+description = "Validate at-email CLI skill discovery files"
+dir = "{{config_root}}"
+run = "node skills/validate-skill-discovery.mjs"
+
+[tasks.check]
+description = "Run at-email CLI formatting, module, and test checks"
+depends = [":fmt:check", ":mod:check", ":test", ":release:check", ":skills:check"]
+run = "true"

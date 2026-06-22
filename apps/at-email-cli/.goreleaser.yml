@@ -1,0 +1,87 @@
+version: 2
+
+project_name: at-email
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: linux-and-windows
+    main: ./cmd/at-email
+    binary: at-email
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X at-email-cli/internal/atemail.Version={{ .Version }}
+      - -X at-email-cli/internal/atemail.Commit={{ .Commit }}
+      - -X at-email-cli/internal/atemail.Date={{ .Date }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+  - id: darwin-amd64
+    main: ./cmd/at-email
+    binary: at-email
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+    goarch:
+      - amd64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X at-email-cli/internal/atemail.Version={{ .Version }}
+      - -X at-email-cli/internal/atemail.Commit={{ .Commit }}
+      - -X at-email-cli/internal/atemail.Date={{ .Date }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+  - id: darwin-arm64
+    main: ./cmd/at-email
+    binary: at-email
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+    goarch:
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X at-email-cli/internal/atemail.Version={{ .Version }}
+      - -X at-email-cli/internal/atemail.Commit={{ .Commit }}
+      - -X at-email-cli/internal/atemail.Date={{ .Date }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: raw-binaries
+    ids:
+      - linux-and-windows
+      - darwin-amd64
+      - darwin-arm64
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - binary
+    format_overrides:
+      - goos: windows
+        formats:
+          - binary
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  use: git
