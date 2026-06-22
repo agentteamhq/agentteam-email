@@ -23,17 +23,12 @@ export class ShutdownManager {
   private tasks = new Set<ShutdownTask>()
   private shuttingDown = false
   private log = (...args: unknown[]) => {}
-  // private sigintHandler: () => void
-  // private sigtermHandler: () => void
-  // private uncaughtExceptionHandler: (err: unknown) => void
-  // private unhandledRejectionHandler: (reason: unknown) => void
   private shutdownTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(logger: (...args: unknown[]) => void) {
     this.log = logger ?? (() => {})
     this.logEnvironmentDetails()
 
-    // Wire up process signals/events
     process.once('SIGINT', this.sigintHandler)
     process.once('SIGTERM', this.sigtermHandler)
     process.once('uncaughtException', this.uncaughtExceptionHandler)
@@ -43,21 +38,21 @@ export class ShutdownManager {
   sigintHandler = () => {
     this.initiate('SIGINT')
   }
+
   sigtermHandler = () => {
     this.initiate('SIGTERM')
   }
+
   uncaughtExceptionHandler = (err: unknown) => {
     this.log('Uncaught exception:', err)
     this.initiate('uncaughtException')
   }
+
   unhandledRejectionHandler = (reason: unknown) => {
     this.log('Unhandled rejection:', reason)
     this.initiate('unhandledRejection')
   }
 
-  /**
-   * Register a task to be run on shutdown.
-   */
   add = (name: string, fn: () => Promise<void>): void => {
     this.tasks.add({ name, fn })
   }
@@ -81,17 +76,12 @@ export class ShutdownManager {
 
     this.shutdownTimer = setTimeout(() => {
       this.log('Shutdown watchdog timeout reached, forcing exit with code 0')
-      // If Docker or another orchestrator hasn't killed us within the timeout,
-      // force a clean exit so the process can be restarted instead of staying deadlocked.
       process.exit(0)
     }, ShutdownManager.gracefulTimeoutSeconds * 1000)
   }
 
   private shutdown = async () => {
     const promises = this.tasks.values().map((task) =>
-      // we're already shutting down we don't have to
-      // care about scope an iife is fine here
-      //
       // eslint-disable-next-line no-restricted-syntax
       (async () => {
         this.log(`Running task: ${task.name}`)
@@ -117,9 +107,6 @@ export class ShutdownManager {
     }
   }
 
-  /**
-   * Trigger shutdown (runs tasks in series).
-   */
   private initiate = (source: string) => {
     if (this.shuttingDown) {
       return

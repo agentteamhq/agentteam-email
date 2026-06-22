@@ -1,11 +1,12 @@
-import { utils, type BytesCoder } from '@scure/base'
+import { utils } from '@scure/base'
 import {
+  v7 as createUuidV7,
   parse as parseUuid,
   stringify as stringifyUuid,
-  v7 as createUuidV7,
-  validate as validateUuid,
-  version as uuidVersion
+  version as uuidVersion,
+  validate as validateUuid
 } from 'uuid'
+import type { BytesCoder } from '@scure/base'
 
 declare const UUIDv7Brand: unique symbol
 export type UUIDv7 = string & { readonly [UUIDv7Brand]: true }

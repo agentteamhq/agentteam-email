@@ -1,5 +1,5 @@
 {
-  "name": "@main/common",
+  "name": "@main/shutdown-manager",
   "version": "1.0.0",
   "private": true,
   "license": "MIT",
@@ -13,7 +13,7 @@
       "default": "./dist/index.mjs"
     }
   },
-  "sideEffects": false,
+  "sideEffects": true,
   "files": [
     "dist"
   ],
@@ -23,30 +23,12 @@
     "dev": "vite build --watch",
     "format": "pnpm run lint --fix && pnpm exec prettier --write ./src",
     "lint": "eslint --quiet ${ESLINT_CACHE_FLAG:---cache} --concurrency ${ESLINT_CONCURRENCY:-auto} ./src",
-    "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "typecheck:debug": "tsc --noEmit --listFiles"
   },
   "devDependencies": {
-    "@date-fns/tz": "catalog:",
-    "@date-fns/utc": "catalog:",
-    "@scure/base": "catalog:",
-    "cookie-es": "catalog:",
-    "date-fns": "catalog:",
-    "debug": "catalog:",
-    "type-fest": "catalog:",
-    "uuid": "catalog:",
-    "vite": "catalog:",
-    "vitest": "catalog:"
+    "@types/node": "catalog:",
+    "vite": "catalog:"
   },
-  "peerDependencies": {
-    "@date-fns/tz": "*",
-    "@date-fns/utc": "*",
-    "@scure/base": "*",
-    "cookie-es": "*",
-    "date-fns": "*",
-    "debug": "*",
-    "type-fest": "*",
-    "uuid": "*"
-  }
+  "peerDependencies": {}
 }

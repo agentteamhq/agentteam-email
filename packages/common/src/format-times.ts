@@ -1,4 +1,4 @@
-import { utc, UTCDate } from '@date-fns/utc'
+import { utc } from '@date-fns/utc'
 import { addDays } from 'date-fns/addDays'
 import { addSeconds } from 'date-fns/addSeconds'
 import { differenceInSeconds } from 'date-fns/differenceInSeconds'
@@ -7,6 +7,7 @@ import { isValid } from 'date-fns/isValid'
 import { isWithinInterval } from 'date-fns/isWithinInterval'
 import { parseISO } from 'date-fns/parseISO'
 import { startOfDay } from 'date-fns/startOfDay'
+import type { UTCDate } from '@date-fns/utc'
 
 import type { SQLUTCTime, SQLUTCTimeSeconds } from './dates'
 

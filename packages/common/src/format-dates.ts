@@ -1,6 +1,4 @@
-import type { TZDate } from '@date-fns/tz'
-import { UTCDate } from '@date-fns/utc'
-import { utc } from '@date-fns/utc'
+import { UTCDate, utc } from '@date-fns/utc'
 import { addMilliseconds } from 'date-fns/addMilliseconds'
 import { addSeconds } from 'date-fns/addSeconds'
 import { formatDistanceToNow } from 'date-fns/formatDistanceToNow'
@@ -8,6 +6,7 @@ import { formatISO } from 'date-fns/formatISO'
 import { formatRFC3339 } from 'date-fns/formatRFC3339'
 import { isValid } from 'date-fns/isValid'
 import { parseISO } from 'date-fns/parseISO'
+import type { TZDate } from '@date-fns/tz'
 
 import type { SQLUTCDate, SQLUTCTimestamp } from './dates'
 
@@ -64,7 +63,6 @@ export function sqlFormatRelativeTimeFromUTC(sqlTimestamp: SQLUTCTimestamp): str
 export function utcEpochSecondsWithMicrosecondsToDate(utcEpochSeconds: string, microSeconds: string) {
   const ts = Number.parseInt(utcEpochSeconds, 10)
   if (Number.isFinite(ts)) {
-    // eslint-disable-next-line no-unsafe-date-fns/no-unsafe-date-fns
     const d = new UTCDate(0)
     const date = addSeconds(d, ts, { in: utc })
     if (isValid(date)) {

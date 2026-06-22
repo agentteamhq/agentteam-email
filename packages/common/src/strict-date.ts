@@ -1,4 +1,3 @@
-/* eslint-disable no-unsafe-date-fns/no-unsafe-date-fns */
 /**
  * Strict date construction and parsing utilities.
  *
@@ -10,7 +9,7 @@
  * of Temporal's `overflow: 'reject'` option. These are the ONLY permitted
  * entry points where silent date overflow can occur in this codebase. Direct
  * use of parse and set from date-fns, and component-form new UTCDate(...) /
- * new TZDate(...), is banned by the no-unsafe-date-fns ESLint rule.
+ * new TZDate(...), should go through these strict helper entry points.
  *
  * parseISO, constructFrom, and epoch-form new UTCDate(ms) are NOT banned —
  * they cannot silently overflow calendar components.
@@ -20,12 +19,12 @@
  *   strictSet(date, values)             — wraps set; detects overflow via post-construction comparison
  */
 
-import { utc, UTCDate } from '@date-fns/utc'
-import type { ContextFn, ContextOptions } from 'date-fns'
+import { UTCDate, utc } from '@date-fns/utc'
 import { format } from 'date-fns/format'
 import { isValid } from 'date-fns/isValid'
 import { parse } from 'date-fns/parse'
 import { set } from 'date-fns/set'
+import type { ContextFn, ContextOptions } from 'date-fns'
 
 // ---------------------------------------------------------------------------
 // strictISO
@@ -77,13 +76,13 @@ import { set } from 'date-fns/set'
  *
  * @throws RangeError if the string cannot be parsed or if components overflow
  */
-export function strictParse<ResultDate extends Date = UTCDate>(
+export function strictParse<TResultDate extends Date = UTCDate>(
   str: string,
   formatStr: string,
   referenceDate: Date,
-  options?: ContextOptions<ResultDate>
-): ResultDate {
-  const context = (options?.in ?? utc) as ContextFn<ResultDate>
+  options?: ContextOptions<TResultDate>
+): TResultDate {
+  const context = (options?.in ?? utc) as ContextFn<TResultDate>
   const d = parse(str, formatStr, referenceDate, { in: context })
   if (!isValid(d)) {
     throw new RangeError(`strictParse: could not parse "${str}" with format "${formatStr}"`)
@@ -122,7 +121,7 @@ export function strictParse<ResultDate extends Date = UTCDate>(
  *
  * @throws RangeError if date, month, or year overflows after being set
  */
-export function strictSet<ResultDate extends Date = UTCDate>(
+export function strictSet<TResultDate extends Date = UTCDate>(
   date: Date,
   values: {
     year?: number
@@ -133,9 +132,9 @@ export function strictSet<ResultDate extends Date = UTCDate>(
     seconds?: number
     milliseconds?: number
   },
-  options?: ContextOptions<ResultDate>
-): ResultDate {
-  const context = (options?.in ?? utc) as ContextFn<ResultDate>
+  options?: ContextOptions<TResultDate>
+): TResultDate {
+  const context = (options?.in ?? utc) as ContextFn<TResultDate>
   const result = set(date, values, { in: context })
   if (values.date !== undefined && result.getDate() !== values.date) {
     throw new RangeError(
