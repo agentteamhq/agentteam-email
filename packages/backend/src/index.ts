@@ -18,6 +18,7 @@ export {
   handleCloudflareOAuthCallbackRequest,
   isCloudflareOAuthCallbackRequestPath
 } from './auth/cloudflare-oauth-callback'
+export { handleAgentMailIngestRequest, isAgentMailIngestRequestPath } from './agent-mail/ingest'
 export { handleOAuthMetadataRequest, isOAuthMetadataRequestPath } from './auth/oauth-metadata'
 export { backendRpcApp, type BackendRpcAppType } from './rpc/'
 export * from './cloudflare/service'

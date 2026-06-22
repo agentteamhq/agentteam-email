@@ -3,15 +3,17 @@ import debug from 'debug'
 import { Elysia } from 'elysia'
 
 import { globals } from '../globals'
+import { handleAgentMailIngestRequest } from '../agent-mail/ingest'
 import { rewritePublicOAuthMetadataResponse } from '../auth/oauth-metadata'
 import { PUBLIC_VARS } from '../vars.public'
 
+import { PRIVATE_VARS } from '../vars.private'
 import cloudflare from './cloudflare'
 import debugRoute from './debug'
 import e2eTestSupport from './e2e-test-support'
+import mail from './mail'
 import test from './test'
 import whoami from './whoami'
-import { PRIVATE_VARS } from '../vars.private'
 
 const apiLog = debug('api:backend')
 
@@ -38,6 +40,7 @@ export const backendRpcApp = new Elysia({ name: 'rpc', prefix: '/rpc', normalize
     await globals()
     return status(HttpStatusCode.Ok, { message: 'Backend is healthy' })
   })
+  .all('/agent-mail/ingest/v1', ({ request }) => handleAgentMailIngestRequest(request))
   .get('/auth/api/.well-known/oauth-authorization-server', async ({ request }) => {
     const { auth } = await globals()
     return rewritePublicOAuthMetadataResponse(await auth.handler(request))
@@ -58,6 +61,7 @@ export const backendRpcApp = new Elysia({ name: 'rpc', prefix: '/rpc', normalize
   // Mount route modules
   .use(internalRpcApp)
   .use(cloudflare)
+  .use(mail)
   .use(whoami)
 
 export type BackendRpcAppType = typeof backendRpcApp
