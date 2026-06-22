@@ -79,6 +79,10 @@ spec:
 {{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_CONTROL_API_BASE_URL") | nindent 14 }}
             - name: AGENT_MAIL_CONTROL_API_TOKEN
 {{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_CONTROL_API_TOKEN") | nindent 14 }}
+            - name: AGENT_MAIL_WILDDUCK_API_BASE_URL
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_WILDDUCK_API_BASE_URL") | nindent 14 }}
+            - name: AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN") | nindent 14 }}
           {{- with .Values.extraEnv.webServer }}
 {{ toYaml . | nindent 12 }}
           {{- end }}

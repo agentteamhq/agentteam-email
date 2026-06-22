@@ -66,4 +66,19 @@ describe('Better Auth organization API-key configuration', () => {
       }
     ])
   })
+
+  it('creates the device authorization plugin with the AT Email CLI client gate', async () => {
+    expect.hasAssertions()
+
+    const { createAtEmailCliDeviceAuthorizationPlugin } = await import('./auth')
+
+    const plugin = createAtEmailCliDeviceAuthorizationPlugin()
+    const validateClient = plugin.options.validateClient
+
+    expect(plugin.id).toBe('device-authorization')
+    expect(plugin.schema.deviceCode.fields.deviceCode.required).toBe(true)
+    expect(validateClient).toBeTypeOf('function')
+    await expect(Promise.resolve(validateClient?.('at-email-cli'))).resolves.toBe(true)
+    await expect(Promise.resolve(validateClient?.('unknown-client'))).resolves.toBe(false)
+  })
 })

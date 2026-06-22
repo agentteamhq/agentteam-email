@@ -71,7 +71,7 @@ export async function submitAgentMailOutboundFromWeb({
   })
 }
 
-async function requireAgentMailOrganizationContext(headers: Headers): Promise<{
+export async function requireAgentMailOrganizationContext(headers: Headers): Promise<{
   organizationId: OrganizationId
   userId: UserId
 }> {
