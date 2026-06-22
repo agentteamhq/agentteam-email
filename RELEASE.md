@@ -1,6 +1,7 @@
 # Release Versioning
 
-One SemVer Git tag controls each published release.
+One SemVer Git tag controls each published release. Main publishes nothing;
+release tags publish the complete release set.
 
 The source of truth for release `X.Y.Z` is Git tag `vX.Y.Z`. Published
 first-party artifacts use version `X.Y.Z`; the leading `v` is only part of the
@@ -11,10 +12,35 @@ Git tag name.
 Stable release `vX.Y.Z` publishes:
 
 - GitHub Release `vX.Y.Z`
+- at-email CLI release binaries:
+  - `at-email_X.Y.Z_linux_amd64`
+  - `at-email_X.Y.Z_linux_arm64`
+  - `at-email_X.Y.Z_darwin_amd64`
+  - `at-email_X.Y.Z_darwin_arm64`
+  - `at-email_X.Y.Z_windows_amd64.exe`
+  - `at-email_X.Y.Z_windows_arm64.exe`
+- at-email CLI `checksums.txt`
+- at-email CLI plugin bundles:
+  - `at-email_X.Y.Z_claude-plugin.tar.gz`
+  - `at-email_X.Y.Z_codex-plugin.tar.gz`
+- at-email CLI discoverable skill published to ClawHub from
+  `skills/at-email-cli`
+- npm package `@agentteamhq/email@X.Y.Z`
+- npm platform packages:
+  - `@agentteamhq/email-linux-x64-gnu@X.Y.Z`
+  - `@agentteamhq/email-linux-x64-musl@X.Y.Z`
+  - `@agentteamhq/email-linux-arm64-gnu@X.Y.Z`
+  - `@agentteamhq/email-linux-arm64-musl@X.Y.Z`
+  - `@agentteamhq/email-darwin-x64@X.Y.Z`
+  - `@agentteamhq/email-darwin-arm64@X.Y.Z`
+  - `@agentteamhq/email-win32-x64@X.Y.Z`
+  - `@agentteamhq/email-win32-arm64@X.Y.Z`
 - `ghcr.io/agentteamhq/agentteam-email/atemail-mail-control-service:X.Y.Z`
 - `ghcr.io/agentteamhq/agentteam-email/atemail-web-server:X.Y.Z`
+- `ghcr.io/agentteamhq/agentteam-email/atemail-cli:X.Y.Z`
 - `ghcr.io/agentteamhq/agentteam-email/atemail-mail-control-service:latest`
 - `ghcr.io/agentteamhq/agentteam-email/atemail-web-server:latest`
+- `ghcr.io/agentteamhq/agentteam-email/atemail-cli:latest`
 - Helm chart OCI artifact `oci://ghcr.io/agentteamhq/agentteam-email --version X.Y.Z`
 
 Prerelease `vX.Y.Z-rc.N` publishes image and Helm chart versions as
@@ -29,9 +55,20 @@ must not claim to be a published release.
 First-party Helm images default to `latest`. Operators can override image
 repositories, tags, pull policies, or digests in values.
 
-Workspace `package.json` versions are npm metadata only. Packages in this repo
-are not published as npm release artifacts, so package versions stay at `1.0.0`
-and are not bumped for AgentTeam Email releases.
+Workspace `package.json` versions are development metadata only and are not
+bumped for AgentTeam Email releases. The public `@agentteamhq/email` npm packages
+are generated into `apps/at-email-cli/dist/` during the tag workflow from the
+Git tag version and GoReleaser output.
+
+The at-email CLI plugin bundles are also generated into
+`apps/at-email-cli/dist/` during the tag workflow. Their plugin manifest
+versions and tarball names are derived from the same Git tag version; committed
+source files do not carry release version bumps for those bundles.
+
+The discoverable at-email CLI skill is committed under `skills/at-email-cli` for
+skills.sh, Hermes taps, LobeHub-style GitHub indexing, and ClawHub publishing.
+It is synchronized from `apps/at-email-cli/SKILL.md`; run
+`mise run //apps/at-email-cli:skills:sync` after editing the embedded skill.
 
 ## Compose
 
@@ -75,14 +112,52 @@ The chart defaults first-party images to `latest` with `imagePullPolicy:
 Always`. Operators can override image repositories, tags, pull policies, or
 digests in values.
 
+## at-email CLI
+
+The at-email CLI release is owned by
+`apps/at-email-cli/.goreleaser.yml`. GoReleaser builds raw binaries rather than
+archives so `at-email self-update` can download and replace one executable
+directly. The binary asset name format is:
+
+```text
+at-email_X.Y.Z_<os>_<arch>[.exe]
+```
+
+`at-email version` and `at-email --version` print the build version stamped by
+GoReleaser. Container image builds stamp the same version, commit, and build date
+from the release workflow.
+
+`at-email self-update [version]` resolves release assets from
+`github.com/agentteamhq/agentteam-email`, downloads `checksums.txt`, verifies the
+selected binary checksum, and replaces the current executable. Windows binaries
+are published for direct download, but in-place self-update is disabled on
+Windows.
+
+The npm distribution exposes `npx @agentteamhq/email` and installs platform
+packages through npm `optionalDependencies`. The root package `@agentteamhq/email`
+contains the JavaScript `at-email` wrapper, while platform packages contain the
+compiled Go binaries. Linux glibc and musl packages publish separate npm package
+metadata and copy the same static `CGO_ENABLED=0` Linux binary. The wrapper sets
+`AT_EMAIL_DISTRIBUTION=npm`, and `at-email self-update` is disabled for that
+distribution because npm owns the installed version. Update notices still check
+GitHub Releases, but npm installs tell users to update `@agentteamhq/email`
+through their package manager.
+
+The plugin bundle distribution packages the same embedded `SKILL.md` as simple
+Claude Code and Codex plugins. The generated bundle roots are named `at-email`
+and contain one host-specific plugin manifest, `skills/at-email-cli/SKILL.md`,
+and `LICENSE`. Marketplace catalog JSON is managed separately from the versioned
+release bundle generation.
+
 ## Release Workflow
 
-The release flow is tag first, then GitHub Release.
+The release flow is tag first. The tag workflow creates and populates the GitHub
+Release through GoReleaser.
 
 1. Merge the release-ready commit.
 2. Create and push an annotated SemVer tag with a leading `v`.
-3. Let the tag workflow publish images and the Helm chart from that exact tag.
-4. Create the GitHub Release with generated notes.
+3. Let the tag workflow publish CLI binaries, checksums, images, and the Helm
+   chart from that exact tag.
 
 Stable release:
 
@@ -90,7 +165,6 @@ Stable release:
 VERSION=X.Y.Z
 git tag -a "v${VERSION}" -m "v${VERSION}"
 git push origin "v${VERSION}"
-gh release create "v${VERSION}" --verify-tag --generate-notes --title "v${VERSION}"
 ```
 
 Prerelease:
@@ -99,7 +173,6 @@ Prerelease:
 VERSION=X.Y.Z-rc.N
 git tag -a "v${VERSION}" -m "v${VERSION}"
 git push origin "v${VERSION}"
-gh release create "v${VERSION}" --verify-tag --generate-notes --prerelease --latest=false --title "v${VERSION}"
 ```
 
 The tag workflow publishes:
@@ -107,18 +180,36 @@ The tag workflow publishes:
 - exact first-party image tags without the leading `v`
 - `latest` image tags for stable releases only
 - the Helm chart OCI artifact with the same version
+- at-email CLI binaries and `checksums.txt` attached to the GitHub Release
+- at-email CLI Claude Code and Codex plugin bundles attached to the GitHub
+  Release
+- at-email CLI skill published to ClawHub from `skills/at-email-cli`
+- `@agentteamhq/email` npm packages with the same version
+- npm package tarball provenance through npm trusted publishing and GitHub
+  artifact attestations for the generated tarballs
 
-Main branch builds publish `edge` and `sha-*` image tags. Prerelease workflows
-publish exact prerelease image tags only and must not update `latest`.
+Prerelease workflows publish exact prerelease versions only and must not update
+`latest` image tags. Prerelease npm packages use the `next` dist-tag; stable npm
+packages use the `latest` dist-tag.
 
 Release packaging stamps the Helm chart version and app version from the Git
 tag. The workflow must not require npm package version bumps.
 
-The workflow attaches GitHub artifact attestations to the published image
-digests and Helm chart OCI digest.
+The workflow attaches GitHub artifact attestations to the at-email CLI binaries,
+the checksum manifest, the generated plugin bundle tarballs, the generated npm
+package tarballs, the published image digests, and the Helm chart OCI digest.
+The `@agentteamhq/email` npm packages are configured for npm trusted publishing from the
+`.github/workflows/build-test-deploy.yml` workflow in the `production`
+environment, so automated publishing does not require `NODE_AUTH_TOKEN` or an
+npm token secret.
 
-If release creation is automated in CI, the workflow must run the equivalent
-`gh release create` command after artifacts publish.
+Release-tag ClawHub skill publishing runs from
+`.github/workflows/build-test-deploy.yml` after `build_test` succeeds. The
+dedicated `.github/workflows/skill-publish.yml` workflow dry-runs pull requests
+and main pushes, and can be manually dispatched for a one-off dry-run or publish.
+Real publishes require a `CLAWHUB_TOKEN` secret with access to the `agentteamhq`
+ClawHub owner. ClawHub skill publishing does not currently use OIDC trusted
+publishing for skills.
 
 ## Release Notes
 
@@ -132,6 +223,11 @@ Mail Control Service image: ghcr.io/agentteamhq/agentteam-email/atemail-mail-con
 Mail Control Service digest: sha256:...
 Web server image: ghcr.io/agentteamhq/agentteam-email/atemail-web-server:X.Y.Z
 Web server digest: sha256:...
+at-email CLI image: ghcr.io/agentteamhq/agentteam-email/atemail-cli:X.Y.Z
+at-email CLI image digest: sha256:...
+at-email CLI assets: at-email_X.Y.Z_<os>_<arch>[.exe], checksums.txt
+at-email plugin bundles: at-email_X.Y.Z_claude-plugin.tar.gz, at-email_X.Y.Z_codex-plugin.tar.gz
+at-email npm package: @agentteamhq/email@X.Y.Z
 Helm chart: oci://ghcr.io/agentteamhq/agentteam-email --version X.Y.Z
 Helm chart digest: sha256:...
 ```

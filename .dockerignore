@@ -1,0 +1,13 @@
+.git/
+node_modules/
+**/node_modules/
+
+.turbo/
+**/.turbo/
+
+coverage/
+**/coverage/
+
+tmp/
+test-containers/full-stack-e2e/
+test-containers/**/tmp/

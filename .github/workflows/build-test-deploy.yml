@@ -7,10 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  id-token: write
   contents: read
-  packages: write
-  attestations: write
 
 env:
   DO_NOT_TRACK: 1
@@ -19,13 +16,16 @@ env:
   PUBLIC_HOSTNAME: ${{ vars.PUBLIC_HOSTNAME }}
 
 jobs:
-  build_test_publish:
-    name: Build, Test and Publish
+  build_test:
+    name: Build and Test
     runs-on: ubuntu-latest
-    environment: production
+    outputs:
+      is_release: ${{ steps.release.outputs.is_release }}
+      is_stable: ${{ steps.release.outputs.is_stable }}
+      version: ${{ steps.release.outputs.version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Resolve release version
         id: release
@@ -55,17 +55,25 @@ jobs:
           } >> "${GITHUB_OUTPUT}"
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
-      - name: Set up Helm
-        if: steps.release.outputs.is_release == 'true'
-        uses: azure/setup-helm@v4
+      - name: Set up Go for at-email CLI package validation
+        uses: actions/setup-go@v5
         with:
-          version: v4.2.0
+          go-version-file: apps/at-email-cli/go.mod
 
-      - name: Set up crane
-        if: steps.release.outputs.is_release == 'true'
-        uses: imjasonh/setup-crane@v0.5
+      - name: Set up Node for at-email CLI npm package validation
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Check at-email CLI GoReleaser config
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: v2.16.0
+          args: check
+          workdir: apps/at-email-cli
 
       - name: Require public hostname
         run: ': "${PUBLIC_HOSTNAME:?PUBLIC_HOSTNAME repository variable is required}"'
@@ -111,16 +119,136 @@ jobs:
             type=registry,ref=ghcr.io/${{ github.repository }}/atemail-mail-control-service:latest
           cache-to: type=gha,mode=max,scope=prod-mail-control-service
 
+      - name: Build at-email CLI test stage
+        uses: docker/build-push-action@v6
+        with:
+          context: ./apps/at-email-cli
+          file: ./apps/at-email-cli/Containerfile
+          target: test
+          load: true
+          tags: atemail-cli:test-stage
+          cache-from: |
+            type=gha,scope=prod-at-email-cli
+            type=registry,ref=ghcr.io/${{ github.repository }}/atemail-cli:latest
+          cache-to: type=gha,mode=max,scope=prod-at-email-cli
+
+      - name: Build at-email CLI production runtime image for testing
+        uses: docker/build-push-action@v6
+        with:
+          context: ./apps/at-email-cli
+          file: ./apps/at-email-cli/Containerfile
+          load: true
+          tags: atemail-cli:test
+          cache-from: |
+            type=gha,scope=prod-at-email-cli
+            type=registry,ref=ghcr.io/${{ github.repository }}/atemail-cli:latest
+          cache-to: type=gha,mode=max,scope=prod-at-email-cli
+
       - name: Run unit and integration tests
         run: |
           docker run \
             -e CI=true \
             -e DEBUG='*' \
             -e DOCKER_IMAGE=atemail-web-server:test \
-            -v $PWD:$PWD \
+            -v "$PWD:$PWD" \
             -v /var/run/docker.sock:/var/run/docker.sock \
             atemail-web-server:build \
             pnpm run test
+
+      - name: Build at-email CLI snapshot release binaries
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: v2.16.0
+          args: release --snapshot --clean
+          workdir: apps/at-email-cli
+
+      - name: Generate at-email CLI npm packages
+        run: node apps/at-email-cli/npm/generate-npm-packages.mjs
+
+      - name: Validate at-email CLI npm packages
+        run: node apps/at-email-cli/npm/validate-npm-packages.mjs
+
+      - name: Pack at-email CLI npm packages
+        run: node apps/at-email-cli/npm/pack-npm-packages.mjs
+
+      - name: Smoke-test at-email CLI npm packages on glibc and musl
+        run: node apps/at-email-cli/npm/smoke-npm-linux.mjs --engine docker
+
+      - name: Generate at-email CLI plugin bundles
+        run: node apps/at-email-cli/plugins/generate-plugin-bundles.mjs
+
+      - name: Validate at-email CLI plugin bundles
+        run: node apps/at-email-cli/plugins/validate-plugin-bundles.mjs
+
+      - name: Pack at-email CLI plugin bundles
+        run: node apps/at-email-cli/plugins/pack-plugin-bundles.mjs
+
+      - name: Validate at-email CLI skill discovery
+        run: node apps/at-email-cli/skills/validate-skill-discovery.mjs
+
+  publish_clawhub_skill:
+    name: Publish ClawHub Skill
+    needs: build_test
+    if: needs.build_test.outputs.is_release == 'true'
+    permissions:
+      contents: read
+      id-token: write
+    uses: openclaw/clawhub/.github/workflows/skill-publish.yml@v1
+    with:
+      root: skills
+      owner: agentteamhq
+      dry_run: false
+      ref: ${{ github.sha }}
+    secrets:
+      clawhub_token: ${{ secrets.CLAWHUB_TOKEN }}
+
+  publish_release:
+    name: Publish Release
+    needs: build_test
+    if: needs.build_test.outputs.is_release == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      id-token: write
+      contents: write
+      packages: write
+      attestations: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v4.2.0
+
+      - name: Set up crane
+        uses: imjasonh/setup-crane@v0.5
+
+      - name: Set up Go for at-email CLI release
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/at-email-cli/go.mod
+
+      - name: Set up Node for at-email CLI npm release
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+
+      - name: Require public hostname
+        run: ': "${PUBLIC_HOSTNAME:?PUBLIC_HOSTNAME repository variable is required}"'
 
       - name: Declare web server docker image meta tags
         id: meta_web_server
@@ -131,8 +259,8 @@ jobs:
           tags: |
             type=edge,branch=main
             type=sha,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=${{ steps.release.outputs.version }},enable=${{ steps.release.outputs.is_release == 'true' }}
-            type=raw,value=latest,enable=${{ steps.release.outputs.is_stable == 'true' }}
+            type=raw,value=${{ needs.build_test.outputs.version }},enable=${{ needs.build_test.outputs.is_release == 'true' }}
+            type=raw,value=latest,enable=${{ needs.build_test.outputs.is_stable == 'true' }}
           flavor: |
             latest=false
 
@@ -145,8 +273,22 @@ jobs:
           tags: |
             type=edge,branch=main
             type=sha,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=${{ steps.release.outputs.version }},enable=${{ steps.release.outputs.is_release == 'true' }}
-            type=raw,value=latest,enable=${{ steps.release.outputs.is_stable == 'true' }}
+            type=raw,value=${{ needs.build_test.outputs.version }},enable=${{ needs.build_test.outputs.is_release == 'true' }}
+            type=raw,value=latest,enable=${{ needs.build_test.outputs.is_stable == 'true' }}
+          flavor: |
+            latest=false
+
+      - name: Declare at-email CLI docker image meta tags
+        id: meta_at_email_cli
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            name=ghcr.io/${{ github.repository }}/atemail-cli
+          tags: |
+            type=edge,branch=main
+            type=sha,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=${{ needs.build_test.outputs.version }},enable=${{ needs.build_test.outputs.is_release == 'true' }}
+            type=raw,value=latest,enable=${{ needs.build_test.outputs.is_stable == 'true' }}
           flavor: |
             latest=false
 
@@ -160,8 +302,8 @@ jobs:
       - name: Resolve published image metadata
         id: image_metadata
         env:
-          IS_RELEASE: ${{ steps.release.outputs.is_release }}
-          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          IS_RELEASE: ${{ needs.build_test.outputs.is_release }}
+          RELEASE_VERSION: ${{ needs.build_test.outputs.version }}
         run: |
           version=edge
           if [[ "${IS_RELEASE}" == "true" ]]; then
@@ -172,6 +314,44 @@ jobs:
             echo "vcs_ref=${GITHUB_SHA}"
             echo "version=${version}"
           } >> "${GITHUB_OUTPUT}"
+
+      - name: Publish at-email CLI release binaries
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: v2.16.0
+          args: release --clean
+          workdir: apps/at-email-cli
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Attest at-email CLI release binaries
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-checksums: apps/at-email-cli/dist/checksums.txt
+
+      - name: Attest at-email CLI checksums manifest
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: apps/at-email-cli/dist/checksums.txt
+
+      - name: Generate at-email CLI plugin release bundles
+        run: node apps/at-email-cli/plugins/generate-plugin-bundles.mjs --expected-version "${{ needs.build_test.outputs.version }}"
+
+      - name: Validate at-email CLI plugin release bundles
+        run: node apps/at-email-cli/plugins/validate-plugin-bundles.mjs
+
+      - name: Pack at-email CLI plugin release bundles
+        run: node apps/at-email-cli/plugins/pack-plugin-bundles.mjs
+
+      - name: Attest at-email CLI plugin bundle tarballs
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: apps/at-email-cli/dist/plugin-bundles/*.tar.gz
+
+      - name: Upload at-email CLI plugin bundles
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${GITHUB_REF_NAME}" apps/at-email-cli/dist/plugin-bundles/*.tar.gz --clobber
 
       - name: Publish web server production image (multi-arch)
         id: publish_web_server
@@ -228,8 +408,34 @@ jobs:
           subject-digest: ${{ steps.publish_mail_control_service.outputs.digest }}
           push-to-registry: true
 
+      - name: Publish at-email CLI production image (multi-arch)
+        id: publish_at_email_cli
+        uses: docker/build-push-action@v6
+        with:
+          context: ./apps/at-email-cli
+          file: ./apps/at-email-cli/Containerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta_at_email_cli.outputs.tags }}
+          labels: ${{ steps.meta_at_email_cli.outputs.labels }}
+          build-args: |
+            BUILD_DATE=${{ steps.image_metadata.outputs.build_date }}
+            VCS_REF=${{ steps.image_metadata.outputs.vcs_ref }}
+            VERSION=${{ steps.image_metadata.outputs.version }}
+          cache-from: |
+            type=gha,scope=prod-at-email-cli
+            type=registry,ref=ghcr.io/${{ github.repository }}/atemail-cli:latest
+          cache-to: |
+            type=gha,mode=max,scope=prod-at-email-cli
+
+      - name: Attest at-email CLI production image
+        uses: actions/attest@v4
+        with:
+          subject-name: ghcr.io/${{ github.repository }}/atemail-cli
+          subject-digest: ${{ steps.publish_at_email_cli.outputs.digest }}
+          push-to-registry: true
+
       - name: Auth Helm to GitHub Container Registry
-        if: steps.release.outputs.is_release == 'true'
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" \
             | helm registry login ghcr.io \
@@ -238,10 +444,9 @@ jobs:
 
       - name: Publish Helm chart
         id: publish_helm_chart
-        if: steps.release.outputs.is_release == 'true'
         env:
           CHART_SUBJECT_NAME: ghcr.io/${{ github.repository_owner }}/agentteam-email
-          VERSION: ${{ steps.release.outputs.version }}
+          VERSION: ${{ needs.build_test.outputs.version }}
         run: |
           mkdir -p tmp/helm-package
           helm package charts/agentteam-email \
@@ -257,9 +462,27 @@ jobs:
           } >> "${GITHUB_OUTPUT}"
 
       - name: Attest Helm chart
-        if: steps.release.outputs.is_release == 'true'
         uses: actions/attest@v4
         with:
           subject-name: ${{ steps.publish_helm_chart.outputs.subject_name }}
           subject-digest: ${{ steps.publish_helm_chart.outputs.subject_digest }}
           push-to-registry: true
+
+      - name: Generate at-email CLI npm release packages
+        run: node apps/at-email-cli/npm/generate-npm-packages.mjs --expected-version "${{ needs.build_test.outputs.version }}"
+
+      - name: Validate at-email CLI npm release packages
+        run: node apps/at-email-cli/npm/validate-npm-packages.mjs
+
+      - name: Pack at-email CLI npm release packages
+        run: node apps/at-email-cli/npm/pack-npm-packages.mjs
+
+      - name: Attest at-email CLI npm package tarballs
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: apps/at-email-cli/dist/npm-packages/*.tgz
+
+      - name: Publish at-email CLI npm packages
+        run: |
+          unset NODE_AUTH_TOKEN
+          node apps/at-email-cli/npm/publish-npm-packages.mjs

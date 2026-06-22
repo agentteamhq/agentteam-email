@@ -36,9 +36,9 @@ RUN --mount=type=bind,source=apps,target=/tmp/apps \
 RUN --mount=type=bind,source=packages,target=/tmp/packages \
   find /tmp/packages -maxdepth 2 -name package.json -exec sh -c 'mkdir -p "/build/packages/$(dirname "${1#/tmp/packages/}")" && cp "$1" "/build/packages/${1#/tmp/packages/}"' _ {} \;
 
-RUN --mount=type=bind,source=.,target=/tmp/repo \
-  if [ -d /tmp/repo/test-containers ]; then \
-    find /tmp/repo/test-containers -maxdepth 2 -name package.json -exec sh -c 'mkdir -p "/build/test-containers/$(dirname "${1#/tmp/repo/test-containers/}")" && cp "$1" "/build/test-containers/${1#/tmp/repo/test-containers/}"' _ {} \; ; \
+RUN --mount=type=bind,source=test-containers,target=/tmp/test-containers \
+  if [ -d /tmp/test-containers ]; then \
+    find /tmp/test-containers -maxdepth 2 -path '*/tmp' -prune -o -name package.json -exec sh -c 'mkdir -p "/build/test-containers/$(dirname "${1#/tmp/test-containers/}")" && cp "$1" "/build/test-containers/${1#/tmp/test-containers/}"' _ {} \; ; \
   fi
 
 # Fetch all dependencies with cache
