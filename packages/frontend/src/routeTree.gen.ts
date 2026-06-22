@@ -20,11 +20,11 @@ import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as MagicLinkRouteImport } from './routes/magic-link'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as DeviceRouteImport } from './routes/device'
-import { Route as DeviceApproveRouteImport } from './routes/device/approve'
 import { Route as CallbackRouteImport } from './routes/callback'
 import { Route as AcceptInviteRouteImport } from './routes/accept-invite'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DeviceApproveRouteImport } from './routes/device/approve'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedSettingsSectionRouteImport } from './routes/_authenticated/settings.$section'
@@ -85,11 +85,6 @@ const DeviceRoute = DeviceRouteImport.update({
   path: '/device',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DeviceApproveRoute = DeviceApproveRouteImport.update({
-  id: '/device/approve',
-  path: '/device/approve',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const CallbackRoute = CallbackRouteImport.update({
   id: '/callback',
   path: '/callback',
@@ -108,6 +103,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const DeviceApproveRoute = DeviceApproveRouteImport.update({
+  id: '/approve',
+  path: '/approve',
+  getParentRoute: () => DeviceRoute,
 } as any)
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   id: '/settings',
@@ -136,8 +136,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/accept-invite': typeof AcceptInviteRoute
   '/callback': typeof CallbackRoute
-  '/device': typeof DeviceRoute
-  '/device/approve': typeof DeviceApproveRoute
+  '/device': typeof DeviceRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/magic-link': typeof MagicLinkRoute
   '/onboarding': typeof OnboardingRoute
@@ -150,6 +149,7 @@ export interface FileRoutesByFullPath {
   '/verification-email-sent': typeof VerificationEmailSentRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/settings': typeof AuthenticatedSettingsRouteWithChildren
+  '/device/approve': typeof DeviceApproveRoute
   '/organization/$section': typeof AuthenticatedOrganizationSectionRoute
   '/settings/$section': typeof AuthenticatedSettingsSectionRoute
 }
@@ -157,8 +157,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/accept-invite': typeof AcceptInviteRoute
   '/callback': typeof CallbackRoute
-  '/device': typeof DeviceRoute
-  '/device/approve': typeof DeviceApproveRoute
+  '/device': typeof DeviceRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/magic-link': typeof MagicLinkRoute
   '/onboarding': typeof OnboardingRoute
@@ -171,6 +170,7 @@ export interface FileRoutesByTo {
   '/verification-email-sent': typeof VerificationEmailSentRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/settings': typeof AuthenticatedSettingsRouteWithChildren
+  '/device/approve': typeof DeviceApproveRoute
   '/organization/$section': typeof AuthenticatedOrganizationSectionRoute
   '/settings/$section': typeof AuthenticatedSettingsSectionRoute
 }
@@ -180,8 +180,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/accept-invite': typeof AcceptInviteRoute
   '/callback': typeof CallbackRoute
-  '/device': typeof DeviceRoute
-  '/device/approve': typeof DeviceApproveRoute
+  '/device': typeof DeviceRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/magic-link': typeof MagicLinkRoute
   '/onboarding': typeof OnboardingRoute
@@ -194,6 +193,7 @@ export interface FileRoutesById {
   '/verification-email-sent': typeof VerificationEmailSentRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRouteWithChildren
+  '/device/approve': typeof DeviceApproveRoute
   '/_authenticated/organization/$section': typeof AuthenticatedOrganizationSectionRoute
   '/_authenticated/settings/$section': typeof AuthenticatedSettingsSectionRoute
 }
@@ -204,7 +204,6 @@ export interface FileRouteTypes {
     | '/accept-invite'
     | '/callback'
     | '/device'
-    | '/device/approve'
     | '/forgot-password'
     | '/magic-link'
     | '/onboarding'
@@ -217,6 +216,7 @@ export interface FileRouteTypes {
     | '/verification-email-sent'
     | '/dashboard'
     | '/settings'
+    | '/device/approve'
     | '/organization/$section'
     | '/settings/$section'
   fileRoutesByTo: FileRoutesByTo
@@ -225,7 +225,6 @@ export interface FileRouteTypes {
     | '/accept-invite'
     | '/callback'
     | '/device'
-    | '/device/approve'
     | '/forgot-password'
     | '/magic-link'
     | '/onboarding'
@@ -238,6 +237,7 @@ export interface FileRouteTypes {
     | '/verification-email-sent'
     | '/dashboard'
     | '/settings'
+    | '/device/approve'
     | '/organization/$section'
     | '/settings/$section'
   id:
@@ -247,7 +247,6 @@ export interface FileRouteTypes {
     | '/accept-invite'
     | '/callback'
     | '/device'
-    | '/device/approve'
     | '/forgot-password'
     | '/magic-link'
     | '/onboarding'
@@ -260,6 +259,7 @@ export interface FileRouteTypes {
     | '/verification-email-sent'
     | '/_authenticated/dashboard'
     | '/_authenticated/settings'
+    | '/device/approve'
     | '/_authenticated/organization/$section'
     | '/_authenticated/settings/$section'
   fileRoutesById: FileRoutesById
@@ -269,8 +269,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AcceptInviteRoute: typeof AcceptInviteRoute
   CallbackRoute: typeof CallbackRoute
-  DeviceRoute: typeof DeviceRoute
-  DeviceApproveRoute: typeof DeviceApproveRoute
+  DeviceRoute: typeof DeviceRouteWithChildren
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   MagicLinkRoute: typeof MagicLinkRoute
   OnboardingRoute: typeof OnboardingRoute
@@ -355,13 +354,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/callback': {
-      id: '/callback'
-      path: '/callback'
-      fullPath: '/callback'
-      preLoaderRoute: typeof CallbackRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/device': {
       id: '/device'
       path: '/device'
@@ -369,11 +361,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DeviceRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/device/approve': {
-      id: '/device/approve'
-      path: '/device/approve'
-      fullPath: '/device/approve'
-      preLoaderRoute: typeof DeviceApproveRouteImport
+    '/callback': {
+      id: '/callback'
+      path: '/callback'
+      fullPath: '/callback'
+      preLoaderRoute: typeof CallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/accept-invite': {
@@ -396,6 +388,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/device/approve': {
+      id: '/device/approve'
+      path: '/approve'
+      fullPath: '/device/approve'
+      preLoaderRoute: typeof DeviceApproveRouteImport
+      parentRoute: typeof DeviceRoute
     }
     '/_authenticated/settings': {
       id: '/_authenticated/settings'
@@ -456,13 +455,23 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
 const AuthenticatedRouteRouteWithChildren =
   AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
 
+interface DeviceRouteChildren {
+  DeviceApproveRoute: typeof DeviceApproveRoute
+}
+
+const DeviceRouteChildren: DeviceRouteChildren = {
+  DeviceApproveRoute: DeviceApproveRoute,
+}
+
+const DeviceRouteWithChildren =
+  DeviceRoute._addFileChildren(DeviceRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AcceptInviteRoute: AcceptInviteRoute,
   CallbackRoute: CallbackRoute,
-  DeviceRoute: DeviceRoute,
-  DeviceApproveRoute: DeviceApproveRoute,
+  DeviceRoute: DeviceRouteWithChildren,
   ForgotPasswordRoute: ForgotPasswordRoute,
   MagicLinkRoute: MagicLinkRoute,
   OnboardingRoute: OnboardingRoute,

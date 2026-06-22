@@ -13,6 +13,7 @@ import { storyAuthClient } from './auth-client-fixtures'
 import { authenticatedSettingsRouteState, storyPublicEnv } from './screen-fixtures'
 import type { DashboardScreenProps } from '../screens/dashboard-screen'
 import type {
+  CLIAccessSettingsState,
   DomainSettingsState,
   DomainSettingsStatus
 } from '../partials/authenticated/settings-dialog'
@@ -183,7 +184,6 @@ export const domainSettingsDomainProvisioningState = {
 
 export const domainSettingsDomainLiveState = {
   ...domainSettingsAddDomainSelectZoneState,
-  message: 'Agent email is live for mailboxes on agentteam.example.',
   mode: 'domain',
   selectedDomainPublicId: liveCloudflareConnection.publicId,
   status: {
@@ -211,6 +211,52 @@ export const domainSettingsDenseDomainListState = {
     grants: [activeCloudflareGrant]
   }
 } satisfies DomainSettingsState
+
+const cliAccessSessions = [
+  {
+    createdAt: '2026-06-22T12:00:00Z',
+    current: false,
+    expiresAt: '2026-12-19T12:00:00Z',
+    id: 'session-cli-current',
+    label: 'at-email 0.4.0',
+    metadata: 'linux/amd64 - created Jun 22, 2026 - expires Dec 19, 2026'
+  },
+  {
+    createdAt: '2026-06-20T09:30:00Z',
+    current: false,
+    expiresAt: '2026-12-17T09:30:00Z',
+    id: 'session-cli-remote',
+    label: 'at-email 0.4.0',
+    metadata: 'darwin/arm64 - created Jun 20, 2026 - expires Dec 17, 2026'
+  }
+] satisfies CLIAccessSettingsState['sessions']
+
+export const cliAccessReadyState = {
+  sessions: cliAccessSessions,
+  state: 'ready'
+} satisfies CLIAccessSettingsState
+
+export const cliAccessEmptyState = {
+  sessions: [],
+  state: 'ready'
+} satisfies CLIAccessSettingsState
+
+export const cliAccessLoadingState = {
+  sessions: [],
+  state: 'loading'
+} satisfies CLIAccessSettingsState
+
+export const cliAccessRevokingState = {
+  revokingSessionId: 'session-cli-remote',
+  sessions: cliAccessSessions,
+  state: 'ready'
+} satisfies CLIAccessSettingsState
+
+export const cliAccessErrorState = {
+  error: 'Session list failed.',
+  sessions: [],
+  state: 'error'
+} satisfies CLIAccessSettingsState
 
 export const authenticatedSectionBaseArgs = {
   authClient: storyAuthClient,
