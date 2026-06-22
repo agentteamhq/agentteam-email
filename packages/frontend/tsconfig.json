@@ -3,7 +3,7 @@
     "jsx": "preserve",
     "lib": ["ESNext", "DOM", "DOM.Iterable", "DOM.AsyncIterable"],
     "paths": {
-      "@/*": ["./src/*"],
+      "src/*": ["./src/*"],
       "#runtime-public-env": ["./src/runtime-public-env"]
     },
     "types": ["node", "vite/client", "@responsive-image/vite-plugin/client", "react", "react-dom"]

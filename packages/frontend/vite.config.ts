@@ -183,7 +183,7 @@ function createAliases(runtimePublicEnvPath: string) {
       replacement: runtimePublicEnvPath
     },
     {
-      find: '@',
+      find: 'src',
       replacement: resolve(__dirname, 'src')
     }
   ]
@@ -194,7 +194,7 @@ function createAliases(runtimePublicEnvPath: string) {
 function createBaseAliases() {
   return [
     {
-      find: '@',
+      find: 'src',
       replacement: resolve(__dirname, 'src')
     }
   ]
@@ -260,7 +260,7 @@ function isExternalServerImport(id: string): boolean {
     return false
   }
 
-  if (id === '@' || id.startsWith('@/')) {
+  if (id === 'src' || id.startsWith('src/')) {
     return false
   }
 

@@ -6,13 +6,13 @@ import { withThemeByDataAttribute } from '@storybook/addon-themes'
 import type { ReactNode } from 'react'
 
 import { createFrontendRouter } from '../src/router'
-import { storyPublicEnv } from '../src/storybook/screen-fixtures'
+import { getStoryPublicEnv } from '../src/storybook/screen-fixtures'
 
 function RouterStoryProvider({ children }: { children: ReactNode }) {
   return (
     <RouterContextProvider
       router={createFrontendRouter({
-        publicEnv: storyPublicEnv
+        publicEnv: getStoryPublicEnv()
       })}
     >
       {children}

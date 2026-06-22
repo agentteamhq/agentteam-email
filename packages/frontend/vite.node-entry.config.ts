@@ -16,7 +16,7 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: '@',
+        find: 'src',
         replacement: resolve(__dirname, 'src')
       }
     ]
@@ -72,7 +72,7 @@ function isExternalNodeEntryImport(id: string): boolean {
     return false
   }
 
-  if (id === '@' || id.startsWith('@/')) {
+  if (id === 'src' || id.startsWith('src/')) {
     return false
   }
 
