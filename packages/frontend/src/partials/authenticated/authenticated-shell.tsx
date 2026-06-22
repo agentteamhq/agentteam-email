@@ -1,5 +1,6 @@
 import * as React from 'react'
 import {
+  AddressBookIcon,
   ArchiveIcon,
   ArrowBendDoubleUpLeftIcon,
   ArrowBendUpLeftIcon,
@@ -13,9 +14,11 @@ import {
   ImageIcon,
   LinkIcon,
   PaperPlaneTiltIcon,
+  RobotIcon,
   StarIcon,
   TrashIcon,
   TrayIcon,
+  UsersThreeIcon,
   WarningIcon,
   XIcon
 } from '@phosphor-icons/react'
@@ -69,6 +72,8 @@ import type {
   AuthenticatedEmailToolbarAction,
   AuthenticatedExternalLink,
   AuthenticatedMailNavIconKey,
+  AuthenticatedManagementNavIconKey,
+  AuthenticatedManagementNavItem,
   AuthenticatedSidebarView
 } from './authenticated-shell-models'
 import type {
@@ -85,6 +90,7 @@ export interface AuthenticatedShellProps {
   cloudflareOAuthCallback?: CloudflareOAuthCallbackState | null
   domainSettingsState?: DomainSettingsState
   onMailSelect?: (mailId: string) => void
+  onCliAccessSessionRevoke?: (session: CLIAccessSettingsState['sessions'][number]) => void
   onSettingsOpenChange: (open: boolean) => void
   onSettingsSectionChange: (section: SettingsSectionId) => void
   onSidebarItemSelect?: (itemId: string) => void
@@ -103,6 +109,7 @@ export function AuthenticatedShell({
   cloudflareOAuthCallback,
   domainSettingsState,
   onMailSelect,
+  onCliAccessSessionRevoke,
   onSettingsOpenChange,
   onSettingsSectionChange,
   onSidebarItemSelect,
@@ -114,8 +121,12 @@ export function AuthenticatedShell({
   sidebarView = defaultAuthenticatedSidebarView,
   title = 'Inbox'
 }: AuthenticatedShellProps) {
+  const hasActiveManagementItem =
+    sidebarView.managementNav?.some((item) => item.id === sidebarView.activeItemId) ?? false
+
   return (
     <SidebarProvider
+      open={hasActiveManagementItem ? false : undefined}
       style={
         {
           '--sidebar-width': '350px'
@@ -142,6 +153,7 @@ export function AuthenticatedShell({
         cloudflareOAuthCallback={cloudflareOAuthCallback}
         contentState={settingsContentState}
         domainSettingsState={domainSettingsState}
+        onCliAccessSessionRevoke={onCliAccessSessionRevoke}
         onActiveSectionChange={onSettingsSectionChange}
         onOpenChange={onSettingsOpenChange}
         open={settingsOpen}
@@ -167,7 +179,9 @@ export function AuthenticatedSidebar({
   view = defaultAuthenticatedSidebarView
 }: AuthenticatedSidebarProps) {
   const { setOpen } = useSidebar()
-  const activeItem = view.navMain.find((item) => item.id === view.activeItemId) ?? view.navMain[0]
+  const activeMailItem = view.navMain.find((item) => item.id === view.activeItemId)
+  const activeManagementItem = view.managementNav?.find((item) => item.id === view.activeItemId)
+  const activeItem = activeMailItem ?? activeManagementItem ?? view.navMain[0]
 
   return (
     <Sidebar
@@ -227,6 +241,22 @@ export function AuthenticatedSidebar({
           </SidebarGroup>
         </SidebarContent>
         <SidebarFooter>
+          {view.managementNav?.length ? (
+            <SidebarMenu>
+              {view.managementNav.map((item) => (
+                <SidebarMenuItem key={item.id}>
+                  <ManagementNavButton
+                    item={item}
+                    isActive={item.id === view.activeItemId}
+                    onSelect={() => {
+                      onSelectItem?.(item.id)
+                      setOpen(false)
+                    }}
+                  />
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          ) : null}
           <UserButton
             align='start'
             sideOffset={8}
@@ -235,48 +265,50 @@ export function AuthenticatedSidebar({
         </SidebarFooter>
       </Sidebar>
 
-      <Sidebar
-        collapsible='none'
-        className='hidden min-w-0 flex-1 md:flex'
-      >
-        <SidebarHeader className='gap-3 border-b p-3'>
-          <OrganizationSwitcher
-            align='start'
-            className='w-full justify-between border px-2'
-            hideSlug={false}
-          />
-          <div className='flex w-full items-center justify-between'>
-            <div className='text-foreground text-base font-medium'>{activeItem?.title ?? 'Inbox'}</div>
-            <Label className='flex items-center gap-2 text-sm'>
-              <span>Unreads</span>
-              <Switch
-                aria-label='Show unread messages only'
-                checked={view.unreadOnly ?? false}
-                className='shadow-none'
-                onCheckedChange={onUnreadOnlyChange}
-              />
-            </Label>
-          </div>
-          <SidebarInput
-            onChange={(event) => {
-              onSearchChange?.(event.currentTarget.value)
-            }}
-            placeholder='Type to search...'
-            readOnly={!onSearchChange}
-            value={view.searchQuery ?? ''}
-          />
-        </SidebarHeader>
-        <SidebarContent>
-          <SidebarGroup className='px-0'>
-            <SidebarGroupContent>
-              <MailboxList
-                onSelectMail={onMailSelect}
-                view={view}
-              />
-            </SidebarGroupContent>
-          </SidebarGroup>
-        </SidebarContent>
-      </Sidebar>
+      {!activeManagementItem ? (
+        <Sidebar
+          collapsible='none'
+          className='hidden min-w-0 flex-1 md:flex'
+        >
+          <SidebarHeader className='gap-3 border-b p-3'>
+            <OrganizationSwitcher
+              align='start'
+              className='w-full justify-between border px-2'
+              hideSlug={false}
+            />
+            <div className='flex w-full items-center justify-between'>
+              <div className='text-foreground text-base font-medium'>{activeItem?.title ?? 'Inbox'}</div>
+              <Label className='flex items-center gap-2 text-sm'>
+                <span>Unreads</span>
+                <Switch
+                  aria-label='Show unread messages only'
+                  checked={view.unreadOnly ?? false}
+                  className='shadow-none'
+                  onCheckedChange={onUnreadOnlyChange}
+                />
+              </Label>
+            </div>
+            <SidebarInput
+              onChange={(event) => {
+                onSearchChange?.(event.currentTarget.value)
+              }}
+              placeholder='Type to search...'
+              readOnly={!onSearchChange}
+              value={view.searchQuery ?? ''}
+            />
+          </SidebarHeader>
+          <SidebarContent>
+            <SidebarGroup className='px-0'>
+              <SidebarGroupContent>
+                <MailboxList
+                  onSelectMail={onMailSelect}
+                  view={view}
+                />
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </SidebarContent>
+        </Sidebar>
+      ) : null}
     </Sidebar>
   )
 }
@@ -289,6 +321,12 @@ const mailNavIcons = {
   trash: TrashIcon
 } satisfies Record<AuthenticatedMailNavIconKey, React.ComponentType<{ className?: string }>>
 
+const managementNavIcons = {
+  accounts: AddressBookIcon,
+  agents: RobotIcon,
+  groups: UsersThreeIcon
+} satisfies Record<AuthenticatedManagementNavIconKey, React.ComponentType<{ className?: string }>>
+
 function MailNavButton({
   isActive,
   item,
@@ -299,6 +337,33 @@ function MailNavButton({
   onSelect: () => void
 }) {
   const Icon = mailNavIcons[item.iconKey]
+
+  return (
+    <SidebarMenuButton
+      tooltip={{
+        children: item.title,
+        hidden: false
+      }}
+      onClick={onSelect}
+      isActive={isActive}
+      className='px-2.5 md:px-2'
+    >
+      <Icon />
+      <span>{item.title}</span>
+    </SidebarMenuButton>
+  )
+}
+
+function ManagementNavButton({
+  isActive,
+  item,
+  onSelect
+}: {
+  isActive: boolean
+  item: AuthenticatedManagementNavItem
+  onSelect: () => void
+}) {
+  const Icon = managementNavIcons[item.iconKey]
 
   return (
     <SidebarMenuButton

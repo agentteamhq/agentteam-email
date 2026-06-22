@@ -8,6 +8,11 @@ import {
   defaultAuthenticatedSidebarView,
   withActiveSidebarItem
 } from '../partials/authenticated/authenticated-shell-models'
+import {
+  getMailboxAdminSectionTitle,
+  isMailboxAdminSectionId
+} from '../partials/authenticated/mailbox-admin-models'
+import { MailboxAdminScreen } from '../partials/authenticated/mailbox-admin-screen'
 import { WebappProviders } from '../partials/webapp/webapp-providers'
 import type {
   AuthenticatedDashboardView,
@@ -25,6 +30,11 @@ import type {
   SettingsDialogContentState
 } from '../partials/authenticated/settings-dialog'
 import type { SettingsSectionId } from '../partials/authenticated/settings-dialog-sections'
+import type {
+  MailboxAdminSectionId,
+  MailboxAdminStatusFilter,
+  MailboxAdminView
+} from '../partials/authenticated/mailbox-admin-models'
 import type { PublicEnv } from '../types'
 
 export interface DashboardScreenProps {
@@ -34,6 +44,8 @@ export interface DashboardScreenProps {
   defaultSettingsOpen?: boolean
   defaultSettingsSection?: SettingsSectionId
   emailPreviewsById?: Readonly<Record<string, AuthenticatedEmailPreview>>
+  mailboxAdminView?: MailboxAdminView
+  onCliAccessSessionRevoke?: (session: CLIAccessSettingsState['sessions'][number]) => void
   onEmailAction?: (action: AuthenticatedEmailAction, email: AuthenticatedEmailPreview) => void
   onSettingsOpenChange?: (open: boolean) => void
   onSettingsSectionChange?: (section: SettingsSectionId) => void
@@ -55,6 +67,8 @@ export function DashboardScreen({
   defaultSettingsOpen,
   defaultSettingsSection,
   emailPreviewsById,
+  mailboxAdminView,
+  onCliAccessSessionRevoke,
   onEmailAction,
   onSettingsOpenChange,
   onSettingsSectionChange,
@@ -80,6 +94,12 @@ export function DashboardScreen({
   )
   const [searchQuery, setSearchQuery] = React.useState(sidebarView.searchQuery ?? '')
   const [unreadOnly, setUnreadOnly] = React.useState(sidebarView.unreadOnly ?? false)
+  const [mailboxAdminSearchBySection, setMailboxAdminSearchBySection] = React.useState<
+    Readonly<Partial<Record<MailboxAdminSectionId, string>>>
+  >({})
+  const [mailboxAdminStatusFilterBySection, setMailboxAdminStatusFilterBySection] = React.useState<
+    Readonly<Partial<Record<MailboxAdminSectionId, MailboxAdminStatusFilter>>>
+  >({})
   const [remoteImagesAllowedByEmailId, setRemoteImagesAllowedByEmailId] = React.useState<ReadonlySet<string>>(
     () => new Set()
   )
@@ -93,6 +113,15 @@ export function DashboardScreen({
   const settingsSection = settingsSectionProp ?? uncontrolledSettingsSection
   const setSettingsOpen = onSettingsOpenChange ?? setUncontrolledSettingsOpen
   const setSettingsSection = onSettingsSectionChange ?? setUncontrolledSettingsSection
+  const activeMailboxAdminSection = isMailboxAdminSectionId(activeItemId) ? activeItemId : null
+  const mailboxAdminSearchQuery = activeMailboxAdminSection
+    ? (mailboxAdminSearchBySection[activeMailboxAdminSection] ?? mailboxAdminView?.searchQuery ?? '')
+    : ''
+  const mailboxAdminStatusFilter = activeMailboxAdminSection
+    ? (mailboxAdminStatusFilterBySection[activeMailboxAdminSection] ??
+      mailboxAdminView?.statusFilter ??
+      'all')
+    : 'all'
   const resolvedSidebarView = React.useMemo(
     () => ({
       ...withActiveSidebarItem(sidebarView, activeItemId),
@@ -139,6 +168,34 @@ export function DashboardScreen({
     },
     [onEmailAction]
   )
+  const handleMailboxAdminSearchChange = React.useCallback(
+    (nextQuery: string) => {
+      if (!activeMailboxAdminSection) {
+        return
+      }
+
+      setMailboxAdminSearchBySection((current) => ({
+        ...current,
+        [activeMailboxAdminSection]: nextQuery
+      }))
+      mailboxAdminView?.onSearchQueryChange?.(nextQuery)
+    },
+    [activeMailboxAdminSection, mailboxAdminView]
+  )
+  const handleMailboxAdminStatusFilterChange = React.useCallback(
+    (nextStatusFilter: MailboxAdminStatusFilter) => {
+      if (!activeMailboxAdminSection) {
+        return
+      }
+
+      setMailboxAdminStatusFilterBySection((current) => ({
+        ...current,
+        [activeMailboxAdminSection]: nextStatusFilter
+      }))
+      mailboxAdminView?.onStatusFilterChange?.(nextStatusFilter)
+    },
+    [activeMailboxAdminSection, mailboxAdminView]
+  )
 
   return (
     <WebappProviders
@@ -149,6 +206,7 @@ export function DashboardScreen({
     >
       <AuthenticatedShell
         cliAccessState={cliAccessState}
+        onCliAccessSessionRevoke={onCliAccessSessionRevoke}
         onSettingsOpenChange={setSettingsOpen}
         onSettingsSectionChange={setSettingsSection}
         onMailSelect={setSelectedMailId}
@@ -168,11 +226,25 @@ export function DashboardScreen({
         settingsOpen={settingsOpen}
         settingsSection={settingsSection}
         sidebarView={resolvedSidebarView}
+        title={activeMailboxAdminSection ? getMailboxAdminSectionTitle(activeMailboxAdminSection) : undefined}
       >
-        <AuthenticatedDashboardContent
-          onEmailAction={handleEmailAction}
-          view={resolvedDashboardView}
-        />
+        {activeMailboxAdminSection && mailboxAdminView ? (
+          <MailboxAdminScreen
+            view={{
+              ...mailboxAdminView,
+              onSearchQueryChange: handleMailboxAdminSearchChange,
+              onStatusFilterChange: handleMailboxAdminStatusFilterChange,
+              searchQuery: mailboxAdminSearchQuery,
+              section: activeMailboxAdminSection,
+              statusFilter: mailboxAdminStatusFilter
+            }}
+          />
+        ) : (
+          <AuthenticatedDashboardContent
+            onEmailAction={handleEmailAction}
+            view={resolvedDashboardView}
+          />
+        )}
       </AuthenticatedShell>
     </WebappProviders>
   )

@@ -1,9 +1,17 @@
 export type AuthenticatedViewState = 'ready' | 'loading' | 'empty'
 export type AuthenticatedMailNavIconKey = 'drafts' | 'inbox' | 'junk' | 'sent' | 'trash'
+export type AuthenticatedManagementNavIconKey = 'accounts' | 'agents' | 'groups'
 export type AuthenticatedEmailBodySize = 'compact' | 'standard' | 'tall' | 'fill'
 
 export interface AuthenticatedMailNavItem {
   iconKey: AuthenticatedMailNavIconKey
+  id: string
+  title: string
+  url: string
+}
+
+export interface AuthenticatedManagementNavItem {
+  iconKey: AuthenticatedManagementNavIconKey
   id: string
   title: string
   url: string
@@ -101,6 +109,7 @@ export interface AuthenticatedSidebarView {
   activeItemId: string
   emptyDescription: string
   emptyTitle: string
+  managementNav?: ReadonlyArray<AuthenticatedManagementNavItem>
   mails: ReadonlyArray<AuthenticatedMailItem>
   navMain: ReadonlyArray<AuthenticatedMailNavItem>
   searchQuery?: string
