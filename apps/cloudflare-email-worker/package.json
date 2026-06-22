@@ -3,26 +3,29 @@
   "version": "1.0.0",
   "private": false,
   "license": "MIT",
-  "publishConfig": {
-    "access": "public"
-  },
   "type": "module",
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && node ./scripts/generate-backend-bundle.mjs --check",
+    "check:backend-bundle": "node ./scripts/generate-backend-bundle.mjs --check",
     "deploy": "corepack pnpm run build && node ./scripts/deploy-worker.mjs",
     "dev": "wrangler dev --local --port 8787 --ip 0.0.0.0",
+    "generate:backend-bundle": "node ./scripts/generate-backend-bundle.mjs",
     "tail": "wrangler tail",
     "test": "node --test"
   },
   "dependencies": {
     "@date-fns/tz": "1.5.0",
+    "aws4fetch": "1.0.20",
     "date-fns": "4.4.0",
     "email-addresses": "5.0.0",
     "uuid": "14.0.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "4.20260606.1",
     "vite": "8.0.16",
-    "wrangler": "4.98.0",
-    "@cloudflare/workers-types": "4.20260606.1"
+    "wrangler": "4.98.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

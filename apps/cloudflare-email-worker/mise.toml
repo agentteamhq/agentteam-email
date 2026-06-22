@@ -7,12 +7,30 @@ node.corepack = true
 unix_default_inline_shell_args = "bash -euo pipefail -c"
 
 [tasks.build]
-description = "Bundle the Cloudflare worker with Vite"
+description = "Bundle the Cloudflare worker with Vite and verify the backend checked-in bundle artifact"
 run = """
 repo_root="$(git rev-parse --show-toplevel)"
 cd "${repo_root}"
 corepack pnpm install
 corepack pnpm --filter agent-mail-cloudflare-worker run build
+"""
+
+[tasks."generate:backend-bundle"]
+description = "Regenerate the checked-in backend Worker bundle artifact"
+run = """
+repo_root="$(git rev-parse --show-toplevel)"
+cd "${repo_root}"
+corepack pnpm install
+corepack pnpm --filter agent-mail-cloudflare-worker run generate:backend-bundle
+"""
+
+[tasks."check:backend-bundle"]
+description = "Verify the checked-in backend Worker bundle artifact is fresh"
+run = """
+repo_root="$(git rev-parse --show-toplevel)"
+cd "${repo_root}"
+corepack pnpm install
+corepack pnpm --filter agent-mail-cloudflare-worker run check:backend-bundle
 """
 
 [tasks."test:unit"]

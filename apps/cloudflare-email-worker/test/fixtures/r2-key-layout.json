@@ -1,23 +1,25 @@
 {
   "inbound": {
-    "recipient_domain": "Example.com",
-    "timestamp": "2026-04-18T12:34:56.000Z",
+    "archive_prefix": "orgs/org_public_test/domains/example.com/mail/inbound",
+    "bundle_prefix": "orgs/org_public_test/domains/example.com/mail/inbound/2026/04/18/019da096-4580-7054-b915-bb21d12a5d30",
+    "daily_prefix": "orgs/org_public_test/domains/example.com/mail/inbound/2026/04/18/",
+    "dsn_key": "orgs/org_public_test/domains/example.com/mail/inbound/2026/04/18/019da096-4580-7054-b915-bb21d12a5d30/dsn.eml",
+    "edge_key": "orgs/org_public_test/domains/example.com/mail/inbound/2026/04/18/019da096-4580-7054-b915-bb21d12a5d30/edge.json",
     "ingest_id": "019da096-4580-7054-b915-bb21d12a5d30",
-    "daily_prefix": "mail/inbound/example.com/2026/04/18/",
-    "bundle_prefix": "mail/inbound/example.com/2026/04/18/019da096-4580-7054-b915-bb21d12a5d30",
-    "raw_key": "mail/inbound/example.com/2026/04/18/019da096-4580-7054-b915-bb21d12a5d30/raw.eml",
-    "edge_key": "mail/inbound/example.com/2026/04/18/019da096-4580-7054-b915-bb21d12a5d30/edge.json",
-    "dsn_key": "mail/inbound/example.com/2026/04/18/019da096-4580-7054-b915-bb21d12a5d30/dsn.eml",
-    "result_key": "mail/inbound/example.com/2026/04/18/019da096-4580-7054-b915-bb21d12a5d30/result.json"
+    "org_public_id": "org_public_test",
+    "raw_key": "orgs/org_public_test/domains/example.com/mail/inbound/2026/04/18/019da096-4580-7054-b915-bb21d12a5d30/raw.eml",
+    "recipient_domain": "Example.com",
+    "result_key": "orgs/org_public_test/domains/example.com/mail/inbound/2026/04/18/019da096-4580-7054-b915-bb21d12a5d30/result.json",
+    "timestamp": "2026-04-18T12:34:56.000Z"
   },
   "outbound_ses": {
-    "sender_domain": "Example.com",
-    "timestamp": "2026-04-18T12:34:56.000Z",
-    "send_id": "019da096-4580-7054-b915-bb21d12a5d30",
     "bundle_prefix": "mail/outbound/example.com/2026/04/18/019da096-4580-7054-b915-bb21d12a5d30",
+    "provider_key": "mail/outbound/example.com/2026/04/18/019da096-4580-7054-b915-bb21d12a5d30/provider.eml",
     "relay_key": "mail/outbound/example.com/2026/04/18/019da096-4580-7054-b915-bb21d12a5d30/relay.eml",
     "relay_meta_key": "mail/outbound/example.com/2026/04/18/019da096-4580-7054-b915-bb21d12a5d30/relay.json",
-    "provider_key": "mail/outbound/example.com/2026/04/18/019da096-4580-7054-b915-bb21d12a5d30/provider.eml",
-    "result_key": "mail/outbound/example.com/2026/04/18/019da096-4580-7054-b915-bb21d12a5d30/result.json"
+    "result_key": "mail/outbound/example.com/2026/04/18/019da096-4580-7054-b915-bb21d12a5d30/result.json",
+    "send_id": "019da096-4580-7054-b915-bb21d12a5d30",
+    "sender_domain": "Example.com",
+    "timestamp": "2026-04-18T12:34:56.000Z"
   }
 }

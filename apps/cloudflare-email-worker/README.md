@@ -1,7 +1,7 @@
 # Agent Mail Cloudflare Worker
 
-Repo-owned Cloudflare Email Routing worker for inbound archive and edge metadata
-creation.
+Repo-owned Cloudflare Email Routing Worker source for inbound archive and edge
+metadata creation.
 
 This worker is the canonical ingress edge:
 
@@ -13,41 +13,49 @@ This worker is the canonical ingress edge:
 - preserves Cloudflare receive-surface metadata in `X-ATMCF-*`
 - logs ingress success and failure with the canonical ingest ID
 
-Checked-in Cloudflare config:
+Checked-in Worker artifacts:
 
-- Worker script name and R2 bucket name are owned by `wrangler.toml` and the
-  worker constants in `src/lib.js`.
-- R2 bucket binding name: `ARCHIVE_BUCKET`
-- inbound bundle prefix: `mail/inbound`
+- `src/index.js` and `src/lib.js` are the editable Worker source.
+- `packages/backend/src/cloudflare/email-worker.generated.ts` is the generated,
+  checked-in bundled artifact imported by backend provisioning.
+- `corepack pnpm --filter agent-mail-cloudflare-worker run generate:backend-bundle`
+  regenerates the backend artifact with the Vite JavaScript API.
+- `corepack pnpm --filter agent-mail-cloudflare-worker run check:backend-bundle`
+  verifies the checked-in backend artifact is fresh.
 - bootstrap/test Email Routing input: `config/email-routing.json`
 
-Required environment variables for Cloudflare API tasks:
+Runtime bindings supplied by backend provisioning:
 
-- `AGENT_MAIL_CLOUDFLARE_API_TOKEN`
-- `AGENT_MAIL_CLOUDFLARE_ACCOUNT_ID`
-- `AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL`
-- `AGENT_MAIL_CF_TUNNEL_HMAC_SECRET`
+- `AGENTTEAM_ORG_PUBLIC_ID`
+- `AGENTTEAM_CONNECTION_ID`
+- `AGENTTEAM_DOMAIN_ID`
+- `AGENTTEAM_DOMAIN`
+- `AGENTTEAM_ARCHIVE_PREFIX`
+- `AGENTTEAM_R2_ENDPOINT`
+- `AGENTTEAM_R2_BUCKET`
+- `AGENTTEAM_R2_REGION`
+- `AGENTTEAM_R2_ACCESS_KEY_ID`
+- `AGENTTEAM_R2_SECRET_ACCESS_KEY`
+- `AGENTTEAM_R2_SESSION_TOKEN`
+- `AGENTTEAM_R2_CREDENTIAL_EXPIRES_AT`
+- `AGENTTEAM_WORKER_HMAC_SECRET`
+- `AGENTTEAM_INGEST_URL`
 
-Cloudflare provisioning is intentionally separate from the app deployment path:
+Cloudflare provisioning is owned by the web/backend orchestration path:
 
-- `mise run cf-provision` deploys the Worker and bootstrap routing config
-- `mise run cf-provision:status` is the read-only status exception
-- scripts under `scripts/` are implementation details for these service-level
-  tasks and report failure if regular non-catch-all rules remain
-- every active Agent Mail domain and subdomain routes to the same configured
-  Worker
-- provisioning declares the Worker binding to the existing R2 bucket; it does
-  not create, delete, or preflight-check the bucket
+- one Worker deployment is created per connected domain
+- backend provisioning uploads the checked-in generated artifact as `index.js`
+- the Worker gets per-domain org, connection, archive-prefix, temporary R2
+  credential, HMAC, and ingest URL bindings from the provisioning call
+- the Worker posts signed fast-path notifications to
+  `/rpc/agent-mail/ingest/v1`
+- `deploy-worker.mjs` remains a developer utility and is not the production
+  provisioning path
 
 Operational contract:
 
-- the control service R2 bucket setting must match the Worker bucket configured
-  in `wrangler.toml`
-- routing is not configured from per-run zone/domain environment variables
 - `config/email-routing.json` must not contain production domain state;
-  steady-state routing mutation is an internal step of Mail Control API
-  provision apply fed by service-owned domain state
-- configured Agent Mail zones use catch-all routing to the configured Worker
+  steady-state routing mutation is driven from web-owned connection/domain state
 - raw archive is written first
 - `edge.json` is written second as the commit marker
 - the Worker does not query Cloudflare Analytics or GraphQL during inbound
@@ -56,8 +64,8 @@ Operational contract:
 - if `edge.json` write fails after raw archive succeeds, the Worker logs and
   throws a hard error instead of degrading into another path
 - after `edge.json` succeeds, the Worker posts to
-  `AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL` with `X-Agent-Mail-Timestamp` and
-  `X-Agent-Mail-Signature`
+  `AGENTTEAM_INGEST_URL` with `X-Agent-Mail-Connection-Id`,
+  `X-Agent-Mail-Timestamp`, and `X-Agent-Mail-Signature`
 - fast-path notification failures are logged and are not retried by the Worker;
   the R2 reconciler sweep remains authoritative for recovery
 
