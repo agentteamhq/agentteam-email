@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -242,11 +243,20 @@ func TestMainAuthLoginStatusAndLogout(t *testing.T) {
 	prevOpenBrowser := openBrowser
 	prevAuthSleep := authSleep
 	Version = "1.2.3"
+	var tokenPolls int
+	var sleepCalls int
 	openBrowser = func(target string) error {
 		t.Fatalf("browser open called for %s", target)
 		return nil
 	}
 	authSleep = func(ctx context.Context, duration time.Duration) error {
+		sleepCalls++
+		if sleepCalls == 1 && tokenPolls != 0 {
+			t.Fatalf("first sleep happened after %d token polls", tokenPolls)
+		}
+		if duration != time.Second {
+			t.Fatalf("sleep duration = %s, want 1s", duration)
+		}
 		return nil
 	}
 	defer func() {
@@ -255,7 +265,6 @@ func TestMainAuthLoginStatusAndLogout(t *testing.T) {
 		authSleep = prevAuthSleep
 	}()
 
-	var tokenPolls int
 	var revoked bool
 	expectedUserAgent := "at-email/1.2.3 (" + runtime.GOOS + "; " + runtime.GOARCH + ")"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -263,11 +272,13 @@ func TestMainAuthLoginStatusAndLogout(t *testing.T) {
 			t.Fatalf("user-agent = %q", got)
 		}
 		switch r.URL.RequestURI() {
+		case "/.well-known/at-email.json":
+			w.WriteHeader(http.StatusNotFound)
 		case "/rpc/auth/api/device/code":
 			if r.Method != http.MethodPost {
 				t.Fatalf("method = %s", r.Method)
 			}
-			_, _ = w.Write([]byte(`{"device_code":"device-1","user_code":"ABCD1234","verification_uri":"https://app.example/device","verification_uri_complete":"https://app.example/device?user_code=ABCD1234","expires_in":60,"interval":0}`))
+			_, _ = w.Write([]byte(`{"device_code":"device-1","user_code":"ABCD1234","verification_uri":"https://app.example/device","verification_uri_complete":"https://app.example/device?user_code=ABCD1234","expires_in":60,"interval":1}`))
 		case "/rpc/auth/api/device/token":
 			tokenPolls++
 			if tokenPolls == 1 {
@@ -302,13 +313,14 @@ func TestMainAuthLoginStatusAndLogout(t *testing.T) {
 
 	env := []string{"AT_EMAIL_API_BASE_URL=" + server.URL}
 	var stdout, stderr bytes.Buffer
-	code := Main(context.Background(), []string{"auth", "login", "--no-open"}, env, strings.NewReader(""), &stdout, &stderr)
+	code := Main(context.Background(), []string{"auth", "login"}, env, strings.NewReader(""), &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("login code = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
 	for _, want := range []string{
-		"Open: https://app.example/device?user_code=ABCD1234\n",
-		"Code: ABCD-1234\n",
+		"Open: https://app.example/device?user_code=ABCD1234\n\n",
+		"Code: ABCD-1234\n\n",
+		"Waiting for approval...\n",
 		"Logged in.\n",
 		"Account: agent@example.com\n",
 	} {
@@ -321,6 +333,9 @@ func TestMainAuthLoginStatusAndLogout(t *testing.T) {
 	}
 	if stderr.String() != "" {
 		t.Fatalf("login stderr = %q", stderr.String())
+	}
+	if sleepCalls < 2 {
+		t.Fatalf("sleep calls = %d, want at least 2", sleepCalls)
 	}
 
 	stdout.Reset()
@@ -355,6 +370,88 @@ func TestMainAuthLoginStatusAndLogout(t *testing.T) {
 	}
 	if logoutPayload["status"] != "logged_out" || logoutPayload["remote_revoked"] != true {
 		t.Fatalf("logout payload = %#v", logoutPayload)
+	}
+}
+
+func TestMainAuthLoginUsesDiscoveryAndExplicitOpen(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	prevVersion := Version
+	prevOpenBrowser := openBrowser
+	prevAuthSleep := authSleep
+	Version = "1.2.3"
+	var openedURL string
+	openBrowser = func(target string) error {
+		openedURL = target
+		return nil
+	}
+	authSleep = func(ctx context.Context, duration time.Duration) error {
+		return nil
+	}
+	defer func() {
+		Version = prevVersion
+		openBrowser = prevOpenBrowser
+		authSleep = prevAuthSleep
+	}()
+
+	expectedUserAgent := "at-email/1.2.3 (" + runtime.GOOS + "; " + runtime.GOARCH + ")"
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("User-Agent"); got != expectedUserAgent {
+			t.Fatalf("api user-agent = %q", got)
+		}
+		switch r.URL.RequestURI() {
+		case "/rpc/auth/api/device/code":
+			if r.Method != http.MethodPost {
+				t.Fatalf("method = %s", r.Method)
+			}
+			_, _ = w.Write([]byte(`{"device_code":"device-2","user_code":"EFGH5678","verification_uri":"https://api.example/device","verification_uri_complete":"https://api.example/device?user_code=EFGH5678","expires_in":60,"interval":0}`))
+		case "/rpc/auth/api/device/token":
+			_, _ = w.Write([]byte(`{"access_token":"discovered-session-token","token_type":"Bearer","expires_in":3600,"scope":"openid profile email"}`))
+		case "/rpc/auth/api/get-session":
+			if r.Header.Get("Authorization") != "Bearer discovered-session-token" {
+				t.Fatalf("authorization header = %q", r.Header.Get("Authorization"))
+			}
+			_, _ = w.Write([]byte(`{"session":{"id":"sess-2","expiresAt":"2026-12-19T12:00:00Z"},"user":{"id":"user-2","email":"agent@example.com"}}`))
+		default:
+			t.Fatalf("api request URI = %s", r.URL.RequestURI())
+		}
+	}))
+	defer apiServer.Close()
+
+	discoveryServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("User-Agent"); got != expectedUserAgent {
+			t.Fatalf("discovery user-agent = %q", got)
+		}
+		if r.URL.RequestURI() != "/.well-known/at-email.json" {
+			t.Fatalf("discovery request URI = %s", r.URL.RequestURI())
+		}
+		_, _ = w.Write([]byte(`{"apiBase":` + strconv.Quote(apiServer.URL) + `,"authBase":"https://auth.example"}`))
+	}))
+	defer discoveryServer.Close()
+
+	env := []string{"AT_EMAIL_API_BASE_URL=" + discoveryServer.URL}
+	var stdout, stderr bytes.Buffer
+	code := Main(context.Background(), []string{"auth", "login", "--open"}, env, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("login code = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if openedURL != "https://auth.example/device?user_code=EFGH5678" {
+		t.Fatalf("opened URL = %q", openedURL)
+	}
+	for _, want := range []string{
+		"Starting at-email login with " + apiServer.URL + "...\n\n",
+		"Open: https://auth.example/device?user_code=EFGH5678\n\n",
+		"Code: EFGH-5678\n\n",
+		"Logged in.\n",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("login stdout missing %q:\n%s", want, stdout.String())
+		}
+	}
+	if strings.Contains(stdout.String(), "discovered-session-token") {
+		t.Fatalf("login stdout exposed token:\n%s", stdout.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("login stderr = %q", stderr.String())
 	}
 }
 

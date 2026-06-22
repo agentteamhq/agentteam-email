@@ -59,9 +59,21 @@ type deviceTokenResponse struct {
 	TokenType   string
 }
 
+type appAuthResolution struct {
+	APIBaseURL  string
+	AuthBaseURL string
+}
+
+type appDiscoveryMetadata struct {
+	APIBaseURL    string `json:"apiBase"`
+	AuthBaseURL   string `json:"authBase"`
+	MinCLIVersion string `json:"minCliVersion,omitempty"`
+}
+
 type authServiceError struct {
-	code    string
-	message string
+	code     string
+	message  string
+	interval int
 }
 
 func (e authServiceError) Error() string {
@@ -85,18 +97,18 @@ func handleAuth(ctx context.Context, args parsedArgs, env []string, stdout io.Wr
 }
 
 func handleAuthLogin(ctx context.Context, args parsedArgs, env []string, stdout io.Writer, stderr io.Writer) error {
-	baseURL, err := resolveAppBaseURL(env, args.APIBaseURL)
+	resolution, err := resolveAppAuthResolution(ctx, env, args.APIBaseURL)
 	if err != nil {
 		return err
 	}
-	client := newAppAuthClient(baseURL)
+	client := newAppAuthClient(resolution.APIBaseURL)
 	progress := stdout
 	if args.JSON {
 		progress = stderr
 	}
 
 	if !args.JSON {
-		fmt.Fprintf(progress, "Starting at-email login with %s...\n", baseURL)
+		fmt.Fprintf(progress, "Starting at-email login with %s...\n\n", resolution.APIBaseURL)
 	}
 	code, err := client.requestDeviceCode(ctx)
 	if err != nil {
@@ -107,10 +119,14 @@ func handleAuthLogin(ctx context.Context, args parsedArgs, env []string, stdout 
 	}
 
 	if !args.JSON {
-		fmt.Fprintf(progress, "Open: %s\n", code.VerificationURIComplete)
-		fmt.Fprintf(progress, "Code: %s\n", formatAuthUserCode(code.UserCode))
-		if !args.NoOpen {
-			_ = openBrowser(code.VerificationURIComplete)
+		verificationURL := code.VerificationURIComplete
+		if resolution.AuthBaseURL != "" {
+			verificationURL = rewriteVerificationURL(code.VerificationURIComplete, resolution.AuthBaseURL)
+		}
+		fmt.Fprintf(progress, "Open: %s\n\n", verificationURL)
+		fmt.Fprintf(progress, "Code: %s\n\n", formatAuthUserCode(code.UserCode))
+		if args.Open {
+			_ = openBrowser(verificationURL)
 		}
 		fmt.Fprintln(progress, "Waiting for approval...")
 	}
@@ -123,7 +139,7 @@ func handleAuthLogin(ctx context.Context, args parsedArgs, env []string, stdout 
 		return newProtocolError("AgentTeam Email device login returned an empty access token")
 	}
 	credential := authCredential{
-		APIBaseURL:  baseURL,
+		APIBaseURL:  resolution.APIBaseURL,
 		AccessToken: token.AccessToken,
 		ClientID:    deviceClientID,
 		ExpiresAt:   time.Now().Add(time.Duration(token.ExpiresIn) * time.Second).UTC().Format(time.RFC3339),
@@ -145,14 +161,14 @@ func handleAuthLogin(ctx context.Context, args parsedArgs, env []string, stdout 
 	if args.JSON {
 		return printJSON(stdout, map[string]any{
 			"authenticated": true,
-			"api_base_url":  baseURL,
+			"api_base_url":  resolution.APIBaseURL,
 			"session":       safeAuthSession(session),
 			"user":          safeAuthUser(session),
 		})
 	}
 
 	fmt.Fprintln(stdout, "Logged in.")
-	renderAuthSession(stdout, baseURL, session)
+	renderAuthSession(stdout, resolution.APIBaseURL, session)
 	return nil
 }
 
@@ -278,6 +294,12 @@ func (c appAuthClient) pollDeviceToken(ctx context.Context, code deviceCodeRespo
 	lastHeartbeat := time.Now()
 
 	for {
+		if time.Now().After(expiresAt) {
+			return deviceTokenResponse{}, newAgentMailError("device login expired; run `at-email auth login` again")
+		}
+		if err := authSleep(ctx, interval); err != nil {
+			return deviceTokenResponse{}, err
+		}
 		token, err := c.requestDeviceToken(ctx, code.DeviceCode)
 		if err == nil {
 			return token, nil
@@ -289,7 +311,11 @@ func (c appAuthClient) pollDeviceToken(ctx context.Context, code deviceCodeRespo
 		switch serviceErr.code {
 		case "authorization_pending":
 		case "slow_down":
-			interval += 5 * time.Second
+			if serviceErr.interval > 0 {
+				interval = time.Duration(serviceErr.interval) * time.Second
+			} else {
+				interval += 5 * time.Second
+			}
 		case "access_denied":
 			return deviceTokenResponse{}, newAgentMailError("device login was denied")
 		case "expired_token":
@@ -304,9 +330,6 @@ func (c appAuthClient) pollDeviceToken(ctx context.Context, code deviceCodeRespo
 		if !jsonMode && time.Since(lastHeartbeat) >= 10*time.Second {
 			fmt.Fprintln(progress, "Still waiting for approval...")
 			lastHeartbeat = time.Now()
-		}
-		if err := authSleep(ctx, interval); err != nil {
-			return deviceTokenResponse{}, err
 		}
 	}
 }
@@ -372,8 +395,8 @@ func (c appAuthClient) requestJSON(ctx context.Context, method string, path stri
 		return nil, newServiceTransportError("AgentTeam Email", "reading "+method+" response")
 	}
 	if response.StatusCode >= 400 {
-		code, message := readAuthServiceError(raw, response.StatusCode)
-		return nil, authServiceError{code: code, message: message}
+		code, message, interval := readAuthServiceError(raw, response.StatusCode)
+		return nil, authServiceError{code: code, message: message, interval: interval}
 	}
 	if len(raw) == 0 || strings.TrimSpace(string(raw)) == "null" {
 		return map[string]any{}, nil
@@ -385,6 +408,23 @@ func (c appAuthClient) requestJSON(ctx context.Context, method string, path stri
 	return payload, nil
 }
 
+func resolveAppAuthResolution(ctx context.Context, env []string, override string) (appAuthResolution, error) {
+	baseURL, err := resolveAppBaseURL(env, override)
+	if err != nil {
+		return appAuthResolution{}, err
+	}
+	resolution := appAuthResolution{APIBaseURL: baseURL}
+	if discovered, ok := discoverAppMetadata(ctx, baseURL); ok {
+		if discovered.APIBaseURL != "" {
+			resolution.APIBaseURL = discovered.APIBaseURL
+		}
+		if discovered.AuthBaseURL != "" {
+			resolution.AuthBaseURL = discovered.AuthBaseURL
+		}
+	}
+	return resolution, nil
+}
+
 func resolveAppBaseURL(env []string, override string) (string, error) {
 	value := strings.TrimSpace(override)
 	if value == "" {
@@ -393,6 +433,10 @@ func resolveAppBaseURL(env []string, override string) (string, error) {
 	if value == "" {
 		value = defaultAppBaseURL
 	}
+	return normalizeAppBaseURL(value)
+}
+
+func normalizeAppBaseURL(value string) (string, error) {
 	parsed, err := url.Parse(value)
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
 		return "", newConfigError("AT_EMAIL_API_BASE_URL must be an absolute http or https URL")
@@ -404,6 +448,65 @@ func resolveAppBaseURL(env []string, override string) (string, error) {
 	parsed.RawQuery = ""
 	parsed.Fragment = ""
 	return parsed.String(), nil
+}
+
+func discoverAppMetadata(ctx context.Context, baseURL string) (appAuthResolution, bool) {
+	discoveryBase, err := url.Parse(baseURL)
+	if err != nil {
+		return appAuthResolution{}, false
+	}
+	discoveryURL := discoveryBase.ResolveReference(&url.URL{Path: "/.well-known/at-email.json"})
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, discoveryURL.String(), nil)
+	if err != nil {
+		return appAuthResolution{}, false
+	}
+	request.Header.Set("Accept", "application/json")
+	request.Header.Set("User-Agent", authUserAgent())
+
+	response, err := (&http.Client{Timeout: 30 * time.Second}).Do(request)
+	if err != nil {
+		return appAuthResolution{}, false
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return appAuthResolution{}, false
+	}
+
+	var metadata appDiscoveryMetadata
+	if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&metadata); err != nil {
+		return appAuthResolution{}, false
+	}
+	resolution := appAuthResolution{}
+	if strings.TrimSpace(metadata.APIBaseURL) != "" {
+		apiBaseURL, err := normalizeAppBaseURL(metadata.APIBaseURL)
+		if err != nil {
+			return appAuthResolution{}, false
+		}
+		resolution.APIBaseURL = apiBaseURL
+	}
+	if strings.TrimSpace(metadata.AuthBaseURL) != "" {
+		authBaseURL, err := normalizeAppBaseURL(metadata.AuthBaseURL)
+		if err != nil {
+			return appAuthResolution{}, false
+		}
+		resolution.AuthBaseURL = authBaseURL
+	}
+	return resolution, true
+}
+
+func rewriteVerificationURL(value string, authBaseURL string) string {
+	target, err := url.Parse(value)
+	if err != nil || target.Scheme == "" || target.Host == "" {
+		return value
+	}
+	authBase, err := url.Parse(authBaseURL)
+	if err != nil || authBase.Scheme == "" || authBase.Host == "" {
+		return value
+	}
+	authBase.Path = target.Path
+	authBase.RawQuery = target.RawQuery
+	authBase.Fragment = target.Fragment
+	return authBase.String()
 }
 
 func authCredentialPath() (string, error) {
@@ -472,9 +575,10 @@ func deleteAuthCredential() error {
 	return newAgentMailError("could not remove local at-email auth credential")
 }
 
-func readAuthServiceError(raw []byte, status int) (string, string) {
+func readAuthServiceError(raw []byte, status int) (string, string, int) {
 	code := fmt.Sprintf("http_%d", status)
 	message := http.StatusText(status)
+	interval := 0
 	var envelope map[string]any
 	if err := json.Unmarshal(raw, &envelope); err == nil {
 		if value := stringValue(envelope["error"]); value != "" {
@@ -486,8 +590,9 @@ func readAuthServiceError(raw []byte, status int) (string, string) {
 				break
 			}
 		}
+		interval = intValueOrDefault(envelope["interval"], 0)
 	}
-	return code, "AgentTeam Email auth failed: " + message
+	return code, "AgentTeam Email auth failed: " + message, interval
 }
 
 func safeAuthSession(envelope map[string]any) map[string]any {

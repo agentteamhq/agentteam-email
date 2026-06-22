@@ -123,11 +123,11 @@ func TestParseGlobalVersionFlag(t *testing.T) {
 }
 
 func TestParseAuthLoginFlags(t *testing.T) {
-	args, err := parseArgs([]string{"auth", "login", "--api-base-url", "http://localhost:4321", "--no-open", "--json"})
+	args, err := parseArgs([]string{"auth", "login", "--api-base-url", "http://localhost:4321", "--open", "--json"})
 	if err != nil {
 		t.Fatalf("parseArgs returned error: %v", err)
 	}
-	if args.Command != commandAuth || args.AuthAction != "login" || args.APIBaseURL != "http://localhost:4321" || !args.NoOpen || !args.JSON {
+	if args.Command != commandAuth || args.AuthAction != "login" || args.APIBaseURL != "http://localhost:4321" || !args.Open || !args.JSON {
 		t.Fatalf("args = %#v", args)
 	}
 }
