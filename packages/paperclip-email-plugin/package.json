@@ -1,0 +1,61 @@
+{
+  "name": "@agentteam/paperclip-email-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Provisions agent email addresses through agentteam.email.",
+  "keywords": [
+    "paperclip",
+    "plugin",
+    "connector",
+    "email",
+    "agents"
+  ],
+  "license": "MIT",
+  "author": "AgentTeam",
+  "type": "module",
+  "main": "./dist/index.mjs",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/src/index.d.ts",
+        "import": "./dist/index.mjs"
+      },
+      "default": "./dist/index.mjs"
+    }
+  },
+  "sideEffects": true,
+  "files": [
+    "dist",
+    "OAUTH_AND_PERMISSION_TODO.md",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "vite build && node ./esbuild.config.mjs && tsc --emitDeclarationOnly --declaration --declarationMap --noEmit false --noCheck --outDir dist && api-extractor run --local --verbose",
+    "clean": "rimraf --glob dist .turbo node_modules/.cache node_modules/.vite* .eslintcache *.tsbuildinfo",
+    "dev": "node ./esbuild.config.mjs --watch",
+    "dev:ui": "paperclip-plugin-dev-server --root . --ui-dir dist/ui --port 4177",
+    "format": "pnpm run lint --fix && pnpm exec prettier --write ./src ./OAUTH_AND_PERMISSION_TODO.md ./README.md",
+    "lint": "eslint --quiet ${ESLINT_CACHE_FLAG:---cache} --concurrency ${ESLINT_CONCURRENCY:-auto} ./src",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@paperclipai/plugin-sdk": "catalog:",
+    "@phosphor-icons/react": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "esbuild": "catalog:",
+    "react": "catalog:",
+    "vite": "catalog:"
+  },
+  "peerDependencies": {
+    "@paperclipai/plugin-sdk": "*",
+    "@phosphor-icons/react": "*",
+    "react": "*"
+  },
+  "paperclipPlugin": {
+    "manifest": "./dist/manifest.js",
+    "worker": "./dist/worker.js",
+    "ui": "./dist/ui/"
+  }
+}
