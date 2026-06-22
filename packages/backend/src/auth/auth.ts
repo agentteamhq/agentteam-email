@@ -59,6 +59,12 @@ const BETTER_AUTH_ROUTE = `${PUBLIC_VARS.PUBLIC_HOSTNAME}/rpc/auth/api`
 const BETTER_AUTH_BASE_PATH = '/api'
 const MANUAL_BASE_PATH = '/rpc/auth/api'
 
+const atEmailCliDeviceAuthorizationOptions = {
+  schema: {},
+  verificationUri: '/device',
+  validateClient: (clientId) => clientId === AT_EMAIL_CLI_DEVICE_CLIENT_ID
+} satisfies NonNullable<Parameters<typeof deviceAuthorization>[0]>
+
 export const organizationAccessControl = createAccessControl({
   organization: ['update', 'delete'],
   member: ['create', 'update', 'delete'],
@@ -347,10 +353,7 @@ export function createGlobalAuth(db: Database): GlobalAuth {
       roles: organizationRoles
     }),
     bearer(),
-    deviceAuthorization({
-      verificationUri: '/device',
-      validateClient: (clientId) => clientId === AT_EMAIL_CLI_DEVICE_CLIENT_ID
-    }),
+    createAtEmailCliDeviceAuthorizationPlugin(),
     auditLog({
       nonBlocking: true,
       paths: [...AUTH_AUDIT_LOG_PATHS],
@@ -804,6 +807,10 @@ export function createGlobalAuth(db: Database): GlobalAuth {
     }
   })
   return auth
+}
+
+export function createAtEmailCliDeviceAuthorizationPlugin() {
+  return deviceAuthorization(atEmailCliDeviceAuthorizationOptions)
 }
 
 async function createDefaultOrganization(db: Database) {

@@ -88,6 +88,8 @@ const envSchema = z.object({
   CLOUDFLARE_OAUTH_USERINFO_URL: optionalNonEmptyString,
   AGENT_MAIL_CONTROL_API_BASE_URL: optionalNonEmptyString,
   AGENT_MAIL_CONTROL_API_TOKEN: optionalNonEmptyString,
+  AGENT_MAIL_WILDDUCK_API_BASE_URL: optionalNonEmptyString,
+  AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN: optionalNonEmptyString,
 
   DATABASE_URL: z.string().min(1),
 

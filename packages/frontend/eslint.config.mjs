@@ -105,6 +105,77 @@ function isBrowserLocationMethodCall(context, node, methodNames) {
   )
 }
 
+function isForbiddenMailClientImport(value) {
+  return (
+    value === 'wildduck' ||
+    value.startsWith('wildduck/') ||
+    value.includes('agent-mail/control-client') ||
+    value.includes('mail-control')
+  )
+}
+
+function getStaticStringValue(node) {
+  if (node?.type === 'Literal' && typeof node.value === 'string') {
+    return node.value
+  }
+
+  if (node?.type === 'TemplateLiteral' && node.expressions.length === 0) {
+    return node.quasis.map((quasi) => quasi.value.cooked ?? quasi.value.raw).join('')
+  }
+
+  return null
+}
+
+function getJSXAttributeName(node) {
+  if (node.name.type === 'JSXIdentifier') {
+    return node.name.name
+  }
+
+  if (node.name.type === 'JSXNamespacedName') {
+    return `${node.name.namespace.name}:${node.name.name.name}`
+  }
+
+  return null
+}
+
+function getStaticJSXAttributeValue(node) {
+  if (!node.value) {
+    return ''
+  }
+
+  if (node.value.type === 'Literal' && typeof node.value.value === 'string') {
+    return node.value.value
+  }
+
+  if (node.value.type === 'JSXExpressionContainer') {
+    return getStaticStringValue(node.value.expression)
+  }
+
+  return null
+}
+
+function isForbiddenMailClientEndpoint(value) {
+  return /(?:wildduck|mail-control)/iu.test(value)
+}
+
+function isNewExpressionForGlobal(context, node, name) {
+  return (
+    isGlobalIdentifierNamed(context, node.callee, name) ||
+    (isMemberExpression(node.callee) &&
+      isGlobalIdentifierNamed(context, node.callee.object, 'globalThis') &&
+      getPropertyName(node.callee.property) === name)
+  )
+}
+
+function isBrowserNavigatorObject(context, node) {
+  return (
+    isGlobalIdentifierNamed(context, node, 'navigator') ||
+    (isMemberExpression(node) &&
+      isGlobalIdentifierNamed(context, node.object, 'globalThis') &&
+      getPropertyName(node.property) === 'navigator')
+  )
+}
+
 const frontendRouterRules = {
   rules: {
     'no-browser-router-state': {
@@ -178,6 +249,171 @@ const frontendRouterRules = {
   }
 }
 
+const frontendMailBoundaryRules = {
+  rules: {
+    'no-direct-wildduck-access': {
+      meta: {
+        type: 'problem',
+        docs: {
+          description: 'Require browser mail UI to access mail only through same-origin web server RPC'
+        },
+        messages: {
+          directEndpoint:
+            'Do not call WildDuck or mail-control endpoints from frontend code. Browser mail access must go through same-origin web server RPC.',
+          directImport:
+            'Do not import WildDuck or agent-mail control clients into frontend code. Browser mail access must go through same-origin web server RPC.'
+        },
+        schema: []
+      },
+      create(context) {
+        const xmlHttpRequestVariables = new Set()
+
+        function checkImportSource(node) {
+          const value = getStaticStringValue(node.source)
+          if (value && isForbiddenMailClientImport(value)) {
+            context.report({
+              node: node.source,
+              messageId: 'directImport'
+            })
+          }
+        }
+
+        function checkDynamicImportSource(node) {
+          const value = getStaticStringValue(node.source)
+          if (value && isForbiddenMailClientImport(value)) {
+            context.report({
+              node: node.source,
+              messageId: 'directImport'
+            })
+          }
+        }
+
+        function checkFetchEndpoint(node) {
+          const callee = node.callee
+          const isFetch =
+            isGlobalIdentifierNamed(context, callee, 'fetch') ||
+            (isMemberExpression(callee) &&
+              isGlobalIdentifierNamed(context, callee.object, 'globalThis') &&
+              getPropertyName(callee.property) === 'fetch')
+
+          if (!isFetch) {
+            return
+          }
+
+          const value = getStaticStringValue(node.arguments[0])
+          if (value && isForbiddenMailClientEndpoint(value)) {
+            context.report({
+              node: node.arguments[0],
+              messageId: 'directEndpoint'
+            })
+          }
+        }
+
+        function isXmlHttpRequestConstructor(node) {
+          return node?.type === 'NewExpression' && isNewExpressionForGlobal(context, node, 'XMLHttpRequest')
+        }
+
+        function isXmlHttpRequestReceiver(node) {
+          return (
+            isXmlHttpRequestConstructor(node) ||
+            (node?.type === 'Identifier' && xmlHttpRequestVariables.has(node.name))
+          )
+        }
+
+        function checkXmlHttpRequestVariable(node) {
+          if (node.id.type === 'Identifier' && isXmlHttpRequestConstructor(node.init)) {
+            xmlHttpRequestVariables.add(node.id.name)
+          }
+        }
+
+        function checkXmlHttpRequestEndpoint(node) {
+          const callee = node.callee
+          if (
+            !isMemberExpression(callee) ||
+            getPropertyName(callee.property) !== 'open' ||
+            !isXmlHttpRequestReceiver(callee.object)
+          ) {
+            return
+          }
+
+          const value = getStaticStringValue(node.arguments[1])
+          if (value && isForbiddenMailClientEndpoint(value)) {
+            context.report({
+              node: node.arguments[1],
+              messageId: 'directEndpoint'
+            })
+          }
+        }
+
+        function checkBeaconEndpoint(node) {
+          const callee = node.callee
+          if (
+            !isMemberExpression(callee) ||
+            getPropertyName(callee.property) !== 'sendBeacon' ||
+            !isBrowserNavigatorObject(context, callee.object)
+          ) {
+            return
+          }
+
+          const value = getStaticStringValue(node.arguments[0])
+          if (value && isForbiddenMailClientEndpoint(value)) {
+            context.report({
+              node: node.arguments[0],
+              messageId: 'directEndpoint'
+            })
+          }
+        }
+
+        function checkNewEndpoint(node) {
+          const guardedConstructors = ['EventSource', 'Request', 'URL', 'WebSocket']
+          if (!guardedConstructors.some((name) => isNewExpressionForGlobal(context, node, name))) {
+            return
+          }
+
+          const value = getStaticStringValue(node.arguments[0])
+          if (value && isForbiddenMailClientEndpoint(value)) {
+            context.report({
+              node: node.arguments[0],
+              messageId: 'directEndpoint'
+            })
+          }
+        }
+
+        function checkJSXBrowserEndpoint(node) {
+          const guardedAttributes = new Set(['action', 'href', 'poster', 'src', 'srcSet'])
+          const name = getJSXAttributeName(node)
+          if (!name || !guardedAttributes.has(name)) {
+            return
+          }
+
+          const value = getStaticJSXAttributeValue(node)
+          if (value && isForbiddenMailClientEndpoint(value)) {
+            context.report({
+              node: node.value ?? node,
+              messageId: 'directEndpoint'
+            })
+          }
+        }
+
+        return {
+          ExportAllDeclaration: checkImportSource,
+          ExportNamedDeclaration: checkImportSource,
+          ImportExpression: checkDynamicImportSource,
+          ImportDeclaration: checkImportSource,
+          JSXAttribute: checkJSXBrowserEndpoint,
+          VariableDeclarator: checkXmlHttpRequestVariable,
+          CallExpression(node) {
+            checkBeaconEndpoint(node)
+            checkFetchEndpoint(node)
+            checkXmlHttpRequestEndpoint(node)
+          },
+          NewExpression: checkNewEndpoint
+        }
+      }
+    }
+  }
+}
+
 export default defineConfig([
   ...rootConfig,
   {
@@ -192,6 +428,16 @@ export default defineConfig([
     },
     rules: {
       'frontend-router/no-browser-router-state': 'error'
+    }
+  },
+  {
+    name: 'frontend-mail-boundaries',
+    files: ['src/**/*.{ts,tsx}'],
+    plugins: {
+      'frontend-mail': frontendMailBoundaryRules
+    },
+    rules: {
+      'frontend-mail/no-direct-wildduck-access': 'error'
     }
   },
   {

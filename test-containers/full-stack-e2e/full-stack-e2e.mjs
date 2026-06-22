@@ -114,6 +114,7 @@ try {
     checkInboundArchiveObjects,
     checkInboundNotificationThroughWebServer,
     checkInboundResultAndWildDuckProof,
+    checkWebmailClientThroughWebServer,
     checkInboundIdempotencyAndSweepContract,
     checkInboundInvalidDomainRejection
   ])
@@ -581,14 +582,17 @@ async function checkWebServerControlApiWiring() {
     'json'
   ])
   const envNames = readContainerEnvNames(deployment, 'web-server')
-  const missing = ['AGENT_MAIL_CONTROL_API_BASE_URL', 'AGENT_MAIL_CONTROL_API_TOKEN'].filter(
-    (name) => !envNames.has(name)
-  )
+  const missing = [
+    'AGENT_MAIL_CONTROL_API_BASE_URL',
+    'AGENT_MAIL_CONTROL_API_TOKEN',
+    'AGENT_MAIL_WILDDUCK_API_BASE_URL',
+    'AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN'
+  ].filter((name) => !envNames.has(name))
   assert(
     missing.length === 0,
-    `web-server deployment is missing internal mail-control env: ${missing.join(', ')}`
+    `web-server deployment is missing internal mail-control/WildDuck env: ${missing.join(', ')}`
   )
-  return 'web-server has internal mail-control API configuration'
+  return 'web-server has internal mail-control and WildDuck API configuration'
 }
 
 async function checkMailControlKubernetesServiceNames() {
@@ -1090,6 +1094,174 @@ async function checkInboundResultAndWildDuckProof() {
     'result.json must include WildDuck/message delivery proof'
   )
   return 'inbound result.json records real WildDuck delivery proof'
+}
+
+async function checkWebmailClientThroughWebServer() {
+  assert(runtime.cookieHeader, 'authenticated cookie is required for webmail client checks')
+  const seed = await seedWildDuckWebmailScenario()
+  await writeJson(path.join(scenariosDir, 'phase-3-inbound-mail', 'webmail-seed.json'), seed)
+
+  const accountId = seed.agent.address
+  const accountPath = encodeURIComponent(accountId)
+  const firstPage = await webMailJson(
+    'GET',
+    `/rpc/mail/workspace?accountId=${accountPath}&folderId=${encodeURIComponent(seed.agent.inboxId)}&limit=25`
+  )
+  assert(firstPage.activeAccountId === accountId, 'webmail workspace did not select requested account')
+  assert(firstPage.messages.length === 25, `first page length = ${firstPage.messages.length}, want 25`)
+  assert(firstPage.pagination?.nextCursor, 'first page did not expose a next cursor')
+  assert(
+    !JSON.stringify(firstPage).includes('wildduck-api') &&
+      !JSON.stringify(firstPage).includes('x-access-token'),
+    'workspace response leaked internal WildDuck endpoint or credential header material'
+  )
+
+  const secondPage = await webMailJson(
+    'GET',
+    `/rpc/mail/workspace?accountId=${accountPath}&folderId=${encodeURIComponent(seed.agent.inboxId)}&limit=25&direction=next&cursor=${encodeURIComponent(firstPage.pagination.nextCursor)}`
+  )
+  const firstPageIds = new Set(firstPage.messages.map((message) => `${message.mailboxId}:${message.id}`))
+  const overlapping = secondPage.messages.filter((message) =>
+    firstPageIds.has(`${message.mailboxId}:${message.id}`)
+  )
+  assert(overlapping.length === 0, `paginated message pages overlapped: ${JSON.stringify(overlapping)}`)
+
+  const unreadPage = await webMailJson(
+    'GET',
+    `/rpc/mail/workspace?accountId=${accountPath}&folderId=${encodeURIComponent(seed.agent.inboxId)}&limit=25&unreadOnly=true`
+  )
+  assert(unreadPage.messages.length > 0, 'unread filter returned no messages')
+  assert(
+    unreadPage.messages.every((message) => message.unread === true),
+    'unread filter returned a read message'
+  )
+
+  const threadWorkspace = await webMailJson(
+    'GET',
+    `/rpc/mail/workspace?accountId=${accountPath}&folderId=${encodeURIComponent(seed.agent.inboxId)}&limit=10&query=${encodeURIComponent(seed.threadQuery)}&messageId=${encodeURIComponent(seed.agent.threadRootMessageId)}`
+  )
+  const selected = threadWorkspace.selectedMessage
+  assert(selected?.id === seed.agent.threadRootMessageId, 'selected thread root was not returned')
+  assert(selected.thread?.length >= 2, 'selected message did not include the conversation thread')
+  assert(selected.attachments?.length === 1, 'selected message did not include the seeded attachment')
+  assert(
+    selected.sourceUrl.startsWith('/rpc/mail/accounts/') &&
+      selected.attachments[0].url.startsWith('/rpc/mail/accounts/'),
+    'message resources must be same-origin web RPC URLs'
+  )
+
+  const attachmentResponse = await fetch(`${runtime.webBaseUrl}${selected.attachments[0].url}`, {
+    headers: { cookie: runtime.cookieHeader }
+  })
+  assert(attachmentResponse.status === 200, `attachment proxy returned ${attachmentResponse.status}`)
+  assert(
+    attachmentResponse.headers.get('content-disposition') === 'attachment',
+    'attachment proxy must force attachment disposition'
+  )
+  assert(
+    attachmentResponse.headers.get('x-content-type-options') === 'nosniff',
+    'attachment proxy must set nosniff'
+  )
+
+  const sourceResponse = await fetch(`${runtime.webBaseUrl}${selected.sourceUrl}`, {
+    headers: { cookie: runtime.cookieHeader }
+  })
+  const sourceText = await sourceResponse.text()
+  assert(sourceResponse.status === 200, `original source proxy returned ${sourceResponse.status}`)
+  assert(
+    sourceResponse.headers.get('content-type')?.startsWith('message/rfc822'),
+    `source proxy content type = ${sourceResponse.headers.get('content-type')}`
+  )
+  assert(sourceText.includes(seed.threadQuery), 'original source did not contain the seeded subject')
+
+  await webMailJson(
+    'PATCH',
+    `/rpc/mail/accounts/${accountPath}/mailboxes/${encodeURIComponent(selected.mailboxId)}/messages/${encodeURIComponent(selected.id)}`,
+    {
+      flagged: true,
+      seen: true
+    }
+  )
+  const updatedWorkspace = await webMailJson(
+    'GET',
+    `/rpc/mail/workspace?accountId=${accountPath}&folderId=${encodeURIComponent(selected.mailboxId)}&messageId=${encodeURIComponent(selected.id)}`
+  )
+  assert(updatedWorkspace.selectedMessage?.isStarred === true, 'flagged update did not persist')
+  assert(updatedWorkspace.selectedMessage?.unread === false, 'seen update did not persist')
+
+  const createdFolder = await webMailJson('POST', `/rpc/mail/accounts/${accountPath}/mailboxes`, {
+    name: `Reviewed ${runId}`
+  })
+  assert(createdFolder.folder?.id, 'folder creation did not return a folder id')
+  const movable = firstPage.messages.find((message) => message.id !== selected.id)
+  assert(movable, 'no message was available for move/delete checks')
+  await webMailJson(
+    'POST',
+    `/rpc/mail/accounts/${accountPath}/mailboxes/${encodeURIComponent(movable.mailboxId)}/messages/${encodeURIComponent(movable.id)}/move`,
+    {
+      targetMailboxId: createdFolder.folder.id
+    }
+  )
+
+  const deletable = secondPage.messages[0]
+  assert(deletable, 'no second-page message was available for delete check')
+  await webMailJson(
+    'DELETE',
+    `/rpc/mail/accounts/${accountPath}/mailboxes/${encodeURIComponent(deletable.mailboxId)}/messages/${encodeURIComponent(deletable.id)}`
+  )
+
+  const draft = await webMailJson('POST', `/rpc/mail/accounts/${accountPath}/drafts`, {
+    body: 'Draft body from the full-stack webmail E2E.',
+    subject: `Webmail E2E Draft ${runId}`,
+    to: 'recipient@example.net'
+  })
+  assert(draft.success && draft.draftId && draft.mailboxId, 'draft save did not return draft identifiers')
+  const replacedDraft = await webMailJson('POST', `/rpc/mail/accounts/${accountPath}/drafts`, {
+    body: 'Updated draft body from the full-stack webmail E2E.',
+    draftMailboxId: draft.mailboxId,
+    draftMessageId: draft.draftId,
+    subject: `Webmail E2E Draft ${runId}`,
+    to: 'recipient@example.net'
+  })
+  assert(
+    replacedDraft.success && replacedDraft.draftId && replacedDraft.mailboxId,
+    'draft replacement did not return draft identifiers'
+  )
+  await webMailJson(
+    'POST',
+    `/rpc/mail/accounts/${accountPath}/mailboxes/${encodeURIComponent(replacedDraft.mailboxId)}/messages/${encodeURIComponent(replacedDraft.draftId)}/send-draft`
+  )
+
+  await webMailJson('POST', `/rpc/mail/accounts/${accountPath}/messages`, {
+    body: 'Standalone message from the full-stack webmail E2E.',
+    subject: `Webmail E2E Send ${runId}`,
+    to: 'recipient@example.net'
+  })
+  await webMailJson('POST', `/rpc/mail/accounts/${accountPath}/messages`, {
+    body: 'Reply message from the full-stack webmail E2E.',
+    reference: {
+      action: 'reply',
+      mailboxId: selected.mailboxId,
+      messageId: selected.id
+    },
+    subject: `Re: ${selected.subject}`,
+    to: 'sender@example.net'
+  })
+
+  const switchedAccount = await webMailJson(
+    'GET',
+    `/rpc/mail/workspace?accountId=${encodeURIComponent(seed.assistant.address)}&limit=25`
+  )
+  assert(
+    switchedAccount.activeAccountId === seed.assistant.address,
+    'account switching did not select the second WildDuck mailbox'
+  )
+  assert(
+    switchedAccount.messages.some((message) => message.subject.includes(seed.accountSwitchSubject)),
+    'second account mailbox did not show its seeded message'
+  )
+
+  return 'webmail RPC lists accounts, paginates, threads, proxies resources, mutates messages, drafts, sends, and switches accounts through the web-server boundary'
 }
 
 async function checkInboundIdempotencyAndSweepContract() {
@@ -1653,6 +1825,230 @@ async function postJson(pathname, body, extraHeaders = {}) {
     raw,
     status: raw.status
   }
+}
+
+async function webMailJson(method, pathname, body) {
+  const raw = await fetch(`${runtime.webBaseUrl}${pathname}`, {
+    body: body === undefined ? undefined : JSON.stringify(body),
+    headers: {
+      accept: 'application/json',
+      ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+      cookie: runtime.cookieHeader
+    },
+    method
+  })
+  const bodyText = await raw.text()
+  assert(
+    raw.status >= 200 && raw.status < 300,
+    `${method} ${pathname} returned ${raw.status}: ${bodySnippet(bodyText)}`
+  )
+  return bodyText ? parseJson(bodyText) : {}
+}
+
+async function seedWildDuckWebmailScenario() {
+  const probe = await execNodeInWebServer(`
+    const token = 'full-stack-e2e-wildduck-admin-token';
+    const baseUrl = 'http://wildduck-api:8080';
+    const runId = ${JSON.stringify(runId)};
+    const pageMessageCount = 32;
+    const agent = {
+      address: 'agent@example.test',
+      name: 'Full Stack E2E Agent',
+      username: 'agent-example-test'
+    };
+    const assistant = {
+      address: 'assistant@second.test',
+      name: 'Full Stack E2E Assistant',
+      username: 'assistant-second-test'
+    };
+
+    async function request(path, init = {}) {
+      const response = await rawRequest(path, init);
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(init.method + ' ' + path + ' returned ' + response.status + ': ' + JSON.stringify(response.body).slice(0, 500));
+      }
+      return response.body;
+    }
+
+    async function rawRequest(path, init = {}) {
+      const response = await fetch(baseUrl + path, {
+        body: init.body === undefined ? undefined : JSON.stringify(init.body),
+        headers: {
+          accept: 'application/json',
+          ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
+          'x-access-token': token
+        },
+        method: init.method || 'GET'
+      });
+      const bodyText = await response.text();
+      let body = {};
+      if (bodyText) {
+        try {
+          body = JSON.parse(bodyText);
+        } catch {
+          body = { bodyText };
+        }
+      }
+      return { body, status: response.status };
+    }
+
+    async function ensureUser(account) {
+      let resolved = await rawRequest('/addresses/resolve/' + encodeURIComponent(account.address));
+      if (resolved.status === 404) {
+        await request('/users', {
+          method: 'POST',
+          body: {
+            address: account.address,
+            allowUnsafe: true,
+            name: account.name,
+            password: 'full-stack-e2e-webmail-password',
+            spamLevel: 0,
+            username: account.username
+          }
+        });
+        resolved = await rawRequest('/addresses/resolve/' + encodeURIComponent(account.address));
+      }
+      if (resolved.status < 200 || resolved.status >= 300) {
+        throw new Error('resolve ' + account.address + ' returned ' + resolved.status + ': ' + JSON.stringify(resolved.body));
+      }
+      const userId = resolved.body.user || resolved.body.id;
+      if (!userId) {
+        throw new Error('WildDuck address resolution for ' + account.address + ' did not return a user id');
+      }
+      return String(userId);
+    }
+
+    async function listMailboxes(userId) {
+      const response = await request('/users/' + encodeURIComponent(userId) + '/mailboxes');
+      return response.results || [];
+    }
+
+    function findMailbox(mailboxes, name) {
+      const normalized = name.toLowerCase();
+      return mailboxes.find((mailbox) => {
+        const specialUse = String(mailbox.specialUse || '').toLowerCase();
+        const path = String(mailbox.path || '').toLowerCase();
+        const mailboxName = String(mailbox.name || '').toLowerCase();
+        return specialUse.includes(normalized) || path === normalized || mailboxName === normalized;
+      });
+    }
+
+    async function ensureMailbox(userId, path) {
+      let mailboxes = await listMailboxes(userId);
+      let mailbox = findMailbox(mailboxes, path);
+      if (!mailbox) {
+        await request('/users/' + encodeURIComponent(userId) + '/mailboxes', {
+          method: 'POST',
+          body: { path }
+        });
+        mailboxes = await listMailboxes(userId);
+        mailbox = findMailbox(mailboxes, path);
+      }
+      if (!mailbox || !mailbox.id) {
+        throw new Error('mailbox ' + path + ' was not available for user ' + userId);
+      }
+      return String(mailbox.id);
+    }
+
+    async function uploadMessage(userId, mailboxId, payload) {
+      const response = await request(
+        '/users/' + encodeURIComponent(userId) + '/mailboxes/' + encodeURIComponent(mailboxId) + '/messages',
+        {
+          method: 'POST',
+          body: payload
+        }
+      );
+      if (!response.message || !response.message.id) {
+        throw new Error('upload did not return a message id: ' + JSON.stringify(response));
+      }
+      return {
+        mailboxId: String(response.message.mailbox || mailboxId),
+        messageId: String(response.message.id)
+      };
+    }
+
+    function messageSubject(label) {
+      return 'Webmail E2E ' + label + ' ' + runId;
+    }
+
+    const agentUserId = await ensureUser(agent);
+    const assistantUserId = await ensureUser(assistant);
+    const agentInboxId = await ensureMailbox(agentUserId, 'Inbox');
+    const assistantInboxId = await ensureMailbox(assistantUserId, 'Inbox');
+    const threadMessageId = '<webmail-thread-' + runId.toLowerCase() + '@example.test>';
+    const threadQuery = messageSubject('Thread');
+    const threadRoot = await uploadMessage(agentUserId, agentInboxId, {
+      attachments: [
+        {
+          content: Buffer.from('Attachment from the full-stack webmail E2E.').toString('base64'),
+          contentDisposition: 'attachment',
+          contentType: 'text/plain',
+          filename: 'webmail-e2e.txt'
+        }
+      ],
+      flagged: false,
+      from: { address: 'sender@example.net', name: 'Sender' },
+      headers: [{ key: 'Message-ID', value: threadMessageId }],
+      html: '<p>Thread root from the full-stack webmail E2E.</p>',
+      subject: threadQuery,
+      text: 'Thread root from the full-stack webmail E2E.',
+      to: [{ address: agent.address, name: agent.name }],
+      unseen: true
+    });
+    const threadReply = await uploadMessage(agentUserId, agentInboxId, {
+      from: { address: agent.address, name: agent.name },
+      headers: [
+        { key: 'Message-ID', value: '<webmail-thread-reply-' + runId.toLowerCase() + '@example.test>' },
+        { key: 'In-Reply-To', value: threadMessageId },
+        { key: 'References', value: threadMessageId }
+      ],
+      html: '<p>Thread reply from the full-stack webmail E2E.</p>',
+      subject: 'Re: ' + threadQuery,
+      text: 'Thread reply from the full-stack webmail E2E.',
+      to: [{ address: 'sender@example.net', name: 'Sender' }],
+      unseen: false
+    });
+
+    for (let index = 0; index < pageMessageCount; index += 1) {
+      await uploadMessage(agentUserId, agentInboxId, {
+        flagged: index === 0,
+        from: { address: 'sender-' + index + '@example.net', name: 'Sender ' + index },
+        html: '<p>Pagination fixture #' + index + ' from the full-stack webmail E2E.</p>',
+        subject: messageSubject('Page') + ' #' + String(index).padStart(2, '0'),
+        text: 'Pagination fixture #' + index + ' from the full-stack webmail E2E.',
+        to: [{ address: agent.address, name: agent.name }],
+        unseen: index % 2 === 0
+      });
+    }
+
+    const accountSwitchSubject = messageSubject('Account Switch');
+    const assistantMessage = await uploadMessage(assistantUserId, assistantInboxId, {
+      from: { address: 'sender@example.net', name: 'Sender' },
+      html: '<p>Second account fixture from the full-stack webmail E2E.</p>',
+      subject: accountSwitchSubject,
+      text: 'Second account fixture from the full-stack webmail E2E.',
+      to: [{ address: assistant.address, name: assistant.name }],
+      unseen: true
+    });
+
+    console.log(JSON.stringify({
+      accountSwitchSubject,
+      agent: {
+        address: agent.address,
+        inboxId: agentInboxId,
+        threadReplyMessageId: threadReply.messageId,
+        threadRootMessageId: threadRoot.messageId
+      },
+      assistant: {
+        address: assistant.address,
+        inboxId: assistantInboxId,
+        messageId: assistantMessage.messageId
+      },
+      pageMessageCount,
+      threadQuery
+    }));
+  `)
+  return parseJson(probe.stdout)
 }
 
 async function postSignedIngestNotification(notification, options = {}) {

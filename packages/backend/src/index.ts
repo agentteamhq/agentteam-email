@@ -20,6 +20,18 @@ export {
   isCloudflareOAuthCallbackRequestPath
 } from './auth/cloudflare-oauth-callback'
 export { handleAgentMailIngestRequest, isAgentMailIngestRequestPath } from './agent-mail/ingest'
+export type {
+  AgentMailComposeInput,
+  AgentMailMessageActionInput,
+  AgentMailWebAccount,
+  AgentMailWebAttachment,
+  AgentMailWebFolder,
+  AgentMailWebMessageDetail,
+  AgentMailWebMessageSummary,
+  AgentMailWebThreadMessage,
+  AgentMailWebWorkspace,
+  AgentMailWorkspaceInput
+} from './agent-mail/webmail-service'
 export { handleOAuthMetadataRequest, isOAuthMetadataRequestPath } from './auth/oauth-metadata'
 export { backendRpcApp, type BackendRpcAppType } from './rpc/'
 export * from './cloudflare/service'
