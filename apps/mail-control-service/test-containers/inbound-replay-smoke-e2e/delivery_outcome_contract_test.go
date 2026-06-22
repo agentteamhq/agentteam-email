@@ -1,0 +1,637 @@
+package smoke
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/textproto"
+	"net/url"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"agent-mail/internal/archive/r2archive"
+	"agent-mail/internal/modules/poller"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
+)
+
+func TestInboundReplayDeliveryOutcomeContracts(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	suite := sweepContractNewSuite(t, ctx)
+
+	t.Run("unknown recipient with valid sender submits dsn and records terminal result", func(t *testing.T) {
+		scenario := newInboundOutcomeScenario(t, suite, "unknown-valid-sender", inboundOutcomeOptions{
+			Mailbox: "missing",
+			WildDuck: inboundOutcomeWildDuck{
+				Existing: map[string]inboundOutcomeAddress{},
+			},
+		})
+		bundle := scenario.writeBundle(t, "Unknown recipient DSN", "sender@example.net")
+
+		p := scenario.startPoller(t)
+		_ = p
+		scenario.postNotification(t, bundle)
+
+		receipt := scenario.waitForReceipt(t, bundle.Bundle.ResultKey, "delivery_failed_dsn_submitted")
+		if receipt.DSNEnvelopeFrom != "" {
+			t.Fatalf("dsn envelope_from = %q, want null reverse path", receipt.DSNEnvelopeFrom)
+		}
+		if receipt.DSNEnvelopeTo != "sender@example.net" {
+			t.Fatalf("dsn envelope_to = %q, want sender@example.net", receipt.DSNEnvelopeTo)
+		}
+		if receipt.DSNFrom != "bounces@"+scenario.domain {
+			t.Fatalf("dsn from = %q, want bounces@%s", receipt.DSNFrom, scenario.domain)
+		}
+		if receipt.DSNRawKey != bundle.Bundle.DSNKey {
+			t.Fatalf("dsn raw key = %q, want %q", receipt.DSNRawKey, bundle.Bundle.DSNKey)
+		}
+		if receipt.DSNRawSHA256 == "" || receipt.DSNID == "" || receipt.DSNMessageID == "" {
+			t.Fatalf("dsn receipt missing persisted identifiers: %#v", receipt)
+		}
+
+		deliveries := scenario.dsnSMTP.Deliveries()
+		if len(deliveries) != 1 {
+			t.Fatalf("dsn smtp deliveries = %d, want 1", len(deliveries))
+		}
+		if deliveries[0].MailFrom != "" {
+			t.Fatalf("dsn smtp MAIL FROM = %q, want null reverse path", deliveries[0].MailFrom)
+		}
+		if len(deliveries[0].RcptTo) != 1 || deliveries[0].RcptTo[0] != "sender@example.net" {
+			t.Fatalf("dsn smtp RCPT TO = %#v, want sender@example.net", deliveries[0].RcptTo)
+		}
+
+		dsnRaw := scenario.objectBytes(t, bundle.Bundle.DSNKey)
+		for _, want := range []string{
+			"Content-Type: multipart/report",
+			"Final-Recipient: rfc822; " + scenario.mailbox,
+			"Diagnostic-Code: smtp; 550 5.1.1 No such user",
+		} {
+			if !strings.Contains(string(dsnRaw), want) {
+				t.Fatalf("dsn raw missing %q:\n%s", want, string(dsnRaw))
+			}
+		}
+		if !messageHasHeader(dsnRaw, "X-Agent-Mail-DSN-Source-Ingest-ID", bundle.IngestID) {
+			t.Fatalf("dsn raw missing source ingest id header %q:\n%s", bundle.IngestID, string(dsnRaw))
+		}
+
+		resultBefore := scenario.objectBytes(t, bundle.Bundle.ResultKey)
+		scenario.postNotification(t, bundle)
+		time.Sleep(350 * time.Millisecond)
+		resultAfter := scenario.objectBytes(t, bundle.Bundle.ResultKey)
+		if string(resultAfter) != string(resultBefore) {
+			t.Fatalf("terminal dsn result was rewritten after duplicate notification\nbefore:\n%s\nafter:\n%s", resultBefore, resultAfter)
+		}
+		if deliveries := scenario.dsnSMTP.Deliveries(); len(deliveries) != 1 {
+			t.Fatalf("dsn smtp deliveries = %d, want no duplicate DSN submission", len(deliveries))
+		}
+		scenario.assertWorkCompleted(t, bundle.IngestID)
+	})
+
+	t.Run("unknown recipient with null sender suppresses dsn", func(t *testing.T) {
+		scenario := newInboundOutcomeScenario(t, suite, "unknown-null-sender", inboundOutcomeOptions{
+			Mailbox: "missing",
+			WildDuck: inboundOutcomeWildDuck{
+				Existing: map[string]inboundOutcomeAddress{},
+			},
+		})
+		bundle := scenario.writeBundle(t, "Unknown recipient DSN suppressed", "")
+
+		p := scenario.startPoller(t)
+		_ = p
+		scenario.postNotification(t, bundle)
+
+		receipt := scenario.waitForReceipt(t, bundle.Bundle.ResultKey, "delivery_failed_dsn_suppressed")
+		if receipt.DeliverySource != "dsn_suppressed" {
+			t.Fatalf("delivery_source = %q, want dsn_suppressed", receipt.DeliverySource)
+		}
+		if receipt.Detail != "original envelope sender is null" {
+			t.Fatalf("suppression detail = %q, want original envelope sender is null", receipt.Detail)
+		}
+		if exists := scenario.objectExists(t, bundle.Bundle.DSNKey); exists {
+			t.Fatalf("dsn object %s exists for null-sender suppression", bundle.Bundle.DSNKey)
+		}
+		if deliveries := scenario.dsnSMTP.Deliveries(); len(deliveries) != 0 {
+			t.Fatalf("dsn smtp deliveries = %d, want 0", len(deliveries))
+		}
+		scenario.assertWorkCompleted(t, bundle.IngestID)
+	})
+
+	t.Run("existing WildDuck delivery proof is terminal without replay", func(t *testing.T) {
+		scenario := newInboundOutcomeScenario(t, suite, "existing-delivery-proof", inboundOutcomeOptions{
+			Mailbox: "agent",
+		})
+		bundle := scenario.writeBundle(t, "Existing delivery proof", "sender@example.net")
+		existingMessageID := scenario.seedDeliveredMessage(t, bundle.IngestID)
+
+		p := scenario.startPoller(t)
+		_ = p
+		scenario.postNotification(t, bundle)
+
+		receipt := scenario.waitForReceipt(t, bundle.Bundle.ResultKey, "delivered")
+		if receipt.DeliverySource != "existing" {
+			t.Fatalf("delivery_source = %q, want existing", receipt.DeliverySource)
+		}
+		if receipt.WildDuckMessageID != existingMessageID {
+			t.Fatalf("wildduck_message_id = %q, want existing seeded message %q", receipt.WildDuckMessageID, existingMessageID)
+		}
+		if deliveries := scenario.replaySMTP.Deliveries(); len(deliveries) != 0 {
+			t.Fatalf("replay smtp deliveries = %d, want 0 for existing proof", len(deliveries))
+		}
+		if deliveries := scenario.dsnSMTP.Deliveries(); len(deliveries) != 0 {
+			t.Fatalf("dsn smtp deliveries = %d, want 0", len(deliveries))
+		}
+		scenario.assertWorkStatus(t, bundle.IngestID, "delivered", "completed")
+	})
+
+	t.Run("forward-only address records forwarded terminal result after replay", func(t *testing.T) {
+		scenario := newInboundOutcomeScenario(t, suite, "forward-only", inboundOutcomeOptions{
+			Mailbox: "forward",
+			WildDuck: inboundOutcomeWildDuck{
+				Existing: map[string]inboundOutcomeAddress{},
+				ForwardTargets: map[string][]string{
+					"forward": {"outside@example.net"},
+				},
+			},
+		})
+		bundle := scenario.writeBundle(t, "Forward-only address", "sender@example.net")
+
+		p := scenario.startPoller(t)
+		_ = p
+		scenario.postNotification(t, bundle)
+
+		receipt := scenario.waitForReceipt(t, bundle.Bundle.ResultKey, "delivered")
+		if receipt.DeliverySource != "forwarded" {
+			t.Fatalf("delivery_source = %q, want forwarded", receipt.DeliverySource)
+		}
+		if receipt.WildDuckUserID != "" || receipt.WildDuckMailboxID != "" || receipt.WildDuckMessageID != "" {
+			t.Fatalf("forward-only receipt should not invent WildDuck mailbox identifiers: %#v", receipt)
+		}
+		deliveries := scenario.replaySMTP.Deliveries()
+		if len(deliveries) != 1 {
+			t.Fatalf("replay smtp deliveries = %d, want 1", len(deliveries))
+		}
+		if deliveries[0].MailFrom != "sender@example.net" {
+			t.Fatalf("replay smtp MAIL FROM = %q, want sender@example.net", deliveries[0].MailFrom)
+		}
+		if deliveries := scenario.dsnSMTP.Deliveries(); len(deliveries) != 0 {
+			t.Fatalf("dsn smtp deliveries = %d, want 0", len(deliveries))
+		}
+		scenario.assertWorkStatus(t, bundle.IngestID, "delivered", "completed")
+	})
+}
+
+type inboundOutcomeOptions struct {
+	Mailbox  string
+	WildDuck inboundOutcomeWildDuck
+}
+
+type inboundOutcomeWildDuck struct {
+	Existing       map[string]inboundOutcomeAddress
+	ForwardTargets map[string][]string
+}
+
+type inboundOutcomeAddress struct {
+	UserID string
+}
+
+type inboundOutcomeScenario struct {
+	suite            *sweepContractSuite
+	domain           string
+	mailbox          string
+	controlDB        string
+	wildduckDB       string
+	wildduck         inboundOutcomeWildDuck
+	userID           bson.ObjectID
+	mailboxID        bson.ObjectID
+	wdServer         *httptest.Server
+	replaySMTP       *smokeSMTPServer
+	dsnSMTP          *recordingSMTPServer
+	notifyEndpoint   string
+	notifyHMACSecret string
+}
+
+func newInboundOutcomeScenario(t *testing.T, suite *sweepContractSuite, name string, opts inboundOutcomeOptions) *inboundOutcomeScenario {
+	t.Helper()
+
+	slug := sweepContractSlug(name)
+	domain := slug + "." + smokeDomain
+	mailboxLocal := strings.TrimSpace(opts.Mailbox)
+	if mailboxLocal == "" {
+		mailboxLocal = "agent"
+	}
+	userID := bson.NewObjectID()
+	mailboxID := bson.NewObjectID()
+	mailbox := mailboxLocal + "@" + domain
+	wildduck := opts.WildDuck
+	if wildduck.Existing == nil {
+		wildduck.Existing = map[string]inboundOutcomeAddress{
+			mailbox: {UserID: userID.Hex()},
+		}
+	}
+	if wildduck.ForwardTargets == nil {
+		wildduck.ForwardTargets = map[string][]string{}
+	}
+	for address, targets := range wildduck.ForwardTargets {
+		if !strings.Contains(address, "@") {
+			delete(wildduck.ForwardTargets, address)
+			wildduck.ForwardTargets[address+"@"+domain] = targets
+		}
+	}
+	wildduckAccessToken := randomSmokeToken(t, "wildduck")
+	t.Setenv("AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN", wildduckAccessToken)
+	wdServer := newInboundOutcomeWildDuckServer(t, wildduckAccessToken, wildduck)
+	t.Cleanup(wdServer.Close)
+
+	wildduckDB := "wildduck_" + slug + "_" + smokeRunID()
+	replaySMTP := newSmokeSMTPServer(t, suite.mongoClient.Database(wildduckDB).Collection("messages"), userID, mailboxID)
+	t.Cleanup(replaySMTP.Close)
+	dsnSMTP := newRecordingSMTPServer(t)
+	t.Cleanup(dsnSMTP.Close)
+
+	return &inboundOutcomeScenario{
+		suite:      suite,
+		domain:     domain,
+		mailbox:    mailbox,
+		controlDB:  "agent_mail_control_" + slug + "_" + smokeRunID(),
+		wildduckDB: wildduckDB,
+		wildduck:   wildduck,
+		userID:     userID,
+		mailboxID:  mailboxID,
+		wdServer:   wdServer,
+		replaySMTP: replaySMTP,
+		dsnSMTP:    dsnSMTP,
+	}
+}
+
+func (s *inboundOutcomeScenario) startPoller(t *testing.T) *poller.Poller {
+	t.Helper()
+
+	notifyListenURL := "http://" + freeSmokeAddress(t)
+	notifyHMACSecret := randomSmokeToken(t, "notify")
+	t.Setenv("AGENT_MAIL_CF_TUNNEL_LISTEN_URL", notifyListenURL)
+	t.Setenv("AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL", "https://mail-ingress."+s.domain+"/agent-mail/ingest/v1")
+	t.Setenv("AGENT_MAIL_CF_TUNNEL_HMAC_SECRET", notifyHMACSecret)
+	s.notifyEndpoint = notifyListenURL + poller.NotifyPath
+	s.notifyHMACSecret = notifyHMACSecret
+
+	cfg := smokePollerConfig(s.suite.mongoURI, s.controlDB, s.wildduckDB, s.wdServer.URL, s.replaySMTP.Addr())
+	cfg.DSN.SMTPAddress = s.dsnSMTP.Addr()
+	cfg.SweepInterval = "1h"
+	cfg.RetryDelay = "100ms"
+	cfg.MaxRetries = 2
+
+	p, err := poller.NewWithDomainSourceConfig(s.suite.ctx, cfg, sweepContractDomainSource{domain: s.domain})
+	if err != nil {
+		t.Fatalf("initialize inbound outcome poller: %v", err)
+	}
+	pollerCtx, stopPoller := context.WithCancel(s.suite.ctx)
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- p.Run(pollerCtx)
+	}()
+	waitForSmokeHealth(t, notifyListenURL+poller.HealthPath)
+	t.Cleanup(func() {
+		stopPoller()
+		err := <-errCh
+		if err != nil && err != context.Canceled {
+			t.Errorf("poller stopped with error: %v", err)
+		}
+		if err := p.Close(context.Background()); err != nil {
+			t.Errorf("close poller: %v", err)
+		}
+	})
+	return p
+}
+
+func (s *inboundOutcomeScenario) writeBundle(t *testing.T, subject string, envelopeFrom string) sweepContractBundle {
+	t.Helper()
+
+	bundle := s.newBundle(t, subject)
+	if err := s.suite.archive.PutBytes(s.suite.ctx, bundle.Bundle.RawKey, "message/rfc822", bundle.RawMessage); err != nil {
+		t.Fatalf("write inbound outcome raw archive: %v", err)
+	}
+	manifest := poller.Manifest{
+		Schema:             r2archive.InboundEdgeSchema,
+		IngestID:           bundle.IngestID,
+		RawKey:             bundle.Bundle.RawKey,
+		EdgeKey:            bundle.Bundle.EdgeKey,
+		Mailbox:            s.mailbox,
+		EnvelopeFrom:       envelopeFrom,
+		EnvelopeTo:         s.mailbox,
+		RecipientDomain:    s.domain,
+		CloudflareZoneName: s.domain,
+		WorkerName:         "delivery-outcome-worker",
+		ReceivedAt:         bundle.ReceivedAt,
+		RawSHA256:          bundle.RawSHA256,
+		MessageID:          bundle.MessageID,
+		ATMCFHeaders: map[string]string{
+			"X-ATMCF-Edge-Action":        "worker",
+			"X-ATMCF-Edge-Status":        "received",
+			"X-ATMCF-Edge-Envelope-From": envelopeFrom,
+			"X-ATMCF-Edge-Envelope-To":   s.mailbox,
+			"X-ATMCF-Edge-Message-ID":    bundle.MessageID,
+		},
+	}
+	if err := s.suite.archive.PutJSON(s.suite.ctx, bundle.Bundle.EdgeKey, manifest); err != nil {
+		t.Fatalf("write inbound outcome edge archive: %v", err)
+	}
+	return bundle
+}
+
+func (s *inboundOutcomeScenario) newBundle(t *testing.T, subject string) sweepContractBundle {
+	t.Helper()
+
+	ingestID, err := r2archive.NewUUIDv7String()
+	if err != nil {
+		t.Fatalf("generate inbound outcome ingest id: %v", err)
+	}
+	receivedAt, err := r2archive.UUIDv7Time(ingestID)
+	if err != nil {
+		t.Fatalf("decode inbound outcome ingest id time: %v", err)
+	}
+	bundle, err := r2archive.InboundBundleKeys(s.domain, receivedAt, ingestID)
+	if err != nil {
+		t.Fatalf("build inbound outcome bundle keys: %v", err)
+	}
+	messageID := "<" + sweepContractSlug(subject) + "@" + s.domain + ">"
+	raw := sweepContractRawMessage(s.mailbox, subject, messageID)
+	return sweepContractBundle{
+		IngestID:   ingestID,
+		ReceivedAt: receivedAt,
+		Bundle:     bundle,
+		RawMessage: raw,
+		RawSHA256:  sha256Hex(raw),
+		MessageID:  messageID,
+	}
+}
+
+func (s *inboundOutcomeScenario) postNotification(t *testing.T, bundle sweepContractBundle) {
+	t.Helper()
+	if err := postSmokeNotification(s.suite.ctx, s.notifyEndpoint, poller.Notification{
+		Schema:          poller.FastPathSchema,
+		IngestID:        bundle.IngestID,
+		RecipientDomain: s.domain,
+		RawKey:          bundle.Bundle.RawKey,
+		EdgeKey:         bundle.Bundle.EdgeKey,
+		ResultKey:       bundle.Bundle.ResultKey,
+		ReceivedAt:      bundle.ReceivedAt,
+		RawSHA256:       bundle.RawSHA256,
+	}, s.notifyHMACSecret); err != nil {
+		t.Fatalf("post inbound outcome notification: %v", err)
+	}
+}
+
+func (s *inboundOutcomeScenario) waitForReceipt(t *testing.T, resultKey string, wantStatus string) poller.Receipt {
+	t.Helper()
+
+	deadline := time.Now().Add(30 * time.Second)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		data, err := s.suite.archive.GetBytes(s.suite.ctx, resultKey)
+		if err == nil {
+			var receipt poller.Receipt
+			if err := json.Unmarshal(data, &receipt); err != nil {
+				t.Fatalf("decode inbound outcome receipt: %v\n%s", err, string(data))
+			}
+			if receipt.Status != wantStatus {
+				t.Fatalf("receipt status = %q, want %q\n%s", receipt.Status, wantStatus, string(data))
+			}
+			return receipt
+		}
+		lastErr = err
+		time.Sleep(250 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for inbound outcome result %s: last error: %v", resultKey, lastErr)
+	return poller.Receipt{}
+}
+
+func (s *inboundOutcomeScenario) seedDeliveredMessage(t *testing.T, ingestID string) string {
+	t.Helper()
+
+	messageID := bson.NewObjectID()
+	_, err := s.suite.mongoClient.Database(s.wildduckDB).Collection("messages").InsertOne(s.suite.ctx, bson.D{
+		{"_id", messageID},
+		{"user", s.userID},
+		{"mailbox", s.mailboxID},
+		{"mimeTree", bson.D{{"header", bson.A{"X-ATM-Ingest-ID: " + ingestID}}}},
+		{"created", time.Now().UTC()},
+	})
+	if err != nil {
+		t.Fatalf("seed existing WildDuck delivery proof: %v", err)
+	}
+	return messageID.Hex()
+}
+
+func (s *inboundOutcomeScenario) assertWorkCompleted(t *testing.T, ingestID string) {
+	t.Helper()
+	s.assertWorkStatus(t, ingestID, "completed")
+}
+
+func (s *inboundOutcomeScenario) assertWorkStatus(t *testing.T, ingestID string, want ...string) {
+	t.Helper()
+
+	wantSet := make(map[string]struct{}, len(want))
+	for _, status := range want {
+		wantSet[status] = struct{}{}
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	var lastStatus string
+	for time.Now().Before(deadline) {
+		var work bson.M
+		err := s.suite.mongoClient.Database(s.controlDB).Collection("inbound_work_items").FindOne(s.suite.ctx, bson.D{{Key: "_id", Value: ingestID}}).Decode(&work)
+		if err == nil {
+			lastStatus = sweepContractStringField(work, "status")
+			if _, ok := wantSet[lastStatus]; ok {
+				return
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("work item %s status = %q, want one of %v", ingestID, lastStatus, want)
+}
+
+func (s *inboundOutcomeScenario) objectExists(t *testing.T, key string) bool {
+	t.Helper()
+	exists, err := s.suite.archive.Exists(s.suite.ctx, key)
+	if err != nil {
+		t.Fatalf("head archive object %s: %v", key, err)
+	}
+	return exists
+}
+
+func (s *inboundOutcomeScenario) objectBytes(t *testing.T, key string) []byte {
+	t.Helper()
+	data, err := s.suite.archive.GetBytes(s.suite.ctx, key)
+	if err != nil {
+		t.Fatalf("read archive object %s: %v", key, err)
+	}
+	return data
+}
+
+func newInboundOutcomeWildDuckServer(t *testing.T, expectedAccessToken string, data inboundOutcomeWildDuck) *httptest.Server {
+	t.Helper()
+
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Header.Get("X-Access-Token") != expectedAccessToken {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"success":false,"error":"Unauthorized","code":"Unauthorized"}`))
+			return
+		}
+
+		addressPath := "/addresses/resolve/"
+		if r.Method != http.MethodGet || !strings.HasPrefix(r.URL.Path, addressPath) {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"success":false,"error":"not found","code":"NotFound"}`))
+			return
+		}
+		address, err := url.PathUnescape(strings.TrimPrefix(r.URL.EscapedPath(), addressPath))
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"success":false,"error":"Bad address","code":"BadAddress"}`))
+			return
+		}
+		address = strings.TrimSpace(address)
+
+		if entry, ok := data.Existing[address]; ok {
+			_, _ = fmt.Fprintf(w, `{"success":true,"id":"address-%s","address":%q,"user":%q}`, strings.ReplaceAll(address, "@", "-"), address, entry.UserID)
+			return
+		}
+		if targets, ok := data.ForwardTargets[address]; ok {
+			payload, err := json.Marshal(struct {
+				Success bool     `json:"success"`
+				ID      string   `json:"id"`
+				Address string   `json:"address"`
+				Targets []string `json:"targets"`
+			}{
+				Success: true,
+				ID:      "forward-" + strings.ReplaceAll(address, "@", "-"),
+				Address: address,
+				Targets: targets,
+			})
+			if err != nil {
+				t.Fatalf("marshal WildDuck forward response: %v", err)
+			}
+			_, _ = w.Write(payload)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"success":false,"error":"Address not found","code":"AddressNotFound"}`))
+	}))
+}
+
+type recordingSMTPServer struct {
+	t          *testing.T
+	listener   net.Listener
+	mu         sync.Mutex
+	deliveries []smokeSMTPDelivery
+	done       chan struct{}
+}
+
+func newRecordingSMTPServer(t *testing.T) *recordingSMTPServer {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen recording SMTP: %v", err)
+	}
+	server := &recordingSMTPServer{
+		t:        t,
+		listener: listener,
+		done:     make(chan struct{}),
+	}
+	go server.serve()
+	return server
+}
+
+func (s *recordingSMTPServer) Addr() string {
+	return s.listener.Addr().String()
+}
+
+func (s *recordingSMTPServer) Close() {
+	_ = s.listener.Close()
+	<-s.done
+}
+
+func (s *recordingSMTPServer) Deliveries() []smokeSMTPDelivery {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	result := make([]smokeSMTPDelivery, len(s.deliveries))
+	copy(result, s.deliveries)
+	return result
+}
+
+func (s *recordingSMTPServer) serve() {
+	defer close(s.done)
+	for {
+		conn, err := s.listener.Accept()
+		if err != nil {
+			return
+		}
+		go s.handleConn(conn)
+	}
+}
+
+func (s *recordingSMTPServer) handleConn(conn net.Conn) {
+	defer conn.Close()
+	reader := textproto.NewReader(bufio.NewReader(conn))
+	bufferedWriter := bufio.NewWriter(conn)
+	writer := textproto.NewWriter(bufferedWriter)
+	send := func(format string, args ...any) {
+		_ = writer.PrintfLine(format, args...)
+		_ = bufferedWriter.Flush()
+	}
+	send("220 recording smtp ready")
+
+	var mailFrom string
+	var rcptTo []string
+	for {
+		line, err := reader.ReadLine()
+		if err != nil {
+			return
+		}
+		upper := strings.ToUpper(line)
+		switch {
+		case strings.HasPrefix(upper, "HELO ") || strings.HasPrefix(upper, "EHLO "):
+			send("250 recording smtp")
+		case strings.HasPrefix(upper, "MAIL FROM:"):
+			mailFrom = cleanSMTPPath(line[len("MAIL FROM:"):])
+			send("250 ok")
+		case strings.HasPrefix(upper, "RCPT TO:"):
+			rcptTo = append(rcptTo, cleanSMTPPath(line[len("RCPT TO:"):]))
+			send("250 ok")
+		case upper == "DATA":
+			send("354 end with dot")
+			raw, err := readSMTPData(reader)
+			if err != nil {
+				send("451 read failed")
+				return
+			}
+			s.mu.Lock()
+			s.deliveries = append(s.deliveries, smokeSMTPDelivery{
+				MailFrom:   mailFrom,
+				RcptTo:     append([]string(nil), rcptTo...),
+				RawMessage: append([]byte(nil), raw...),
+			})
+			s.mu.Unlock()
+			send("250 queued")
+		case upper == "QUIT":
+			send("221 bye")
+			return
+		case upper == "RSET":
+			mailFrom = ""
+			rcptTo = nil
+			send("250 reset")
+		default:
+			send("250 ok")
+		}
+	}
+}
