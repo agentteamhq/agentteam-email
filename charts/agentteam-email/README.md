@@ -16,7 +16,6 @@ This chart renders the self-hosted AgentTeam Email stack:
 - Haraka
 - Rspamd
 - ZoneMTA
-- optional Tailscale or `cloudflared` fast-path tunnel
 
 Render:
 

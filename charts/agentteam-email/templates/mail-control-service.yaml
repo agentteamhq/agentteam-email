@@ -84,16 +84,18 @@ spec:
 {{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_R2_SECRET_ACCESS_KEY") | nindent 14 }}
             - name: AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN
 {{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN") | nindent 14 }}
+            - name: AGENT_MAIL_WILDDUCK_API_BASE_URL
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_WILDDUCK_API_BASE_URL") | nindent 14 }}
+            - name: AGENT_MAIL_WILDDUCK_IMAP_ADDRESS
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_WILDDUCK_IMAP_ADDRESS") | nindent 14 }}
+            - name: AGENT_MAIL_HARAKA_SMTP_ADDRESS
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_HARAKA_SMTP_ADDRESS") | nindent 14 }}
+            - name: AGENT_MAIL_ZONEMTA_DSN_ADDRESS
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_ZONEMTA_DSN_ADDRESS") | nindent 14 }}
             - name: AGENT_MAIL_ZONEMTA_RELAY_PASSWORD
 {{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_ZONEMTA_RELAY_PASSWORD") | nindent 14 }}
             - name: AGENT_MAIL_FEEDBACK_MAILBOX_PASSWORD
 {{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_FEEDBACK_MAILBOX_PASSWORD") | nindent 14 }}
-            - name: AGENT_MAIL_CF_TUNNEL_LISTEN_URL
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_CF_TUNNEL_LISTEN_URL") | nindent 14 }}
-            - name: AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL") | nindent 14 }}
-            - name: AGENT_MAIL_CF_TUNNEL_HMAC_SECRET
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_CF_TUNNEL_HMAC_SECRET") | nindent 14 }}
             - name: AGENT_MAIL_OUTBOUND_PROVIDER
 {{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_OUTBOUND_PROVIDER") | nindent 14 }}
             - name: AGENT_MAIL_CONTROL_API_TOKEN
@@ -124,7 +126,7 @@ spec:
               command:
                 - /bin/sh
                 - -c
-                - wget -qO- http://127.0.0.1:8080/healthz >/dev/null
+                - wget -qO- http://127.0.0.1:8081/healthz >/dev/null
             periodSeconds: 10
             timeoutSeconds: 5
           livenessProbe:
@@ -132,7 +134,7 @@ spec:
               command:
                 - /bin/sh
                 - -c
-                - wget -qO- http://127.0.0.1:8080/healthz >/dev/null
+                - wget -qO- http://127.0.0.1:8081/healthz >/dev/null
             periodSeconds: 20
             timeoutSeconds: 5
           {{- with .Values.extraVolumeMounts.mailControlService }}
@@ -143,28 +145,6 @@ spec:
           resources:
 {{ toYaml . | nindent 12 }}
           {{- end }}
-        - name: fastpath-gate
-          image: {{ include "agentteam-email.image" .Values.images.mailControlService | quote }}
-          imagePullPolicy: {{ .Values.images.mailControlService.pullPolicy }}
-{{ include "agentteam-email.securityContext" . | nindent 10 }}
-          command:
-            - /usr/local/bin/agent-mail-control-service
-            - fastpath-gate
-          ports:
-            - name: fastpath-gate
-              containerPort: 9003
-          readinessProbe:
-            tcpSocket:
-              port: fastpath-gate
-            initialDelaySeconds: 2
-            periodSeconds: 5
-            timeoutSeconds: 5
-          livenessProbe:
-            tcpSocket:
-              port: fastpath-gate
-            initialDelaySeconds: 5
-            periodSeconds: 10
-            timeoutSeconds: 5
       {{- if .Values.extraVolumes.mailControlService }}
       volumes:
         {{- with .Values.extraVolumes.mailControlService }}

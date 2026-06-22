@@ -19,7 +19,6 @@ x-control-env: &control-env
   AGENT_MAIL_CONTROL_API_TOKEN: "${AGENT_MAIL_CONTROL_API_TOKEN:?missing AGENT_MAIL_CONTROL_API_TOKEN}"
   AGENT_MAIL_ZONEMTA_RELAY_PASSWORD: "${AGENT_MAIL_ZONEMTA_RELAY_PASSWORD:?missing AGENT_MAIL_ZONEMTA_RELAY_PASSWORD}"
   AGENT_MAIL_FEEDBACK_MAILBOX_PASSWORD: "${AGENT_MAIL_FEEDBACK_MAILBOX_PASSWORD:?missing AGENT_MAIL_FEEDBACK_MAILBOX_PASSWORD}"
-  AGENT_MAIL_CF_TUNNEL_LISTEN_URL: "${AGENT_MAIL_CF_TUNNEL_LISTEN_URL:-http://0.0.0.0:8080}"
   AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL: "${AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL:?missing AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL}"
   AGENT_MAIL_CF_TUNNEL_HMAC_SECRET: "${AGENT_MAIL_CF_TUNNEL_HMAC_SECRET:?missing AGENT_MAIL_CF_TUNNEL_HMAC_SECRET}"
   AGENT_MAIL_CLOUDFLARE_API_BASE_URL: "${AGENT_MAIL_CLOUDFLARE_API_BASE_URL:-https://api.cloudflare.com/client/v4}"
@@ -213,34 +212,6 @@ services:
       retries: 10
       start_period: 5s
     restart: unless-stopped
-
-  # Optional ingress: uncomment one tunnel service when using Tailscale Funnel
-  # or Cloudflare Tunnel for external access to this Compose stack.
-  # tailscale:
-  #   <<: *runtime
-  #   image: "ghcr.io/tailscale/tailscale:v1.96.5"
-  #   environment:
-  #     TS_AUTHKEY: "${TS_AUTHKEY:?missing TS_AUTHKEY}"
-  #     TS_HOSTNAME: "${TS_HOSTNAME:-agentteam-email}"
-  #     TS_SERVE_CONFIG: /etc/tailscale/serve/serve.json
-  #     TS_USERSPACE: "true"
-  #     TS_AUTH_ONCE: "true"
-  #     TS_ENABLE_HEALTH_CHECK: "true"
-  #     TS_LOCAL_ADDR_PORT: "[::]:9002"
-  #   volumes:
-  #     - tailscale-state:/var/lib/tailscale
-  #   restart: unless-stopped
-
-  # cloudflared:
-  #   <<: *runtime
-  #   image: "docker.io/cloudflare/cloudflared:2026.6.1"
-  #   command:
-  #     - tunnel
-  #     - --no-autoupdate
-  #     - run
-  #   environment:
-  #     TUNNEL_TOKEN: "${TUNNEL_TOKEN:?missing TUNNEL_TOKEN}"
-  #   restart: unless-stopped
 
 configs:
   rspamd-worker-controller:

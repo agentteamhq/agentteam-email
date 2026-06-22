@@ -72,14 +72,6 @@
       },
       "type": "object"
     },
-    "cloudflared": {
-      "properties": {
-        "metricsPort": { "maximum": 65535, "minimum": 1, "type": "integer" },
-        "replicas": { "minimum": 0, "type": "integer" },
-        "tunnelToken": { "$ref": "#/$defs/valueSource" }
-      },
-      "type": "object"
-    },
     "containerSecurityContext": { "type": "object" },
     "controlApi": {
       "properties": {
@@ -90,7 +82,6 @@
     "extraEnv": { "type": "object" },
     "extraLabels": {
       "properties": {
-        "cloudflared": { "additionalProperties": { "type": "string" }, "type": "object" },
         "mailControlService": { "additionalProperties": { "type": "string" }, "type": "object" },
         "namespace": { "additionalProperties": { "type": "string" }, "type": "object" },
         "webServer": { "additionalProperties": { "type": "string" }, "type": "object" },
@@ -103,13 +94,11 @@
     "fullnameOverride": { "type": "string" },
     "images": {
       "properties": {
-        "cloudflared": { "$ref": "#/$defs/image" },
         "haraka": { "$ref": "#/$defs/image" },
         "mailControlService": { "$ref": "#/$defs/image" },
         "mongodb": { "$ref": "#/$defs/image" },
         "redis": { "$ref": "#/$defs/image" },
         "rspamd": { "$ref": "#/$defs/image" },
-        "tailscale": { "$ref": "#/$defs/image" },
         "webServer": { "$ref": "#/$defs/image" },
         "wildduck": { "$ref": "#/$defs/image" },
         "zonemta": { "$ref": "#/$defs/image" }
@@ -174,28 +163,7 @@
       },
       "type": "object"
     },
-    "tailscale": {
-      "properties": {
-        "authKey": { "$ref": "#/$defs/valueSource" },
-        "certDomain": { "type": "string" },
-        "hostname": { "minLength": 1, "type": "string" },
-        "localAddrPort": { "minLength": 1, "type": "string" }
-      },
-      "type": "object"
-    },
     "tolerations": { "type": "array" },
-    "tunnel": {
-      "properties": {
-        "externalUrl": { "$ref": "#/$defs/valueSource" },
-        "hmacSecret": { "$ref": "#/$defs/valueSource" },
-        "listenUrl": { "$ref": "#/$defs/valueSource" },
-        "provider": {
-          "enum": ["none", "tailscale", "cloudflared"],
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
     "webServer": {
       "properties": {
         "authSecret": { "$ref": "#/$defs/valueSource" },

@@ -15,13 +15,14 @@ x-control-env: &control-env
   AGENT_MAIL_R2_ACCESS_KEY_ID: "${AGENT_MAIL_R2_ACCESS_KEY_ID:?missing AGENT_MAIL_R2_ACCESS_KEY_ID}"
   AGENT_MAIL_R2_SECRET_ACCESS_KEY: "${AGENT_MAIL_R2_SECRET_ACCESS_KEY:?missing AGENT_MAIL_R2_SECRET_ACCESS_KEY}"
   AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN: "${AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN:?missing AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN}"
+  AGENT_MAIL_WILDDUCK_API_BASE_URL: "${AGENT_MAIL_WILDDUCK_API_BASE_URL:-http://wildduck:8080}"
+  AGENT_MAIL_WILDDUCK_IMAP_ADDRESS: "${AGENT_MAIL_WILDDUCK_IMAP_ADDRESS:-wildduck:10143}"
+  AGENT_MAIL_HARAKA_SMTP_ADDRESS: "${AGENT_MAIL_HARAKA_SMTP_ADDRESS:-haraka:10025}"
+  AGENT_MAIL_ZONEMTA_DSN_ADDRESS: "${AGENT_MAIL_ZONEMTA_DSN_ADDRESS:-zonemta:2526}"
   AGENT_MAIL_OUTBOUND_PROVIDER: "${AGENT_MAIL_OUTBOUND_PROVIDER:-cloudflare}"
   AGENT_MAIL_CONTROL_API_TOKEN: "${AGENT_MAIL_CONTROL_API_TOKEN:?missing AGENT_MAIL_CONTROL_API_TOKEN}"
   AGENT_MAIL_ZONEMTA_RELAY_PASSWORD: "${AGENT_MAIL_ZONEMTA_RELAY_PASSWORD:?missing AGENT_MAIL_ZONEMTA_RELAY_PASSWORD}"
   AGENT_MAIL_FEEDBACK_MAILBOX_PASSWORD: "${AGENT_MAIL_FEEDBACK_MAILBOX_PASSWORD:?missing AGENT_MAIL_FEEDBACK_MAILBOX_PASSWORD}"
-  AGENT_MAIL_CF_TUNNEL_LISTEN_URL: "${AGENT_MAIL_CF_TUNNEL_LISTEN_URL:-http://0.0.0.0:8080}"
-  AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL: "${AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL:?missing AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL}"
-  AGENT_MAIL_CF_TUNNEL_HMAC_SECRET: "${AGENT_MAIL_CF_TUNNEL_HMAC_SECRET:?missing AGENT_MAIL_CF_TUNNEL_HMAC_SECRET}"
   AGENT_MAIL_CLOUDFLARE_API_BASE_URL: "${AGENT_MAIL_CLOUDFLARE_API_BASE_URL:-https://api.cloudflare.com/client/v4}"
   AGENT_MAIL_CLOUDFLARE_ACCOUNT_ID: "${AGENT_MAIL_CLOUDFLARE_ACCOUNT_ID:?missing AGENT_MAIL_CLOUDFLARE_ACCOUNT_ID}"
   AGENT_MAIL_CLOUDFLARE_API_TOKEN: "${AGENT_MAIL_CLOUDFLARE_API_TOKEN:?missing AGENT_MAIL_CLOUDFLARE_API_TOKEN}"
@@ -207,7 +208,7 @@ services:
           "CMD",
           "sh",
           "-c",
-          "wget -qO- --header=\"X-Access-Token: ${AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN}\" http://localhost:8080/health || exit 1"
+          'wget -qO- --header="X-Access-Token: ${AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN}" http://localhost:8080/health || exit 1'
         ]
       interval: 5s
       timeout: 3s
@@ -265,34 +266,6 @@ services:
       retries: 10
       start_period: 5s
     restart: unless-stopped
-
-  # Optional ingress: uncomment one tunnel service when using Tailscale Funnel
-  # or Cloudflare Tunnel for external access to this Compose stack.
-  # tailscale:
-  #   <<: *runtime
-  #   image: "ghcr.io/tailscale/tailscale:v1.96.5"
-  #   environment:
-  #     TS_AUTHKEY: "${TS_AUTHKEY:?missing TS_AUTHKEY}"
-  #     TS_HOSTNAME: "${TS_HOSTNAME:-agentteam-email}"
-  #     TS_SERVE_CONFIG: /etc/tailscale/serve/serve.json
-  #     TS_USERSPACE: "true"
-  #     TS_AUTH_ONCE: "true"
-  #     TS_ENABLE_HEALTH_CHECK: "true"
-  #     TS_LOCAL_ADDR_PORT: "[::]:9002"
-  #   volumes:
-  #     - tailscale-state:/var/lib/tailscale
-  #   restart: unless-stopped
-
-  # cloudflared:
-  #   <<: *runtime
-  #   image: "docker.io/cloudflare/cloudflared:2026.6.1"
-  #   command:
-  #     - tunnel
-  #     - --no-autoupdate
-  #     - run
-  #   environment:
-  #     TUNNEL_TOKEN: "${TUNNEL_TOKEN:?missing TUNNEL_TOKEN}"
-  #   restart: unless-stopped
 
 configs:
   mongodb-mongod-conf:

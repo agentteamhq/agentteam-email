@@ -57,14 +57,6 @@ app.kubernetes.io/instance: {{ .root.Release.Name | quote }}
 {{- end -}}
 {{- end -}}
 
-{{- define "agentteam-email.cloudflaredImage" -}}
-{{- if .tag -}}
-{{- printf "%s:%s" .repository .tag -}}
-{{- else -}}
-{{- required "images.cloudflared.tag is required when tunnel.provider=cloudflared" .tag -}}
-{{- end -}}
-{{- end -}}
-
 {{- define "agentteam-email.valueSourceEnv" -}}
 {{- $source := default dict .source -}}
 {{- if hasKey $source "valueFrom" -}}
@@ -135,12 +127,14 @@ emptyDir: {}
 {{- else if eq $name "AGENT_MAIL_R2_SECRET_ACCESS_KEY" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.objectStorage.secretAccessKey "name" "objectStorage.secretAccessKey") -}}
 {{- else if eq $name "AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.wildduck.adminAccessToken "name" "wildduck.adminAccessToken") -}}
 {{- else if eq $name "AGENT_MAIL_WILDDUCK_ACCESS_CONTROL_SECRET" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.wildduck.accessControlSecret "name" "wildduck.accessControlSecret") -}}
+{{- else if eq $name "AGENT_MAIL_WILDDUCK_API_BASE_URL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (printf "http://%s:8080" $root.Values.names.wildduckApi))) -}}
+{{- else if eq $name "AGENT_MAIL_WILDDUCK_IMAP_ADDRESS" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (printf "%s:143" $root.Values.names.wildduckImap))) -}}
+{{- else if eq $name "AGENT_MAIL_HARAKA_SMTP_ADDRESS" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (printf "%s:25" $root.Values.names.haraka))) -}}
+{{- else if eq $name "AGENT_MAIL_ZONEMTA_DSN_ADDRESS" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (printf "%s:2526" $root.Values.names.zonemtaDsn))) -}}
 {{- else if eq $name "AGENT_MAIL_ZONEMTA_RELAY_PASSWORD" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.mailRuntime.zonemtaRelayPassword "name" "mailRuntime.zonemtaRelayPassword") -}}
 {{- else if eq $name "AGENT_MAIL_FEEDBACK_MAILBOX_PASSWORD" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.mailRuntime.feedbackMailboxPassword "name" "mailRuntime.feedbackMailboxPassword") -}}
-{{- else if eq $name "AGENT_MAIL_CF_TUNNEL_LISTEN_URL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.tunnel.listenUrl) -}}
-{{- else if eq $name "AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.tunnel.externalUrl "name" "tunnel.externalUrl") -}}
-{{- else if eq $name "AGENT_MAIL_CF_TUNNEL_HMAC_SECRET" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.tunnel.hmacSecret "name" "tunnel.hmacSecret") -}}
 {{- else if eq $name "AGENT_MAIL_OUTBOUND_PROVIDER" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.outbound.provider) -}}
+{{- else if eq $name "AGENT_MAIL_CONTROL_API_BASE_URL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (printf "http://%s:8081" $root.Values.names.mailControlService))) -}}
 {{- else if eq $name "AGENT_MAIL_CONTROL_API_TOKEN" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.controlApi.token "name" "controlApi.token") -}}
 {{- else if eq $name "AGENT_MAIL_CLOUDFLARE_API_BASE_URL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" $root.Values.cloudflare.apiBaseUrl)) -}}
 {{- else if eq $name "AGENT_MAIL_CLOUDFLARE_ACCOUNT_ID" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.cloudflare.accountId "name" "cloudflare.accountId") -}}
@@ -162,8 +156,6 @@ emptyDir: {}
 {{- else if eq $name "TMP_DIR" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" "/tmp/agentteam-email")) -}}
 {{- else if eq $name "BETTER_AUTH_SECRET" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.webServer.authSecret "name" "webServer.authSecret") -}}
 {{- else if eq $name "ENCRYPT_SECRET_KEY" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.webServer.encryptionKey "name" "webServer.encryptionKey") -}}
-{{- else if eq $name "TS_AUTHKEY" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.tailscale.authKey "name" "tailscale.authKey") -}}
-{{- else if eq $name "TUNNEL_TOKEN" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.cloudflared.tunnelToken "name" "cloudflared.tunnelToken") -}}
 {{- else -}}{{ fail (printf "unsupported environment variable %s" $name) }}
 {{- end }}
 {{- end -}}

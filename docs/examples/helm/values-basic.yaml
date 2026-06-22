@@ -51,15 +51,6 @@ cloudflare:
     archiveBucket:
       value: company-agent-mail-archive
 
-tunnel:
-  provider: none
-  listenUrl:
-    value: http://0.0.0.0:8080
-  externalUrl:
-    value: https://mail-ingress.company.example/agent-mail/ingest/v1
-  hmacSecret:
-    value: '<random-fast-path-secret>'
-
 outbound:
   provider:
     value: cloudflare

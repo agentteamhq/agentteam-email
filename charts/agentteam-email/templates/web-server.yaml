@@ -1,26 +1,3 @@
-{{- if eq .Values.tunnel.provider "tailscale" }}
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: {{ .Values.names.tailscaleServe }}
-  namespace: {{ include "agentteam-email.namespace" . }}
-  labels:
-{{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.webServer "component" "tailscale") | nindent 4 }}
-data:
-  serve.json: |
-    {
-      "TCP": {
-        "443": {
-          "TCPForward": "127.0.0.1:4321",
-          "TerminateTLS": "${TS_CERT_DOMAIN}"
-        }
-      },
-      "AllowFunnel": {
-        "${TS_CERT_DOMAIN}:443": true
-      }
-    }
----
-{{ end }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -98,6 +75,10 @@ spec:
 {{- include "agentteam-email.envFor" (dict "root" . "name" "BETTER_AUTH_SECRET") | nindent 14 }}
             - name: ENCRYPT_SECRET_KEY
 {{- include "agentteam-email.envFor" (dict "root" . "name" "ENCRYPT_SECRET_KEY") | nindent 14 }}
+            - name: AGENT_MAIL_CONTROL_API_BASE_URL
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_CONTROL_API_BASE_URL") | nindent 14 }}
+            - name: AGENT_MAIL_CONTROL_API_TOKEN
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_CONTROL_API_TOKEN") | nindent 14 }}
           {{- with .Values.extraEnv.webServer }}
 {{ toYaml . | nindent 12 }}
           {{- end }}
@@ -121,76 +102,8 @@ spec:
           resources:
 {{ toYaml . | nindent 12 }}
           {{- end }}
-        {{- if eq .Values.tunnel.provider "tailscale" }}
-        - name: tailscale
-          image: {{ include "agentteam-email.image" .Values.images.tailscale | quote }}
-          imagePullPolicy: {{ .Values.images.tailscale.pullPolicy }}
-{{ include "agentteam-email.securityContext" . | nindent 10 }}
-          ports:
-            - name: tailscale
-              containerPort: 9002
-          env:
-            - name: TS_AUTHKEY
-{{- include "agentteam-email.envFor" (dict "root" . "name" "TS_AUTHKEY") | nindent 14 }}
-            - name: TS_HOSTNAME
-              value: {{ .Values.tailscale.hostname | quote }}
-            - name: TS_CERT_DOMAIN
-              value: {{ required "tailscale.certDomain is required when tunnel.provider=tailscale" .Values.tailscale.certDomain | quote }}
-            - name: TS_KUBE_SECRET
-              value: {{ .Values.names.tailscaleState | quote }}
-            - name: TS_SERVE_CONFIG
-              value: /etc/tailscale/serve/serve.json
-            - name: TS_USERSPACE
-              value: "true"
-            - name: TS_AUTH_ONCE
-              value: "true"
-            - name: TS_SOCKET
-              value: /tmp/tailscale/tailscaled.sock
-            - name: TS_ENABLE_HEALTH_CHECK
-              value: "true"
-            - name: TS_LOCAL_ADDR_PORT
-              value: {{ .Values.tailscale.localAddrPort | quote }}
-            - name: HOME
-              value: /tmp/tailscale
-            - name: XDG_CACHE_HOME
-              value: /tmp/tailscale/cache
-          {{- with .Values.extraEnv.tailscale }}
-{{ toYaml . | nindent 12 }}
-          {{- end }}
-          readinessProbe:
-            tcpSocket:
-              port: tailscale
-            initialDelaySeconds: 5
-            periodSeconds: 5
-            timeoutSeconds: 5
-          livenessProbe:
-            tcpSocket:
-              port: tailscale
-            initialDelaySeconds: 10
-            periodSeconds: 10
-            timeoutSeconds: 5
-          volumeMounts:
-            - name: tailscale-socket
-              mountPath: /tmp/tailscale
-            - name: tailscale-socket
-              mountPath: /var/run/tailscale
-            - name: tailscale-serve-config
-              mountPath: /etc/tailscale/serve
-              readOnly: true
-          {{- with .Values.resources.tailscale }}
-          resources:
-{{ toYaml . | nindent 12 }}
-          {{- end }}
-        {{- end }}
-      {{- if or (eq .Values.tunnel.provider "tailscale") .Values.extraVolumes.webServer }}
+      {{- if .Values.extraVolumes.webServer }}
       volumes:
-        {{- if eq .Values.tunnel.provider "tailscale" }}
-        - name: tailscale-socket
-          emptyDir: {}
-        - name: tailscale-serve-config
-          configMap:
-            name: {{ .Values.names.tailscaleServe }}
-        {{- end }}
         {{- with .Values.extraVolumes.webServer }}
 {{ toYaml . | nindent 8 }}
         {{- end }}
