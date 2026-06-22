@@ -2,6 +2,9 @@
 
 import eslint from '@eslint/js';
 import stylistic from '@stylistic/eslint-plugin';
+import { tanstackConfig } from '@tanstack/eslint-config';
+import tanstackQuery from '@tanstack/eslint-plugin-query';
+import tanstackRouter from '@tanstack/eslint-plugin-router';
 import eslintParserTypeScript from '@typescript-eslint/parser';
 import vitest from '@vitest/eslint-plugin';
 import { defineConfig } from 'eslint/config';
@@ -169,6 +172,22 @@ const eslintRequireThisArrow = {
   }
 };
 
+const tanstackProjectServiceCompatibleConfig = tanstackConfig.map((config) => {
+  if (!config.languageOptions?.parserOptions || !('project' in config.languageOptions.parserOptions)) {
+    return config;
+  }
+
+  const { project: _project, ...parserOptions } = config.languageOptions.parserOptions;
+
+  return {
+    ...config,
+    languageOptions: {
+      ...config.languageOptions,
+      parserOptions
+    }
+  };
+});
+
 export default defineConfig([
   {
     name: 'proj-ignores',
@@ -191,6 +210,16 @@ export default defineConfig([
       '**/*.sql'
     ]
   },
+  ...tanstackProjectServiceCompatibleConfig,
+  ...tanstackQuery.configs['flat/recommended-strict'],
+  ...tanstackRouter.configs['flat/recommended'].map((config) => ({
+    ...config,
+    name: config.name ?? 'tanstack/router/flat/recommended',
+    rules: {
+      ...config.rules,
+      '@tanstack/router/create-route-property-order': 'error'
+    }
+  })),
   ...defineConfig(
     eslint.configs.recommended,
     // eslintPluginUnicorn.configs.recommended,
@@ -695,9 +724,6 @@ export default defineConfig([
       ],
       '@typescript-eslint/no-unnecessary-condition': 'off',
       'no-restricted-syntax': 'off',
-      // Test files may use component-form UTCDate/TZDate constructors and bare parse/set
-      // to build precise fixture dates — this is intentional and correct in test context.
-      'no-unsafe-date-fns/no-unsafe-date-fns': 'off'
     }
   }
 ]);

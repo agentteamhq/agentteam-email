@@ -8,6 +8,7 @@ through the checked-out repository root:
 ```bash
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
+cp .env.example .env
 mise install
 pnpm install
 ```
@@ -18,9 +19,9 @@ The main checkout should use:
 WT=main
 ```
 
-For a non-main worktree, set `WT` in the repo-local `.env` to a short kebab-case
-slug for that worktree. Also give the app database names the same suffix, for
-example:
+For a non-main worktree, copy `.env.example` to `.env`, then set `WT` in the
+repo-local `.env` to a short kebab-case slug for that worktree. Also give the
+app database names the same suffix, for example:
 
 ```dotenv
 WT=feature-mailbox
@@ -31,19 +32,6 @@ DATABASE_URL=mongodb://localhost:27017/agentteam_email_feature_mailbox
 
 `mise run db:start` intentionally reuses the same local MongoDB container across
 worktrees. The database name is the isolation boundary.
-
-## Container Engine
-
-Repo-owned local container tasks default to Podman:
-
-```dotenv
-CONTAINER_ENGINE=podman
-```
-
-Set `CONTAINER_ENGINE=docker` in the repo-local `.env` to use Docker-compatible
-CLI commands for local MongoDB, Mailpit, repo-built images, and kind E2E image
-export. Compose validation uses the Compose CLI installed in your environment,
-such as `podman-compose` or `docker compose`.
 
 ## Local Runtime
 
@@ -80,24 +68,31 @@ mise run deploy:start
 
 ## Repo-Built Images
 
-The repository currently builds two local images for kind end-to-end testing:
+The repository currently builds these local images:
 
 - `apps/mail-control-service/Containerfile` builds the Mail Control Service
   image.
 - `apps/web-server/Containerfile` builds the web server image.
+- `apps/at-email-cli/Containerfile` builds the at-email CLI image.
 
-The kind harness derives local image repositories from `WT`:
+Repo-owned local image repositories derive from `WT`:
 
 ```text
 atemail.<WT>.mail-control-service:stage
 atemail.<WT>.web-server:stage
+atemail.<WT>.at-email-cli:stage
+atemail.<WT>.at-email-cli-test:stage
 ```
+
+Repo-owned local container names and image repositories must use the
+`atemail.<WT>.<resource>` form.
 
 Build the images directly with:
 
 ```bash
 mise run //apps/mail-control-service:image:build
 mise run //apps/web-server:image:build
+mise run //apps/at-email-cli:image:build
 ```
 
 Build the complete kind E2E image set with:
@@ -197,6 +192,12 @@ mise run //apps/mail-control-service:mod:check
 mise run //apps/mail-control-service:test
 ```
 
+Run the service-owned mail-control E2E smoke suite with:
+
+```bash
+mise run //apps/mail-control-service:test:e2e
+```
+
 The aggregate Go validation command is:
 
 ```bash
@@ -210,6 +211,33 @@ updated:
 mise run //apps/mail-control-service:fmt
 mise run //apps/mail-control-service:mod:tidy
 ```
+
+### at-email CLI Checks
+
+The at-email CLI owns its Go, container, and npm package validation tasks in
+`apps/at-email-cli/mise.toml`.
+
+```bash
+mise run //apps/at-email-cli:fmt:check
+mise run //apps/at-email-cli:mod:check
+mise run //apps/at-email-cli:test
+mise run //apps/at-email-cli:release:check
+mise run //apps/at-email-cli:release:npm:check
+mise run //apps/at-email-cli:release:plugins:check
+mise run //apps/at-email-cli:skills:check
+```
+
+`release:npm:check` builds a GoReleaser snapshot, generates the npm
+distribution packages, validates and packs them, and smoke-tests the generated
+Linux npm package on glibc and musl Node images.
+
+`release:plugins:check` builds a GoReleaser snapshot, generates the versioned
+Claude Code and Codex plugin bundles, validates the generated manifests and
+skill copies, and packs the release tarballs.
+
+`skills:check` validates that the root discoverable skill under
+`skills/at-email-cli` matches the embedded app skill and that `skills.sh.json`
+lists it for marketplace/tap discovery.
 
 ### Helm Chart
 
@@ -255,12 +283,18 @@ Run an individual suite through its owning test-container task:
 
 ```bash
 mise run //test-containers/auth-e2e:test
+mise run //apps/mail-control-service/test-containers/inbound-replay-smoke-e2e:test
 mise run //test-containers/cloudflare-oauth-e2e:test
 mise run //test-containers/kind-e2e:test
+mise run //test-containers/full-stack-e2e:test
 ```
 
 The kind E2E task uses `WT` to scope local image names, the kind cluster,
 namespace, and Helm release.
+
+The full-stack E2E task is a P1 contract suite: failures are expected while the
+Helm-deployed stack does not yet satisfy the web-server-only public boundary
+and full inbound/outbound mail-flow contracts.
 
 ### Shell And Diff Hygiene
 

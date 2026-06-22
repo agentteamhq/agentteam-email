@@ -6,6 +6,9 @@ experimental = true
 node.corepack = true
 unix_default_inline_shell_args = "bash -euo pipefail -c"
 
+[hooks]
+postinstall = "pnpm install --frozen-lockfile"
+
 [tools]
 go = "1.26.4"
 node = "24.16.0"
@@ -16,12 +19,16 @@ kind = "0.32.0"
 helm = "4.2.0"
 shellcheck = "0.11.0"
 yamllint = "1.38.0"
+actionlint = "1.7.12"
 
 [monorepo]
 config_roots = [
   "docs",
   "charts",
+  "apps/at-email-cli",
+  "apps/cloudflare-email-worker",
   "apps/mail-control-service",
+  "apps/mail-control-service/test-containers/*",
   "apps/web-server",
   "test-containers/*",
 ]
@@ -33,6 +40,8 @@ _.file = ".env"
 AGENTTEAM_EMAIL_DEV_MONGO_IMAGE = "docker.io/library/mongo:8.2.7"
 # renovate: datasource=docker depName=docker.io/axllent/mailpit versioning=docker
 AGENTTEAM_EMAIL_DEV_MAILPIT_IMAGE = "docker.io/axllent/mailpit:v1.30.1"
+# renovate: datasource=docker depName=docker.io/minio/minio versioning=docker
+AGENTTEAM_EMAIL_SMOKE_MINIO_IMAGE = "docker.io/minio/minio:RELEASE.2025-09-07T16-13-09Z"
 
 [tasks."clean:tmp"]
 description = "Remove contents of tmp/ directories under the workspace root"
@@ -57,8 +66,21 @@ description = "Typecheck all workspace packages"
 run = "pnpm typecheck"
 
 [tasks.lint]
-description = "Lint all workspace packages"
-run = "pnpm lint"
+description = "Run repo lint checks"
+run = [
+  "pnpm lint",
+  { task = "//:lint:yaml" },
+  { task = "//:lint:actions" },
+  { task = "//charts:lint" },
+]
+
+[tasks.format]
+description = "Format repo Node and Go sources"
+run = [
+  { task = "//apps/mail-control-service:fmt" },
+  { task = "//apps/at-email-cli:fmt" },
+  "pnpm format",
+]
 
 [tasks."lint:yaml"]
 description = "Lint static YAML files"
@@ -71,6 +93,10 @@ git ls-files -z --cached --others --exclude-standard \
   | xargs -0 -r yamllint -d '{extends: relaxed, rules: {line-length: disable}}'
 '''
 
+[tasks."lint:actions"]
+description = "Lint GitHub Actions workflows"
+run = "actionlint"
+
 [tasks.test]
 description = "Run repo unit tests"
 run = [
@@ -80,7 +106,11 @@ run = [
 
 [tasks.typegen]
 description = "Regenerate committed service-boundary contracts"
-depends = ["typegen:rpc-openapi"]
+depends = ["typegen:cloudflare-email-worker", "typegen:rpc-openapi"]
+
+[tasks."typegen:cloudflare-email-worker"]
+description = "Regenerate the checked-in Cloudflare Email Worker backend bundle"
+run = "pnpm --filter agent-mail-cloudflare-worker run generate:backend-bundle"
 
 [tasks."typegen:rpc-openapi"]
 description = "Regenerate the committed RPC OpenAPI schema"
@@ -89,10 +119,83 @@ run = "node scripts/generate-rpc-openapi.mjs"
 [tasks."test:e2e"]
 description = "Run all end-to-end test-container flows"
 depends = [
+  "//apps/mail-control-service/test-containers/inbound-replay-smoke-e2e:test",
   "//test-containers/auth-e2e:test",
   "//test-containers/cloudflare-oauth-e2e:test",
+  "//test-containers/paperclip-plugin-e2e:test",
   "//test-containers/kind-e2e:test",
+  "//test-containers/full-stack-e2e:test",
 ]
+run = "true"
+
+[tasks."paperclip-plugin:start"]
+description = "Start an isolated Paperclip sandbox with the local AgentTeam Email plugin installed"
+depends = ["//test-containers/paperclip-plugin-e2e:sandbox:start"]
+run = "true"
+
+[tasks."paperclip-plugin:stop"]
+description = "Stop the isolated Paperclip plugin sandbox"
+depends = ["//test-containers/paperclip-plugin-e2e:sandbox:stop"]
+run = "true"
+
+[tasks."paperclip-plugin:status"]
+description = "Print isolated Paperclip plugin sandbox status"
+depends = ["//test-containers/paperclip-plugin-e2e:sandbox:status"]
+run = "true"
+
+[tasks."paperclip-plugin:logs"]
+description = "Follow isolated Paperclip plugin sandbox logs"
+depends = ["//test-containers/paperclip-plugin-e2e:sandbox:logs"]
+run = "true"
+
+[tasks."paperclip-plugin:install"]
+description = "Rebuild and reinstall the local AgentTeam Email plugin into the running sandbox"
+depends = ["//test-containers/paperclip-plugin-e2e:sandbox:install"]
+run = "true"
+
+[tasks."paperclip-plugin:seed"]
+description = "Seed the running Paperclip plugin sandbox with the example workspace when empty"
+depends = ["//test-containers/paperclip-plugin-e2e:sandbox:seed"]
+run = "true"
+
+[tasks."paperclip-plugin:smoke"]
+description = "Smoke-check the isolated Paperclip plugin sandbox"
+depends = ["//test-containers/paperclip-plugin-e2e:sandbox:smoke"]
+run = "true"
+
+[tasks."paperclip-plugin:reset"]
+description = "Stop the isolated Paperclip plugin sandbox and remove sandbox volumes plus ignored artifacts"
+depends = ["//test-containers/paperclip-plugin-e2e:sandbox:reset"]
+run = "true"
+
+[tasks."paperclip-plugin:preview:start"]
+description = "Start an unauthenticated LAN preview proxy for the Paperclip plugin sandbox"
+depends = ["//test-containers/paperclip-plugin-e2e:preview:start"]
+run = "true"
+
+[tasks."paperclip-plugin:preview:stop"]
+description = "Stop the unauthenticated LAN preview proxy"
+depends = ["//test-containers/paperclip-plugin-e2e:preview:stop"]
+run = "true"
+
+[tasks."paperclip-plugin:preview:status"]
+description = "Print unauthenticated LAN preview proxy status"
+depends = ["//test-containers/paperclip-plugin-e2e:preview:status"]
+run = "true"
+
+[tasks."paperclip-plugin:preview:logs"]
+description = "Follow unauthenticated LAN preview proxy logs"
+depends = ["//test-containers/paperclip-plugin-e2e:preview:logs"]
+run = "true"
+
+[tasks."paperclip-plugin:preview:smoke"]
+description = "Smoke-check the unauthenticated LAN preview proxy"
+depends = ["//test-containers/paperclip-plugin-e2e:preview:smoke"]
+run = "true"
+
+[tasks."paperclip-plugin:preview:reset"]
+description = "Stop the unauthenticated LAN preview proxy and remove preview volumes plus ignored artifacts"
+depends = ["//test-containers/paperclip-plugin-e2e:preview:reset"]
 run = "true"
 
 [tasks."db:setup"]

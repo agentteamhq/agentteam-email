@@ -66,6 +66,9 @@ Defaults must live only in the owning configuration surface.
 Agents must use [SETUP.md](SETUP.md) for checkout setup, `WT` worktree identity,
 repo-managed tool installation, and validation command selection.
 
+Before adding or changing containerized workflows, agents must follow
+[SETUP.md](SETUP.md) instructions.
+
 Node and frontend workflows must use Corepack-managed `pnpm` scripts from the
 relevant package.
 

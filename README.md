@@ -21,6 +21,7 @@ operator-owned deployment.
 - App: [app.agentteam.email](https://app.agentteam.email)
 - Docs: [agentteamemail.mintlify.com](https://agentteamemail.mintlify.com)
 - Repository: [github.com/agentteamhq/agentteam-email](https://github.com/agentteamhq/agentteam-email)
+- Agent skill: [skills/at-email-cli/SKILL.md](skills/at-email-cli/SKILL.md)
 
 ## What It Provides
 
@@ -95,6 +96,30 @@ Repo-level tasks are defined in `mise.toml`; package workflows use
 Corepack-managed `pnpm`.
 
 For local worktree setup and container-test isolation, see [SETUP.md](SETUP.md).
+
+## Agent Skill
+
+The at-email CLI skill is published from [skills/at-email-cli](skills/at-email-cli)
+for agent-skill marketplaces and GitHub tap discovery.
+
+Install directly with the skills CLI:
+
+```bash
+npx skills add https://github.com/agentteamhq/agentteam-email/tree/main/skills/at-email-cli
+```
+
+Hermes users can add the repository as a tap or install the skill directly:
+
+```bash
+hermes skills tap add agentteamhq/agentteam-email
+hermes skills install agentteamhq/agentteam-email/skills/at-email-cli
+```
+
+After ClawHub publishes the skill, OpenClaw users can install it with:
+
+```bash
+openclaw skills install @agentteamhq/at-email-cli
+```
 
 ## Contributing
 

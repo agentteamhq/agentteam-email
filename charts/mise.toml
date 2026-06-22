@@ -17,22 +17,12 @@ run = "helm lint agentteam-email -f ../docs/examples/helm/values-basic.yaml"
 description = "Lint the AgentTeam Email Helm chart with the existing Secret example values"
 run = "helm lint agentteam-email -f ../docs/examples/helm/values-existing-secret.yaml"
 
-[tasks."lint:tailscale"]
-description = "Lint the AgentTeam Email Helm chart with the Tailscale example values"
-run = "helm lint agentteam-email -f ../docs/examples/helm/values-tailscale.yaml"
-
-[tasks."lint:cloudflared"]
-description = "Lint the AgentTeam Email Helm chart with the cloudflared example values"
-run = "helm lint agentteam-email -f ../docs/examples/helm/values-cloudflared.yaml"
-
 [tasks.lint]
 description = "Lint the AgentTeam Email example values and verify missing required values fail"
 depends = [
   ":lint:missing-required",
   ":lint:basic",
   ":lint:existing-secret",
-  ":lint:tailscale",
-  ":lint:cloudflared",
 ]
 run = "true"
 
@@ -55,22 +45,12 @@ run = "mkdir -p tmp && helm template atemail agentteam-email --namespace agentte
 description = "Render the AgentTeam Email Helm chart with the existing Secret example values"
 run = "mkdir -p tmp && helm template atemail agentteam-email --namespace agentteam-email -f ../docs/examples/helm/values-existing-secret.yaml > tmp/render-existing-secret.yaml"
 
-[tasks."template:tailscale"]
-description = "Render the AgentTeam Email Helm chart with the Tailscale example values"
-run = "mkdir -p tmp && helm template atemail agentteam-email --namespace agentteam-email -f ../docs/examples/helm/values-tailscale.yaml > tmp/render-tailscale.yaml"
-
-[tasks."template:cloudflared"]
-description = "Render the AgentTeam Email Helm chart with the cloudflared example values"
-run = "mkdir -p tmp && helm template atemail agentteam-email --namespace agentteam-email -f ../docs/examples/helm/values-cloudflared.yaml > tmp/render-cloudflared.yaml"
-
 [tasks.template]
 description = "Render the AgentTeam Email example values and verify missing required values fail"
 depends = [
   ":template:missing-required",
   ":template:basic",
   ":template:existing-secret",
-  ":template:tailscale",
-  ":template:cloudflared",
 ]
 run = "true"
 
@@ -84,23 +64,11 @@ description = "Run Kubernetes client-side dry-run for the existing Secret Helm r
 depends = [":template:existing-secret"]
 run = "kubectl apply --dry-run=client --validate=false -f tmp/render-existing-secret.yaml >/dev/null"
 
-[tasks."dry-run:tailscale"]
-description = "Run Kubernetes client-side dry-run for the Tailscale Helm render"
-depends = [":template:tailscale"]
-run = "kubectl apply --dry-run=client --validate=false -f tmp/render-tailscale.yaml >/dev/null"
-
-[tasks."dry-run:cloudflared"]
-description = "Run Kubernetes client-side dry-run for the cloudflared Helm render"
-depends = [":template:cloudflared"]
-run = "kubectl apply --dry-run=client --validate=false -f tmp/render-cloudflared.yaml >/dev/null"
-
 [tasks."dry-run"]
 description = "Run Kubernetes client-side dry-run for all successful Helm renders"
 depends = [
   ":dry-run:basic",
   ":dry-run:existing-secret",
-  ":dry-run:tailscale",
-  ":dry-run:cloudflared",
 ]
 run = "true"
 

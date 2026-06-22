@@ -13,7 +13,7 @@ Service-specific contracts live close to their owning code:
 ## Public Boundary
 
 AgentTeam Email has one public application boundary: the web server from
-`apps/web-server`.
+`apps/web-server`. Every external request enters through that web server.
 
 The web server owns:
 
@@ -27,6 +27,14 @@ The web server owns:
 Every other runtime service is internal. Browsers, customer integrations, and
 operator workflows must not talk directly to the mail control service, WildDuck,
 Haraka, ZoneMTA, Rspamd, MongoDB, Redis, or internal SMTP listeners.
+
+All public mailbox clients, including the browser UI, CLI clients, public API
+clients, and agent runtime tools, must call the web server. The web server
+authenticates the caller, authorizes the exact organization, mailbox, and
+operation, maps that authority to internal WildDuck or mail-control identities,
+and performs the internal call server-side. Public clients must not receive
+WildDuck admin credentials, WildDuck mailbox tokens, mail-control service
+tokens, or raw internal service URLs.
 
 The mail control service exposes an internal service API for the web server
 and trusted internal controllers. `AGENT_MAIL_CONTROL_API_TOKEN` is an internal
@@ -48,6 +56,45 @@ The web server is the only public place where customer credentials,
 organization identity, public API authorization, and browser sessions are
 accepted. Server-side code may call internal services after authenticating and
 authorizing the public request at the web boundary.
+
+The web application database stores product control state, authorization state,
+integration state, and realized internal identifiers needed to mediate mailbox
+access. It must not store email messages, parsed message bodies, conversation
+threads, or mailbox contents as product state. WildDuck owns mailbox storage
+and message state. Archive storage owns raw boundary copies. The mail-control
+service owns queue, replay, provisioning, provenance, and safe message-view
+state needed by the mail runtime.
+
+Mailbox assignment state belongs at the web boundary. A user, organization,
+agent, or API client may be granted access to an assigned mailbox, but the
+persisted grant must identify the allowed mailbox and internal WildDuck
+identity or credential reference. Requests for any other mailbox must fail at
+the web authorization layer before WildDuck or mail-control calls are made.
+
+## Mailbox API Boundary
+
+WildDuck is the email server. WildDuck owns mailbox users, folders, message
+state, message actions, submission, aliases, forwarding, filters, mailbox-token
+primitives, and mailbox storage. AgentTeam Email must not rebuild email
+management by storing mailbox contents in the web application database.
+
+The web server uses the WildDuck API as its server-side mailbox primitive.
+WildDuck-compatible mailbox routes exposed to public clients are web-server
+routes, not direct WildDuck exposure. Each request must be authenticated by the
+web server and authorized against persisted organization, actor, mailbox, and
+operation permission state before the web server calls WildDuck.
+
+The CLI target is a WildDuck-compatible API surface at the web server. The CLI
+keeps the request shapes it uses for WildDuck mailbox operations, but its base
+URL must point at the web server and its credential must be an AgentTeam Email
+public credential accepted by the web server. The web server must not pass that
+public credential through to WildDuck. It must translate the authorized request
+into an internal WildDuck API call using server-owned configuration.
+
+The web server must not expose a generic open WildDuck proxy. It must expose
+only the mailbox operations AgentTeam Email supports, enforce mailbox
+permissions before every WildDuck call, and route safe message rendering and
+security evidence through the mail-control service APIs server-side.
 
 ## Internal Mail Runtime
 
@@ -90,8 +137,8 @@ The control API owns domain-level mail coordination:
 
 The control API does not own ordinary mailbox primitives. User mailboxes,
 aliases, forwarding targets, filters, and mailbox tokens remain WildDuck mailbox
-primitives used by the web server or another authorized internal
-controller.
+primitives used by the web server or another authorized internal controller.
+Those primitives are never a direct public-client contract.
 
 ## Inbound Mail
 
@@ -117,9 +164,10 @@ scoped credentials.
 
 ## Outbound Mail
 
-User and agent submission enters through WildDuck mailbox submission surfaces
-owned by the authenticated product flow. WildDuck writes user-visible mailbox
-state and queues outbound work through ZoneMTA.
+User and agent submission enters through the authenticated product flow at the
+web server. After authorization, the web server uses WildDuck mailbox submission
+surfaces on behalf of the allowed principal. WildDuck writes user-visible
+mailbox state and queues outbound work through ZoneMTA.
 
 ZoneMTA submits each outbound queue item to the Mail Control Service internal SMTP
 relay. The relay:
@@ -210,11 +258,10 @@ The Helm chart exposes the web service through optional Ingress. The
 control service, mail stack, MongoDB, Redis, and internal SMTP listeners are
 cluster-internal services.
 
-Self-hosted deployments may configure a dedicated fast-path URL for Cloudflare
-Worker notifications. That route is restricted to the signed
-`POST /agent-mail/ingest/v1` notification flow and is not an admin, operator, or
-mail-control API surface. Tailscale Funnel and Cloudflare Tunnel are optional
-self-host ingress mechanisms for that route.
+Self-hosted deployments must configure a public Worker ingest URL for
+Cloudflare Worker notifications. Operator-owned ingress forwards
+`POST /agent-mail/ingest/v1` to the web server. The route accepts only signed
+Worker notifications and is not an admin, operator, or mail-control API surface.
 
 ## Configuration
 
