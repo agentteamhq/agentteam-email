@@ -6,7 +6,7 @@ import type { PublicEnv } from '../types'
 
 const storyDateReference = new Date(0)
 type StoryAuthenticatedUser = NonNullable<SettingsRouteState['user']>
-const storyAuthenticatedUserId = '01974504-a2bb-7a92-a1bb-5f9c0f2d6901' as StoryAuthenticatedUser['id']
+const storyAuthenticatedUserId = 'storybook-user-id' as StoryAuthenticatedUser['id']
 
 export const storyPublicEnv: PublicEnv = {
   NODE_ENV: 'development',
