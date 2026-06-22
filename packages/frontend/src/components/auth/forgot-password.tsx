@@ -8,18 +8,18 @@ import {
 import { type SyntheticEvent, useState } from "react"
 import { toast } from "sonner"
 
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "src/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "src/components/ui/card"
 import {
   Field,
   FieldDescription,
   FieldError,
   FieldGroup
-} from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Spinner } from "@/components/ui/spinner"
-import { cn } from "@/lib/utils"
+} from "src/components/ui/field"
+import { Input } from "src/components/ui/input"
+import { Label } from "src/components/ui/label"
+import { Spinner } from "src/components/ui/spinner"
+import { cn } from "src/lib/utils"
 
 export type ForgotPasswordProps = {
   className?: string
@@ -67,8 +67,8 @@ export function ForgotPassword({ className }: ForgotPasswordProps) {
     })
   }
 
-  const Captcha = plugins.find((plugin) =>
-    Boolean(plugin.captchaComponent)
+  const Captcha = plugins.find(
+    (plugin) => plugin.captchaComponent
   )?.captchaComponent
 
   const [fieldErrors, setFieldErrors] = useState<{
@@ -105,10 +105,14 @@ export function ForgotPassword({ className }: ForgotPasswordProps) {
                 }}
                 onInvalid={(e) => {
                   e.preventDefault()
+                  const el = e.target as HTMLInputElement
+                  const msg = el.validity.valueMissing
+                    ? localization.auth.fieldRequired
+                    : localization.auth.invalidEmail
 
                   setFieldErrors((prev) => ({
                     ...prev,
-                    email: (e.target as HTMLInputElement).validationMessage
+                    email: msg
                   }))
                 }}
                 aria-invalid={!!fieldErrors.email}

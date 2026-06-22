@@ -1,7 +1,7 @@
 "use client"
 
-import { Card, CardContent } from "@/components/ui/card"
-import { Skeleton } from "@/components/ui/skeleton"
+import { Card, CardContent } from "src/components/ui/card"
+import { Skeleton } from "src/components/ui/skeleton"
 
 export function ApiKeySkeleton() {
   return (

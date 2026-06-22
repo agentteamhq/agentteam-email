@@ -1,6 +1,10 @@
 import * as React from 'react'
 import * as SelectPrimitive from '@radix-ui/react-select'
-import { CheckIcon, CaretDownIcon as ChevronDownIcon, CaretUpIcon as ChevronUpIcon } from '@phosphor-icons/react'
+import {
+  CheckIcon,
+  CaretDownIcon as ChevronDownIcon,
+  CaretUpIcon as ChevronUpIcon
+} from '@phosphor-icons/react'
 
 import { cn } from '../../lib/utils'
 

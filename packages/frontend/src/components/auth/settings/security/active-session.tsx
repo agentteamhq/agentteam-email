@@ -1,14 +1,17 @@
-"use client"
-
 import { useAuth, useRevokeSession, useSession } from "@better-auth-ui/react"
 import type { Session } from "better-auth"
 import Bowser from "bowser"
-import { SignOutIcon as LogOut, MonitorIcon as Monitor, DeviceMobileIcon as Smartphone, XIcon as X } from "@phosphor-icons/react"
+import {
+  SignOutIcon as LogOut,
+  MonitorIcon as Monitor,
+  DeviceMobileIcon as Smartphone,
+  XIcon as X
+} from "@phosphor-icons/react"
 import { toast } from "sonner"
 
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Spinner } from "@/components/ui/spinner"
+import { Button } from "src/components/ui/button"
+import { Card, CardContent } from "src/components/ui/card"
+import { Spinner } from "src/components/ui/spinner"
 
 function timeAgo(date: Date) {
   const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
@@ -96,16 +99,13 @@ export function ActiveSession({ activeSession }: ActiveSessionProps) {
           className="ml-auto shrink-0"
           variant="outline"
           size="sm"
-          onClick={() => {
-            if (isCurrentSession) {
-              navigate({
-                to: `${basePaths.auth}/${viewPaths.auth.signOut}`
-              })
-              return
-            }
-
-            revokeSession(activeSession)
-          }}
+          onClick={() =>
+            isCurrentSession
+              ? navigate({
+                  to: `${basePaths.auth}/${viewPaths.auth.signOut}`
+                })
+              : revokeSession(activeSession)
+          }
           disabled={isRevoking}
           aria-label={
             isCurrentSession

@@ -11,20 +11,20 @@ import { useIsMutating } from "@tanstack/react-query"
 import { type SyntheticEvent, useState } from "react"
 import { toast } from "sonner"
 
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "src/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "src/components/ui/card"
 import {
   Field,
   FieldDescription,
   FieldError,
   FieldGroup,
   FieldSeparator
-} from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Spinner } from "@/components/ui/spinner"
-import { magicLinkPlugin } from "@/lib/auth/magic-link-plugin"
-import { cn } from "@/lib/utils"
+} from "src/components/ui/field"
+import { Input } from "src/components/ui/input"
+import { Label } from "src/components/ui/label"
+import { Spinner } from "src/components/ui/spinner"
+import { magicLinkPlugin } from "src/lib/auth/magic-link-plugin"
+import { cn } from "src/lib/utils"
 import { ProviderButtons, type SocialLayout } from "./provider-buttons"
 
 export type MagicLinkProps = {
@@ -104,7 +104,7 @@ export function MagicLink({
               )}
 
               {showSeparator && (
-                <FieldSeparator className="*:data-[slot=field-separator-content]:bg-surface m-0 text-xs flex items-center">
+                <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card m-0 text-xs flex items-center">
                   {localization.auth.or}
                 </FieldSeparator>
               )}
@@ -169,7 +169,7 @@ export function MagicLink({
           {socialPosition === "bottom" && (
             <>
               {showSeparator && (
-                <FieldSeparator className="*:data-[slot=field-separator-content]:bg-surface text-xs flex items-center">
+                <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card text-xs flex items-center">
                   {localization.auth.or}
                 </FieldSeparator>
               )}

@@ -1,19 +1,16 @@
-"use client"
-
 import {
   type ApiKeyAuthClient,
-  type ListedApiKey,
   useAuth,
   useAuthPlugin,
   useListApiKeys
 } from "@better-auth-ui/react"
-import { type ReactNode, useState } from "react"
+import { useState } from "react"
 
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
-import { apiKeyPlugin } from "@/lib/auth/api-key-plugin"
-import { cn } from "@/lib/utils"
+import { Button } from "src/components/ui/button"
+import { Card, CardContent } from "src/components/ui/card"
+import { Separator } from "src/components/ui/separator"
+import { apiKeyPlugin } from "src/lib/auth/api-key-plugin"
+import { cn } from "src/lib/utils"
 import { ApiKey } from "./api-key"
 import { ApiKeySkeleton } from "./api-key-skeleton"
 import { ApiKeysEmpty } from "./api-keys-empty"
@@ -21,9 +18,7 @@ import { CreateApiKeyDialog } from "./create-api-key-dialog"
 
 export type ApiKeysProps = {
   className?: string
-  /** Actions rendered beside the create button. */
-  headerActions?: ReactNode
-  /** Send list and create payloads for a specific organization. */
+  /** Scope the list and create payload to an organization. */
   organizationId?: string
   /** Force the loading skeleton and disable the list query. */
   isPending?: boolean
@@ -35,7 +30,6 @@ export type ApiKeysProps = {
 
 export function ApiKeys({
   className,
-  headerActions,
   organizationId,
   isPending: isPendingProp,
   hideCreate,
@@ -55,7 +49,6 @@ export function ApiKeys({
   )
 
   const isPending = isPendingProp || isListPending
-  const apiKeys = listData?.apiKeys as ListedApiKey[] | undefined
 
   const [createOpen, setCreateOpen] = useState(false)
 
@@ -66,33 +59,29 @@ export function ApiKeys({
           {apiKeyLocalization.apiKeys}
         </h2>
 
-        <div className="flex shrink-0 items-center gap-2">
-          {headerActions}
-
-          {!hideCreate && (
-            <Button
-              className="shrink-0"
-              size="sm"
-              disabled={isPending}
-              onClick={() => { setCreateOpen(true); }}
-            >
-              {apiKeyLocalization.createApiKey}
-            </Button>
-          )}
-        </div>
+        {!hideCreate && (
+          <Button
+            className="shrink-0"
+            size="sm"
+            disabled={isPending}
+            onClick={() => setCreateOpen(true)}
+          >
+            {apiKeyLocalization.createApiKey}
+          </Button>
+        )}
       </div>
 
       <Card className="p-0">
         <CardContent className="p-0">
           {isPending ? (
             <ApiKeySkeleton />
-          ) : !apiKeys?.length ? (
+          ) : !listData?.apiKeys.length ? (
             <ApiKeysEmpty
-              onCreatePress={() => { setCreateOpen(true); }}
+              onCreatePress={() => setCreateOpen(true)}
               hideCreate={hideCreate}
             />
           ) : (
-            apiKeys.map((key: ListedApiKey, index: number) => (
+            listData.apiKeys.map((key, index) => (
               <div key={key.id}>
                 {index > 0 && <Separator />}
 

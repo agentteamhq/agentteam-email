@@ -8,16 +8,16 @@ import {
 import { KeyIcon as Key, XIcon as X } from "@phosphor-icons/react"
 import { useState } from "react"
 
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { apiKeyPlugin } from "@/lib/auth/api-key-plugin"
+import { Button } from "src/components/ui/button"
+import { Card, CardContent } from "src/components/ui/card"
+import { apiKeyPlugin } from "src/lib/auth/api-key-plugin"
 import { DeleteApiKeyDialog } from "./delete-api-key-dialog"
 
 export type ApiKeyProps = {
   apiKey: ListedApiKey
   /** Hide the row's delete button (e.g., when caller lacks `apiKey:delete`). */
   hideDelete?: boolean
-  /** Send the delete payload for a specific organization (sets `configId`). */
+  /** Scope the delete payload to an organization (sets `configId`). */
   organizationId?: string
 }
 
@@ -58,7 +58,7 @@ export function ApiKey({ apiKey, hideDelete, organizationId }: ApiKeyProps) {
               className="ml-auto shrink-0"
               variant="outline"
               size="sm"
-              onClick={() => { setDeleteOpen(true); }}
+              onClick={() => setDeleteOpen(true)}
               aria-label={apiKeyLocalization.deleteApiKey}
             >
               <X />

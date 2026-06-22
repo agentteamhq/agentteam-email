@@ -1,5 +1,6 @@
 import { useRouterState } from '@tanstack/react-router'
 
+import { getWebAppManifestIconUrl } from '../../public-assets'
 import { SITE_STRINGS } from '../../strings'
 import type { PublicEnv } from '../../types'
 
@@ -27,10 +28,7 @@ export function SiteMeta({ publicEnv }: SiteMetaProps) {
   const canonicalUrl = absoluteUrl(publicEnv.PUBLIC_HOSTNAME, pathname)
   const appUrl = absoluteUrl(publicEnv.PUBLIC_HOSTNAME, '/')
   const webApplicationId = absoluteUrl(publicEnv.PUBLIC_HOSTNAME, SITE_STRINGS.WEB_APPLICATION.ID_PATH)
-  const openGraphImageUrl = absoluteUrl(
-    publicEnv.PUBLIC_HOSTNAME,
-    `/web-app-manifest-512x512.png?v=${SITE_STRINGS.ASSET_VERSION}`
-  )
+  const openGraphImageUrl = getWebAppManifestIconUrl(publicEnv.PUBLIC_HOSTNAME, 512)
   const jsonLd = serializeJsonLd({
     '@context': 'https://schema.org',
     '@graph': [

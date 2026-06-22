@@ -1,10 +1,10 @@
-"use client"
+'use client'
 
 import * as React from 'react'
 import * as RechartsPrimitive from 'recharts'
 import type { TooltipValueType } from 'recharts'
 
-import { cn } from '@/lib/utils'
+import { cn } from 'src/lib/utils'
 
 const THEMES = { light: '', dark: '.dark' } as const
 
@@ -59,16 +59,16 @@ function ChartContainer({
         data-slot='chart'
         data-chart={chartId}
         className={cn(
-          `flex aspect-video justify-center text-xs
-          [&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground
+          `[&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground
           [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50
           [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border
-          [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-hidden
           [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border
           [&_.recharts-radial-bar-background-sector]:fill-muted
           [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted
-          [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-sector]:outline-hidden
-          [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-surface]:outline-hidden`,
+          [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border flex aspect-video justify-center text-xs
+          [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-hidden
+          [&_.recharts-sector]:outline-hidden [&_.recharts-sector[stroke='#fff']]:stroke-transparent
+          [&_.recharts-surface]:outline-hidden`,
           className
         )}
         {...props}
@@ -190,7 +190,7 @@ function ChartTooltipContent({
               <div
                 key={index}
                 className={cn(
-                  'flex w-full flex-wrap items-stretch gap-2 [&>svg]:size-2.5 [&>svg]:text-muted-foreground',
+                  '[&>svg]:text-muted-foreground flex w-full flex-wrap items-stretch gap-2 [&>svg]:size-2.5',
                   indicator === 'dot' && 'items-center'
                 )}
               >
@@ -279,7 +279,7 @@ function ChartLegendContent({
           return (
             <div
               key={index}
-              className='flex items-center gap-1.5 [&>svg]:size-3 [&>svg]:text-muted-foreground'
+              className='[&>svg]:text-muted-foreground flex items-center gap-1.5 [&>svg]:size-3'
             >
               {itemConfig?.icon && !hideIcon ? (
                 <itemConfig.icon />
@@ -313,7 +313,11 @@ function getPayloadConfigFromPayload(config: ChartConfig, payload: unknown, key:
 
   if (key in payload && typeof payload[key as keyof typeof payload] === 'string') {
     configLabelKey = payload[key as keyof typeof payload] as string
-  } else if (payloadPayload && key in payloadPayload && typeof payloadPayload[key as keyof typeof payloadPayload] === 'string') {
+  } else if (
+    payloadPayload &&
+    key in payloadPayload &&
+    typeof payloadPayload[key as keyof typeof payloadPayload] === 'string'
+  ) {
     configLabelKey = payloadPayload[key as keyof typeof payloadPayload] as string
   }
 

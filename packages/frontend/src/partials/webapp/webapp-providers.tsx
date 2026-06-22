@@ -1,19 +1,22 @@
-import { type PropsWithChildren, StrictMode } from 'react'
-import type { AuthProviderProps } from '@better-auth-ui/react'
+import { StrictMode } from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
 
 import { Toaster } from '../../components/ui/sonner'
 
 import { BetterAuthUIProvider } from './better-auth-ui-provider'
-import { BetterAuthViewTemplate, type BetterAuthViewTemplateProps } from './better-auth-view-template'
-import type { EnvContextValue } from './env-context'
+import { BetterAuthViewTemplate } from './better-auth-view-template'
 import { EnvProvider } from './env-provider'
 import { ErrorPage } from './error-page'
 import { NotFoundPage } from './not-found-page'
+import type { BetterAuthViewTemplateProps } from './better-auth-view-template'
+import type { EnvContextValue } from './env-context'
+import type { PropsWithChildren } from 'react'
+import type { AuthProviderProps } from '@better-auth-ui/react'
 
 export interface WebappProvidersProps extends EnvContextValue {
   authClient?: AuthProviderProps['authClient']
   redirectTo?: string
+  sessionCleanupEnabled?: boolean
 }
 
 export function WebappProviders(props: PropsWithChildren<WebappProvidersProps>) {
@@ -34,6 +37,7 @@ export function WebappProviders(props: PropsWithChildren<WebappProvidersProps>) 
           <BetterAuthUIProvider
             authClient={props.authClient}
             redirectTo={props.redirectTo}
+            sessionCleanupEnabled={props.sessionCleanupEnabled}
           >
             {props.children}
           </BetterAuthUIProvider>

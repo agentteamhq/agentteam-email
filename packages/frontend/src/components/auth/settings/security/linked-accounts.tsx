@@ -1,11 +1,10 @@
 "use client"
 
 import { useAuth, useListAccounts } from "@better-auth-ui/react"
-import type { Account, SocialProvider } from "better-auth"
-import { Card, CardContent } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
-import { Skeleton } from "@/components/ui/skeleton"
-import { cn } from "@/lib/utils"
+import { Card, CardContent } from "src/components/ui/card"
+import { Separator } from "src/components/ui/separator"
+import { Skeleton } from "src/components/ui/skeleton"
+import { cn } from "src/lib/utils"
 import { LinkedAccount } from "./linked-account"
 
 export type LinkedAccountsProps = {
@@ -22,34 +21,33 @@ export type LinkedAccountsProps = {
  * @returns A JSX element containing the linked accounts card
  */
 export function LinkedAccounts({ className }: LinkedAccountsProps) {
-  const { authClient, localization, socialProviders } = useAuth()
+  const {
+    authClient,
+    localization,
+    multipleAccountsPerProvider,
+    socialProviders
+  } = useAuth()
 
-  const { data: accountsData, isPending } = useListAccounts(authClient)
-  const accounts = accountsData as Account[] | undefined
+  const { data: accounts, isPending } = useListAccounts(authClient)
 
   const linkedAccounts = accounts?.filter(
-    (account: Account) => account.providerId !== "credential"
+    (account) => account.providerId !== "credential"
   )
 
-  const linkedProviderIds = new Set<SocialProvider>(
-    linkedAccounts?.map((a: Account) => a.providerId)
-  )
+  const linkedProviderIds = new Set(linkedAccounts?.map((a) => a.providerId))
 
-  const availableProviders = socialProviders?.filter(
-    (provider: SocialProvider) => !linkedProviderIds.has(provider)
-  )
+  const availableProviders =
+    multipleAccountsPerProvider === false
+      ? socialProviders?.filter((p) => !linkedProviderIds.has(p))
+      : socialProviders
 
-  const allRows: Array<{
-    key: string
-    account?: Account
-    provider: SocialProvider
-  }> = [
-    ...(linkedAccounts?.map((account: Account) => ({
+  const allRows = [
+    ...(linkedAccounts?.map((account) => ({
       key: account.id,
       account,
       provider: account.providerId
     })) ?? []),
-    ...(availableProviders?.map((provider: SocialProvider) => ({
+    ...(availableProviders?.map((provider) => ({
       key: provider,
       account: undefined,
       provider
@@ -65,7 +63,7 @@ export function LinkedAccounts({ className }: LinkedAccountsProps) {
       <Card className={cn("p-0", className)}>
         <CardContent className="p-0">
           {isPending
-            ? socialProviders?.map((provider: SocialProvider, index: number) => (
+            ? socialProviders?.map((provider, index) => (
                 <div key={provider}>
                   {index > 0 && <Separator />}
                   <AccountRowSkeleton />

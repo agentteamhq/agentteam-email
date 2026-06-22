@@ -2,21 +2,24 @@
 
 import { fileToBase64 } from "@better-auth-ui/core"
 import { useAuth, useSession, useUpdateUser } from "@better-auth-ui/react"
-import { TrashIcon as Trash2, UploadIcon as Upload } from "@phosphor-icons/react"
-import type { User } from "better-auth"
+import {
+  TrashIcon as Trash2,
+  UploadIcon as Upload
+} from "@phosphor-icons/react"
 import { type ChangeEvent, useRef, useState } from "react"
 import { toast } from "sonner"
-import { UserAvatar } from "@/components/auth/user/user-avatar"
-import { Button } from "@/components/ui/button"
+import { UserAvatar } from "src/components/auth/user/user-avatar"
+import { Button, buttonVariants } from "src/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger
-} from "@/components/ui/dropdown-menu"
-import { Field } from "@/components/ui/field"
-import { Label } from "@/components/ui/label"
-import { Spinner } from "@/components/ui/spinner"
+} from "src/components/ui/dropdown-menu"
+import { Field } from "src/components/ui/field"
+import { Label } from "src/components/ui/label"
+import { Spinner } from "src/components/ui/spinner"
+import { cn } from "src/lib/utils"
 
 export type ChangeAvatarProps = {
   className?: string
@@ -37,9 +40,7 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
 
   async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
-    if (!file) {
-      return
-    }
+    if (!file) return
 
     e.target.value = ""
 
@@ -68,23 +69,20 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
     setIsUploading(false)
   }
 
-  function handleDelete() {
-    const sessionUser = session?.user as User | undefined
-    const currentImage = sessionUser?.image ?? undefined
+  async function handleDelete() {
+    const currentImage = session?.user.image
 
     updateUser(
       { image: null },
       {
-        onSuccess: () => {
+        onSuccess: async () => {
           if (currentImage) {
             setIsDeleting(true)
-            Promise.resolve(avatar.delete?.(currentImage))
-              .catch((error: unknown) => {
-                toast.error(error instanceof Error ? error.message : String(error))
-              })
-              .finally(() => {
-                setIsDeleting(false)
-              })
+            try {
+              await avatar.delete?.(currentImage)
+            } finally {
+              setIsDeleting(false)
+            }
           }
 
           toast.success(localization.settings.avatarDeletedSuccess)
@@ -102,11 +100,7 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
         type="file"
         accept="image/*"
         className="hidden"
-        onChange={(event) => {
-          handleFileChange(event).catch((error: unknown) => {
-            toast.error(error instanceof Error ? error.message : String(error))
-          })
-        }}
+        onChange={handleFileChange}
       />
 
       <div className="flex items-center gap-4">
@@ -121,16 +115,13 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
         </Button>
 
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={!session || isPending}
-            >
-              {isPending && <Spinner />}
+          <DropdownMenuTrigger
+            className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}
+            disabled={!session || isPending}
+          >
+            {isPending && <Spinner />}
 
-              {localization.settings.changeAvatar}
-            </Button>
+            {localization.settings.changeAvatar}
           </DropdownMenuTrigger>
 
           <DropdownMenuContent className="min-w-fit">
@@ -143,9 +134,7 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
             <DropdownMenuItem
               variant="destructive"
               disabled={!session?.user.image}
-              onClick={() => {
-                handleDelete()
-              }}
+              onClick={handleDelete}
             >
               <Trash2 />
 

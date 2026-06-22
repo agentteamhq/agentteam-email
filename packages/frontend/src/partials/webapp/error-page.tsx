@@ -3,6 +3,7 @@
 
 import { useSyncExternalStore } from 'react'
 import { WarningCircleIcon as AlertCircle } from '@phosphor-icons/react'
+import { useLocation } from '@tanstack/react-router'
 
 import { Link } from '../../components/link'
 import { Button } from '../../components/ui/button'
@@ -20,11 +21,9 @@ const emptySubscribe = () => () => {}
 
 const getSnapshotUserAgent = () => globalThis.window?.navigator?.userAgent ?? 'unknown'
 
-const getSnapshotCurrentURL = () => globalThis.window?.location?.href ?? 'unknown'
 const getServerSnapshot = () => 'unknown'
 
 const useUserAgent = () => useSyncExternalStore(emptySubscribe, getSnapshotUserAgent, getServerSnapshot)
-const useCurrentURL = () => useSyncExternalStore(emptySubscribe, getSnapshotCurrentURL, getServerSnapshot)
 
 interface ErrorPageProps {
   title?: string
@@ -60,7 +59,7 @@ export function ErrorPage({
   }
 
   const userAgent = useUserAgent()
-  const currentURL = useCurrentURL()
+  const currentURL = useLocation({ select: (location) => location.href })
 
   // Log the error details to ensure they are captured in production.
   // eslint-disable-next-line no-console

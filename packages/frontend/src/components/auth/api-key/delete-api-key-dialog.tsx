@@ -1,5 +1,3 @@
-"use client"
-
 import {
   type ApiKeyAuthClient,
   type ListedApiKey,
@@ -18,19 +16,19 @@ import {
   AlertDialogHeader,
   AlertDialogMedia,
   AlertDialogTitle
-} from "@/components/ui/alert-dialog"
-import { Button } from "@/components/ui/button"
-import { Field } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Spinner } from "@/components/ui/spinner"
-import { apiKeyPlugin } from "@/lib/auth/api-key-plugin"
+} from "src/components/ui/alert-dialog"
+import { Button } from "src/components/ui/button"
+import { Field } from "src/components/ui/field"
+import { Input } from "src/components/ui/input"
+import { Label } from "src/components/ui/label"
+import { Spinner } from "src/components/ui/spinner"
+import { apiKeyPlugin } from "src/lib/auth/api-key-plugin"
 
 export type DeleteApiKeyDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   apiKey: ListedApiKey
-  /** Send the delete payload for a specific organization (sets `configId`). */
+  /** Scope the delete payload to an organization (sets `configId`). */
   organizationId?: string
 }
 
@@ -47,7 +45,7 @@ export function DeleteApiKeyDialog({
   const { mutate: deleteApiKey, isPending: isDeleting } = useDeleteApiKey(
     authClient as ApiKeyAuthClient,
     {
-      onSuccess: () => { onOpenChange(false); }
+      onSuccess: () => onOpenChange(false)
     }
   )
 
@@ -90,10 +88,10 @@ export function DeleteApiKeyDialog({
             variant="destructive"
             disabled={isDeleting}
             onClick={() =>
-              { deleteApiKey({
+              deleteApiKey({
                 keyId: apiKey.id,
                 ...(organizationId ? { configId: "organization" } : {})
-              }); }
+              })
             }
           >
             {isDeleting && <Spinner />}

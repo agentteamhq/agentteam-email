@@ -1,13 +1,11 @@
-// import type { GlobalAuth } from '@main/backend'
 import { apiKeyClient } from '@better-auth/api-key/client'
 import { oauthProviderClient } from '@better-auth/oauth-provider/client'
 import {
   adminClient,
-  // customSessionClient,
   jwtClient,
+  lastLoginMethodClient,
   magicLinkClient,
-  organizationClient,
-  lastLoginMethodClient
+  organizationClient
 } from 'better-auth/client/plugins'
 import { createAuthClient } from 'better-auth/react'
 
@@ -33,7 +31,6 @@ const authReactClientOptions = {
     oauthProviderClient(),
     jwtClient(),
     lastLoginMethodClient()
-    // customSessionClient<GlobalAuth>()
   ]
 }
 

@@ -1,7 +1,7 @@
-import type { AuthProviderProps } from '@better-auth-ui/react'
 import { useSession } from '@better-auth-ui/react'
+import { useLocation, useRouter } from '@tanstack/react-router'
 import debug from 'debug'
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 
 import { AuthProvider } from '../../components/auth/auth-provider'
 import { deleteUserPlugin } from '../../lib/auth/delete-user-plugin'
@@ -11,13 +11,27 @@ import { clearPersistedStore } from '../../store/use-store'
 
 import { Link } from '../../components/link'
 import { useEnvContext } from './env-context'
+import type { ReactNode } from 'react'
+import type { AuthProviderProps } from '@better-auth-ui/react'
 
 const log = debug('app:auth-setup')
+
+function resolveNavigationHref(to: string, baseURL: string) {
+  const publicURL = new URL(baseURL)
+  const targetURL = new URL(to, publicURL)
+
+  if (targetURL.origin === publicURL.origin) {
+    return `${targetURL.pathname}${targetURL.search}${targetURL.hash}`
+  }
+
+  return targetURL.toString()
+}
 
 export interface BetterAuthUIProviderProps {
   authClient?: AuthProviderProps['authClient']
   children: ReactNode
   redirectTo?: string
+  sessionCleanupEnabled?: boolean
 }
 
 function AuthSessionCleanup({ authClient }: { authClient: AuthProviderProps['authClient'] }) {
@@ -43,46 +57,52 @@ function AuthSessionCleanup({ authClient }: { authClient: AuthProviderProps['aut
 export function BetterAuthUIProvider({
   authClient = authReactClient,
   children,
-  redirectTo = '/dashboard/'
+  redirectTo = '/dashboard/',
+  sessionCleanupEnabled = true
 }: BetterAuthUIProviderProps) {
   const { publicEnv } = useEnvContext()
+  const currentPath = useLocation({ select: (location) => location.pathname })
+  const router = useRouter()
 
-  const navigate: AuthProviderProps['navigate'] = ({ to, replace }) => {
-    if (typeof globalThis.window === 'undefined') {
-      log('navigate called during SSR, ignoring', { to, replace })
-      return
-    }
+  const navigateToHref = useCallback(
+    (href: string, replace?: boolean) => {
+      router.navigate({ href, replace }).catch((error: unknown) => {
+        log('navigation failed', error)
+      })
+    },
+    [router]
+  )
 
-    const currentPath = globalThis.window.location.pathname
-    const targetUrl = new URL(to, globalThis.window.location.origin)
-    const targetPath = targetUrl.pathname
+  const navigate: AuthProviderProps['navigate'] = useCallback(
+    ({ to, replace }) => {
+      const targetUrl = new URL(to, publicEnv.PUBLIC_HOSTNAME)
+      const targetHref = resolveNavigationHref(to, publicEnv.PUBLIC_HOSTNAME)
+      const targetPath = targetUrl.pathname
 
-    log('current path', currentPath, targetPath)
+      log('current path', currentPath, targetPath)
 
-    if (currentPath.startsWith('/forgot-password') && targetPath.startsWith('/signin')) {
-      log('intercepting forgot-password -> signin, redirecting to recovery-email')
-      globalThis.window.location.assign('/recovery-email-sent/')
-      return
-    }
+      if (currentPath.startsWith('/forgot-password') && targetPath.startsWith('/signin')) {
+        log('intercepting forgot-password -> signin, redirecting to recovery-email')
+        navigateToHref('/recovery-email-sent/', true)
+        return
+      }
 
-    if (currentPath.startsWith('/reset-password') && targetPath.startsWith('/signin')) {
-      log('intercepting reset-password -> signin, adding reset_success param')
-      targetUrl.searchParams.set('reset_success', '1')
-      globalThis.window.location.assign(targetUrl.toString())
-      return
-    }
+      if (currentPath.startsWith('/reset-password') && targetPath.startsWith('/signin')) {
+        log('intercepting reset-password -> signin, adding reset_success param')
+        targetUrl.searchParams.set('reset_success', '1')
+        navigateToHref(resolveNavigationHref(targetUrl.toString(), publicEnv.PUBLIC_HOSTNAME), true)
+        return
+      }
 
-    if (currentPath.startsWith('/signup') && targetPath.startsWith('/signin')) {
-      globalThis.window.location.assign('/verification-email-sent/')
-      return
-    }
+      if (currentPath.startsWith('/signup') && targetPath.startsWith('/signin')) {
+        navigateToHref('/verification-email-sent/', true)
+        return
+      }
 
-    if (replace) {
-      globalThis.window.location.replace(to)
-    } else {
-      globalThis.window.location.assign(to)
-    }
-  }
+      navigateToHref(targetHref, replace)
+    },
+    [currentPath, navigateToHref, publicEnv.PUBLIC_HOSTNAME]
+  )
 
   return (
     <AuthProvider
@@ -128,7 +148,7 @@ export function BetterAuthUIProvider({
         resize: async (file) => file
       }}
     >
-      <AuthSessionCleanup authClient={authClient} />
+      {sessionCleanupEnabled ? <AuthSessionCleanup authClient={authClient} /> : null}
       {children}
     </AuthProvider>
   )

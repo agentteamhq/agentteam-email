@@ -1,7 +1,8 @@
-import { createContext, type FC, type PropsWithChildren, useContext, useMemo } from 'react'
+import { createContext, useContext, useMemo } from 'react'
+import { EnvContext } from './env-context'
+import type { FC, PropsWithChildren } from 'react'
+import type { EnvContextValue } from './env-context'
 import type { PUBLIC_VARS } from '@main/backend/vars.public'
-
-import { EnvContext, type EnvContextValue } from './env-context'
 
 // Provide the context value to the subtree
 export const EnvProvider: FC<PropsWithChildren<EnvContextValue>> = ({ publicEnv, flash, children }) => {

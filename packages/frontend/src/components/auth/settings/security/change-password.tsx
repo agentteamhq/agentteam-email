@@ -1,31 +1,29 @@
-"use client"
-
 import {
   useAuth,
   useChangePassword,
+  useFetchOptions,
   useListAccounts,
   useRequestPasswordReset,
   useSession
 } from "@better-auth-ui/react"
 import { EyeIcon as Eye, EyeSlashIcon as EyeOff } from "@phosphor-icons/react"
-import type { Account } from "better-auth"
 import { type SyntheticEvent, useState } from "react"
 import { toast } from "sonner"
 
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardFooter } from "@/components/ui/card"
-import { Field, FieldError } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
+import { Button } from "src/components/ui/button"
+import { Card, CardContent, CardFooter } from "src/components/ui/card"
+import { Field, FieldError } from "src/components/ui/field"
+import { Input } from "src/components/ui/input"
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
   InputGroupInput
-} from "@/components/ui/input-group"
-import { Label } from "@/components/ui/label"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Spinner } from "@/components/ui/spinner"
-import { cn } from "@/lib/utils"
+} from "src/components/ui/input-group"
+import { Label } from "src/components/ui/label"
+import { Skeleton } from "src/components/ui/skeleton"
+import { Spinner } from "src/components/ui/spinner"
+import { cn } from "src/lib/utils"
 
 export type ChangePasswordProps = {
   className?: string
@@ -43,12 +41,11 @@ export type ChangePasswordProps = {
 export function ChangePassword({ className }: ChangePasswordProps) {
   const { authClient, emailAndPassword, localization } = useAuth()
   const { data: session } = useSession(authClient)
-  const { data: accountsData, isPending: isAccountsPending } =
+  const { data: accounts, isPending: isAccountsPending } =
     useListAccounts(authClient)
-  const accounts = accountsData as Account[] | undefined
 
   const hasCredentialAccount = accounts?.some(
-    (account: Account) => account.providerId === "credential"
+    (account) => account.providerId === "credential"
   )
 
   if (!isAccountsPending && !hasCredentialAccount) {
@@ -66,20 +63,28 @@ export function ChangePassword({ className }: ChangePasswordProps) {
 }
 
 function SetPassword({ className }: { className?: string }) {
-  const { authClient, localization } = useAuth()
+  const { authClient, localization, plugins } = useAuth()
   const { data: session } = useSession(authClient)
+  const { fetchOptions, resetFetchOptions } = useFetchOptions()
 
   const { mutate: requestPasswordReset, isPending } = useRequestPasswordReset(
     authClient,
     {
+      onError: () => {
+        resetFetchOptions()
+      },
       onSuccess: () => toast.success(localization.auth.passwordResetEmailSent)
     }
   )
 
-  const handleSetPassword = () => {
-    if (!session) {return}
+  const Captcha = plugins.find(
+    (plugin) => plugin.captchaComponent
+  )?.captchaComponent
 
-    requestPasswordReset({ email: session.user.email })
+  const handleSetPassword = () => {
+    if (!session) return
+
+    requestPasswordReset({ email: session.user.email, fetchOptions })
   }
 
   return (
@@ -100,15 +105,19 @@ function SetPassword({ className }: { className?: string }) {
             </p>
           </div>
 
-          <Button
-            size="sm"
-            disabled={isPending || !session}
-            onClick={handleSetPassword}
-          >
-            {isPending && <Spinner />}
+          <div className="flex flex-col gap-3 items-start sm:items-end">
+            {Captcha && <div>{Captcha}</div>}
 
-            {localization.auth.sendResetLink}
-          </Button>
+            <Button
+              size="sm"
+              disabled={isPending || !session?.user.email}
+              onClick={handleSetPassword}
+            >
+              {isPending && <Spinner />}
+
+              {localization.auth.sendResetLink}
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -271,7 +280,7 @@ function ChangePasswordForm({
                           : localization.auth.showPassword
                       }
                       onClick={() =>
-                        { setIsNewPasswordVisible(!isNewPasswordVisible); }
+                        setIsNewPasswordVisible(!isNewPasswordVisible)
                       }
                       disabled={isPending}
                     >
@@ -336,7 +345,7 @@ function ChangePasswordForm({
                             : localization.auth.showPassword
                         }
                         onClick={() =>
-                          { setIsConfirmPasswordVisible(!isConfirmPasswordVisible); }
+                          setIsConfirmPasswordVisible(!isConfirmPasswordVisible)
                         }
                         disabled={isPending}
                       >

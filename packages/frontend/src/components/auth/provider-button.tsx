@@ -1,35 +1,16 @@
-"use client"
-
 import { authMutationKeys, getProviderName } from "@better-auth-ui/core"
 import { providerIcons, useAuth, useSignInSocial } from "@better-auth-ui/react"
 import { useIsMutating } from "@tanstack/react-query"
 import type { SocialProvider } from "better-auth/social-providers"
 import type { ComponentProps } from "react"
 
-import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
-import { cn } from "@/lib/utils"
+import { Button } from "src/components/ui/button"
+import { Spinner } from "src/components/ui/spinner"
 
 export type ProviderButtonProps = {
   provider: SocialProvider
   display?: "full" | "name" | "icon"
 } & Omit<ComponentProps<typeof Button>, "onClick" | "children" | "disabled">
-
-const providerAnchorClasses = {
-  google: "anchor-[--login-google]",
-  linkedin: "anchor-[--login-linkedin]"
-} satisfies Partial<Record<SocialProvider, string>>
-
-function providerAnchorClass(provider: SocialProvider) {
-  switch (provider) {
-    case "google":
-      return providerAnchorClasses.google
-    case "linkedin":
-      return providerAnchorClasses.linkedin
-    default:
-      return undefined
-  }
-}
 
 /**
  * Social provider sign-in button.
@@ -65,12 +46,15 @@ export function ProviderButton({
       type="button"
       variant={variant}
       disabled={isPending}
-      onClick={() => { signInSocial({ provider, callbackURL }); }}
+      onClick={() => signInSocial({ provider, callbackURL })}
       {...props}
-      className={cn(providerAnchorClass(provider), props.className)}
       aria-label={getProviderName(provider)}
     >
-      {signInSocialPending ? <Spinner /> : <ProviderIcon />}
+      {signInSocialPending ? (
+        <Spinner />
+      ) : ProviderIcon ? (
+        <ProviderIcon />
+      ) : null}
 
       {display === "full"
         ? localization.auth.continueWith.replace(

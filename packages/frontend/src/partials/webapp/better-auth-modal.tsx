@@ -9,11 +9,7 @@ interface BetterAuthModalProps {
   view?: 'signIn' | 'signUp'
 }
 
-export function BetterAuthModal({
-  open,
-  onOpenChange,
-  view = 'signUp'
-}: BetterAuthModalProps) {
+export function BetterAuthModal({ open, onOpenChange, view = 'signUp' }: BetterAuthModalProps) {
   return (
     <Dialog
       open={open}

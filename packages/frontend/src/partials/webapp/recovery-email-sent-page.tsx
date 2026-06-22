@@ -8,8 +8,10 @@ export interface RecoveryEmailSentPageProps {
 
 export function RecoveryEmailSentPage(props: RecoveryEmailSentPageProps) {
   return (
-    <div className='relative flex h-auto min-h-[70svh] items-center justify-center overflow-x-hidden'>
-      <Card className='z-1 w-full border shadow-md sm:max-w-md'>
+    <div
+      className='relative flex min-h-[70svh] w-full items-center justify-center overflow-x-hidden px-4 py-10'
+    >
+      <Card className='z-1 w-full max-w-md border shadow-md'>
         <CardHeader className='gap-6'>
           {props.logoimage}
 

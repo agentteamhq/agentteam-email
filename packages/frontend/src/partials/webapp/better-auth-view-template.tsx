@@ -1,19 +1,15 @@
 'use client'
 
-import type { AuthView } from '@better-auth-ui/core'
 import { KeyIcon } from '@phosphor-icons/react'
-import { useEffect, type ReactNode } from 'react'
+import { useEffect } from 'react'
 import { toast } from 'sonner'
 
 import { Auth } from '../../components/auth/auth'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle
-} from '../../components/ui/card'
-import { cn, tw, type TailwindClass } from '../../lib/utils'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
+import { cn, tw } from '../../lib/utils'
+import type { ReactNode } from 'react'
+import type { TailwindClass } from '../../lib/utils'
+import type { AuthView } from '@better-auth-ui/core'
 
 export type BetterAuthRouteView =
   | AuthView
@@ -21,21 +17,17 @@ export type BetterAuthRouteView =
   | 'callback'
   | 'acceptInvitation'
   | 'recoverAccount'
-  | 'emailVerification'
   | 'emailOtp'
   | 'twoFactor'
 
-export type BetterAuthLastUsedLoginMethod =
-  | 'email'
-  | 'magic-link'
-  | 'google'
-  | 'linkedin'
+export type BetterAuthLastUsedLoginMethod = 'email' | 'magic-link' | 'google' | 'linkedin'
 
 export interface BetterAuthViewTemplateProps {
   view: BetterAuthRouteView
   redirectTo?: string
   flash?: string | null
   lastUsedLoginMethod?: BetterAuthLastUsedLoginMethod | null
+  resetPasswordToken?: string
 }
 
 export interface BetterAuthViewFrameProps {
@@ -90,7 +82,7 @@ const authConfig = {
     title: 'Accept invitation',
     subtitle: 'Sign in to accept the organization invitation.'
   },
-  emailVerification: {
+  verifyEmail: {
     title: 'Verify your email',
     subtitle: 'Please check your inbox for a verification link.'
   },
@@ -102,16 +94,25 @@ const authConfig = {
     title: 'Two-factor authentication',
     subtitle: 'Enter the code from your authenticator app.'
   }
-} satisfies Record<BetterAuthViewTemplateProps['view'], AuthPathConfig>
+} satisfies Record<BetterAuthRouteView, AuthPathConfig>
 
-const supportedAuthViews = new Set<BetterAuthRouteView>([
+const supportedAuthViewValues = [
   'signIn',
   'signUp',
   'signOut',
   'forgotPassword',
   'resetPassword',
+  'verifyEmail',
   'magicLink'
-])
+] as const satisfies readonly AuthView[]
+
+type SupportedAuthView = (typeof supportedAuthViewValues)[number]
+
+const supportedAuthViews = new Set<string>(supportedAuthViewValues)
+
+function isSupportedAuthView(view: BetterAuthRouteView): view is SupportedAuthView {
+  return supportedAuthViews.has(view)
+}
 
 const lastUsedAnchors = {
   email: tw('anchor-to-[--login-email]'),
@@ -157,7 +158,7 @@ export function BetterAuthViewTemplate({
       view={view}
       lastUsedLoginMethod={lastUsedLoginMethod}
     >
-      {supportedAuthViews.has(view) ? (
+      {isSupportedAuthView(view) ? (
         <Auth
           socialLayout={view === 'signIn' || view === 'signUp' ? 'vertical' : 'auto'}
           view={view}
@@ -173,11 +174,7 @@ export function BetterAuthViewTemplate({
   )
 }
 
-export function BetterAuthViewFrame({
-  children,
-  view,
-  lastUsedLoginMethod
-}: BetterAuthViewFrameProps) {
+export function BetterAuthViewFrame({ children, view, lastUsedLoginMethod }: BetterAuthViewFrameProps) {
   const lastMethodClass = getLastMethodClass(view, lastUsedLoginMethod)
 
   return (

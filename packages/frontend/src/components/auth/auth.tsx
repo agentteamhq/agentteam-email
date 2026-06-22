@@ -1,5 +1,3 @@
-"use client"
-
 import type { AuthView } from "@better-auth-ui/core"
 import { useAuth } from "@better-auth-ui/react"
 import { type ComponentType, useEffect } from "react"
@@ -10,14 +8,15 @@ import { ResetPassword } from "./reset-password"
 import { SignIn } from "./sign-in"
 import { SignOut } from "./sign-out"
 import { SignUp } from "./sign-up"
+import { VerifyEmail } from "./verify-email"
 
 export type AuthProps = {
   className?: string
   path?: string
   socialLayout?: SocialLayout
   socialPosition?: "top" | "bottom"
-  /** Plugin auth views may use string keys beyond built-in `AuthView` keys. */
-  view?: string
+  /** @remarks `AuthView` */
+  view?: AuthView
 }
 
 /**
@@ -32,7 +31,8 @@ const AUTH_VIEWS: Partial<Record<AuthView, ComponentType<AuthProps>>> = {
   signOut: SignOut,
   signUp: SignUp,
   forgotPassword: ForgotPassword,
-  resetPassword: ResetPassword
+  resetPassword: ResetPassword,
+  verifyEmail: VerifyEmail
 }
 
 /**
@@ -105,10 +105,10 @@ export function Auth({
         Object.keys(pluginAuthPaths).find(
           (key) => pluginAuthPaths[key] === path
         ))
-    if (!pluginView) {continue}
+    if (!pluginView) continue
 
     const PluginView = plugin.views?.auth?.[pluginView]
-    if (!PluginView) {continue}
+    if (!PluginView) continue
 
     return (
       <PluginView
@@ -138,7 +138,7 @@ export function Auth({
     }
   }
 
-  const AuthView = authView ? AUTH_VIEWS[authView as AuthView] : undefined
+  const AuthView = authView ? AUTH_VIEWS[authView] : undefined
 
   if (!AuthView) {
     throw new Error(

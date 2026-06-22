@@ -1,10 +1,11 @@
-import { type PropsWithChildren, StrictMode } from 'react'
+import { StrictMode } from 'react'
 import { ThemeProvider } from 'next-themes'
 import { ErrorBoundary } from 'react-error-boundary'
 
-import type { EnvContextValue } from './env-context'
 import { EnvProvider } from './env-provider'
 import { ErrorPage } from './error-page'
+import type { PropsWithChildren } from 'react'
+import type { EnvContextValue } from './env-context'
 
 export interface IslandProvidersProps extends EnvContextValue {}
 

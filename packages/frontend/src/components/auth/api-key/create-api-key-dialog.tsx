@@ -1,5 +1,3 @@
-"use client"
-
 import {
   type ApiKeyAuthClient,
   useAuth,
@@ -18,13 +16,13 @@ import {
   AlertDialogHeader,
   AlertDialogMedia,
   AlertDialogTitle
-} from "@/components/ui/alert-dialog"
-import { Button } from "@/components/ui/button"
-import { Field, FieldError } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Spinner } from "@/components/ui/spinner"
-import { apiKeyPlugin } from "@/lib/auth/api-key-plugin"
+} from "src/components/ui/alert-dialog"
+import { Button } from "src/components/ui/button"
+import { Field, FieldError } from "src/components/ui/field"
+import { Input } from "src/components/ui/input"
+import { Label } from "src/components/ui/label"
+import { Spinner } from "src/components/ui/spinner"
+import { apiKeyPlugin } from "src/lib/auth/api-key-plugin"
 import { NewApiKeyDialog } from "./new-api-key-dialog"
 
 export type CreateApiKeyDialogProps = {

@@ -1,27 +1,25 @@
-"use client"
-
 import { useAuth, useResetPassword } from "@better-auth-ui/react"
 import { EyeIcon as Eye, EyeSlashIcon as EyeOff } from "@phosphor-icons/react"
 import { type SyntheticEvent, useEffect, useState } from "react"
 import { toast } from "sonner"
 
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "src/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "src/components/ui/card"
 import {
   Field,
   FieldDescription,
   FieldError,
   FieldGroup
-} from "@/components/ui/field"
+} from "src/components/ui/field"
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
   InputGroupInput
-} from "@/components/ui/input-group"
-import { Label } from "@/components/ui/label"
-import { Spinner } from "@/components/ui/spinner"
-import { cn } from "@/lib/utils"
+} from "src/components/ui/input-group"
+import { Label } from "src/components/ui/label"
+import { Spinner } from "src/components/ui/spinner"
+import { cn } from "src/lib/utils"
 
 export type ResetPasswordProps = {
   className?: string
@@ -62,8 +60,8 @@ export function ResetPassword({ className }: ResetPasswordProps) {
   }>({})
 
   useEffect(() => {
-    const searchParams = new URLSearchParams(globalThis.window.location.search)
-    const token = searchParams.get("token")
+    const searchParams = new URLSearchParams(window.location.search)
+    const token = searchParams.get("token") as string
 
     if (!token) {
       toast.error(localization.auth.invalidResetPasswordToken)
@@ -79,8 +77,8 @@ export function ResetPassword({ className }: ResetPasswordProps) {
   function handleSubmit(e: SyntheticEvent<HTMLFormElement>) {
     e.preventDefault()
 
-    const searchParams = new URLSearchParams(globalThis.window.location.search)
-    const token = searchParams.get("token")
+    const searchParams = new URLSearchParams(window.location.search)
+    const token = searchParams.get("token") as string
 
     if (!token) {
       toast.error(localization.auth.invalidResetPasswordToken)
@@ -133,10 +131,24 @@ export function ResetPassword({ className }: ResetPasswordProps) {
                   }}
                   onInvalid={(e) => {
                     e.preventDefault()
+                    const el = e.target as HTMLInputElement
+                    const min = emailAndPassword?.minPasswordLength
+                    const max = emailAndPassword?.maxPasswordLength
+                    const msg = el.validity.valueMissing
+                      ? localization.auth.fieldRequired
+                      : el.validity.tooShort
+                        ? localization.auth.tooShort.replace(
+                            "{{min}}",
+                            String(min)
+                          )
+                        : localization.auth.tooLong.replace(
+                            "{{max}}",
+                            String(max)
+                          )
 
                     setFieldErrors((prev) => ({
                       ...prev,
-                      password: (e.target as HTMLInputElement).validationMessage
+                      password: msg
                     }))
                   }}
                   aria-invalid={!!fieldErrors.password}
@@ -191,11 +203,24 @@ export function ResetPassword({ className }: ResetPasswordProps) {
                     }}
                     onInvalid={(e) => {
                       e.preventDefault()
+                      const el = e.target as HTMLInputElement
+                      const min = emailAndPassword?.minPasswordLength
+                      const max = emailAndPassword?.maxPasswordLength
+                      const msg = el.validity.valueMissing
+                        ? localization.auth.fieldRequired
+                        : el.validity.tooShort
+                          ? localization.auth.tooShort.replace(
+                              "{{min}}",
+                              String(min)
+                            )
+                          : localization.auth.tooLong.replace(
+                              "{{max}}",
+                              String(max)
+                            )
 
                       setFieldErrors((prev) => ({
                         ...prev,
-                        confirmPassword: (e.target as HTMLInputElement)
-                          .validationMessage
+                        confirmPassword: msg
                       }))
                     }}
                     aria-invalid={!!fieldErrors.confirmPassword}

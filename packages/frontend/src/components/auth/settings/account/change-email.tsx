@@ -1,17 +1,15 @@
-"use client"
-
 import { useAuth, useChangeEmail, useSession } from "@better-auth-ui/react"
 import { type SyntheticEvent, useState } from "react"
 import { toast } from "sonner"
 
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardFooter } from "@/components/ui/card"
-import { Field, FieldError } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Spinner } from "@/components/ui/spinner"
-import { cn } from "@/lib/utils"
+import { Button } from "src/components/ui/button"
+import { Card, CardContent, CardFooter } from "src/components/ui/card"
+import { Field, FieldError } from "src/components/ui/field"
+import { Input } from "src/components/ui/input"
+import { Label } from "src/components/ui/label"
+import { Skeleton } from "src/components/ui/skeleton"
+import { Spinner } from "src/components/ui/spinner"
+import { cn } from "src/lib/utils"
 
 export type ChangeEmailProps = {
   className?: string

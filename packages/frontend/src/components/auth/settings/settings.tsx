@@ -1,12 +1,10 @@
-"use client"
-
 import type { SettingsView } from "@better-auth-ui/core"
 import { useAuth, useAuthenticate } from "@better-auth-ui/react"
 import { ShieldIcon as Shield, UserIcon as User2 } from "@phosphor-icons/react"
-import { type ComponentType, type ReactNode, useMemo } from "react"
+import { useMemo } from "react"
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { cn } from "@/lib/utils"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "src/components/ui/tabs"
+import { cn } from "src/lib/utils"
 import { AccountSettings } from "./account/account-settings"
 import { SecuritySettings } from "./security/security-settings"
 
@@ -16,42 +14,6 @@ export type SettingsProps = {
   /** @remarks `SettingsView` */
   view?: SettingsView
   hideNav?: boolean
-}
-
-type PluginSettingsTab = {
-  component: ComponentType
-  label: ReactNode
-  view: string
-}
-
-function isPluginSettingsTab(tab: unknown): tab is PluginSettingsTab {
-  const candidate = tab as {
-    component?: unknown
-    label?: unknown
-    view?: unknown
-  }
-
-  return (
-    typeof candidate.view === "string" &&
-    (typeof candidate.component === "function" ||
-      (typeof candidate.component === "object" && candidate.component !== null))
-  )
-}
-
-function pluginSettingsTabs(plugin: unknown) {
-  const settingsTabs = (plugin as { settingsTabs?: unknown }).settingsTabs
-
-  return Array.isArray(settingsTabs) ? settingsTabs.filter(isPluginSettingsTab) : []
-}
-
-function settingsPathEntries(source: unknown): [string, string][] {
-  if (typeof source !== "object" || source === null) {
-    return []
-  }
-
-  return Object.entries(source).filter(
-    (entry): entry is [string, string] => typeof entry[1] === "string"
-  )
 }
 
 /**
@@ -64,7 +26,7 @@ function settingsPathEntries(source: unknown): [string, string][] {
  * @returns A JSX element rendering the settings layout and the selected settings panel
  */
 export function Settings({ className, view, path, hideNav }: SettingsProps) {
-  const { authClient, basePaths, localization, viewPaths, plugins, Link } =
+  const { authClient, basePaths, localization, viewPaths, plugins, navigate } =
     useAuth()
   useAuthenticate(authClient)
 
@@ -73,19 +35,25 @@ export function Settings({ className, view, path, hideNav }: SettingsProps) {
   }
 
   const currentView = useMemo(() => {
-    if (view) {return view}
-    if (!path) {return undefined}
+    if (view) return view
+    if (!path) return undefined
 
-    const match = [viewPaths.settings, ...plugins.map((plugin) => plugin.viewPaths?.settings)]
-      .flatMap((source) => settingsPathEntries(source))
+    const match = [
+      viewPaths.settings,
+      ...plugins.map((plugin) => plugin.viewPaths?.settings)
+    ]
+      .flatMap((source) => Object.entries(source ?? {}))
       .find(([, segment]) => segment === path)
 
     return match?.[0] as SettingsView | undefined
   }, [view, path, viewPaths.settings, plugins])
 
   if (!currentView) {
-    const validPaths = [viewPaths.settings, ...plugins.map((plugin) => plugin.viewPaths?.settings)]
-      .flatMap((source) => settingsPathEntries(source).map(([, segment]) => segment))
+    const validPaths = [
+      viewPaths.settings,
+      ...plugins.map((plugin) => plugin.viewPaths?.settings)
+    ]
+      .flatMap((source) => Object.values(source ?? {}))
       .join(", ")
     throw new Error(
       `[Better Auth UI] Unknown settings path "${path}". Valid paths are: ${validPaths}`
@@ -99,42 +67,48 @@ export function Settings({ className, view, path, hideNav }: SettingsProps) {
     >
       <div className={cn(hideNav && "hidden")}>
         <TabsList aria-label={localization.settings.settings}>
-          <TabsTrigger value="account" asChild>
-            <Link
-              href={`${basePaths.settings}/${viewPaths.settings.account}`}
-              className="gap-1"
-            >
-              <User2 className="text-muted-foreground" />
+          <TabsTrigger
+            value="account"
+            className="gap-1"
+            onClick={() =>
+              navigate({
+                to: `${basePaths.settings}/${viewPaths.settings.account}`
+              })
+            }
+          >
+            <User2 className="text-muted-foreground" />
 
-              {localization.settings.account}
-            </Link>
+            {localization.settings.account}
           </TabsTrigger>
 
-          <TabsTrigger value="security" asChild>
-            <Link
-              href={`${basePaths.settings}/${viewPaths.settings.security}`}
-              className="gap-1"
-            >
-              <Shield className="text-muted-foreground" />
+          <TabsTrigger
+            value="security"
+            className="gap-1"
+            onClick={() =>
+              navigate({
+                to: `${basePaths.settings}/${viewPaths.settings.security}`
+              })
+            }
+          >
+            <Shield className="text-muted-foreground" />
 
-              {localization.settings.security}
-            </Link>
+            {localization.settings.security}
           </TabsTrigger>
 
           {plugins.flatMap(
             (plugin) =>
-              pluginSettingsTabs(plugin).map((settingsTab, index) => (
+              plugin.settingsTabs?.map((settingsTab, index) => (
                 <TabsTrigger
                   key={`${plugin.id}-${index.toString()}`}
                   value={settingsTab.view}
-                  asChild
+                  className="gap-1"
+                  onClick={() =>
+                    navigate({
+                      to: `${basePaths.settings}/${plugin.viewPaths?.settings?.[settingsTab.view]}`
+                    })
+                  }
                 >
-                  <Link
-                    href={`${basePaths.settings}/${plugin.viewPaths?.settings?.[settingsTab.view]}`}
-                    className="gap-1"
-                  >
-                    {settingsTab.label}
-                  </Link>
+                  {settingsTab.label}
                 </TabsTrigger>
               )) ?? []
           )}
@@ -150,7 +124,7 @@ export function Settings({ className, view, path, hideNav }: SettingsProps) {
       </TabsContent>
 
       {plugins.flatMap((plugin) =>
-        pluginSettingsTabs(plugin).map((settingsTab, index) => (
+        plugin.settingsTabs?.map((settingsTab, index) => (
           <TabsContent
             key={`${plugin.id}-${index.toString()}`}
             value={settingsTab.view}

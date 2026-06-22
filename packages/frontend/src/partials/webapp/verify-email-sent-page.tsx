@@ -8,10 +8,9 @@ export interface VerifyEmailSentPageProps {
 export function VerifyEmailSentPage(props: VerifyEmailSentPageProps) {
   return (
     <div
-      className='relative my-24 flex h-auto items-center justify-center overflow-x-hidden px-4 py-10 sm:px-6
-        lg:px-8'
+      className='relative flex min-h-[70svh] w-full items-center justify-center overflow-x-hidden px-4 py-10'
     >
-      <Card className='z-1 w-full border shadow-md sm:max-w-md'>
+      <Card className='z-1 w-full max-w-md border shadow-md'>
         <CardHeader className='gap-6'>
           {props.logoimage}
 

@@ -1,4 +1,5 @@
-import { createContext, type FC, type PropsWithChildren, useContext, useMemo } from 'react'
+import { createContext, useContext, useMemo } from 'react'
+import type { FC, PropsWithChildren } from 'react'
 import type { PUBLIC_VARS } from '@main/backend/vars.public'
 
 // Define the shape of the environment variables your context will contain

@@ -1,11 +1,9 @@
-"use client"
-
 import { useAuthPlugin } from "@better-auth-ui/react"
 import { KeyIcon as Key } from "@phosphor-icons/react"
 
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { apiKeyPlugin } from "@/lib/auth/api-key-plugin"
+import { Button } from "src/components/ui/button"
+import { Card, CardContent } from "src/components/ui/card"
+import { apiKeyPlugin } from "src/lib/auth/api-key-plugin"
 
 export type ApiKeysEmptyProps = {
   onCreatePress: () => void

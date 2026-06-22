@@ -1,6 +1,8 @@
-import { createContext, type FC, type PropsWithChildren, useContext } from 'react'
+import { createContext, useContext } from 'react'
+import { AuthContext } from './auth-context'
+import type { FC, PropsWithChildren } from 'react'
 
-import { AuthContext, type AuthContextValue } from './auth-context'
+import type { AuthContextValue } from './auth-context'
 
 // Provide the context value to the subtree
 export const AuthProvider: FC<PropsWithChildren<AuthContextValue>> = ({ session, children }) => {

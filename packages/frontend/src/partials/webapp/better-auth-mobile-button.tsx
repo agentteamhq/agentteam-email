@@ -6,9 +6,9 @@ import { UserButton } from '../../components/auth/user/user-button'
 import { Toaster } from '../../components/ui/sonner'
 
 import { BetterAuthUIProvider } from './better-auth-ui-provider'
-import type { EnvContextValue } from './env-context'
 import { EnvProvider } from './env-provider'
 import { ErrorPage } from './error-page'
+import type { EnvContextValue } from './env-context'
 
 export interface BetterAuthMobileButtonProps extends EnvContextValue {}
 

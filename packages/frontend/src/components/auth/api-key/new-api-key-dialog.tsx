@@ -1,7 +1,11 @@
 "use client"
 
 import { useAuth, useAuthPlugin } from "@better-auth-ui/react"
-import { CheckIcon as Check, CopyIcon as Copy, KeyIcon as Key } from "@phosphor-icons/react"
+import {
+  CheckIcon as Check,
+  CopyIcon as Copy,
+  KeyIcon as Key
+} from "@phosphor-icons/react"
 import { useState } from "react"
 import { toast } from "sonner"
 
@@ -14,14 +18,14 @@ import {
   AlertDialogHeader,
   AlertDialogMedia,
   AlertDialogTitle
-} from "@/components/ui/alert-dialog"
+} from "src/components/ui/alert-dialog"
 import {
   InputGroup,
   InputGroupButton,
   InputGroupInput
-} from "@/components/ui/input-group"
-import { Label } from "@/components/ui/label"
-import { apiKeyPlugin } from "@/lib/auth/api-key-plugin"
+} from "src/components/ui/input-group"
+import { Label } from "src/components/ui/label"
+import { apiKeyPlugin } from "src/lib/auth/api-key-plugin"
 
 export type NewApiKeyDialogProps = {
   open: boolean
@@ -42,12 +46,12 @@ export function NewApiKeyDialog({
   const [copied, setCopied] = useState(false)
 
   const copySecretKey = async () => {
-    if (!secretKey) {return}
+    if (!secretKey) return
 
     try {
-      await globalThis.navigator.clipboard.writeText(secretKey)
+      await navigator.clipboard.writeText(secretKey)
       setCopied(true)
-      setTimeout(() => { setCopied(false); }, 1500)
+      setTimeout(() => setCopied(false), 1500)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
     }
@@ -84,11 +88,7 @@ export function NewApiKeyDialog({
             <InputGroupButton
               size="icon-xs"
               aria-label={localization.settings.copyToClipboard}
-              onClick={() => {
-                copySecretKey().catch((error: unknown) => {
-                  toast.error(error instanceof Error ? error.message : String(error))
-                })
-              }}
+              onClick={copySecretKey}
             >
               {copied ? <Check /> : <Copy />}
             </InputGroupButton>
