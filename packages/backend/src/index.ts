@@ -14,6 +14,7 @@ export {
 export { isAuthed } from './auth/is-authed'
 export { getUser } from './auth/get-user'
 export * from './auth/auth'
+export { handleAtEmailMetadataRequest, isAtEmailMetadataRequestPath } from './auth/at-email-metadata'
 export {
   handleCloudflareOAuthCallbackRequest,
   isCloudflareOAuthCallbackRequestPath

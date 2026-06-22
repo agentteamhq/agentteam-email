@@ -50,7 +50,7 @@ type parsedArgs struct {
 
 	AuthAction string
 	APIBaseURL string
-	NoOpen     bool
+	Open       bool
 }
 
 type helpRequest struct {
@@ -408,8 +408,8 @@ func parseAuthLogin(argv []string) (parsedArgs, error) {
 			return args, nil
 		case token == "--json":
 			args.JSON = true
-		case token == "--no-open":
-			args.NoOpen = true
+		case token == "--open":
+			args.Open = true
 		case token == "--api-base-url" || strings.HasPrefix(token, "--api-base-url="):
 			value, err := flagValue(commandAuthLogin, argv, &i, "--api-base-url")
 			if err != nil {
@@ -611,8 +611,8 @@ configuration:
   Requires AT_EMAIL_WILDDUCK_API_BASE_URL, AT_EMAIL_WILDDUCK_ACCESS_TOKEN,
   and AT_EMAIL_WILDDUCK_USER_ID. Safe message reads also require
   AT_EMAIL_CONTROL_API_BASE_URL and AT_EMAIL_MESSAGE_READ_TOKEN. CLI auth uses
-  https://app.agentteam.email by default; set AT_EMAIL_API_BASE_URL for another
-  app origin.
+  https://app.agentteam.email by default and discovers /.well-known/at-email.json
+  when available; set AT_EMAIL_API_BASE_URL for another app origin.
 
 Examples:
   at-email status
@@ -645,7 +645,7 @@ func commandUsage(command commandName) string {
 	case commandAuth:
 		return "usage: at-email auth [-h] AUTH_COMMAND ...\n"
 	case commandAuthLogin:
-		return "usage: at-email auth login [-h] [--json] [--api-base-url URL] [--no-open]\n"
+		return "usage: at-email auth login [-h] [--json] [--api-base-url URL] [--open]\n"
 	case commandAuthStatus:
 		return "usage: at-email auth status [-h] [--json]\n"
 	case commandAuthLogout:
@@ -860,7 +860,8 @@ options:
   -h, --help  show this help message and exit
 
 configuration:
-  Uses https://app.agentteam.email by default. Set AT_EMAIL_API_BASE_URL to use
+  Uses https://app.agentteam.email by default and discovers
+  /.well-known/at-email.json when available. Set AT_EMAIL_API_BASE_URL to use
   another app origin.
 
 Examples:
@@ -876,19 +877,20 @@ options:
   -h, --help          show this help message and exit
   --json              write machine-readable JSON to stdout
   --api-base-url URL  app origin to authenticate against
-  --no-open           print the verification URL without trying to open a browser
+  --open             open the verification URL in a browser in text mode
 
 defaults:
-  Prints the verification URL and code, tries to open the browser in text mode,
-  then waits until the request is approved or denied.
+  Prints the verification URL and code, then waits until the request is
+  approved or denied. Use --open to also launch the browser in text mode.
 
 configuration:
-  Uses https://app.agentteam.email by default. Set AT_EMAIL_API_BASE_URL to use
+  Uses https://app.agentteam.email by default and discovers
+  /.well-known/at-email.json when available. Set AT_EMAIL_API_BASE_URL to use
   another app origin.
 
 Examples:
   at-email auth login
-  at-email auth login --no-open
+  at-email auth login --open
   at-email auth login --api-base-url http://localhost:4321 --json
 `
 	case commandAuthStatus:
