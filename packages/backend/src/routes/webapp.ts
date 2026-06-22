@@ -31,6 +31,10 @@ export interface SettingsRouteState {
   user: WebappRouteUser
 }
 
+export interface DeviceRouteState extends SettingsRouteState {
+  userCode: string | null
+}
+
 export interface BillingRouteState extends SettingsRouteState {
   customerStatus: Awaited<ReturnType<typeof getCustomerStripeStatus>>
   shouldRedirectToSignIn: boolean
@@ -60,7 +64,7 @@ export async function loadDashboardRoute(request: Request): Promise<SettingsRout
 
 export async function loadSignInRoute(request: Request): Promise<AuthRouteState> {
   const url = new URL(request.url)
-  const redirectTo = url.searchParams.get('redirect') ?? '/dashboard/'
+  const redirectTo = readInternalRedirect(url.searchParams.get('redirect'), '/dashboard/')
   const resetSuccess = url.searchParams.get('reset_success') === '1'
   const user = await getUser(request.headers)
 
@@ -101,7 +105,7 @@ export async function loadSignOutRoute(_request: Request): Promise<SignOutRouteS
 
 export async function loadSettingsRoute(request: Request): Promise<SettingsRouteState> {
   const url = new URL(request.url)
-  const redirectTo = url.searchParams.get('redirect') ?? '/signin/'
+  const redirectTo = readInternalRedirect(url.searchParams.get('redirect'), '/signin/')
   const user = await getUser(request.headers)
 
   if (!user) {
@@ -122,6 +126,35 @@ export async function loadSettingsRoute(request: Request): Promise<SettingsRoute
     setCookieHeaders: flashCookie.setCookieHeaders,
     shouldRedirectToSignIn: false,
     user
+  }
+}
+
+export async function loadDeviceRoute(request: Request): Promise<DeviceRouteState> {
+  const url = new URL(request.url)
+  const redirectTo = `${url.pathname}${url.search}${url.hash}`
+  const userCode = normalizeDeviceUserCode(url.searchParams.get('user_code'))
+  const user = await getUser(request.headers)
+
+  if (!user) {
+    return {
+      flash: null,
+      redirectTo,
+      setCookieHeaders: [],
+      shouldRedirectToSignIn: true,
+      user,
+      userCode
+    }
+  }
+
+  const flashCookie = readFlashCookie(request.headers)
+
+  return {
+    flash: flashCookie.flash,
+    redirectTo,
+    setCookieHeaders: flashCookie.setCookieHeaders,
+    shouldRedirectToSignIn: false,
+    user,
+    userCode
   }
 }
 
@@ -165,4 +198,25 @@ export function routeCookieHeaders(
   setCookieHeaders: ReadonlyArray<string> | undefined
 ): Record<string, string> | undefined {
   return routeSetCookieHeaders(setCookieHeaders)
+}
+
+function readInternalRedirect(value: string | null, fallback: string): string {
+  if (!value) {
+    return fallback
+  }
+
+  try {
+    const parsed = new URL(value, 'https://agentteam.email')
+    if (parsed.origin !== 'https://agentteam.email') {
+      return fallback
+    }
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`
+  } catch {
+    return fallback
+  }
+}
+
+function normalizeDeviceUserCode(value: string | null): string | null {
+  const normalized = value?.replaceAll('-', '').trim().toUpperCase() ?? ''
+  return normalized === '' ? null : normalized
 }

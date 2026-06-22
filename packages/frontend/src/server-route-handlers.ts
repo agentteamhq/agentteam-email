@@ -1,6 +1,7 @@
 import {
   loadBillingRoute,
   loadDashboardRoute,
+  loadDeviceRoute,
   loadHomeRoute,
   loadPublicAuthRoute,
   loadSettingsRoute,
@@ -15,6 +16,7 @@ export function createFrontendServerRouteHandlers(): FrontendServerRouteHandlers
   return {
     loadBillingRoute,
     loadDashboardRoute,
+    loadDeviceRoute,
     loadHomeRoute,
     loadPublicAuthRoute,
     loadSettingsRoute,

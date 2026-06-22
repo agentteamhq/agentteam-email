@@ -122,7 +122,7 @@ jobs:
       - name: Build at-email CLI test stage
         uses: docker/build-push-action@v6
         with:
-          context: ./apps/at-email-cli
+          context: .
           file: ./apps/at-email-cli/Containerfile
           target: test
           load: true
@@ -135,7 +135,7 @@ jobs:
       - name: Build at-email CLI production runtime image for testing
         uses: docker/build-push-action@v6
         with:
-          context: ./apps/at-email-cli
+          context: .
           file: ./apps/at-email-cli/Containerfile
           load: true
           tags: atemail-cli:test
@@ -154,6 +154,9 @@ jobs:
             -v /var/run/docker.sock:/var/run/docker.sock \
             atemail-web-server:build \
             pnpm run test
+
+      - name: Stage at-email CLI embedded skill
+        run: node apps/at-email-cli/skills/stage-skill.mjs
 
       - name: Build at-email CLI snapshot release binaries
         uses: goreleaser/goreleaser-action@v6
@@ -185,22 +188,6 @@ jobs:
 
       - name: Validate at-email CLI skill discovery
         run: node apps/at-email-cli/skills/validate-skill-discovery.mjs
-
-  publish_clawhub_skill:
-    name: Publish ClawHub Skill
-    needs: build_test
-    if: needs.build_test.outputs.is_release == 'true'
-    permissions:
-      contents: read
-      id-token: write
-    uses: openclaw/clawhub/.github/workflows/skill-publish.yml@v1
-    with:
-      root: skills
-      owner: agentteamhq
-      dry_run: false
-      ref: ${{ github.sha }}
-    secrets:
-      clawhub_token: ${{ secrets.CLAWHUB_TOKEN }}
 
   publish_release:
     name: Publish Release
@@ -315,6 +302,9 @@ jobs:
             echo "version=${version}"
           } >> "${GITHUB_OUTPUT}"
 
+      - name: Stage at-email CLI embedded skill
+        run: node apps/at-email-cli/skills/stage-skill.mjs
+
       - name: Publish at-email CLI release binaries
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -412,7 +402,7 @@ jobs:
         id: publish_at_email_cli
         uses: docker/build-push-action@v6
         with:
-          context: ./apps/at-email-cli
+          context: .
           file: ./apps/at-email-cli/Containerfile
           platforms: linux/amd64,linux/arm64
           push: true

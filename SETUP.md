@@ -235,9 +235,9 @@ Linux npm package on glibc and musl Node images.
 Claude Code and Codex plugin bundles, validates the generated manifests and
 skill copies, and packs the release tarballs.
 
-`skills:check` validates that the root discoverable skill under
-`skills/at-email-cli` matches the embedded app skill and that `skills.sh.json`
-lists it for marketplace/tap discovery.
+`skills:check` validates the canonical root skill under `skills/at-email-cli`,
+checks any generated app-local staged copy when present, and confirms that
+`skills.sh.json` lists the skill for marketplace/tap discovery.
 
 ### Helm Chart
 

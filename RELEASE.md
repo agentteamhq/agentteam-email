@@ -23,8 +23,6 @@ Stable release `vX.Y.Z` publishes:
 - at-email CLI plugin bundles:
   - `at-email_X.Y.Z_claude-plugin.tar.gz`
   - `at-email_X.Y.Z_codex-plugin.tar.gz`
-- at-email CLI discoverable skill published to ClawHub from
-  `skills/at-email-cli`
 - npm package `@agentteamhq/email@X.Y.Z`
 - npm platform packages:
   - `@agentteamhq/email-linux-x64-gnu@X.Y.Z`
@@ -67,8 +65,9 @@ source files do not carry release version bumps for those bundles.
 
 The discoverable at-email CLI skill is committed under `skills/at-email-cli` for
 skills.sh, Hermes taps, LobeHub-style GitHub indexing, and ClawHub publishing.
-It is synchronized from `apps/at-email-cli/SKILL.md`; run
-`mise run //apps/at-email-cli:skills:sync` after editing the embedded skill.
+It is the only committed skill source. Container builds copy it directly, and
+host GoReleaser builds stage it into `apps/at-email-cli/SKILL.md` with
+`mise run //apps/at-email-cli:skills:stage` before compilation.
 
 ## Compose
 
@@ -183,7 +182,6 @@ The tag workflow publishes:
 - at-email CLI binaries and `checksums.txt` attached to the GitHub Release
 - at-email CLI Claude Code and Codex plugin bundles attached to the GitHub
   Release
-- at-email CLI skill published to ClawHub from `skills/at-email-cli`
 - `@agentteamhq/email` npm packages with the same version
 - npm package tarball provenance through npm trusted publishing and GitHub
   artifact attestations for the generated tarballs
@@ -198,18 +196,15 @@ tag. The workflow must not require npm package version bumps.
 The workflow attaches GitHub artifact attestations to the at-email CLI binaries,
 the checksum manifest, the generated plugin bundle tarballs, the generated npm
 package tarballs, the published image digests, and the Helm chart OCI digest.
-The `@agentteamhq/email` npm packages are configured for npm trusted publishing from the
-`.github/workflows/build-test-deploy.yml` workflow in the `production`
+The `@agentteamhq/email` npm packages are configured for npm trusted publishing
+from the `.github/workflows/build-test-deploy.yml` workflow in the `production`
 environment, so automated publishing does not require `NODE_AUTH_TOKEN` or an
 npm token secret.
 
-Release-tag ClawHub skill publishing runs from
-`.github/workflows/build-test-deploy.yml` after `build_test` succeeds. The
-dedicated `.github/workflows/skill-publish.yml` workflow dry-runs pull requests
-and main pushes, and can be manually dispatched for a one-off dry-run or publish.
-Real publishes require a `CLAWHUB_TOKEN` secret with access to the `agentteamhq`
-ClawHub owner. ClawHub skill publishing does not currently use OIDC trusted
-publishing for skills.
+Skill marketplace publishing is intentionally manual because those directories
+index GitHub paths and do not share one trusted-publishing mechanism. Follow
+[SKILL-PUBLISHING.md](SKILL-PUBLISHING.md) after changing
+`skills/at-email-cli/SKILL.md`.
 
 ## Release Notes
 

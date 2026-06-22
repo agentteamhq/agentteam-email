@@ -6,8 +6,8 @@ import { fileURLToPath } from 'node:url'
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const cliRoot = path.resolve(scriptDir, '..')
 const repoRoot = path.resolve(cliRoot, '..', '..')
-const canonicalSkillPath = path.join(cliRoot, 'SKILL.md')
-const discoverableSkillPath = path.join(repoRoot, 'skills', 'at-email-cli', 'SKILL.md')
+const canonicalSkillPath = path.join(repoRoot, 'skills', 'at-email-cli', 'SKILL.md')
+const stagedSkillPath = path.join(cliRoot, 'SKILL.md')
 const skillsConfigPath = path.join(repoRoot, 'skills.sh.json')
 
 function assert(condition, message) {
@@ -34,24 +34,38 @@ async function readJSON(filePath) {
   return JSON.parse(await fs.readFile(filePath, 'utf8'))
 }
 
+async function readOptional(filePath) {
+  try {
+    return await fs.readFile(filePath, 'utf8')
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      return null
+    }
+    throw error
+  }
+}
+
 async function validate() {
-  const [canonicalSkill, discoverableSkill, skillsConfig] = await Promise.all([
+  const [canonicalSkill, stagedSkill, skillsConfig] = await Promise.all([
     fs.readFile(canonicalSkillPath, 'utf8'),
-    fs.readFile(discoverableSkillPath, 'utf8'),
+    readOptional(stagedSkillPath),
     readJSON(skillsConfigPath)
   ])
 
-  assert(
-    discoverableSkill === canonicalSkill,
-    'skills/at-email-cli/SKILL.md must match apps/at-email-cli/SKILL.md. Run mise run //apps/at-email-cli:skills:sync.'
-  )
+  if (stagedSkill !== null) {
+    assert(
+      stagedSkill === canonicalSkill,
+      'generated apps/at-email-cli/SKILL.md must match skills/at-email-cli/SKILL.md. Run mise run //apps/at-email-cli:skills:stage.'
+    )
+  }
 
-  const frontmatter = parseFrontmatter(discoverableSkill, 'skills/at-email-cli/SKILL.md')
+  const frontmatter = parseFrontmatter(canonicalSkill, 'skills/at-email-cli/SKILL.md')
+  assert(frontmatter.get('name') === 'at-email-cli', 'canonical skill frontmatter name must be at-email-cli')
+  assert(frontmatter.has('description'), 'canonical skill frontmatter must include description')
   assert(
-    frontmatter.get('name') === 'at-email-cli',
-    'discoverable skill frontmatter name must be at-email-cli'
+    /^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?$/.test(frontmatter.get('version') ?? ''),
+    'canonical skill frontmatter version must be SemVer'
   )
-  assert(frontmatter.has('description'), 'discoverable skill frontmatter must include description')
 
   assert(
     skillsConfig.$schema === 'https://skills.sh/schemas/skills.sh.schema.json',

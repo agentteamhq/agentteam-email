@@ -11,3 +11,6 @@ coverage/
 tmp/
 test-containers/full-stack-e2e/
 test-containers/**/tmp/
+
+apps/at-email-cli/SKILL.md
+apps/at-email-cli/dist/

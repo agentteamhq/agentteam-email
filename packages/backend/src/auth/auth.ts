@@ -7,7 +7,9 @@ import { createAuthMiddleware } from 'better-auth/api'
 import { betterAuth } from 'better-auth/minimal'
 import {
   admin,
+  bearer,
   customSession,
+  deviceAuthorization,
   genericOAuth,
   jwt,
   lastLoginMethod,
@@ -46,6 +48,7 @@ const log = debug('app:auth')
 export const BETTER_AUTH_SESSION_EXPIRES_IN = 60 * 60 * 24 * 180 // 180 days
 
 const DEFAULT_ORGANIZATION_SLUG_MAX_ATTEMPTS = 16
+const AT_EMAIL_CLI_DEVICE_CLIENT_ID = 'at-email-cli'
 
 const BETTER_AUTH_ROUTE = `${PUBLIC_VARS.PUBLIC_HOSTNAME}/rpc/auth/api`
 const BETTER_AUTH_BASE_PATH = '/api'
@@ -69,6 +72,11 @@ const AUTH_AUDIT_LOG_PATHS = [
   '/verify-email',
   '/delete-user',
   '/delete-user/callback',
+  '/device',
+  '/device/approve',
+  '/device/code',
+  '/device/deny',
+  '/device/token',
   '/revoke-session',
   '/revoke-sessions',
   '/revoke-other-sessions',
@@ -254,6 +262,11 @@ export function createGlobalAuth(db: Database): GlobalAuth {
   const cloudflareOAuthConfig = createCloudflareGenericOAuthConfig()
   const plugins = [
     organization(),
+    bearer(),
+    deviceAuthorization({
+      verificationUri: '/device',
+      validateClient: (clientId) => clientId === AT_EMAIL_CLI_DEVICE_CLIENT_ID
+    }),
     auditLog({
       nonBlocking: true,
       paths: [...AUTH_AUDIT_LOG_PATHS],

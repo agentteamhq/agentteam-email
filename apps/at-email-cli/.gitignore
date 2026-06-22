@@ -2,3 +2,5 @@
 /at-email
 /bin/
 /dist/
+# Generated from skills/at-email-cli/SKILL.md for host GoReleaser builds.
+/SKILL.md

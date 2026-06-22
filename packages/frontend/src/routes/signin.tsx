@@ -23,7 +23,7 @@ export const Route = createFileRoute('/signin')({
       )
 
       if (routeState.shouldRedirectToDashboard) {
-        throwRouteRedirect('/dashboard/')
+        throwRouteRedirect(routeState.redirectTo)
       }
 
       return routeState

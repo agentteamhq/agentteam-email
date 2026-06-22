@@ -2,6 +2,7 @@ import {
   accountSchema,
   apikeySchema,
   auditLogSchema,
+  deviceCodeSchema,
   invitationSchema,
   jwkSchema,
   memberSchema,
@@ -30,6 +31,7 @@ import type {
   AccountDocument,
   ApiKeyDocument,
   AuditLogDocument,
+  DeviceCodeDocument,
   InvitationDocument,
   JwkDocument,
   MemberDocument,
@@ -69,6 +71,7 @@ export type AppModels = {
   cloudflareConnection: AppModel<CloudflareConnectionDocument>
   cloudflareOAuthConnectionIntent: AppModel<CloudflareOAuthConnectionIntentDocument>
   cloudflareOAuthGrant: AppModel<CloudflareOAuthGrantDocument>
+  deviceCode: AppModel<DeviceCodeDocument>
   invitation: AppModel<InvitationDocument>
   jwk: AppModel<JwkDocument>
   member: AppModel<MemberDocument>
@@ -111,6 +114,7 @@ export function createAppModels(connection: Connection): AppModels {
       cloudflareOAuthConnectionIntentSchema
     ),
     cloudflareOAuthGrant: connectionModel(connection, 'cloudflareOAuthGrant', cloudflareOAuthGrantSchema),
+    deviceCode: connectionModel(connection, 'deviceCode', deviceCodeSchema),
     invitation: connectionModel(connection, 'invitation', invitationSchema),
     jwk: connectionModel(connection, 'jwk', jwkSchema),
     member: connectionModel(connection, 'member', memberSchema),

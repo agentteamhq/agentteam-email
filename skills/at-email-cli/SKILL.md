@@ -1,6 +1,7 @@
 ---
 name: at-email-cli
 description: Use the AgentTeam Email CLI command `at-email` to operate an agent mailbox. Use when the user wants to check mailbox status, list inbox messages, read safe message content, search mail, mark messages read, archive messages, send email, reply to email, use JSON output for automation, check CLI version/update status, or install/launch the CLI when the skill is available but `at-email` is not installed.
+version: 1.0.0
 metadata:
   openclaw:
     requires:

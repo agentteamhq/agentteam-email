@@ -19,6 +19,8 @@ import { Route as RecoverAccountRouteImport } from './routes/recover-account'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as MagicLinkRouteImport } from './routes/magic-link'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as DeviceRouteImport } from './routes/device'
+import { Route as DeviceApproveRouteImport } from './routes/device/approve'
 import { Route as CallbackRouteImport } from './routes/callback'
 import { Route as AcceptInviteRouteImport } from './routes/accept-invite'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
@@ -75,6 +77,16 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DeviceRoute = DeviceRouteImport.update({
+  id: '/device',
+  path: '/device',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DeviceApproveRoute = DeviceApproveRouteImport.update({
+  id: '/device/approve',
+  path: '/device/approve',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CallbackRoute = CallbackRouteImport.update({
   id: '/callback',
   path: '/callback',
@@ -104,6 +116,8 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/accept-invite': typeof AcceptInviteRoute
   '/callback': typeof CallbackRoute
+  '/device': typeof DeviceRoute
+  '/device/approve': typeof DeviceApproveRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/magic-link': typeof MagicLinkRoute
   '/onboarding': typeof OnboardingRoute
@@ -120,6 +134,8 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/accept-invite': typeof AcceptInviteRoute
   '/callback': typeof CallbackRoute
+  '/device': typeof DeviceRoute
+  '/device/approve': typeof DeviceApproveRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/magic-link': typeof MagicLinkRoute
   '/onboarding': typeof OnboardingRoute
@@ -138,6 +154,8 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/accept-invite': typeof AcceptInviteRoute
   '/callback': typeof CallbackRoute
+  '/device': typeof DeviceRoute
+  '/device/approve': typeof DeviceApproveRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/magic-link': typeof MagicLinkRoute
   '/onboarding': typeof OnboardingRoute
@@ -156,6 +174,8 @@ export interface FileRouteTypes {
     | '/'
     | '/accept-invite'
     | '/callback'
+    | '/device'
+    | '/device/approve'
     | '/forgot-password'
     | '/magic-link'
     | '/onboarding'
@@ -172,6 +192,8 @@ export interface FileRouteTypes {
     | '/'
     | '/accept-invite'
     | '/callback'
+    | '/device'
+    | '/device/approve'
     | '/forgot-password'
     | '/magic-link'
     | '/onboarding'
@@ -189,6 +211,8 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/accept-invite'
     | '/callback'
+    | '/device'
+    | '/device/approve'
     | '/forgot-password'
     | '/magic-link'
     | '/onboarding'
@@ -207,6 +231,8 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AcceptInviteRoute: typeof AcceptInviteRoute
   CallbackRoute: typeof CallbackRoute
+  DeviceRoute: typeof DeviceRoute
+  DeviceApproveRoute: typeof DeviceApproveRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   MagicLinkRoute: typeof MagicLinkRoute
   OnboardingRoute: typeof OnboardingRoute
@@ -298,6 +324,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/device': {
+      id: '/device'
+      path: '/device'
+      fullPath: '/device'
+      preLoaderRoute: typeof DeviceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/device/approve': {
+      id: '/device/approve'
+      path: '/device/approve'
+      fullPath: '/device/approve'
+      preLoaderRoute: typeof DeviceApproveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/accept-invite': {
       id: '/accept-invite'
       path: '/accept-invite'
@@ -345,6 +385,8 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AcceptInviteRoute: AcceptInviteRoute,
   CallbackRoute: CallbackRoute,
+  DeviceRoute: DeviceRoute,
+  DeviceApproveRoute: DeviceApproveRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   MagicLinkRoute: MagicLinkRoute,
   OnboardingRoute: OnboardingRoute,

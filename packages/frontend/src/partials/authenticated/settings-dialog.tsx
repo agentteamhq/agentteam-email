@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useAuth, useListSessions, useRevokeSession, useSession } from '@better-auth-ui/react'
 import {
   BellIcon,
   ChatCircleIcon,
@@ -13,6 +14,8 @@ import {
   ListIcon,
   LockIcon,
   PaintBrushIcon,
+  TerminalWindowIcon,
+  TrashIcon,
   VideoCameraIcon
 } from '@phosphor-icons/react'
 import { useRouter } from '@tanstack/react-router'
@@ -37,6 +40,7 @@ import {
 import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
 import { Skeleton } from '../../components/ui/skeleton'
+import { Spinner } from '../../components/ui/spinner'
 import {
   Sidebar,
   SidebarContent,
@@ -49,6 +53,7 @@ import {
 } from '../../components/ui/sidebar'
 import { rpc } from '../../lib/rpc-api-client'
 import type { CloudflareAccountSummary, CloudflareStatusResult, CloudflareZoneSummary } from '@main/backend'
+import type { Session } from 'better-auth'
 
 export type SettingsSectionId =
   | 'notifications'
@@ -61,6 +66,7 @@ export type SettingsSectionId =
   | 'markAsRead'
   | 'audioVideo'
   | 'connectedAccounts'
+  | 'cliAccess'
   | 'privacyVisibility'
   | 'advanced'
 
@@ -70,6 +76,17 @@ export interface CloudflareOAuthCallbackState {
   intentPublicId: string
   oauthError?: string
 }
+
+export interface CLIAccessSessionView {
+  createdAt?: Date | string | null
+  current?: boolean
+  expiresAt?: Date | string | null
+  id: string
+  label: string
+  metadata: string
+}
+
+export type CLIAccessPanelState = 'ready' | 'loading' | 'error'
 
 const settingsNavigation = [
   { id: 'notifications', name: 'Notifications', icon: BellIcon },
@@ -82,6 +99,7 @@ const settingsNavigation = [
   { id: 'markAsRead', name: 'Mark as read', icon: CheckIcon },
   { id: 'audioVideo', name: 'Audio & video', icon: VideoCameraIcon },
   { id: 'connectedAccounts', name: 'Connected accounts', icon: LinkIcon },
+  { id: 'cliAccess', name: 'CLI access', icon: TerminalWindowIcon },
   { id: 'privacyVisibility', name: 'Privacy & visibility', icon: LockIcon },
   { id: 'advanced', name: 'Advanced', icon: GearSixIcon }
 ] satisfies Array<{
@@ -97,6 +115,7 @@ const settingsNames = Object.fromEntries(settingsNavigation.map((item) => [item.
 
 interface SettingsDialogProps {
   activeSection?: SettingsSectionId
+  cliAccessPanel?: React.ReactNode
   cloudflareOAuthCallback?: CloudflareOAuthCallbackState | null
   contentState?: SettingsDialogContentState
   defaultActiveSection?: SettingsSectionId
@@ -109,6 +128,7 @@ interface SettingsDialogProps {
 
 export function SettingsDialog({
   activeSection: activeSectionProp,
+  cliAccessPanel,
   cloudflareOAuthCallback,
   contentState = 'ready',
   defaultActiveSection = 'messagesMedia',
@@ -189,6 +209,7 @@ export function SettingsDialog({
             </header>
             <div className='flex flex-1 flex-col gap-4 overflow-y-auto p-4 pt-0'>
               <SettingsPanelContent
+                cliAccessPanel={cliAccessPanel}
                 cloudflareOAuthCallback={cloudflareOAuthCallback}
                 contentState={contentState}
                 section={activeSection}
@@ -202,10 +223,12 @@ export function SettingsDialog({
 }
 
 function SettingsPanelContent({
+  cliAccessPanel,
   cloudflareOAuthCallback,
   contentState,
   section
 }: {
+  cliAccessPanel?: React.ReactNode
   cloudflareOAuthCallback?: CloudflareOAuthCallbackState | null
   contentState: SettingsDialogContentState
   section: SettingsSectionId
@@ -220,15 +243,27 @@ function SettingsPanelContent({
         description={
           section === 'connectedAccounts'
             ? 'Connected Cloudflare domains will appear here after an account is linked.'
-            : 'No configurable options are available for this settings section yet.'
+            : section === 'cliAccess'
+              ? 'CLI sessions will appear here after at-email authenticates.'
+              : 'No configurable options are available for this settings section yet.'
         }
-        title={section === 'connectedAccounts' ? 'No connected domains' : 'No settings yet'}
+        title={
+          section === 'connectedAccounts'
+            ? 'No connected domains'
+            : section === 'cliAccess'
+              ? 'No CLI sessions'
+              : 'No settings yet'
+        }
       />
     )
   }
 
   if (section === 'connectedAccounts') {
     return <CloudflareConnectedAccountsPanel cloudflareOAuthCallback={cloudflareOAuthCallback} />
+  }
+
+  if (section === 'cliAccess') {
+    return cliAccessPanel ?? <CLIAccessPanelLive />
   }
 
   return <SettingsPlaceholderContent />
@@ -270,6 +305,169 @@ function SettingsEmptyContent({ description, title }: { description: string; tit
       <p className='max-w-sm text-sm'>{description}</p>
     </div>
   )
+}
+
+function CLIAccessPanelLive() {
+  const { authClient } = useAuth()
+  const { data: currentSession } = useSession(authClient, { refetchOnMount: false })
+  const { data: sessions, isPending, error } = useListSessions(authClient)
+  const [revokingSessionId, setRevokingSessionId] = React.useState<string | null>(null)
+  const { mutate: revokeSession } = useRevokeSession(authClient, {
+    onSettled: () => {
+      setRevokingSessionId(null)
+    }
+  })
+
+  const currentSessionToken = currentSession?.session.token
+  const cliSessions = (sessions ?? [])
+    .filter((session) => isAtEmailSession(session.userAgent))
+    .map((session) => toCLIAccessSessionView(session, currentSessionToken))
+
+  return (
+    <CLIAccessPanel
+      error={error instanceof Error ? error.message : error ? 'Failed to load CLI sessions.' : null}
+      onRevoke={(session) => {
+        const rawSession = sessions?.find((candidate) => candidate.id === session.id)
+        if (!rawSession) {
+          return
+        }
+        setRevokingSessionId(session.id)
+        revokeSession(rawSession)
+      }}
+      revokingSessionId={revokingSessionId}
+      sessions={cliSessions}
+      state={isPending ? 'loading' : error ? 'error' : 'ready'}
+    />
+  )
+}
+
+export function CLIAccessPanel({
+  error,
+  onRevoke,
+  revokingSessionId,
+  sessions,
+  state
+}: {
+  error?: string | null
+  onRevoke?: (session: CLIAccessSessionView) => void
+  revokingSessionId?: string | null
+  sessions: ReadonlyArray<CLIAccessSessionView>
+  state: CLIAccessPanelState
+}) {
+  if (state === 'loading') {
+    return <SettingsLoadingContent />
+  }
+
+  if (state === 'error') {
+    return (
+      <SettingsEmptyContent
+        description={error ?? 'CLI sessions could not be loaded.'}
+        title='CLI sessions unavailable'
+      />
+    )
+  }
+
+  if (sessions.length === 0) {
+    return (
+      <SettingsEmptyContent
+        description='Run at-email auth login to connect the CLI to this account.'
+        title='No CLI sessions'
+      />
+    )
+  }
+
+  return (
+    <section className='max-w-3xl space-y-3'>
+      <div>
+        <h2 className='text-sm font-semibold'>CLI access</h2>
+        <p className='text-muted-foreground mt-1 text-sm'>
+          Revoke at-email sessions that were authorized through device login.
+        </p>
+      </div>
+      <div className='divide-border overflow-hidden rounded-lg border'>
+        {sessions.map((session) => (
+          <div
+            className='flex items-center gap-3 p-3'
+            key={session.id}
+          >
+            <div className='bg-muted flex size-10 shrink-0 items-center justify-center rounded-md'>
+              <TerminalWindowIcon className='size-5' />
+            </div>
+            <div className='min-w-0 flex-1'>
+              <div className='flex min-w-0 flex-wrap items-center gap-2'>
+                <p className='truncate text-sm font-medium'>{session.label}</p>
+                {session.current ? <Badge variant='secondary'>Current</Badge> : null}
+              </div>
+              <p className='text-muted-foreground mt-1 truncate text-xs'>{session.metadata}</p>
+            </div>
+            <Button
+              aria-label={`Revoke ${session.label}`}
+              disabled={!onRevoke || revokingSessionId === session.id}
+              onClick={() => onRevoke?.(session)}
+              size='sm'
+              type='button'
+              variant='outline'
+            >
+              {revokingSessionId === session.id ? <Spinner className='size-3.5' /> : <TrashIcon />}
+              Revoke
+            </Button>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function isAtEmailSession(userAgent: string | null | undefined): boolean {
+  return typeof userAgent === 'string' && userAgent.startsWith('at-email/')
+}
+
+function toCLIAccessSessionView(session: Session, currentSessionToken: string | undefined) {
+  const parsed = parseAtEmailUserAgent(session.userAgent)
+  const created = formatSessionDate(session.createdAt)
+  const expires = formatSessionDate(session.expiresAt)
+  const metadata = [
+    parsed.platform,
+    created ? `created ${created}` : null,
+    expires ? `expires ${expires}` : null
+  ].filter(Boolean)
+
+  return {
+    createdAt: session.createdAt,
+    current: session.token === currentSessionToken,
+    expiresAt: session.expiresAt,
+    id: session.id,
+    label: parsed.label,
+    metadata: metadata.join(' · ')
+  } satisfies CLIAccessSessionView
+}
+
+function parseAtEmailUserAgent(userAgent: string | null | undefined) {
+  const value = userAgent ?? ''
+  const match = /^at-email\/([^\s]+)(?: \(([^;]+); ([^)]+)\))?/.exec(value)
+  const version = match?.[1] ?? 'unknown'
+  const os = match?.[2] ?? null
+  const arch = match?.[3] ?? null
+
+  return {
+    label: `at-email ${version}`,
+    platform: os && arch ? `${os}/${arch}` : 'CLI session'
+  }
+}
+
+function formatSessionDate(value: Date | string | null | undefined): string | null {
+  if (!value) {
+    return null
+  }
+  const date = value instanceof Date ? value : new Date(value)
+  if (!Number.isFinite(date.getTime())) {
+    return null
+  }
+  return date.toLocaleDateString(undefined, {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  })
 }
 
 function CloudflareConnectedAccountsPanel({

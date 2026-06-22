@@ -52,7 +52,9 @@ export function DashboardScreen({
   sidebarView = defaultAuthenticatedSidebarView
 }: DashboardScreenProps) {
   const requestedSettingsSection =
-    routeSearch?.settings === 'connectedAccounts' ? 'connectedAccounts' : undefined
+    routeSearch?.settings === 'connectedAccounts' || routeSearch?.settings === 'cliAccess'
+      ? routeSearch.settings
+      : undefined
   const [activeItemId, setActiveItemId] = React.useState(sidebarView.activeItemId)
   const [selectedMailId, setSelectedMailId] = React.useState(
     sidebarView.selectedMailId ?? dashboardView.selectedEmail?.id

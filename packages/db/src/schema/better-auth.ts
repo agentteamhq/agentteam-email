@@ -37,6 +37,10 @@ declare const VerificationIdBrand: unique symbol
 export type VerificationId = UUIDv7 & { readonly [VerificationIdBrand]: true }
 export { VerificationIdBrand }
 
+declare const DeviceCodeIdBrand: unique symbol
+export type DeviceCodeId = UUIDv7 & { readonly [DeviceCodeIdBrand]: true }
+export { DeviceCodeIdBrand }
+
 declare const AuditLogIdBrand: unique symbol
 export type AuditLogId = UUIDv7 & { readonly [AuditLogIdBrand]: true }
 export { AuditLogIdBrand }
@@ -275,6 +279,35 @@ export const verificationSchema = new Schema<VerificationDocument>(verificationS
 })
   .index({ identifier: 1 }, { name: 'verification_identifier' })
   .index({ expiresAt: 1 }, { expireAfterSeconds: 0, name: 'verification_expiresAt_ttl' })
+
+export const deviceCodeSchemaDefinition = {
+  _id: uuidV7IdField(),
+  deviceCode: { required: true, type: String },
+  userCode: { required: true, type: String },
+  userId: optionalUUIDv7Field(),
+  expiresAt: { required: true, type: Date },
+  status: { required: true, type: String },
+  lastPolledAt: { default: null, type: Date },
+  pollingInterval: { default: null, type: Number },
+  clientId: { default: null, type: String },
+  scope: { default: null, type: String },
+  createdAt: createdAtField(),
+  updatedAt: updatedAtField()
+} as const
+
+export type DeviceCodeRawDocument = SchemaRawDocument<typeof deviceCodeSchemaDefinition>
+export type DeviceCodeDocument = ReplaceDocumentFields<
+  DeviceCodeRawDocument,
+  { _id: DeviceCodeId; userId?: UserId | null }
+>
+
+export const deviceCodeSchema = new Schema<DeviceCodeDocument>(deviceCodeSchemaDefinition, {
+  ...mongooseTimestampSchemaOptions,
+  collection: 'deviceCode'
+})
+  .index({ deviceCode: 1 }, { name: 'deviceCode_deviceCode' })
+  .index({ userCode: 1 }, { name: 'deviceCode_userCode' })
+  .index({ expiresAt: 1 }, { expireAfterSeconds: 0, name: 'deviceCode_expiresAt_ttl' })
 
 export const auditLogSchemaDefinition = {
   _id: uuidV7IdField(),
@@ -673,6 +706,7 @@ export const betterAuthSchemas = {
   account: accountSchema,
   apikey: apikeySchema,
   auditLog: auditLogSchema,
+  deviceCode: deviceCodeSchema,
   invitation: invitationSchema,
   jwk: jwkSchema,
   member: memberSchema,
