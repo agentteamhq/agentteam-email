@@ -71,12 +71,17 @@ import type {
   AuthenticatedMailNavIconKey,
   AuthenticatedSidebarView
 } from './authenticated-shell-models'
-import type { CloudflareOAuthCallbackState, SettingsDialogContentState } from './settings-dialog'
+import type {
+  CloudflareOAuthCallbackState,
+  DomainSettingsState,
+  SettingsDialogContentState
+} from './settings-dialog'
 import type { SettingsSectionId } from './settings-dialog-sections'
 
 export interface AuthenticatedShellProps {
   children: React.ReactNode
   cloudflareOAuthCallback?: CloudflareOAuthCallbackState | null
+  domainSettingsState?: DomainSettingsState
   onMailSelect?: (mailId: string) => void
   onSettingsOpenChange: (open: boolean) => void
   onSettingsSectionChange: (section: SettingsSectionId) => void
@@ -93,6 +98,7 @@ export interface AuthenticatedShellProps {
 export function AuthenticatedShell({
   children,
   cloudflareOAuthCallback,
+  domainSettingsState,
   onMailSelect,
   onSettingsOpenChange,
   onSettingsSectionChange,
@@ -131,6 +137,7 @@ export function AuthenticatedShell({
         activeSection={settingsSection}
         cloudflareOAuthCallback={cloudflareOAuthCallback}
         contentState={settingsContentState}
+        domainSettingsState={domainSettingsState}
         onActiveSectionChange={onSettingsSectionChange}
         onOpenChange={onSettingsOpenChange}
         open={settingsOpen}

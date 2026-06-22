@@ -19,7 +19,10 @@ import type { DashboardSearch } from '../routes/_authenticated/dashboard'
 import type { AuthProviderProps } from '@better-auth-ui/react'
 import type { SettingsRouteState } from '@main/backend/routes/webapp'
 
-import type { SettingsDialogContentState } from '../partials/authenticated/settings-dialog'
+import type {
+  DomainSettingsState,
+  SettingsDialogContentState
+} from '../partials/authenticated/settings-dialog'
 import type { SettingsSectionId } from '../partials/authenticated/settings-dialog-sections'
 import type { PublicEnv } from '../types'
 
@@ -36,6 +39,7 @@ export interface DashboardScreenProps {
   routeState: SettingsRouteState
   routeSearch?: DashboardSearch
   sessionCleanupEnabled?: boolean
+  domainSettingsState?: DomainSettingsState
   settingsOpen?: boolean
   settingsContentState?: SettingsDialogContentState
   settingsSection?: SettingsSectionId
@@ -55,13 +59,14 @@ export function DashboardScreen({
   routeState,
   routeSearch,
   sessionCleanupEnabled,
+  domainSettingsState,
   settingsOpen: settingsOpenProp,
   settingsContentState,
   settingsSection: settingsSectionProp,
   sidebarView = defaultAuthenticatedSidebarView
 }: DashboardScreenProps) {
   const requestedSettingsSection =
-    routeSearch?.settings === 'connectedAccounts' ? 'connectedAccounts' : undefined
+    routeSearch?.settings === 'connectedAccounts' || routeSearch?.settings === 'domains' ? 'domains' : undefined
   const [activeItemId, setActiveItemId] = React.useState(sidebarView.activeItemId)
   const [selectedMailId, setSelectedMailId] = React.useState(
     sidebarView.selectedMailId ?? dashboardView.selectedEmail?.id
@@ -150,6 +155,7 @@ export function DashboardScreen({
               }
             : null
         }
+        domainSettingsState={domainSettingsState}
         settingsContentState={settingsContentState}
         settingsOpen={settingsOpen}
         settingsSection={settingsSection}

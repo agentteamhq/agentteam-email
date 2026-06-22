@@ -4,13 +4,13 @@ export type SettingsSectionId =
   | 'organizations'
   | 'organizationSettings'
   | 'organizationPeople'
-  | 'connectedAccounts'
+  | 'domains'
 
 const settingsRouteSegments = {
   account: 'account',
   security: 'security',
   organizations: 'organizations',
-  connectedAccounts: 'connected-accounts'
+  domains: 'domains'
 } as const
 
 const settingsSectionHrefs = {
@@ -19,7 +19,7 @@ const settingsSectionHrefs = {
   organizations: '/settings/organizations/',
   organizationSettings: '/organization/settings/',
   organizationPeople: '/organization/people/',
-  connectedAccounts: '/settings/connected-accounts/'
+  domains: '/settings/domains/'
 } satisfies Record<SettingsSectionId, string>
 
 const settingsSectionIds = new Set<SettingsSectionId>([
@@ -28,7 +28,7 @@ const settingsSectionIds = new Set<SettingsSectionId>([
   'organizations',
   'organizationSettings',
   'organizationPeople',
-  'connectedAccounts'
+  'domains'
 ])
 
 export function isSettingsSectionId(value: string): value is SettingsSectionId {
@@ -44,8 +44,12 @@ export function getSettingsSectionFromSegment(segment: string | undefined): Sett
     return 'account'
   }
 
-  if (segment === settingsRouteSegments.connectedAccounts || segment === 'connectedAccounts') {
-    return 'connectedAccounts'
+  if (
+    segment === settingsRouteSegments.domains ||
+    segment === 'connected-accounts' ||
+    segment === 'connectedAccounts'
+  ) {
+    return 'domains'
   }
 
   if (segment === 'developer') {

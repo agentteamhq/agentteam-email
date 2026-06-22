@@ -19,6 +19,9 @@ If a story requires a UI state that the canonical component cannot express throu
 
 Story-only mocks, draft layouts, and prototype hierarchies are forbidden unless the user explicitly asks for a mock, draft, or prototype.
 
+Stories that do not render production-reachable app UI through the canonical app component contract are mock stories.
+Mock stories must include `Mock` in the Storybook title or story name and must set Storybook `tags: ['mock']`.
+
 ## RPC Clients
 
 - Frontend `/rpc/*` calls must use the typed Elysia Eden client derived from `@main/backend`
