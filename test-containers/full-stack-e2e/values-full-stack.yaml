@@ -1,0 +1,113 @@
+namespace:
+  create: true
+  name: atemail-main-full-stack
+
+publicHostname: http://127.0.0.1:23200
+
+images:
+  mailControlService:
+    repository: atemail.main.mail-control-service
+    tag: stage
+    pullPolicy: IfNotPresent
+  webServer:
+    repository: atemail.main.web-server
+    tag: stage
+    pullPolicy: IfNotPresent
+
+webServer:
+  authSecret:
+    value: full-stack-e2e-better-auth-secret
+  encryptionKey:
+    value: ZnVsbC1zdGFjay1lMmUtZW5jcnlwdGlvbi1rZXktMzI
+
+controlApi:
+  token:
+    value: full-stack-e2e-control-api-token
+
+wildduck:
+  adminAccessToken:
+    value: full-stack-e2e-wildduck-admin-token
+  accessControlSecret:
+    value: full-stack-e2e-wildduck-access-control-secret
+
+mailRuntime:
+  loopSecret:
+    value: full-stack-e2e-mail-loop-secret
+  zonemtaRelayPassword:
+    value: full-stack-e2e-zonemta-relay-password
+  feedbackMailboxPassword:
+    value: full-stack-e2e-feedback-mailbox-password
+
+objectStorage:
+  endpoint:
+    value: http://minio:9000
+  region:
+    value: us-east-1
+  bucket:
+    value: full-stack-e2e-archive
+  accessKeyId:
+    value: full-stack-e2e-minio
+  secretAccessKey:
+    value: full-stack-e2e-minio-secret
+
+cloudflare:
+  apiBaseUrl: http://fake-cloudflare:8080/client/v4
+  accountId:
+    value: full-stack-e2e-cloudflare-account-id
+  apiToken:
+    value: full-stack-e2e-cloudflare-api-token
+  worker:
+    scriptName: full-stack-e2e-agent-mail-ingress
+    archiveBucket:
+      value: full-stack-e2e-archive
+
+tunnel:
+  provider: none
+  externalUrl:
+    value: http://atemail-web-server/agent-mail/ingest/v1
+  hmacSecret:
+    value: full-stack-e2e-fastpath-hmac-secret
+
+ingress:
+  enabled: false
+
+persistence:
+  mongodb:
+    size: 1Gi
+  redis:
+    size: 512Mi
+  rspamd:
+    size: 512Mi
+  harakaQueue:
+    size: 512Mi
+
+extraEnv:
+  webServer:
+    - name: E2E_TEST_SUPPORT_ENABLED
+      value: 'true'
+    - name: E2E_TEST_SUPPORT_TOKEN
+      value: full-stack-e2e-support-token
+    - name: SMTP_ADDRESS
+      value: mailpit
+    - name: SMTP_PORT
+      value: '1025'
+    - name: SMTP_FROM_EMAIL
+      value: noreply@example.test
+    - name: SMTP_REPLY_TO_EMAIL
+      value: support@example.test
+    - name: CLOUDFLARE_API_BASE_URL
+      value: http://fake-cloudflare:8080/client/v4
+    - name: CLOUDFLARE_OAUTH_CLIENT_ID
+      value: full-stack-e2e-cloudflare-client
+    - name: CLOUDFLARE_OAUTH_CLIENT_SECRET
+      value: full-stack-e2e-cloudflare-client-secret
+    - name: CLOUDFLARE_OAUTH_AUTHORIZATION_URL
+      value: http://fake-cloudflare:8080/oauth2/auth
+    - name: CLOUDFLARE_OAUTH_TOKEN_URL
+      value: http://fake-cloudflare:8080/oauth2/token
+    - name: CLOUDFLARE_OAUTH_USERINFO_URL
+      value: http://fake-cloudflare:8080/oauth2/userinfo
+    - name: CLOUDFLARE_OAUTH_REVOKE_URL
+      value: http://fake-cloudflare:8080/oauth2/revoke
+    - name: CLOUDFLARE_OAUTH_ISSUER
+      value: http://fake-cloudflare:8080
