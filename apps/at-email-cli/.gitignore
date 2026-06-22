@@ -1,0 +1,4 @@
+# Native build outputs. The canonical build path is the Containerfile.
+/at-email
+/bin/
+/dist/
