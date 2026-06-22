@@ -1,0 +1,11 @@
+{
+  "$schema": "https://skills.sh/schemas/skills.sh.schema.json",
+  "groupings": [
+    {
+      "description": "Operate AgentTeam Email mailboxes from CLI-enabled agent runtimes.",
+      "skills": ["at-email-cli"],
+      "title": "Email"
+    }
+  ],
+  "notGrouped": "bottom"
+}
