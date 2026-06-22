@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"agent-mail/internal/archive/r2archive"
 	"agent-mail/internal/mail/structured"
 )
 
@@ -58,11 +59,16 @@ type ControllerRef struct {
 
 type DomainApplyParams struct {
 	CompanyIdentity      string                 `json:"company_identity"`
+	OrganizationID       string                 `json:"organization_id"`
+	OrganizationPublicID string                 `json:"organization_public_id"`
 	Controller           ControllerRef          `json:"controller"`
 	Domain               string                 `json:"domain"`
 	DesiredHash          string                 `json:"desired_hash"`
 	AuthoritativeRouting bool                   `json:"authoritative_routing"`
 	CloudflareZoneName   string                 `json:"cloudflare_zone_name"`
+	ArchivePrefix        string                 `json:"archive_prefix"`
+	WorkerConnectionID   string                 `json:"worker_connection_id"`
+	WorkerDeploymentID   string                 `json:"worker_domain_deployment_id"`
 	FeedbackLocalPart    string                 `json:"feedback_local_part,omitempty"`
 	FeedbackAddress      string                 `json:"feedback_address,omitempty"`
 	Outbound             DomainOutboundPolicy   `json:"outbound"`
@@ -70,10 +76,15 @@ type DomainApplyParams struct {
 }
 
 type DomainConfigParams struct {
-	Domain             string `json:"domain"`
-	Enabled            bool   `json:"enabled"`
-	CloudflareZoneName string `json:"cloudflare_zone_name"`
-	MailFromDomain     string `json:"mail_from_domain"`
+	OrganizationID       string `json:"organization_id"`
+	OrganizationPublicID string `json:"organization_public_id"`
+	Domain               string `json:"domain"`
+	Enabled              bool   `json:"enabled"`
+	CloudflareZoneName   string `json:"cloudflare_zone_name"`
+	ArchivePrefix        string `json:"archive_prefix"`
+	WorkerConnectionID   string `json:"worker_connection_id"`
+	WorkerDeploymentID   string `json:"worker_domain_deployment_id"`
+	MailFromDomain       string `json:"mail_from_domain,omitempty"`
 }
 
 type DomainRemoveParams struct {
@@ -114,12 +125,17 @@ type SESProviderMetadata struct {
 
 type DomainRecord struct {
 	CompanyIdentity      string                 `json:"company_identity"`
+	OrganizationID       string                 `json:"organization_id"`
+	OrganizationPublicID string                 `json:"organization_public_id"`
 	Controller           ControllerRef          `json:"controller"`
 	Domain               string                 `json:"domain"`
 	DesiredHash          string                 `json:"desired_hash"`
 	Status               string                 `json:"status"`
 	AuthoritativeRouting bool                   `json:"authoritative_routing"`
 	CloudflareZoneName   string                 `json:"cloudflare_zone_name"`
+	ArchivePrefix        string                 `json:"archive_prefix"`
+	WorkerConnectionID   string                 `json:"worker_connection_id"`
+	WorkerDeploymentID   string                 `json:"worker_domain_deployment_id"`
 	FeedbackAddress      string                 `json:"feedback_address"`
 	MailFromDomain       string                 `json:"mail_from_domain"`
 	Outbound             DomainOutboundPolicy   `json:"outbound"`
@@ -458,6 +474,14 @@ func NormalizeDomainApply(params DomainApplyParams, now time.Time) (DomainRecord
 	if err != nil {
 		return DomainRecord{}, err
 	}
+	organizationID, err := requiredPlainValue(params.OrganizationID, "organization_id")
+	if err != nil {
+		return DomainRecord{}, err
+	}
+	organizationPublicID, err := r2archive.CanonicalPathSegment(params.OrganizationPublicID, "organization_public_id")
+	if err != nil {
+		return DomainRecord{}, err
+	}
 	desiredHash, err := requiredPlainValue(params.DesiredHash, "desired_hash")
 	if err != nil {
 		return DomainRecord{}, err
@@ -467,6 +491,18 @@ func NormalizeDomainApply(params DomainApplyParams, now time.Time) (DomainRecord
 		return DomainRecord{}, err
 	}
 	cloudflareZone, err := requiredDomain(params.CloudflareZoneName, "cloudflare_zone_name")
+	if err != nil {
+		return DomainRecord{}, err
+	}
+	archivePrefix, err := normalizeArchivePrefix(params.ArchivePrefix, organizationPublicID, domain)
+	if err != nil {
+		return DomainRecord{}, err
+	}
+	workerConnectionID, err := requiredPlainValue(params.WorkerConnectionID, "worker_connection_id")
+	if err != nil {
+		return DomainRecord{}, err
+	}
+	workerDeploymentID, err := requiredPlainValue(params.WorkerDeploymentID, "worker_domain_deployment_id")
 	if err != nil {
 		return DomainRecord{}, err
 	}
@@ -485,12 +521,17 @@ func NormalizeDomainApply(params DomainApplyParams, now time.Time) (DomainRecord
 	createdAt := now.UTC()
 	return DomainRecord{
 		CompanyIdentity:      companyIdentity,
+		OrganizationID:       organizationID,
+		OrganizationPublicID: organizationPublicID,
 		Controller:           params.Controller,
 		Domain:               domain,
 		DesiredHash:          desiredHash,
 		Status:               DomainStatusActive,
 		AuthoritativeRouting: params.AuthoritativeRouting,
 		CloudflareZoneName:   cloudflareZone,
+		ArchivePrefix:        archivePrefix,
+		WorkerConnectionID:   workerConnectionID,
+		WorkerDeploymentID:   workerDeploymentID,
 		FeedbackAddress:      feedbackAddress,
 		MailFromDomain:       providerMetadata.SES.MailFromDomain,
 		Outbound:             outbound,
@@ -501,6 +542,14 @@ func NormalizeDomainApply(params DomainApplyParams, now time.Time) (DomainRecord
 }
 
 func NormalizeDomainConfig(params DomainConfigParams, selectedProvider string, now time.Time) (DomainRecord, error) {
+	organizationID, err := requiredPlainValue(params.OrganizationID, "organization_id")
+	if err != nil {
+		return DomainRecord{}, err
+	}
+	organizationPublicID, err := r2archive.CanonicalPathSegment(params.OrganizationPublicID, "organization_public_id")
+	if err != nil {
+		return DomainRecord{}, err
+	}
 	domain, err := requiredDomain(params.Domain, "domain")
 	if err != nil {
 		return DomainRecord{}, err
@@ -509,7 +558,19 @@ func NormalizeDomainConfig(params DomainConfigParams, selectedProvider string, n
 	if err != nil {
 		return DomainRecord{}, err
 	}
-	mailFromDomain, err := requiredDomain(params.MailFromDomain, "mail_from_domain")
+	archivePrefix, err := normalizeArchivePrefix(params.ArchivePrefix, organizationPublicID, domain)
+	if err != nil {
+		return DomainRecord{}, err
+	}
+	workerConnectionID, err := requiredPlainValue(params.WorkerConnectionID, "worker_connection_id")
+	if err != nil {
+		return DomainRecord{}, err
+	}
+	workerDeploymentID, err := requiredPlainValue(params.WorkerDeploymentID, "worker_domain_deployment_id")
+	if err != nil {
+		return DomainRecord{}, err
+	}
+	mailFromDomain, err := normalizeMailFromDomain(params.MailFromDomain, domain, "mail_from_domain")
 	if err != nil {
 		return DomainRecord{}, err
 	}
@@ -542,10 +603,15 @@ func NormalizeDomainConfig(params DomainConfigParams, selectedProvider string, n
 	}
 	timestamp := now.UTC()
 	return DomainRecord{
+		OrganizationID:       organizationID,
+		OrganizationPublicID: organizationPublicID,
 		Domain:               domain,
 		Status:               status,
 		AuthoritativeRouting: params.Enabled,
 		CloudflareZoneName:   cloudflareZone,
+		ArchivePrefix:        archivePrefix,
+		WorkerConnectionID:   workerConnectionID,
+		WorkerDeploymentID:   workerDeploymentID,
 		FeedbackAddress:      feedbackAddress,
 		MailFromDomain:       mailFromDomain,
 		Outbound: DomainOutboundPolicy{
@@ -603,12 +669,17 @@ func sortDomains(records []DomainRecord) {
 
 func sameDomainDesired(left DomainRecord, right DomainRecord) bool {
 	return left.CompanyIdentity == right.CompanyIdentity &&
+		left.OrganizationID == right.OrganizationID &&
+		left.OrganizationPublicID == right.OrganizationPublicID &&
 		left.Controller == right.Controller &&
 		left.Domain == right.Domain &&
 		left.DesiredHash == right.DesiredHash &&
 		left.Status == right.Status &&
 		left.AuthoritativeRouting == right.AuthoritativeRouting &&
 		left.CloudflareZoneName == right.CloudflareZoneName &&
+		left.ArchivePrefix == right.ArchivePrefix &&
+		left.WorkerConnectionID == right.WorkerConnectionID &&
+		left.WorkerDeploymentID == right.WorkerDeploymentID &&
 		left.FeedbackAddress == right.FeedbackAddress &&
 		left.MailFromDomain == right.MailFromDomain &&
 		left.Outbound == right.Outbound &&
@@ -719,7 +790,7 @@ func normalizeProviderMetadata(metadata DomainProviderMetadata, provider string,
 		if identityDomain != domain {
 			return DomainProviderMetadata{}, fmt.Errorf("provider_metadata.ses.identity_domain %q must match %q", identityDomain, domain)
 		}
-		mailFromDomain, err := requiredDomain(metadata.SES.MailFromDomain, "provider_metadata.ses.mail_from_domain")
+		mailFromDomain, err := normalizeMailFromDomain(metadata.SES.MailFromDomain, domain, "provider_metadata.ses.mail_from_domain")
 		if err != nil {
 			return DomainProviderMetadata{}, err
 		}
@@ -740,6 +811,30 @@ func normalizeProviderMetadata(metadata DomainProviderMetadata, provider string,
 	default:
 		return DomainProviderMetadata{}, fmt.Errorf("unsupported provider %q", provider)
 	}
+}
+
+func normalizeArchivePrefix(value string, organizationPublicID string, domain string) (string, error) {
+	if value == "" {
+		return "", fmt.Errorf("archive_prefix is required")
+	}
+	prefix, err := r2archive.ParseInboundArchivePrefix(value)
+	if err != nil {
+		return "", fmt.Errorf("archive_prefix: %w", err)
+	}
+	if prefix.OrganizationPublicID != organizationPublicID {
+		return "", fmt.Errorf("archive_prefix organization_public_id %q must match %q", prefix.OrganizationPublicID, organizationPublicID)
+	}
+	if prefix.RecipientDomain != domain {
+		return "", fmt.Errorf("archive_prefix domain %q must match %q", prefix.RecipientDomain, domain)
+	}
+	expected, err := r2archive.OrganizationInboundArchivePrefix(organizationPublicID, domain)
+	if err != nil {
+		return "", err
+	}
+	if prefix.ArchivePrefix != expected {
+		return "", fmt.Errorf("archive_prefix must be %q", expected)
+	}
+	return prefix.ArchivePrefix, nil
 }
 
 func normalizeSelectedProvider(value string) (string, error) {
@@ -784,6 +879,20 @@ func optionalDomain(value string, field string) (string, error) {
 		return "", fmt.Errorf("%s: %w", field, err)
 	}
 	return domain, nil
+}
+
+func normalizeMailFromDomain(value string, domain string, field string) (string, error) {
+	if value == "" {
+		return domain, nil
+	}
+	mailFromDomain, err := requiredDomain(value, field)
+	if err != nil {
+		return "", err
+	}
+	if mailFromDomain != domain && !strings.HasSuffix(mailFromDomain, "."+domain) {
+		return "", fmt.Errorf("%s %q must match %q or be a subdomain of %q", field, mailFromDomain, domain, domain)
+	}
+	return mailFromDomain, nil
 }
 
 func requiredPlainValue(value string, field string) (string, error) {

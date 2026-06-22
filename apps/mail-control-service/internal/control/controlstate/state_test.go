@@ -6,16 +6,56 @@ import (
 	"time"
 )
 
+func testDomainConfigParams(domain string, enabled bool) DomainConfigParams {
+	return DomainConfigParams{
+		OrganizationID:       "org-1",
+		OrganizationPublicID: "org_pub_123",
+		Domain:               domain,
+		Enabled:              enabled,
+		CloudflareZoneName:   domain,
+		ArchivePrefix:        "orgs/org_pub_123/domains/" + domain + "/mail/inbound",
+		WorkerConnectionID:   "worker-connection-1",
+		WorkerDeploymentID:   "worker-deployment-1",
+	}
+}
+
+func testDomainApplyParams(domain string, provider string) DomainApplyParams {
+	params := DomainApplyParams{
+		CompanyIdentity:      "example",
+		OrganizationID:       "org-1",
+		OrganizationPublicID: "org_pub_123",
+		Domain:               domain,
+		DesiredHash:          "sha256:domain-v1",
+		AuthoritativeRouting: true,
+		CloudflareZoneName:   domain,
+		ArchivePrefix:        "orgs/org_pub_123/domains/" + domain + "/mail/inbound",
+		WorkerConnectionID:   "worker-connection-1",
+		WorkerDeploymentID:   "worker-deployment-1",
+		FeedbackAddress:      "bounces@" + domain,
+		Outbound: DomainOutboundPolicy{
+			Provider:     provider,
+			SenderDomain: domain,
+		},
+	}
+	switch provider {
+	case ProviderCloudflare:
+		params.ProviderMetadata.Cloudflare = CloudflareProviderMetadata{SendingDomain: domain}
+	case ProviderSES:
+		params.ProviderMetadata.SES = SESProviderMetadata{
+			IdentityDomain:     domain,
+			FeedbackReturnPath: "bounces@" + domain,
+		}
+	}
+	return params
+}
+
 func TestAddModifyRemoveDomainConfigOwnsMinimalDesiredState(t *testing.T) {
 	store := NewMemoryStore()
 	now := time.Date(2026, 5, 21, 12, 0, 0, 0, time.UTC)
 
-	record, changed, err := AddDomain(context.Background(), store, ProviderSES, DomainConfigParams{
-		Domain:             "example.com",
-		Enabled:            true,
-		CloudflareZoneName: "example.com",
-		MailFromDomain:     "ei.example.com",
-	}, now)
+	addParams := testDomainConfigParams("example.com", true)
+	addParams.MailFromDomain = "ei.example.com"
+	record, changed, err := AddDomain(context.Background(), store, ProviderSES, addParams, now)
 	if err != nil {
 		t.Fatalf("AddDomain: %v", err)
 	}
@@ -32,12 +72,9 @@ func TestAddModifyRemoveDomainConfigOwnsMinimalDesiredState(t *testing.T) {
 		t.Fatalf("FeedbackReturnPath = %q", record.ProviderMetadata.SES.FeedbackReturnPath)
 	}
 
-	modified, changed, err := ModifyDomain(context.Background(), store, ProviderSES, DomainConfigParams{
-		Domain:             "example.com",
-		Enabled:            false,
-		CloudflareZoneName: "example.com",
-		MailFromDomain:     "mail.example.com",
-	}, now.Add(time.Hour))
+	modifyParams := testDomainConfigParams("example.com", false)
+	modifyParams.MailFromDomain = "mail.example.com"
+	modified, changed, err := ModifyDomain(context.Background(), store, ProviderSES, modifyParams, now.Add(time.Hour))
 	if err != nil {
 		t.Fatalf("ModifyDomain: %v", err)
 	}
@@ -51,12 +88,9 @@ func TestAddModifyRemoveDomainConfigOwnsMinimalDesiredState(t *testing.T) {
 		t.Fatalf("modified MailFromDomain = %q", modified.MailFromDomain)
 	}
 
-	_, changed, err = ModifyDomain(context.Background(), store, ProviderSES, DomainConfigParams{
-		Domain:             "example.com",
-		Enabled:            true,
-		CloudflareZoneName: "example.com",
-		MailFromDomain:     "mail.example.com",
-	}, now.Add(90*time.Minute))
+	reenableParams := testDomainConfigParams("example.com", true)
+	reenableParams.MailFromDomain = "mail.example.com"
+	_, changed, err = ModifyDomain(context.Background(), store, ProviderSES, reenableParams, now.Add(90*time.Minute))
 	if err != nil {
 		t.Fatalf("reenable ModifyDomain: %v", err)
 	}
@@ -78,17 +112,53 @@ func TestAddModifyRemoveDomainConfigOwnsMinimalDesiredState(t *testing.T) {
 	if removed.AuthoritativeRouting {
 		t.Fatalf("removed AuthoritativeRouting = true, want false")
 	}
+	active, err := ActiveDomainRecords(context.Background(), store, nil)
+	if err != nil {
+		t.Fatalf("ActiveDomainRecords after remove: %v", err)
+	}
+	if len(active) != 0 {
+		t.Fatalf("active runtime projection after remove = %#v, want no active domains", active)
+	}
+}
+
+func TestDomainConfigDefaultsMailFromDomainToOwnedDomain(t *testing.T) {
+	record, err := NormalizeDomainConfig(testDomainConfigParams("example.com", true), ProviderSES, time.Date(2026, 5, 21, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("NormalizeDomainConfig: %v", err)
+	}
+	if record.MailFromDomain != "example.com" {
+		t.Fatalf("MailFromDomain = %q, want example.com", record.MailFromDomain)
+	}
+	if record.ProviderMetadata.SES.MailFromDomain != "example.com" {
+		t.Fatalf("ProviderMetadata.SES.MailFromDomain = %q, want example.com", record.ProviderMetadata.SES.MailFromDomain)
+	}
+}
+
+func TestDomainConfigRejectsCrossDomainMailFromDomain(t *testing.T) {
+	params := testDomainConfigParams("example.com", true)
+	params.MailFromDomain = "mail.example.net"
+	_, err := NormalizeDomainConfig(params, ProviderSES, time.Date(2026, 5, 21, 12, 0, 0, 0, time.UTC))
+	if err == nil {
+		t.Fatal("NormalizeDomainConfig succeeded with cross-domain mail_from_domain")
+	}
+}
+
+func TestDomainConfigRejectsMismatchedArchivePrefix(t *testing.T) {
+	params := testDomainConfigParams("example.com", true)
+	params.ArchivePrefix = "orgs/org_pub_123/domains/example.net/mail/inbound"
+
+	_, err := NormalizeDomainConfig(params, ProviderSES, time.Date(2026, 5, 21, 12, 0, 0, 0, time.UTC))
+	if err == nil {
+		t.Fatal("NormalizeDomainConfig succeeded with mismatched archive_prefix")
+	}
 }
 
 func TestModifyDomainClearsCloudflareProvisionWhenZoneChanges(t *testing.T) {
 	store := NewMemoryStore()
 	now := time.Date(2026, 5, 21, 12, 0, 0, 0, time.UTC)
-	if _, _, err := AddDomain(context.Background(), store, ProviderSES, DomainConfigParams{
-		Domain:             "example.com",
-		Enabled:            true,
-		CloudflareZoneName: "example.com",
-		MailFromDomain:     "ei.example.com",
-	}, now); err != nil {
+	addParams := testDomainConfigParams("example.com", true)
+	addParams.MailFromDomain = "ei.example.com"
+	if _, _, err := AddDomain(context.Background(), store, ProviderSES, addParams, now); err != nil {
 		t.Fatalf("AddDomain: %v", err)
 	}
 	provisionedAt := now.Add(time.Minute)
@@ -103,12 +173,10 @@ func TestModifyDomainClearsCloudflareProvisionWhenZoneChanges(t *testing.T) {
 		t.Fatalf("RecordCloudflareProvision: %v", err)
 	}
 
-	modified, changed, err := ModifyDomain(context.Background(), store, ProviderSES, DomainConfigParams{
-		Domain:             "example.com",
-		Enabled:            true,
-		CloudflareZoneName: "mail.example.com",
-		MailFromDomain:     "ei.example.com",
-	}, now.Add(time.Hour))
+	modifyParams := testDomainConfigParams("example.com", true)
+	modifyParams.CloudflareZoneName = "mail.example.com"
+	modifyParams.MailFromDomain = "ei.example.com"
+	modified, changed, err := ModifyDomain(context.Background(), store, ProviderSES, modifyParams, now.Add(time.Hour))
 	if err != nil {
 		t.Fatalf("ModifyDomain: %v", err)
 	}
@@ -124,25 +192,11 @@ func TestApplyDomainNormalizesAndPersistsActiveDomain(t *testing.T) {
 	store := NewMemoryStore()
 	now := time.Date(2026, 5, 21, 12, 0, 0, 0, time.UTC)
 
-	record, changed, err := ApplyDomain(context.Background(), store, DomainApplyParams{
-		CompanyIdentity:      "example",
-		Domain:               "example.com",
-		DesiredHash:          "sha256:domain-v1",
-		AuthoritativeRouting: true,
-		CloudflareZoneName:   "example.com",
-		FeedbackLocalPart:    "bounces",
-		Outbound: DomainOutboundPolicy{
-			Provider:     ProviderSES,
-			SenderDomain: "example.com",
-		},
-		ProviderMetadata: DomainProviderMetadata{
-			SES: SESProviderMetadata{
-				IdentityDomain:     "example.com",
-				MailFromDomain:     "ei.example.com",
-				FeedbackReturnPath: "bounces@example.com",
-			},
-		},
-	}, now)
+	applyParams := testDomainApplyParams("example.com", ProviderSES)
+	applyParams.FeedbackAddress = ""
+	applyParams.FeedbackLocalPart = "bounces"
+	applyParams.ProviderMetadata.SES.MailFromDomain = "ei.example.com"
+	record, changed, err := ApplyDomain(context.Background(), store, applyParams, now)
 	if err != nil {
 		t.Fatalf("ApplyDomain: %v", err)
 	}
@@ -168,25 +222,27 @@ func TestApplyDomainNormalizesAndPersistsActiveDomain(t *testing.T) {
 	}
 }
 
+func TestApplyDomainDefaultsAndValidatesSESMailFromDomain(t *testing.T) {
+	now := time.Date(2026, 5, 21, 12, 0, 0, 0, time.UTC)
+	base := testDomainApplyParams("example.com", ProviderSES)
+
+	record, err := NormalizeDomainApply(base, now)
+	if err != nil {
+		t.Fatalf("NormalizeDomainApply: %v", err)
+	}
+	if record.ProviderMetadata.SES.MailFromDomain != "example.com" {
+		t.Fatalf("default SES mail-from domain = %q, want example.com", record.ProviderMetadata.SES.MailFromDomain)
+	}
+
+	base.ProviderMetadata.SES.MailFromDomain = "mail.example.net"
+	if _, err := NormalizeDomainApply(base, now); err == nil {
+		t.Fatal("NormalizeDomainApply succeeded with cross-domain SES mail-from domain")
+	}
+}
+
 func TestApplyDomainDoesNotRewriteUnchangedDesiredState(t *testing.T) {
 	store := NewMemoryStore()
-	params := DomainApplyParams{
-		CompanyIdentity:      "example",
-		Domain:               "example.com",
-		DesiredHash:          "sha256:domain-v1",
-		AuthoritativeRouting: true,
-		CloudflareZoneName:   "example.com",
-		FeedbackAddress:      "bounces@example.com",
-		Outbound: DomainOutboundPolicy{
-			Provider:     ProviderCloudflare,
-			SenderDomain: "example.com",
-		},
-		ProviderMetadata: DomainProviderMetadata{
-			Cloudflare: CloudflareProviderMetadata{
-				SendingDomain: "example.com",
-			},
-		},
-	}
+	params := testDomainApplyParams("example.com", ProviderCloudflare)
 	firstTime := time.Date(2026, 5, 21, 12, 0, 0, 0, time.UTC)
 	first, changed, err := ApplyDomain(context.Background(), store, params, firstTime)
 	if err != nil {
@@ -210,23 +266,7 @@ func TestApplyDomainDoesNotRewriteUnchangedDesiredState(t *testing.T) {
 
 func TestApplyDomainPreservesPrimitiveStateForSameDesiredState(t *testing.T) {
 	store := NewMemoryStore()
-	params := DomainApplyParams{
-		CompanyIdentity:      "example",
-		Domain:               "example.com",
-		DesiredHash:          "sha256:domain-v1",
-		AuthoritativeRouting: true,
-		CloudflareZoneName:   "example.com",
-		FeedbackAddress:      "bounces@example.com",
-		Outbound: DomainOutboundPolicy{
-			Provider:     ProviderCloudflare,
-			SenderDomain: "example.com",
-		},
-		ProviderMetadata: DomainProviderMetadata{
-			Cloudflare: CloudflareProviderMetadata{
-				SendingDomain: "example.com",
-			},
-		},
-	}
+	params := testDomainApplyParams("example.com", ProviderCloudflare)
 	firstTime := time.Date(2026, 5, 21, 12, 0, 0, 0, time.UTC)
 	if _, _, err := ApplyDomain(context.Background(), store, params, firstTime); err != nil {
 		t.Fatalf("ApplyDomain: %v", err)
@@ -256,23 +296,9 @@ func TestApplyDomainPreservesPrimitiveStateForSameDesiredState(t *testing.T) {
 }
 
 func TestApplyDomainRejectsCrossDomainFeedbackAddress(t *testing.T) {
-	_, _, err := ApplyDomain(context.Background(), NewMemoryStore(), DomainApplyParams{
-		CompanyIdentity:      "example",
-		Domain:               "example.com",
-		DesiredHash:          "sha256:domain-v1",
-		AuthoritativeRouting: true,
-		CloudflareZoneName:   "example.com",
-		FeedbackAddress:      "bounces@example.net",
-		Outbound: DomainOutboundPolicy{
-			Provider:     ProviderCloudflare,
-			SenderDomain: "example.com",
-		},
-		ProviderMetadata: DomainProviderMetadata{
-			Cloudflare: CloudflareProviderMetadata{
-				SendingDomain: "example.com",
-			},
-		},
-	}, time.Now().UTC())
+	params := testDomainApplyParams("example.com", ProviderCloudflare)
+	params.FeedbackAddress = "bounces@example.net"
+	_, _, err := ApplyDomain(context.Background(), NewMemoryStore(), params, time.Now().UTC())
 	if err == nil {
 		t.Fatalf("ApplyDomain succeeded, want feedback domain error")
 	}

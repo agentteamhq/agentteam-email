@@ -91,10 +91,15 @@ func seededDomainStore(t *testing.T) *controlstate.MemoryStore {
 	t.Helper()
 	store := controlstate.NewMemoryStore()
 	_, _, err := controlstate.AddDomain(context.Background(), store, controlstate.ProviderCloudflare, controlstate.DomainConfigParams{
-		Domain:             "example.com",
-		Enabled:            true,
-		CloudflareZoneName: "example.com",
-		MailFromDomain:     "ei.example.com",
+		OrganizationID:       "org-1",
+		OrganizationPublicID: "org_pub_123",
+		Domain:               "example.com",
+		Enabled:              true,
+		CloudflareZoneName:   "example.com",
+		ArchivePrefix:        "orgs/org_pub_123/domains/example.com/mail/inbound",
+		WorkerConnectionID:   "worker-connection-1",
+		WorkerDeploymentID:   "worker-deployment-1",
+		MailFromDomain:       "ei.example.com",
 	}, time.Date(2026, 5, 21, 11, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("AddDomain: %v", err)
