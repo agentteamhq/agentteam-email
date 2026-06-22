@@ -84,9 +84,9 @@ type MessageSecurityResult struct {
 }
 
 type MessageRawSource struct {
-	Source string             `json:"source"`
-	Size   int                `json:"size"`
-	Raw    string             `json:"raw"`
+	Source  string             `json:"source"`
+	Size    int                `json:"size"`
+	Raw     string             `json:"raw"`
 	Headers []MessageRawHeader `json:"headers"`
 }
 

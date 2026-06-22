@@ -288,15 +288,15 @@ func TestMessageSecurityReadsCloudflareEdgeEvidenceFromArchive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InboundBundleKeys: %v", err)
 	}
-		rawArchive := []byte(strings.Join([]string{
-			"Received: from mail.example.net (203.0.113.7) by cloudflare-email.net (cloudflare) id cf-session for <agent@example.com>; Thu, 18 Jun 2026 06:56:11 +0000",
-			"Received-SPF: pass (mx.cloudflare.net: domain of sender@example.net designates 203.0.113.7 as permitted sender) receiver=mx.cloudflare.net; client-ip=203.0.113.7; envelope-from=\"sender@example.net\"; helo=mail.example.net;",
-			"Authentication-Results: mx.cloudflare.net; dkim=pass header.d=example.net header.i=@example.net; dmarc=pass header.from=example.net; spf=pass smtp.mailfrom=sender@example.net; arc=pass smtp.remote-ip=203.0.113.7",
-			"X-CF-Trace: one",
-			"X-CF-Trace: two",
-			"From: Sender <sender@example.net>",
-			"To: Agent <agent@example.com>",
-			"Subject: Cloudflare Raw",
+	rawArchive := []byte(strings.Join([]string{
+		"Received: from mail.example.net (203.0.113.7) by cloudflare-email.net (cloudflare) id cf-session for <agent@example.com>; Thu, 18 Jun 2026 06:56:11 +0000",
+		"Received-SPF: pass (mx.cloudflare.net: domain of sender@example.net designates 203.0.113.7 as permitted sender) receiver=mx.cloudflare.net; client-ip=203.0.113.7; envelope-from=\"sender@example.net\"; helo=mail.example.net;",
+		"Authentication-Results: mx.cloudflare.net; dkim=pass header.d=example.net header.i=@example.net; dmarc=pass header.from=example.net; spf=pass smtp.mailfrom=sender@example.net; arc=pass smtp.remote-ip=203.0.113.7",
+		"X-CF-Trace: one",
+		"X-CF-Trace: two",
+		"From: Sender <sender@example.net>",
+		"To: Agent <agent@example.com>",
+		"Subject: Cloudflare Raw",
 		"",
 		"body",
 	}, "\r\n"))
@@ -383,27 +383,27 @@ func TestMessageSecurityReadsCloudflareEdgeEvidenceFromArchive(t *testing.T) {
 		security.Cloudflare.PerMessageAuthVerdicts.ARC.Status != "pass" {
 		t.Fatalf("Cloudflare auth verdicts = %#v", security.Cloudflare.PerMessageAuthVerdicts)
 	}
-		if len(security.Cloudflare.AuthenticationResults) != 1 || len(security.Cloudflare.ReceivedSPF) != 1 || len(security.Cloudflare.Received) != 1 {
-			t.Fatalf("Cloudflare raw headers = auth=%#v spf=%#v received=%#v", security.Cloudflare.AuthenticationResults, security.Cloudflare.ReceivedSPF, security.Cloudflare.Received)
-		}
-		if security.CloudflareArchive.RawSource == nil {
-			t.Fatalf("CloudflareArchive raw source missing")
-		}
-		if security.CloudflareArchive.RawSource.Source != "cloudflare-archived-raw-eml" ||
-			security.CloudflareArchive.RawSource.Size != len(rawArchive) ||
-			security.CloudflareArchive.RawSource.Raw != string(rawArchive) {
-			t.Fatalf("CloudflareArchive raw source = %#v", security.CloudflareArchive.RawSource)
-		}
-		traceHeaders := 0
-		for _, header := range security.CloudflareArchive.RawSource.Headers {
-			if strings.EqualFold(header.Name, "X-CF-Trace") {
-				traceHeaders++
-			}
-		}
-		if traceHeaders != 2 {
-			t.Fatalf("CloudflareArchive raw headers should preserve duplicate X-CF headers: %#v", security.CloudflareArchive.RawSource.Headers)
+	if len(security.Cloudflare.AuthenticationResults) != 1 || len(security.Cloudflare.ReceivedSPF) != 1 || len(security.Cloudflare.Received) != 1 {
+		t.Fatalf("Cloudflare raw headers = auth=%#v spf=%#v received=%#v", security.Cloudflare.AuthenticationResults, security.Cloudflare.ReceivedSPF, security.Cloudflare.Received)
+	}
+	if security.CloudflareArchive.RawSource == nil {
+		t.Fatalf("CloudflareArchive raw source missing")
+	}
+	if security.CloudflareArchive.RawSource.Source != "cloudflare-archived-raw-eml" ||
+		security.CloudflareArchive.RawSource.Size != len(rawArchive) ||
+		security.CloudflareArchive.RawSource.Raw != string(rawArchive) {
+		t.Fatalf("CloudflareArchive raw source = %#v", security.CloudflareArchive.RawSource)
+	}
+	traceHeaders := 0
+	for _, header := range security.CloudflareArchive.RawSource.Headers {
+		if strings.EqualFold(header.Name, "X-CF-Trace") {
+			traceHeaders++
 		}
 	}
+	if traceHeaders != 2 {
+		t.Fatalf("CloudflareArchive raw headers should preserve duplicate X-CF headers: %#v", security.CloudflareArchive.RawSource.Headers)
+	}
+}
 
 func TestMessageSecurityRejectsArchiveEnvelopeFromMismatch(t *testing.T) {
 	t.Parallel()

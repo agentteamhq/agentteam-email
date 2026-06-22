@@ -11,6 +11,7 @@ import (
 type keyLayoutFixture struct {
 	Inbound struct {
 		RecipientDomain string `json:"recipient_domain"`
+		OrgPublicID     string `json:"org_public_id"`
 		Timestamp       string `json:"timestamp"`
 		IngestID        string `json:"ingest_id"`
 		DailyPrefix     string `json:"daily_prefix"`
@@ -65,6 +66,72 @@ func TestInboundBundleKeysAndParser(t *testing.T) {
 	}
 }
 
+func TestOrganizationInboundBundleKeysAndParser(t *testing.T) {
+	id, err := NewUUIDv7String()
+	if err != nil {
+		t.Fatalf("NewUUIDv7String returned error: %v", err)
+	}
+	ts := time.Date(2026, 4, 18, 12, 34, 56, 0, time.FixedZone("test", -7*60*60))
+
+	bundle, err := OrganizationInboundBundleKeys("org_pub_123", "Example.com", ts, id)
+	if err != nil {
+		t.Fatalf("OrganizationInboundBundleKeys returned error: %v", err)
+	}
+	wantPrefix := "orgs/org_pub_123/domains/example.com/mail/inbound"
+	if bundle.OrganizationPublicID != "org_pub_123" {
+		t.Fatalf("OrganizationPublicID = %q, want org_pub_123", bundle.OrganizationPublicID)
+	}
+	if bundle.ArchivePrefix != wantPrefix {
+		t.Fatalf("ArchivePrefix = %q, want %q", bundle.ArchivePrefix, wantPrefix)
+	}
+	if bundle.RawKey != wantPrefix+"/2026/04/18/"+id+"/raw.eml" {
+		t.Fatalf("unexpected raw key: %s", bundle.RawKey)
+	}
+	if bundle.EdgeKey != wantPrefix+"/2026/04/18/"+id+"/edge.json" {
+		t.Fatalf("unexpected edge key: %s", bundle.EdgeKey)
+	}
+	if bundle.ResultKey != wantPrefix+"/2026/04/18/"+id+"/result.json" {
+		t.Fatalf("unexpected result key: %s", bundle.ResultKey)
+	}
+	if bundle.DSNKey != wantPrefix+"/2026/04/18/"+id+"/dsn.eml" {
+		t.Fatalf("unexpected dsn key: %s", bundle.DSNKey)
+	}
+
+	dailyPrefix, err := OrganizationInboundDailyPrefix("org_pub_123", "example.com", ts)
+	if err != nil {
+		t.Fatalf("OrganizationInboundDailyPrefix returned error: %v", err)
+	}
+	if dailyPrefix != wantPrefix+"/2026/04/18/" {
+		t.Fatalf("daily prefix = %q, want org-prefixed day prefix", dailyPrefix)
+	}
+
+	parsed, err := ParseInboundEdgeKey(bundle.EdgeKey)
+	if err != nil {
+		t.Fatalf("ParseInboundEdgeKey returned error: %v", err)
+	}
+	if parsed != bundle {
+		t.Fatalf("parsed bundle mismatch: got %#v want %#v", parsed, bundle)
+	}
+	if !IsInboundEdgeKey(bundle.EdgeKey) {
+		t.Fatalf("org-prefixed edge key was not recognized")
+	}
+}
+
+func TestParseInboundArchivePrefixRejectsNonCanonicalMetadata(t *testing.T) {
+	tests := []string{
+		"orgs/../domains/example.com/mail/inbound",
+		"orgs/org_pub_123/domains/Example.com/mail/inbound",
+		"mail/inbound/example.com",
+	}
+	for _, value := range tests {
+		t.Run(value, func(t *testing.T) {
+			if _, err := ParseInboundArchivePrefix(value); err == nil {
+				t.Fatalf("ParseInboundArchivePrefix(%q) succeeded", value)
+			}
+		})
+	}
+}
+
 func TestOutboundBundleKeys(t *testing.T) {
 	id, err := NewUUIDv7String()
 	if err != nil {
@@ -97,17 +164,17 @@ func TestR2KeyLayoutGoldenFixture(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse inbound fixture timestamp: %v", err)
 	}
-	dailyPrefix, err := InboundDailyPrefix(fixture.Inbound.RecipientDomain, inboundTS)
+	dailyPrefix, err := OrganizationInboundDailyPrefix(fixture.Inbound.OrgPublicID, fixture.Inbound.RecipientDomain, inboundTS)
 	if err != nil {
-		t.Fatalf("InboundDailyPrefix returned error: %v", err)
+		t.Fatalf("OrganizationInboundDailyPrefix returned error: %v", err)
 	}
 	if dailyPrefix != fixture.Inbound.DailyPrefix {
 		t.Fatalf("daily prefix = %q, want %q", dailyPrefix, fixture.Inbound.DailyPrefix)
 	}
 
-	inbound, err := InboundBundleKeys(fixture.Inbound.RecipientDomain, inboundTS, fixture.Inbound.IngestID)
+	inbound, err := OrganizationInboundBundleKeys(fixture.Inbound.OrgPublicID, fixture.Inbound.RecipientDomain, inboundTS, fixture.Inbound.IngestID)
 	if err != nil {
-		t.Fatalf("InboundBundleKeys returned error: %v", err)
+		t.Fatalf("OrganizationInboundBundleKeys returned error: %v", err)
 	}
 	if inbound.Prefix != fixture.Inbound.BundlePrefix ||
 		inbound.RawKey != fixture.Inbound.RawKey ||

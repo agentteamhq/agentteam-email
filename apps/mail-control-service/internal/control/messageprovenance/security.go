@@ -444,34 +444,34 @@ func (s *Service) resolveCloudflareArchiveEvidence(ctx context.Context, provenan
 	if err != nil {
 		return unavailableBoundArchive(bundle, "cloudflare_raw_unavailable"), []string{fmt.Sprintf("read Cloudflare raw message %q: %v", bundle.RawKey, err)}
 	}
-		rawSHA := sha256.Sum256(rawBytes)
-		if got := hex.EncodeToString(rawSHA[:]); got != strings.ToLower(strings.TrimSpace(manifest.RawSHA256)) {
-			return unavailableBoundArchive(bundle, "cloudflare_raw_sha256_mismatch"), []string{fmt.Sprintf("Cloudflare raw sha256 %q does not match manifest %q", got, manifest.RawSHA256)}
-		}
-		rawHeaders, err := parseMessageRawHeaders(rawBytes)
-		if err != nil {
-			return unavailableBoundArchive(bundle, "cloudflare_raw_headers_unparseable"), []string{fmt.Sprintf("parse Cloudflare raw message headers %q: %v", bundle.RawKey, err)}
-		}
-		// Cloudflare auth verdicts are trusted only from the verified R2 raw EML.
-		// WildDuck source has already been replayed through Haraka and can contain
-		// user-supplied or namespaced copies of upstream boundary headers.
-		rawSecurity, err := parseCloudflareRawSecurityEvidence(rawBytes)
-		if err != nil {
+	rawSHA := sha256.Sum256(rawBytes)
+	if got := hex.EncodeToString(rawSHA[:]); got != strings.ToLower(strings.TrimSpace(manifest.RawSHA256)) {
+		return unavailableBoundArchive(bundle, "cloudflare_raw_sha256_mismatch"), []string{fmt.Sprintf("Cloudflare raw sha256 %q does not match manifest %q", got, manifest.RawSHA256)}
+	}
+	rawHeaders, err := parseMessageRawHeaders(rawBytes)
+	if err != nil {
+		return unavailableBoundArchive(bundle, "cloudflare_raw_headers_unparseable"), []string{fmt.Sprintf("parse Cloudflare raw message headers %q: %v", bundle.RawKey, err)}
+	}
+	// Cloudflare auth verdicts are trusted only from the verified R2 raw EML.
+	// WildDuck source has already been replayed through Haraka and can contain
+	// user-supplied or namespaced copies of upstream boundary headers.
+	rawSecurity, err := parseCloudflareRawSecurityEvidence(rawBytes)
+	if err != nil {
 		return unavailableBoundArchive(bundle, "cloudflare_raw_headers_unparseable"), []string{fmt.Sprintf("parse Cloudflare raw message headers %q: %v", bundle.RawKey, err)}
 	}
 
 	return &CloudflareArchiveEvidence{
 		Status:                archiveStatusAvailable,
-			RawKey:                firstNonEmpty(manifest.RawKey, bundle.RawKey),
-			EdgeKey:               firstNonEmpty(manifest.EdgeKey, bundle.EdgeKey),
-			RawSHA256:             manifest.RawSHA256,
-			EdgeEvidence:          manifest.CloudflareEdgeEvidence,
-			RawSource:             &MessageRawSource{Source: "cloudflare-archived-raw-eml", Size: len(rawBytes), Raw: string(rawBytes), Headers: rawHeaders},
-			AuthenticationResults: rawSecurity.AuthenticationResults,
-			ReceivedSPF:           rawSecurity.ReceivedSPF,
-			Received:              rawSecurity.Received,
-		}, nil
-	}
+		RawKey:                firstNonEmpty(manifest.RawKey, bundle.RawKey),
+		EdgeKey:               firstNonEmpty(manifest.EdgeKey, bundle.EdgeKey),
+		RawSHA256:             manifest.RawSHA256,
+		EdgeEvidence:          manifest.CloudflareEdgeEvidence,
+		RawSource:             &MessageRawSource{Source: "cloudflare-archived-raw-eml", Size: len(rawBytes), Raw: string(rawBytes), Headers: rawHeaders},
+		AuthenticationResults: rawSecurity.AuthenticationResults,
+		ReceivedSPF:           rawSecurity.ReceivedSPF,
+		Received:              rawSecurity.Received,
+	}, nil
+}
 
 func parseCloudflareRawSecurityEvidence(raw []byte) (cloudflareRawSecurityEvidence, error) {
 	entity, err := message.Read(bytes.NewReader(raw))
