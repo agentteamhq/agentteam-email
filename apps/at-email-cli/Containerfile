@@ -2,10 +2,11 @@ FROM docker.io/library/golang:1.26.4 AS test
 
 WORKDIR /src
 
-COPY go.mod ./
-COPY SKILL.md skill.go ./
-COPY cmd ./cmd
-COPY internal ./internal
+COPY apps/at-email-cli/go.mod ./
+COPY apps/at-email-cli/skill.go ./
+COPY skills/at-email-cli/SKILL.md ./SKILL.md
+COPY apps/at-email-cli/cmd ./cmd
+COPY apps/at-email-cli/internal ./internal
 
 RUN go test ./...
 
@@ -19,10 +20,11 @@ ARG BUILD_DATE=unknown
 ARG VCS_REF=unknown
 ARG VERSION=0.1.0-dev
 
-COPY go.mod ./
-COPY SKILL.md skill.go ./
-COPY cmd ./cmd
-COPY internal ./internal
+COPY apps/at-email-cli/go.mod ./
+COPY apps/at-email-cli/skill.go ./
+COPY skills/at-email-cli/SKILL.md ./SKILL.md
+COPY apps/at-email-cli/cmd ./cmd
+COPY apps/at-email-cli/internal ./internal
 
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w -X at-email-cli/internal/atemail.Version=${VERSION} -X at-email-cli/internal/atemail.Commit=${VCS_REF} -X at-email-cli/internal/atemail.Date=${BUILD_DATE}" -o /out/at-email ./cmd/at-email
 

@@ -49,6 +49,13 @@ func Main(ctx context.Context, argv []string, env []string, stdin io.Reader, std
 			return exitCodeForError(err)
 		}
 		return 0
+	case commandAuth:
+		err = handleAuth(ctx, args, env, stdout, stderr)
+		if err != nil {
+			writeInterpretedError(failureWriter(args.JSON, stdout, stderr), err)
+			return exitCodeForError(err)
+		}
+		return 0
 	}
 
 	args, err = prepareBodyInput(args, stdin)

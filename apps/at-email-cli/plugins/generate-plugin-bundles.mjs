@@ -7,6 +7,7 @@ import { pluginBundles, skillName } from './manifests.mjs'
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const cliRoot = path.resolve(scriptDir, '..')
 const repoRoot = path.resolve(cliRoot, '..', '..')
+const canonicalSkill = path.join(repoRoot, 'skills', skillName, 'SKILL.md')
 
 function parseArgs(argv) {
   const args = {
@@ -68,7 +69,7 @@ async function writeJSON(filePath, value) {
 async function copySkill(targetDir) {
   const skillTarget = path.join(targetDir, 'skills', skillName, 'SKILL.md')
   await fs.mkdir(path.dirname(skillTarget), { recursive: true })
-  await fs.copyFile(path.join(cliRoot, 'SKILL.md'), skillTarget)
+  await fs.copyFile(canonicalSkill, skillTarget)
   return path.relative(targetDir, skillTarget)
 }
 

@@ -6,6 +6,8 @@ import { pluginBundles, skillName } from './manifests.mjs'
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const cliRoot = path.resolve(scriptDir, '..')
+const repoRoot = path.resolve(cliRoot, '..', '..')
+const canonicalSkillPath = path.join(repoRoot, 'skills', skillName, 'SKILL.md')
 
 function parseArgs(argv) {
   const args = {
@@ -90,7 +92,7 @@ function validateManifestPaths(manifest, label) {
 async function validate({ pluginsRoot }) {
   const pluginsRootDir = path.resolve(pluginsRoot)
   const manifest = await readJSON(path.join(pluginsRootDir, 'manifest.json'))
-  const canonicalSkill = await fs.readFile(path.join(cliRoot, 'SKILL.md'), 'utf8')
+  const canonicalSkill = await fs.readFile(canonicalSkillPath, 'utf8')
 
   for (const expectedBundle of pluginBundles) {
     const entry = manifest.bundles.find((bundle) => bundle.id === expectedBundle.id)
@@ -105,7 +107,7 @@ async function validate({ pluginsRoot }) {
 
     const skill = await fs.readFile(path.join(bundleRoot, entry.skill), 'utf8')
     if (skill !== canonicalSkill) {
-      throw new Error(`${entry.id} bundle skill did not match apps/at-email-cli/SKILL.md`)
+      throw new Error(`${entry.id} bundle skill did not match skills/at-email-cli/SKILL.md`)
     }
 
     await assertExpectedFiles(bundleRoot, entry.manifest)

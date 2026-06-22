@@ -7,6 +7,7 @@ import type {
   handleStripeRedirect,
   loadBillingRoute,
   loadDashboardRoute,
+  loadDeviceRoute,
   loadHomeRoute,
   loadPublicAuthRoute,
   loadSettingsRoute,
@@ -24,6 +25,7 @@ export interface FrontendServerRouteHandlers {
   handleStripeRedirect?: typeof handleStripeRedirect
   loadBillingRoute?: typeof loadBillingRoute
   loadDashboardRoute?: typeof loadDashboardRoute
+  loadDeviceRoute?: typeof loadDeviceRoute
   loadHomeRoute?: typeof loadHomeRoute
   loadPublicAuthRoute?: typeof loadPublicAuthRoute
   loadSettingsRoute?: typeof loadSettingsRoute

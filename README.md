@@ -102,6 +102,9 @@ For local worktree setup and container-test isolation, see [SETUP.md](SETUP.md).
 The at-email CLI skill is published from [skills/at-email-cli](skills/at-email-cli)
 for agent-skill marketplaces and GitHub tap discovery.
 
+Skill publishing and update procedures are tracked in
+[SKILL-PUBLISHING.md](SKILL-PUBLISHING.md).
+
 Install directly with the skills CLI:
 
 ```bash
@@ -115,7 +118,7 @@ hermes skills tap add agentteamhq/agentteam-email
 hermes skills install agentteamhq/agentteam-email/skills/at-email-cli
 ```
 
-After ClawHub publishes the skill, OpenClaw users can install it with:
+OpenClaw/ClawHub users can install it with:
 
 ```bash
 openclaw skills install @agentteamhq/at-email-cli

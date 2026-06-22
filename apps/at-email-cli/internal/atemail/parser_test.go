@@ -16,6 +16,10 @@ func TestCommandHelpIsScopedForEveryCommand(t *testing.T) {
 		commandArchive,
 		commandSend,
 		commandReply,
+		commandAuth,
+		commandAuthLogin,
+		commandAuthStatus,
+		commandAuthLogout,
 		commandVersion,
 		commandUpdate,
 		commandSkill,
@@ -64,6 +68,7 @@ func TestParseCommandHelpFlags(t *testing.T) {
 		commandArchive,
 		commandSend,
 		commandReply,
+		commandAuth,
 		commandVersion,
 		commandUpdate,
 		commandSkill,
@@ -84,6 +89,29 @@ func TestParseCommandHelpFlags(t *testing.T) {
 	}
 }
 
+func TestParseNestedAuthHelpFlags(t *testing.T) {
+	cases := []struct {
+		argv    []string
+		command commandName
+	}{
+		{argv: []string{"auth", "login", "--help"}, command: commandAuthLogin},
+		{argv: []string{"auth", "status", "-h"}, command: commandAuthStatus},
+		{argv: []string{"auth", "logout", "--help"}, command: commandAuthLogout},
+	}
+	for _, tc := range cases {
+		t.Run(strings.Join(tc.argv, " "), func(t *testing.T) {
+			_, err := parseArgs(tc.argv)
+			var help helpRequest
+			if !errors.As(err, &help) {
+				t.Fatalf("err = %T %v, want helpRequest", err, err)
+			}
+			if !strings.Contains(help.text, commandUsage(tc.command)) {
+				t.Fatalf("help missing usage %q:\n%s", commandUsage(tc.command), help.text)
+			}
+		})
+	}
+}
+
 func TestParseGlobalVersionFlag(t *testing.T) {
 	args, err := parseArgs([]string{"--version", "--json"})
 	if err != nil {
@@ -91,6 +119,27 @@ func TestParseGlobalVersionFlag(t *testing.T) {
 	}
 	if args.Command != commandVersion || !args.JSON {
 		t.Fatalf("args = %#v", args)
+	}
+}
+
+func TestParseAuthLoginFlags(t *testing.T) {
+	args, err := parseArgs([]string{"auth", "login", "--api-base-url", "http://localhost:4321", "--no-open", "--json"})
+	if err != nil {
+		t.Fatalf("parseArgs returned error: %v", err)
+	}
+	if args.Command != commandAuth || args.AuthAction != "login" || args.APIBaseURL != "http://localhost:4321" || !args.NoOpen || !args.JSON {
+		t.Fatalf("args = %#v", args)
+	}
+}
+
+func TestParseAuthRequiresSubcommand(t *testing.T) {
+	_, err := parseArgs([]string{"auth"})
+	if err == nil {
+		t.Fatal("expected parse error")
+	}
+	want := "the following arguments are required: auth_command"
+	if err.Error() != want {
+		t.Fatalf("error = %q, want %q", err.Error(), want)
 	}
 }
 

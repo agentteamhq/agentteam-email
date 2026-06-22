@@ -28,20 +28,22 @@ dir = "{{config_root}}"
 run = "go mod tidy -diff"
 
 [tasks.test]
-description = "Run at-email CLI Go tests"
-dir = "{{config_root}}"
-run = "go test ./..."
+description = "Run at-email CLI Go tests in the container build stage"
+depends = [":image:test"]
+run = "true"
 
 [tasks."image:test"]
 description = "Run at-email CLI tests inside the container build stage"
 dir = "{{config_root}}"
 run = '''
 : "${WT:?missing WT}"
+repo_root="$(git rev-parse --show-toplevel)"
+cd "${repo_root}"
 engine="${CONTAINER_ENGINE:-podman}"
 image_tag="${AT_EMAIL_CLI_TEST_IMAGE_TAG:-stage}"
 image_repository="${AT_EMAIL_CLI_TEST_IMAGE_REPOSITORY:-atemail.${WT}.at-email-cli-test}"
 "${engine}" build \
-  -f Containerfile \
+  -f apps/at-email-cli/Containerfile \
   --target test \
   -t "${image_repository}:${image_tag}" \
   .
@@ -52,11 +54,13 @@ description = "Build the at-email CLI container image"
 dir = "{{config_root}}"
 run = '''
 : "${WT:?missing WT}"
+repo_root="$(git rev-parse --show-toplevel)"
+cd "${repo_root}"
 engine="${CONTAINER_ENGINE:-podman}"
 image_tag="${AT_EMAIL_CLI_IMAGE_TAG:-stage}"
 image_repository="${AT_EMAIL_CLI_IMAGE_REPOSITORY:-atemail.${WT}.at-email-cli}"
 "${engine}" build \
-  -f Containerfile \
+  -f apps/at-email-cli/Containerfile \
   -t "${image_repository}:${image_tag}" \
   .
 '''
@@ -69,6 +73,7 @@ run = "goreleaser check"
 [tasks."release:snapshot"]
 description = "Build at-email CLI snapshot release artifacts under dist/"
 dir = "{{config_root}}"
+depends = [":skills:stage"]
 run = "goreleaser release --snapshot --clean"
 
 [tasks."npm:generate"]
@@ -123,10 +128,10 @@ description = "Build, validate, and pack at-email CLI plugin distribution bundle
 depends = [":plugins:check", ":plugins:pack"]
 run = "true"
 
-[tasks."skills:sync"]
-description = "Sync the root discoverable at-email CLI skill from the embedded skill"
+[tasks."skills:stage"]
+description = "Stage the canonical root skill for host GoReleaser builds"
 dir = "{{config_root}}"
-run = "node skills/sync-skill-discovery.mjs"
+run = "node skills/stage-skill.mjs"
 
 [tasks."skills:check"]
 description = "Validate at-email CLI skill discovery files"

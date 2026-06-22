@@ -9,17 +9,21 @@ import (
 type commandName string
 
 const (
-	commandStatus   commandName = "status"
-	commandInbox    commandName = "inbox"
-	commandRead     commandName = "read"
-	commandSearch   commandName = "search"
-	commandMarkRead commandName = "mark-read"
-	commandArchive  commandName = "archive"
-	commandSend     commandName = "send"
-	commandReply    commandName = "reply"
-	commandVersion  commandName = "version"
-	commandUpdate   commandName = "self-update"
-	commandSkill    commandName = "skill"
+	commandStatus     commandName = "status"
+	commandInbox      commandName = "inbox"
+	commandRead       commandName = "read"
+	commandSearch     commandName = "search"
+	commandMarkRead   commandName = "mark-read"
+	commandArchive    commandName = "archive"
+	commandSend       commandName = "send"
+	commandReply      commandName = "reply"
+	commandAuth       commandName = "auth"
+	commandAuthLogin  commandName = "auth login"
+	commandAuthStatus commandName = "auth status"
+	commandAuthLogout commandName = "auth logout"
+	commandVersion    commandName = "version"
+	commandUpdate     commandName = "self-update"
+	commandSkill      commandName = "skill"
 )
 
 type parsedArgs struct {
@@ -43,6 +47,10 @@ type parsedArgs struct {
 	All        bool
 
 	TargetVersion string
+
+	AuthAction string
+	APIBaseURL string
+	NoOpen     bool
 }
 
 type helpRequest struct {
@@ -88,6 +96,8 @@ func parseArgs(argv []string) (parsedArgs, error) {
 		return parseSend(rest)
 	case commandReply:
 		return parseReply(rest)
+	case commandAuth:
+		return parseAuth(rest)
 	case commandVersion:
 		return parseVersion(rest)
 	case commandUpdate:
@@ -363,6 +373,96 @@ func parseReply(argv []string) (parsedArgs, error) {
 	return args, nil
 }
 
+func parseAuth(argv []string) (parsedArgs, error) {
+	if len(argv) == 0 {
+		return parsedArgs{}, newCommandUsageError(commandAuth, "the following arguments are required: auth_command")
+	}
+	if argv[0] == "-h" || argv[0] == "--help" {
+		return parsedArgs{}, helpRequest{text: commandHelp(commandAuth)}
+	}
+	action := argv[0]
+	rest := argv[1:]
+	switch action {
+	case "login":
+		return parseAuthLogin(rest)
+	case "status":
+		return parseAuthStatus(rest)
+	case "logout":
+		return parseAuthLogout(rest)
+	default:
+		return parsedArgs{}, newCommandUsageError(commandAuth, fmt.Sprintf("argument auth_command: invalid choice: %q", action))
+	}
+}
+
+func parseAuthLogin(argv []string) (parsedArgs, error) {
+	args := parsedArgs{Command: commandAuth, AuthAction: "login"}
+	for i := 0; i < len(argv); i++ {
+		token := argv[i]
+		switch {
+		case token == "-h" || token == "--help":
+			return parsedArgs{}, helpRequest{text: commandHelp(commandAuthLogin)}
+		case token == "--":
+			if i+1 < len(argv) {
+				return parsedArgs{}, unrecognized(commandAuthLogin, argv[i+1:])
+			}
+			return args, nil
+		case token == "--json":
+			args.JSON = true
+		case token == "--no-open":
+			args.NoOpen = true
+		case token == "--api-base-url" || strings.HasPrefix(token, "--api-base-url="):
+			value, err := flagValue(commandAuthLogin, argv, &i, "--api-base-url")
+			if err != nil {
+				return parsedArgs{}, err
+			}
+			args.APIBaseURL = value
+		default:
+			return parsedArgs{}, unrecognized(commandAuthLogin, argv[i:])
+		}
+	}
+	return args, nil
+}
+
+func parseAuthStatus(argv []string) (parsedArgs, error) {
+	args := parsedArgs{Command: commandAuth, AuthAction: "status"}
+	for i := 0; i < len(argv); i++ {
+		switch argv[i] {
+		case "-h", "--help":
+			return parsedArgs{}, helpRequest{text: commandHelp(commandAuthStatus)}
+		case "--":
+			if i+1 < len(argv) {
+				return parsedArgs{}, unrecognized(commandAuthStatus, argv[i+1:])
+			}
+			return args, nil
+		case "--json":
+			args.JSON = true
+		default:
+			return parsedArgs{}, unrecognized(commandAuthStatus, argv[i:])
+		}
+	}
+	return args, nil
+}
+
+func parseAuthLogout(argv []string) (parsedArgs, error) {
+	args := parsedArgs{Command: commandAuth, AuthAction: "logout"}
+	for i := 0; i < len(argv); i++ {
+		switch argv[i] {
+		case "-h", "--help":
+			return parsedArgs{}, helpRequest{text: commandHelp(commandAuthLogout)}
+		case "--":
+			if i+1 < len(argv) {
+				return parsedArgs{}, unrecognized(commandAuthLogout, argv[i+1:])
+			}
+			return args, nil
+		case "--json":
+			args.JSON = true
+		default:
+			return parsedArgs{}, unrecognized(commandAuthLogout, argv[i:])
+		}
+	}
+	return args, nil
+}
+
 func parseVersion(argv []string) (parsedArgs, error) {
 	args := parsedArgs{Command: commandVersion}
 	for i := 0; i < len(argv); i++ {
@@ -496,6 +596,7 @@ positional arguments:
     archive    Move one message to Archive
     send       Send one email
     reply      Reply to one message
+    auth       Authenticate the CLI with AgentTeam Email
     version    Print the at-email version
     self-update
               Update the at-email binary from GitHub Releases
@@ -509,11 +610,14 @@ options:
 configuration:
   Requires AT_EMAIL_WILDDUCK_API_BASE_URL, AT_EMAIL_WILDDUCK_ACCESS_TOKEN,
   and AT_EMAIL_WILDDUCK_USER_ID. Safe message reads also require
-  AT_EMAIL_CONTROL_API_BASE_URL and AT_EMAIL_MESSAGE_READ_TOKEN.
+  AT_EMAIL_CONTROL_API_BASE_URL and AT_EMAIL_MESSAGE_READ_TOKEN. CLI auth uses
+  https://app.agentteam.email by default; set AT_EMAIL_API_BASE_URL for another
+  app origin.
 
 Examples:
   at-email status
   at-email inbox --unseen
+  at-email auth login
   at-email send --to alice@example.net --subject Hello --body 'Hi there'
   at-email version
   at-email skill > at-email-cli/SKILL.md
@@ -538,6 +642,14 @@ func commandUsage(command commandName) string {
 		return "usage: at-email send [-h] [--json] --to TO [--cc CC] [--bcc BCC] [--reply-to REPLY_TO] --subject SUBJECT [--body BODY | --body-file PATH]\n"
 	case commandReply:
 		return "usage: at-email reply [-h] [--json] [--folder FOLDER] [--all] [--body BODY | --body-file PATH] message_id\n"
+	case commandAuth:
+		return "usage: at-email auth [-h] AUTH_COMMAND ...\n"
+	case commandAuthLogin:
+		return "usage: at-email auth login [-h] [--json] [--api-base-url URL] [--no-open]\n"
+	case commandAuthStatus:
+		return "usage: at-email auth status [-h] [--json]\n"
+	case commandAuthLogout:
+		return "usage: at-email auth logout [-h] [--json]\n"
 	case commandVersion:
 		return "usage: at-email version [-h] [--json]\n"
 	case commandUpdate:
@@ -734,6 +846,80 @@ Examples:
   at-email reply 7 --body 'Thanks, received.'
   at-email reply 7 --all --body-file reply.txt
   at-email reply --folder Archive 7 --json
+`
+	case commandAuth:
+		return commandUsage(commandAuth) + `
+Authenticate at-email with AgentTeam Email.
+
+auth commands:
+  login   Start a Better Auth device login and store the CLI session locally
+  status  Show the current CLI authentication state
+  logout  Revoke the current CLI session and remove the local credential
+
+options:
+  -h, --help  show this help message and exit
+
+configuration:
+  Uses https://app.agentteam.email by default. Set AT_EMAIL_API_BASE_URL to use
+  another app origin.
+
+Examples:
+  at-email auth login
+  at-email auth status
+  at-email auth logout
+`
+	case commandAuthLogin:
+		return commandUsage(commandAuthLogin) + `
+Start a Better Auth device login and store the at-email session locally.
+
+options:
+  -h, --help          show this help message and exit
+  --json              write machine-readable JSON to stdout
+  --api-base-url URL  app origin to authenticate against
+  --no-open           print the verification URL without trying to open a browser
+
+defaults:
+  Prints the verification URL and code, tries to open the browser in text mode,
+  then waits until the request is approved or denied.
+
+configuration:
+  Uses https://app.agentteam.email by default. Set AT_EMAIL_API_BASE_URL to use
+  another app origin.
+
+Examples:
+  at-email auth login
+  at-email auth login --no-open
+  at-email auth login --api-base-url http://localhost:4321 --json
+`
+	case commandAuthStatus:
+		return commandUsage(commandAuthStatus) + `
+Show the current CLI authentication state.
+
+options:
+  -h, --help  show this help message and exit
+  --json      write machine-readable JSON to stdout
+
+configuration:
+  Reads the local at-email auth file created by at-email auth login.
+
+Examples:
+  at-email auth status
+  at-email auth status --json
+`
+	case commandAuthLogout:
+		return commandUsage(commandAuthLogout) + `
+Revoke the current CLI session and remove the local credential.
+
+options:
+  -h, --help  show this help message and exit
+  --json      write machine-readable JSON to stdout
+
+configuration:
+  Reads the local at-email auth file created by at-email auth login.
+
+Examples:
+  at-email auth logout
+  at-email auth logout --json
 `
 	case commandVersion:
 		return commandUsage(commandVersion) + `

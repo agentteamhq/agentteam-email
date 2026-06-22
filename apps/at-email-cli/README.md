@@ -68,14 +68,16 @@ Exit codes:
 From this directory:
 
 ```bash
-go test ./...
-go mod tidy -diff
 mise run fmt:check
 mise run mod:check
 mise run test
 mise run check
 mise run image:test
+mise run skills:check
 ```
+
+For direct host Go debugging, run `mise run skills:stage` first so the ignored
+`SKILL.md` needed by `go:embed` exists in this package directory.
 
 ## Builds
 
@@ -135,7 +137,7 @@ npm package metadata so package managers can install the exact platform target.
 ## Plugin Bundle Distribution
 
 The release workflow also generates version-stamped Claude Code and Codex plugin
-bundles from the canonical embedded skill at `apps/at-email-cli/SKILL.md`.
+bundles from the canonical skill at `skills/at-email-cli/SKILL.md`.
 
 Generated bundle directories are written under `dist/plugins/`, and packed
 release tarballs are written under `dist/plugin-bundles/`:
@@ -151,14 +153,14 @@ are intentionally handled separately from this release bundle generator.
 
 ## Skill Marketplace Discovery
 
-The embedded app skill at `apps/at-email-cli/SKILL.md` is canonical for the Go
-binary and plugin bundles. The root copy at `skills/at-email-cli/SKILL.md` is
-the discoverable marketplace/tap path and must stay byte-for-byte identical.
+The root skill at `skills/at-email-cli/SKILL.md` is canonical for the Go binary,
+plugin bundles, and marketplace/tap discovery. Do not commit an app-local skill
+copy under this directory. Host release builds stage an ignored copy with
+`mise run skills:stage`.
 
-Sync and validate the discoverable copy with:
+Validate the skill discovery setup with:
 
 ```bash
-mise run skills:sync
 mise run skills:check
 ```
 
@@ -175,12 +177,11 @@ Repository tap discovery:
 hermes skills tap add agentteamhq/agentteam-email
 ```
 
-ClawHub publishing runs from the release workflow after release validation
-succeeds. The dedicated `.github/workflows/skill-publish.yml` workflow dry-runs
-pull requests and main pushes, and can be manually dispatched for a one-off
-dry-run or publish when `CLAWHUB_TOKEN` is configured:
+Skill marketplace publishing is manual. See the root
+`SKILL-PUBLISHING.md` runbook for skills.sh, Hermes, ClawHub/OpenClaw, and
+LobeHub update steps. The ClawHub publish shape is:
 
 ```bash
-clawhub skill publish skills/at-email-cli --owner agentteamhq --dry-run
-clawhub skill publish skills/at-email-cli --owner agentteamhq
+npx --yes clawhub@latest skill publish skills/at-email-cli --owner agentteamhq --dry-run
+npx --yes clawhub@latest skill publish skills/at-email-cli --owner agentteamhq
 ```

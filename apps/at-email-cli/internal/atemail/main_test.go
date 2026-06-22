@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	atemailskill "at-email-cli"
 )
@@ -56,6 +58,8 @@ func TestMainUsageErrorsUseCommandUsage(t *testing.T) {
 		{name: "archive", argv: []string{"archive"}, wantUsage: commandUsage(commandArchive)},
 		{name: "send", argv: []string{"send", "--body", "hello"}, wantUsage: commandUsage(commandSend)},
 		{name: "reply", argv: []string{"reply"}, wantUsage: commandUsage(commandReply)},
+		{name: "auth", argv: []string{"auth"}, wantUsage: commandUsage(commandAuth)},
+		{name: "auth login", argv: []string{"auth", "login", "extra"}, wantUsage: commandUsage(commandAuthLogin)},
 		{name: "skill", argv: []string{"skill", "extra"}, wantUsage: commandUsage(commandSkill)},
 	}
 	for _, tc := range cases {
@@ -229,6 +233,128 @@ func TestMainSelfUpdateJSONKeepsStdoutMachineReadable(t *testing.T) {
 	}
 	if stderr.String() != "" {
 		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func TestMainAuthLoginStatusAndLogout(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	prevVersion := Version
+	prevOpenBrowser := openBrowser
+	prevAuthSleep := authSleep
+	Version = "1.2.3"
+	openBrowser = func(target string) error {
+		t.Fatalf("browser open called for %s", target)
+		return nil
+	}
+	authSleep = func(ctx context.Context, duration time.Duration) error {
+		return nil
+	}
+	defer func() {
+		Version = prevVersion
+		openBrowser = prevOpenBrowser
+		authSleep = prevAuthSleep
+	}()
+
+	var tokenPolls int
+	var revoked bool
+	expectedUserAgent := "at-email/1.2.3 (" + runtime.GOOS + "; " + runtime.GOARCH + ")"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("User-Agent"); got != expectedUserAgent {
+			t.Fatalf("user-agent = %q", got)
+		}
+		switch r.URL.RequestURI() {
+		case "/rpc/auth/api/device/code":
+			if r.Method != http.MethodPost {
+				t.Fatalf("method = %s", r.Method)
+			}
+			_, _ = w.Write([]byte(`{"device_code":"device-1","user_code":"ABCD1234","verification_uri":"https://app.example/device","verification_uri_complete":"https://app.example/device?user_code=ABCD1234","expires_in":60,"interval":0}`))
+		case "/rpc/auth/api/device/token":
+			tokenPolls++
+			if tokenPolls == 1 {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"error":"authorization_pending","error_description":"Authorization is pending"}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"access_token":"session-token-secret","token_type":"Bearer","expires_in":3600,"scope":"openid profile email"}`))
+		case "/rpc/auth/api/get-session":
+			if r.Header.Get("Authorization") != "Bearer session-token-secret" {
+				t.Fatalf("authorization header = %q", r.Header.Get("Authorization"))
+			}
+			_, _ = w.Write([]byte(`{"session":{"id":"sess-1","expiresAt":"2026-12-19T12:00:00Z","userAgent":"at-email/1.2.3 (linux; amd64)"},"user":{"id":"user-1","email":"agent@example.com","name":"Agent"}}`))
+		case "/rpc/auth/api/revoke-session":
+			if r.Header.Get("Authorization") != "Bearer session-token-secret" {
+				t.Fatalf("authorization header = %q", r.Header.Get("Authorization"))
+			}
+			var body map[string]string
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatalf("decode revoke body: %v", err)
+			}
+			if body["token"] != "session-token-secret" {
+				t.Fatalf("revoke token = %q", body["token"])
+			}
+			revoked = true
+			_, _ = w.Write([]byte(`{"status":true}`))
+		default:
+			t.Fatalf("request URI = %s", r.URL.RequestURI())
+		}
+	}))
+	defer server.Close()
+
+	env := []string{"AT_EMAIL_API_BASE_URL=" + server.URL}
+	var stdout, stderr bytes.Buffer
+	code := Main(context.Background(), []string{"auth", "login", "--no-open"}, env, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("login code = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	for _, want := range []string{
+		"Open: https://app.example/device?user_code=ABCD1234\n",
+		"Code: ABCD-1234\n",
+		"Logged in.\n",
+		"Account: agent@example.com\n",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("login stdout missing %q:\n%s", want, stdout.String())
+		}
+	}
+	if strings.Contains(stdout.String(), "session-token-secret") {
+		t.Fatalf("login stdout exposed token:\n%s", stdout.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("login stderr = %q", stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = Main(context.Background(), []string{"auth", "status", "--json"}, nil, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("status code = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if strings.Contains(stdout.String(), "session-token-secret") {
+		t.Fatalf("status stdout exposed token:\n%s", stdout.String())
+	}
+	var statusPayload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &statusPayload); err != nil {
+		t.Fatalf("decode status json: %v", err)
+	}
+	if statusPayload["authenticated"] != true {
+		t.Fatalf("status payload = %#v", statusPayload)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = Main(context.Background(), []string{"auth", "logout", "--json"}, nil, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("logout code = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !revoked {
+		t.Fatal("remote session was not revoked")
+	}
+	var logoutPayload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &logoutPayload); err != nil {
+		t.Fatalf("decode logout json: %v", err)
+	}
+	if logoutPayload["status"] != "logged_out" || logoutPayload["remote_revoked"] != true {
+		t.Fatalf("logout payload = %#v", logoutPayload)
 	}
 }
 
