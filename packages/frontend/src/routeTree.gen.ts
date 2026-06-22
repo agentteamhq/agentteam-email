@@ -16,6 +16,7 @@ import { Route as SigninRouteImport } from './routes/signin'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as RecoveryEmailSentRouteImport } from './routes/recovery-email-sent'
 import { Route as RecoverAccountRouteImport } from './routes/recover-account'
+import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as MagicLinkRouteImport } from './routes/magic-link'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as CallbackRouteImport } from './routes/callback'
@@ -59,6 +60,11 @@ const RecoverAccountRoute = RecoverAccountRouteImport.update({
   path: '/recover-account',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OnboardingRoute = OnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MagicLinkRoute = MagicLinkRouteImport.update({
   id: '/magic-link',
   path: '/magic-link',
@@ -100,6 +106,7 @@ export interface FileRoutesByFullPath {
   '/callback': typeof CallbackRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/magic-link': typeof MagicLinkRoute
+  '/onboarding': typeof OnboardingRoute
   '/recover-account': typeof RecoverAccountRoute
   '/recovery-email-sent': typeof RecoveryEmailSentRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -115,6 +122,7 @@ export interface FileRoutesByTo {
   '/callback': typeof CallbackRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/magic-link': typeof MagicLinkRoute
+  '/onboarding': typeof OnboardingRoute
   '/recover-account': typeof RecoverAccountRoute
   '/recovery-email-sent': typeof RecoveryEmailSentRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -132,6 +140,7 @@ export interface FileRoutesById {
   '/callback': typeof CallbackRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/magic-link': typeof MagicLinkRoute
+  '/onboarding': typeof OnboardingRoute
   '/recover-account': typeof RecoverAccountRoute
   '/recovery-email-sent': typeof RecoveryEmailSentRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -149,6 +158,7 @@ export interface FileRouteTypes {
     | '/callback'
     | '/forgot-password'
     | '/magic-link'
+    | '/onboarding'
     | '/recover-account'
     | '/recovery-email-sent'
     | '/reset-password'
@@ -164,6 +174,7 @@ export interface FileRouteTypes {
     | '/callback'
     | '/forgot-password'
     | '/magic-link'
+    | '/onboarding'
     | '/recover-account'
     | '/recovery-email-sent'
     | '/reset-password'
@@ -180,6 +191,7 @@ export interface FileRouteTypes {
     | '/callback'
     | '/forgot-password'
     | '/magic-link'
+    | '/onboarding'
     | '/recover-account'
     | '/recovery-email-sent'
     | '/reset-password'
@@ -197,6 +209,7 @@ export interface RootRouteChildren {
   CallbackRoute: typeof CallbackRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   MagicLinkRoute: typeof MagicLinkRoute
+  OnboardingRoute: typeof OnboardingRoute
   RecoverAccountRoute: typeof RecoverAccountRoute
   RecoveryEmailSentRoute: typeof RecoveryEmailSentRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
@@ -255,6 +268,13 @@ declare module '@tanstack/react-router' {
       path: '/recover-account'
       fullPath: '/recover-account'
       preLoaderRoute: typeof RecoverAccountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/onboarding': {
+      id: '/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof OnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/magic-link': {
@@ -327,6 +347,7 @@ const rootRouteChildren: RootRouteChildren = {
   CallbackRoute: CallbackRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   MagicLinkRoute: MagicLinkRoute,
+  OnboardingRoute: OnboardingRoute,
   RecoverAccountRoute: RecoverAccountRoute,
   RecoveryEmailSentRoute: RecoveryEmailSentRoute,
   ResetPasswordRoute: ResetPasswordRoute,

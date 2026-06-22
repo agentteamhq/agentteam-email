@@ -1,13 +1,12 @@
 import * as React from 'react'
-import type { VariantProps } from 'class-variance-authority'
 
 import { cn } from '../lib/utils'
 import { useEnvContext } from '../partials/webapp/env-context'
 import { buttonVariants } from './ui/button'
+import type { VariantProps } from 'class-variance-authority'
 
 export interface LinkProps
-  extends React.AnchorHTMLAttributes<HTMLAnchorElement>,
-    VariantProps<typeof buttonVariants> {
+  extends React.AnchorHTMLAttributes<HTMLAnchorElement>, VariantProps<typeof buttonVariants> {
   align?: 'start' | 'center'
   disabled?: boolean
   prefetch?: boolean

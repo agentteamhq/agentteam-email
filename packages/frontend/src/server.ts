@@ -1,5 +1,4 @@
 import { createServer as createHttpServer } from 'node:http'
-import type { IncomingMessage, ServerResponse } from 'node:http'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import debug from 'debug'
@@ -8,6 +7,7 @@ import send from 'send'
 import { createWebRequest, getRequestOrigin, sendWebResponse } from './http'
 import { handleBackendPackageRequest } from './backend-package-handlers'
 import startWebServer from './start-web-server.js'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 
 const log = debug('app:frontend')
 const clientDist = fileURLToPath(new URL('../client', import.meta.url))
@@ -65,11 +65,7 @@ async function handleNodeRequest(req: IncomingMessage, res: ServerResponse): Pro
   await sendWebResponse(response, res)
 }
 
-async function sendStaticAsset(
-  req: IncomingMessage,
-  res: ServerResponse,
-  pathname: string
-): Promise<void> {
+async function sendStaticAsset(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<void> {
   await new Promise<void>((resolvePromise, reject) => {
     send(req, pathname, {
       index: false,

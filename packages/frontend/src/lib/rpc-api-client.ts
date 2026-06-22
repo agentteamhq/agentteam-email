@@ -1,4 +1,5 @@
-import { treaty, type Treaty } from '@elysiajs/eden'
+import { treaty } from '@elysiajs/eden'
+import type { Treaty } from '@elysiajs/eden'
 import type { BackendRpcAppType } from '@main/backend'
 
 const client = treaty<BackendRpcAppType>(

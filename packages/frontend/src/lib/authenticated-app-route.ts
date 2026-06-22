@@ -1,9 +1,10 @@
-import type { SettingsRouteState } from '@main/backend/routes/webapp'
 import { parseUUIDv7 } from '@main/common'
 
-import { resolveFrontendServerRouteContext, type FrontendLoaderInput } from '../server-route-context'
+import { resolveFrontendServerRouteContext } from '../server-route-context'
 import { authReactClient } from './auth-react-client'
 import { throwAuthRequiredRedirect } from './route-redirect'
+import type { FrontendLoaderInput } from '../server-route-context'
+import type { SettingsRouteState } from '@main/backend/routes/webapp'
 
 export interface AuthenticatedRouteContext {
   authenticatedRouteState?: SettingsRouteState

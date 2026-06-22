@@ -1,9 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
-import type { AuthRouteState } from '@main/backend/routes/webapp'
 
 import { resolveFrontendServerRouteContext } from '../server-route-context'
 import { MagicLinkRouteScreen } from '../screens/magic-link-route-screen'
 import { SITE_STRINGS, formatSiteTitle } from '../strings'
+import type { AuthRouteState } from '@main/backend/routes/webapp'
 
 const defaultAuthRouteState: AuthRouteState = {
   flash: null,
@@ -13,6 +13,15 @@ const defaultAuthRouteState: AuthRouteState = {
 }
 
 export const Route = createFileRoute('/magic-link')({
+  loader: async (loaderInput) => {
+    const serverRouteContext = resolveFrontendServerRouteContext(loaderInput)
+
+    if (serverRouteContext?.serverRouteHandlers.loadPublicAuthRoute) {
+      return serverRouteContext.serverRouteHandlers.loadPublicAuthRoute(serverRouteContext.request)
+    }
+
+    return defaultAuthRouteState
+  },
   head: () => ({
     meta: [
       {
@@ -24,14 +33,5 @@ export const Route = createFileRoute('/magic-link')({
       }
     ]
   }),
-  loader: async (loaderInput) => {
-    const serverRouteContext = resolveFrontendServerRouteContext(loaderInput)
-
-    if (serverRouteContext?.serverRouteHandlers.loadPublicAuthRoute) {
-      return serverRouteContext.serverRouteHandlers.loadPublicAuthRoute(serverRouteContext.request)
-    }
-
-    return defaultAuthRouteState
-  },
   component: MagicLinkRouteScreen
 })

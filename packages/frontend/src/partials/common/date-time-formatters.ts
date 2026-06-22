@@ -4,10 +4,9 @@
 // format(2, 'day') => 'in 2 days'
 // format(-1, 'day) => 'yesterday'
 
+import { ensureClientOnly } from './ensure-client-only'
 import type { TZDate } from '@date-fns/tz'
 import type { UTCDate } from '@date-fns/utc'
-
-import { ensureClientOnly } from './ensure-client-only'
 
 // format(1, 'hour') => 'in 1 hour'
 const localRelativeDayStringFormatter = new Intl.RelativeTimeFormat(undefined, {

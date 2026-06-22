@@ -24,9 +24,7 @@ export function AuthScreenFrame({ children }: { children: ReactNode }) {
           AgentTeam Email
         </a>
       </header>
-      <section className='flex flex-1 items-start justify-center px-4 py-10 md:py-16'>
-        {children}
-      </section>
+      <section className='flex flex-1 items-start justify-center px-4 py-10 md:py-16'>{children}</section>
     </main>
   )
 }

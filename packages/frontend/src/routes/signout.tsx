@@ -6,17 +6,6 @@ import { SignOutRouteScreen } from '../screens/signout-route-screen'
 import { SITE_STRINGS, formatSiteTitle } from '../strings'
 
 export const Route = createFileRoute('/signout')({
-  head: () => ({
-    meta: [
-      {
-        title: formatSiteTitle('Sign out')
-      },
-      {
-        name: 'description',
-        content: `Sign out of your ${SITE_STRINGS.BRAND_NAME} account.`
-      }
-    ]
-  }),
   loader: async (loaderInput) => {
     const serverRouteContext = resolveFrontendServerRouteContext(loaderInput)
 
@@ -29,6 +18,17 @@ export const Route = createFileRoute('/signout')({
       setCookieHeaders: []
     }
   },
+  head: () => ({
+    meta: [
+      {
+        title: formatSiteTitle('Sign out')
+      },
+      {
+        name: 'description',
+        content: `Sign out of your ${SITE_STRINGS.BRAND_NAME} account.`
+      }
+    ]
+  }),
   headers: ({ loaderData }) => routeSetCookieHeaders(loaderData?.setCookieHeaders),
   component: SignOutRouteScreen
 })

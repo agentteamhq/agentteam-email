@@ -1,6 +1,6 @@
-import type { IncomingMessage, ServerResponse } from 'node:http'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 
 type RequestInitWithDuplex = RequestInit & {
   duplex?: 'half'

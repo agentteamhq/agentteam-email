@@ -1,8 +1,4 @@
-import type {
-  FrontendRouterContext,
-  FrontendServerRouteHandlers,
-  FrontendStartRequestContext
-} from './types'
+import type { FrontendRouterContext, FrontendServerRouteHandlers, FrontendStartRequestContext } from './types'
 
 export interface FrontendLoaderInput {
   context: FrontendRouterContext

@@ -2,9 +2,9 @@ import { QueryClient } from '@tanstack/react-query'
 import { createRouter as createTanStackRouter } from '@tanstack/react-router'
 import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query'
 
-import { getRuntimePublicEnv } from '#runtime-public-env'
 import { routeTree } from './routeTree.gen'
 import type { FrontendRouterContext, FrontendStartRequestContext, PublicEnv } from './types'
+import { getRuntimePublicEnv } from '#runtime-public-env'
 
 export interface CreateFrontendRouterOptions {
   publicEnv: PublicEnv

@@ -1,12 +1,10 @@
-import type { Register } from '@tanstack/react-router'
 import { defaultStreamHandler } from '@tanstack/react-start-server'
-import {
-  createStartHandler,
-  type RequestHandler
-} from '@tanstack/start-server-core'
+import { createStartHandler } from '@tanstack/start-server-core'
 
 import { handleBackendPackageRequest } from './backend-package-handlers'
 import { createFrontendServerRouteHandlers } from './server-route-handlers'
+import type { RequestHandler } from '@tanstack/start-server-core'
+import type { Register } from '@tanstack/react-router'
 import type { FrontendStartRequestContext } from './types'
 
 const startHandler = createStartHandler(defaultStreamHandler)

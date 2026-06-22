@@ -1,10 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
-import type { AuthRouteState } from '@main/backend/routes/webapp'
 
 import { throwRouteRedirect } from '../lib/route-redirect'
 import { resolveFrontendServerRouteContext } from '../server-route-context'
 import { SignInRouteScreen } from '../screens/signin-route-screen'
 import { SITE_STRINGS, formatSiteTitle } from '../strings'
+import type { AuthRouteState } from '@main/backend/routes/webapp'
 
 const defaultSignInRouteState: AuthRouteState = {
   flash: null,
@@ -14,17 +14,6 @@ const defaultSignInRouteState: AuthRouteState = {
 }
 
 export const Route = createFileRoute('/signin')({
-  head: () => ({
-    meta: [
-      {
-        title: formatSiteTitle('Sign in')
-      },
-      {
-        name: 'description',
-        content: `Access your ${SITE_STRINGS.BRAND_NAME} workspace.`
-      }
-    ]
-  }),
   loader: async (loaderInput) => {
     const serverRouteContext = resolveFrontendServerRouteContext(loaderInput)
 
@@ -42,5 +31,16 @@ export const Route = createFileRoute('/signin')({
 
     return defaultSignInRouteState
   },
+  head: () => ({
+    meta: [
+      {
+        title: formatSiteTitle('Sign in')
+      },
+      {
+        name: 'description',
+        content: `Access your ${SITE_STRINGS.BRAND_NAME} workspace.`
+      }
+    ]
+  }),
   component: SignInRouteScreen
 })
