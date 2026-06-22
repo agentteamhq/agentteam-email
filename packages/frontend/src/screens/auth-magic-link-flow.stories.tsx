@@ -1,13 +1,13 @@
+import { defaultAuthRouteArgs } from '../storybook/auth-route-fixtures'
+import { publicAuthRouteState } from '../storybook/screen-fixtures'
+import { AuthRoutePage } from './auth-route-page'
 import type { Meta, StoryObj } from '@storybook/react'
-
-import { AuthRouteStory } from '../storybook/auth-route-story'
-import { publicAuthRouteState, storyPublicEnv } from '../storybook/screen-fixtures'
 
 const meta = {
   title: 'Screens/Auth/Flows/Magic Link',
-  component: AuthRouteStory,
+  component: AuthRoutePage,
   args: {
-    publicEnv: storyPublicEnv,
+    ...defaultAuthRouteArgs,
     routeState: publicAuthRouteState,
     lastUsedLoginMethod: null,
     view: 'magicLink'
@@ -15,7 +15,7 @@ const meta = {
   parameters: {
     layout: 'fullscreen'
   }
-} satisfies Meta<typeof AuthRouteStory>
+} satisfies Meta<typeof AuthRoutePage>
 
 export default meta
 

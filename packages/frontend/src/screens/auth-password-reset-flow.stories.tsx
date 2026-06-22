@@ -1,18 +1,13 @@
+import { defaultAuthRouteArgs } from '../storybook/auth-route-fixtures'
+import { publicAuthRouteState, resetSuccessAuthRouteState } from '../storybook/screen-fixtures'
+import { AuthRoutePage } from './auth-route-page'
 import type { Meta, StoryObj } from '@storybook/react'
-
-import { AuthRouteStory } from '../storybook/auth-route-story'
-import {
-  publicAuthRouteState,
-  resetSuccessAuthRouteState,
-  storyPublicEnv
-} from '../storybook/screen-fixtures'
-import { EmailStatusScreen } from './email-status-screen'
 
 const meta = {
   title: 'Screens/Auth/Flows/Password Reset',
-  component: AuthRouteStory,
+  component: AuthRoutePage,
   args: {
-    publicEnv: storyPublicEnv,
+    ...defaultAuthRouteArgs,
     routeState: publicAuthRouteState,
     lastUsedLoginMethod: null,
     view: 'forgotPassword'
@@ -20,7 +15,7 @@ const meta = {
   parameters: {
     layout: 'fullscreen'
   }
-} satisfies Meta<typeof AuthRouteStory>
+} satisfies Meta<typeof AuthRoutePage>
 
 export default meta
 
@@ -35,28 +30,18 @@ export const Step01RequestLink: Story = {
   }
 }
 
-export const Step02RecoveryEmailSent: Story = {
-  name: '02 recovery email sent',
-  render: () => (
-    <EmailStatusScreen
-      publicEnv={storyPublicEnv}
-      type='recovery'
-    />
-  )
-}
-
-export const Step03ResetFromEmailLink: Story = {
-  name: '03 reset from email link',
+export const Step02ResetFromEmailLink: Story = {
+  name: '02 reset from email link',
   args: {
     routeState: publicAuthRouteState,
     lastUsedLoginMethod: null,
-    search: '?token=storybook-reset-token',
+    resetPasswordToken: 'storybook-reset-token',
     view: 'resetPassword'
   }
 }
 
-export const Step04SignInAfterReset: Story = {
-  name: '04 sign in after reset',
+export const Step03SignInAfterReset: Story = {
+  name: '03 sign in after reset',
   args: {
     routeState: resetSuccessAuthRouteState,
     lastUsedLoginMethod: null,

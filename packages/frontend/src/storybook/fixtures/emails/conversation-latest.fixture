@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+      body {
+        margin: 0;
+        padding: 16px 20px;
+        color: #18181b;
+        font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      p {
+        margin: 0 0 14px;
+      }
+
+    </style>
+  </head>
+  <body>
+    <p>Hi team,</p>
+    <p>Confirming that the mailbox is receiving and sending replies correctly. The message came through with headers intact, and the reply chain below has the original context.</p>
+    <p>Please keep this mailbox active while we finish the Cloudflare routing checks.</p>
+  </body>
+</html>

@@ -1,16 +1,13 @@
+import { defaultAuthRouteArgs } from '../storybook/auth-route-fixtures'
+import { protectedRouteSignInState, publicAuthRouteState } from '../storybook/screen-fixtures'
+import { AuthRoutePage } from './auth-route-page'
 import type { Meta, StoryObj } from '@storybook/react'
-
-import { SignOutView } from '../components/auth/sign-out'
-import { BetterAuthViewFrame } from '../partials/webapp/better-auth-view-template'
-import { AuthRouteStory } from '../storybook/auth-route-story'
-import { protectedRouteSignInState, publicAuthRouteState, storyPublicEnv } from '../storybook/screen-fixtures'
-import { AuthViewScreen } from './auth-view-screen'
 
 const meta = {
   title: 'Screens/Auth/States',
-  component: AuthRouteStory,
+  component: AuthRoutePage,
   args: {
-    publicEnv: storyPublicEnv,
+    ...defaultAuthRouteArgs,
     routeState: protectedRouteSignInState,
     lastUsedLoginMethod: null,
     view: 'signIn'
@@ -24,7 +21,7 @@ const meta = {
       }
     }
   }
-} satisfies Meta<typeof AuthRouteStory>
+} satisfies Meta<typeof AuthRoutePage>
 
 export default meta
 
@@ -113,14 +110,8 @@ export const SignUpLastUsedLinkedIn: Story = {
 
 export const SignOutRedirecting: Story = {
   name: 'Sign out / redirecting to sign in',
-  render: () => (
-    <AuthViewScreen
-      publicEnv={storyPublicEnv}
-      routeState={publicAuthRouteState}
-    >
-      <BetterAuthViewFrame view='signOut'>
-        <SignOutView className='border-secondary-card-border bg-surface w-full gap-4 shadow-sm' />
-      </BetterAuthViewFrame>
-    </AuthViewScreen>
-  )
+  args: {
+    routeState: publicAuthRouteState,
+    view: 'signOut'
+  }
 }

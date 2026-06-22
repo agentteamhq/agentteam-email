@@ -1,57 +1,39 @@
-import type { Meta, StoryObj } from '@storybook/react'
-import { expect, userEvent, within } from 'storybook/test'
+import { expect, fn, userEvent, within } from 'storybook/test'
 
 import {
-  defaultAuthenticatedDashboardView,
-  defaultAuthenticatedSidebarView,
-  type AuthenticatedDashboardView,
-  type AuthenticatedSidebarView
-} from '../partials/authenticated/authenticated-shell'
-import { SettingsDialog } from '../partials/authenticated/settings-dialog'
-import { authenticatedSettingsRouteState, storyPublicEnv } from '../storybook/screen-fixtures'
+  authenticatedSectionBaseArgs,
+  blockedImagesSidebarView,
+  conversationThreadSidebarView,
+  disabledToolbarActionSidebarView,
+  disabledToolbarEmailPreviewsById,
+  emailPreviewSidebarView,
+  emailPreviewsById,
+  emptyAuthenticatedDashboardView,
+  emptyAuthenticatedSidebarView,
+  loadingAuthenticatedDashboardView,
+  loadingAuthenticatedSidebarView,
+  searchFilteredSidebarView,
+  unreadOnlySidebarView,
+  welcomeEmailSidebarView
+} from '../storybook/authenticated-section-fixtures'
 import { DashboardScreen } from './dashboard-screen'
-
-const loadingSidebarView = {
-  ...defaultAuthenticatedSidebarView,
-  mails: [],
-  state: 'loading'
-} satisfies AuthenticatedSidebarView
-
-const emptySidebarView = {
-  ...defaultAuthenticatedSidebarView,
-  emptyDescription: 'This mailbox does not have any messages yet.',
-  emptyTitle: 'No messages',
-  mails: [],
-  state: 'empty'
-} satisfies AuthenticatedSidebarView
-
-const loadingDashboardView = {
-  ...defaultAuthenticatedDashboardView,
-  state: 'loading'
-} satisfies AuthenticatedDashboardView
-
-const emptyDashboardView = {
-  ...defaultAuthenticatedDashboardView,
-  emptyDescription: 'Dashboard modules will appear here once there is workspace activity.',
-  emptyTitle: 'No dashboard activity',
-  state: 'empty'
-} satisfies AuthenticatedDashboardView
+import type { Meta, StoryObj } from '@storybook/react'
 
 const meta = {
-  title: 'Authenticated Section/Views',
+  title: 'Mail Client/Workspace',
   component: DashboardScreen,
   args: {
-    dashboardView: defaultAuthenticatedDashboardView,
-    publicEnv: storyPublicEnv,
-    routeState: authenticatedSettingsRouteState,
-    sidebarView: defaultAuthenticatedSidebarView
+    ...authenticatedSectionBaseArgs,
+    emailPreviewsById,
+    onEmailAction: fn(),
+    sidebarView: emailPreviewSidebarView
   },
   parameters: {
     layout: 'fullscreen',
     docs: {
       description: {
         component:
-          'The production authenticated shell and settings dialog using the promoted sidebar-09 and sidebar-13 layouts.'
+          'The production mail client workspace with mailbox navigation, message reading, conversation, security, and settings states.'
       }
     }
   }
@@ -61,53 +43,110 @@ export default meta
 
 type Story = StoryObj<typeof meta>
 
-export const Sidebar09: Story = {
-  name: 'sidebar-09'
+export const MailboxDefault: Story = {
+  name: 'mailbox / default'
 }
 
-export const Sidebar09Loading: Story = {
-  name: 'sidebar-09 loading',
+export const MailboxLoading: Story = {
+  name: 'mailbox / loading',
   args: {
-    dashboardView: loadingDashboardView,
-    sidebarView: loadingSidebarView
+    dashboardView: loadingAuthenticatedDashboardView,
+    sidebarView: loadingAuthenticatedSidebarView
   }
 }
 
-export const Sidebar09Empty: Story = {
-  name: 'sidebar-09 empty',
+export const MailboxEmpty: Story = {
+  name: 'mailbox / empty',
   args: {
-    dashboardView: emptyDashboardView,
-    sidebarView: emptySidebarView
+    dashboardView: emptyAuthenticatedDashboardView,
+    sidebarView: emptyAuthenticatedSidebarView
   }
 }
 
-export const SettingsDialogOpen: Story = {
-  name: 'sidebar-13 settings dialog',
-  render: () => <SettingsDialog />
+export const MessageAppointment: Story = {
+  name: 'message / appointment',
+  args: {
+    sidebarView: emailPreviewSidebarView
+  }
 }
 
-export const SettingsDialogLoading: Story = {
-  name: 'sidebar-13 settings dialog loading',
-  render: () => <SettingsDialog contentState='loading' />
+export const MessageWelcome: Story = {
+  name: 'message / welcome',
+  args: {
+    sidebarView: welcomeEmailSidebarView
+  }
 }
 
-export const SettingsDialogEmpty: Story = {
-  name: 'sidebar-13 settings dialog empty',
-  render: () => <SettingsDialog contentState='empty' />
+export const MessageDisabledActions: Story = {
+  name: 'message / disabled toolbar action',
+  args: {
+    emailPreviewsById: disabledToolbarEmailPreviewsById,
+    sidebarView: disabledToolbarActionSidebarView
+  }
 }
 
-export const SettingsDialogConnectedAccounts: Story = {
-  name: 'sidebar-13 connected accounts',
-  render: () => (
-    <SettingsDialog
-      activeSection='connectedAccounts'
-      contentState='empty'
-    />
-  )
+export const ConversationThread: Story = {
+  name: 'conversation / thread',
+  args: {
+    sidebarView: conversationThreadSidebarView
+  }
 }
 
-export const SettingsDialogFromAvatarMenu: Story = {
-  name: 'sidebar-09 avatar menu opens sidebar-13 settings',
+export const SecurityRemoteContentBlocked: Story = {
+  name: 'security / remote content blocked',
+  args: {
+    sidebarView: blockedImagesSidebarView
+  }
+}
+
+export const SecurityRemoteContentInteraction: Story = {
+  name: 'security / remote content interaction',
+  args: {
+    sidebarView: blockedImagesSidebarView
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+
+    await expect(await canvas.findByText(/remote images blocked/i)).toBeInTheDocument()
+    await userEvent.click(await canvas.findByRole('button', { name: /show images/i }))
+    await expect(canvas.queryByText(/remote images blocked/i)).not.toBeInTheDocument()
+    await userEvent.click(await canvas.findByRole('button', { name: /dash.cloudflare.com/i }))
+
+    const body = within(canvasElement.ownerDocument.body)
+    await expect(await body.findByRole('dialog')).toHaveTextContent(/dash.cloudflare.com/i)
+  }
+}
+
+export const MailboxSearchFiltered: Story = {
+  name: 'mailbox / search filtered',
+  args: {
+    sidebarView: searchFilteredSidebarView
+  }
+}
+
+export const MailboxUnreadOnly: Story = {
+  name: 'mailbox / unread only',
+  args: {
+    sidebarView: unreadOnlySidebarView
+  }
+}
+
+export const MessageRowSelection: Story = {
+  name: 'message / row selection',
+  args: {
+    sidebarView: emailPreviewSidebarView
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+
+    await expect(await canvas.findByRole('heading', { name: /appointment alert/i })).toBeInTheDocument()
+    await userEvent.click(await canvas.findByRole('button', { name: /mailjet templates/i }))
+    await expect(await canvas.findByRole('heading', { name: /welcome aboard/i })).toBeInTheDocument()
+  }
+}
+
+export const SettingsFromAccountMenu: Story = {
+  name: 'settings / account menu',
   play: async ({ canvasElement }) => {
     const body = within(canvasElement.ownerDocument.body)
 

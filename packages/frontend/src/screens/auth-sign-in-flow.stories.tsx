@@ -1,13 +1,13 @@
+import { defaultAuthRouteArgs } from '../storybook/auth-route-fixtures'
+import { protectedRouteSignInState } from '../storybook/screen-fixtures'
+import { AuthRoutePage } from './auth-route-page'
 import type { Meta, StoryObj } from '@storybook/react'
-
-import { AuthRouteStory } from '../storybook/auth-route-story'
-import { protectedRouteSignInState, storyPublicEnv } from '../storybook/screen-fixtures'
 
 const meta = {
   title: 'Screens/Auth/Flows/Sign In',
-  component: AuthRouteStory,
+  component: AuthRoutePage,
   args: {
-    publicEnv: storyPublicEnv,
+    ...defaultAuthRouteArgs,
     routeState: protectedRouteSignInState,
     lastUsedLoginMethod: null,
     view: 'signIn'
@@ -15,7 +15,7 @@ const meta = {
   parameters: {
     layout: 'fullscreen'
   }
-} satisfies Meta<typeof AuthRouteStory>
+} satisfies Meta<typeof AuthRoutePage>
 
 export default meta
 

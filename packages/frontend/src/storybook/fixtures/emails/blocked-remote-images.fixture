@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+      body {
+        margin: 0;
+        padding: 16px 20px;
+        color: #18181b;
+        font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      p {
+        margin: 0 0 12px;
+      }
+
+      img {
+        display: block;
+        width: 320px;
+        max-width: 100%;
+        height: 120px;
+        margin: 12px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <p>Thanks for checking out the deployment notes.</p>
+    <img
+      alt="Remote launch banner"
+      data-agent-mail-remote-image-id="image-1"
+      height="120"
+      width="320"
+    >
+    <p>
+      Review the rollout checklist at
+      <a href="#agent-mail-external-link-1" data-agent-mail-external-link-id="link-1">the provider portal</a>.
+    </p>
+  </body>
+</html>

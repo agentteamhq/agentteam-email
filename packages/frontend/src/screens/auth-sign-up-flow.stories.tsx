@@ -1,14 +1,13 @@
+import { defaultAuthRouteArgs } from '../storybook/auth-route-fixtures'
+import { publicAuthRouteState } from '../storybook/screen-fixtures'
+import { AuthRoutePage } from './auth-route-page'
 import type { Meta, StoryObj } from '@storybook/react'
-
-import { AuthRouteStory } from '../storybook/auth-route-story'
-import { publicAuthRouteState, storyPublicEnv } from '../storybook/screen-fixtures'
-import { EmailStatusScreen } from './email-status-screen'
 
 const meta = {
   title: 'Screens/Auth/Flows/Sign Up',
-  component: AuthRouteStory,
+  component: AuthRoutePage,
   args: {
-    publicEnv: storyPublicEnv,
+    ...defaultAuthRouteArgs,
     routeState: publicAuthRouteState,
     lastUsedLoginMethod: null,
     view: 'signUp'
@@ -16,7 +15,7 @@ const meta = {
   parameters: {
     layout: 'fullscreen'
   }
-} satisfies Meta<typeof AuthRouteStory>
+} satisfies Meta<typeof AuthRoutePage>
 
 export default meta
 
@@ -29,14 +28,4 @@ export const Step01CreateAccount: Story = {
     lastUsedLoginMethod: null,
     view: 'signUp'
   }
-}
-
-export const Step02VerificationEmailSent: Story = {
-  name: '02 verification email sent',
-  render: () => (
-    <EmailStatusScreen
-      publicEnv={storyPublicEnv}
-      type='verification'
-    />
-  )
 }
