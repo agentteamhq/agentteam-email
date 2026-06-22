@@ -1,12 +1,15 @@
 import { apiKeyClient } from '@better-auth/api-key/client'
 import { oauthProviderClient } from '@better-auth/oauth-provider/client'
+import { passkeyClient } from '@better-auth/passkey/client'
 import {
   adminClient,
   deviceAuthorizationClient,
   jwtClient,
   lastLoginMethodClient,
   magicLinkClient,
-  organizationClient
+  multiSessionClient,
+  organizationClient,
+  usernameClient
 } from 'better-auth/client/plugins'
 import { createAuthClient } from 'better-auth/react'
 
@@ -26,7 +29,10 @@ const authReactClientOptions = {
   basePath: '/rpc/auth/api',
   plugins: [
     organizationClient(),
+    usernameClient(),
     magicLinkClient(),
+    passkeyClient(),
+    multiSessionClient(),
     adminClient(),
     apiKeyClient(),
     oauthProviderClient(),

@@ -11,6 +11,7 @@ import {
   oauthConsentSchema,
   oauthRefreshTokenSchema,
   organizationSchema,
+  passkeySchema,
   sessionSchema,
   subscriptionSchema,
   teamSchema,
@@ -40,6 +41,7 @@ import type {
   OAuthConsentDocument,
   OAuthRefreshTokenDocument,
   OrganizationDocument,
+  PasskeyDocument,
   SessionDocument,
   SubscriptionDocument,
   TeamDocument,
@@ -80,6 +82,7 @@ export type AppModels = {
   oauthConsent: AppModel<OAuthConsentDocument>
   oauthRefreshToken: AppModel<OAuthRefreshTokenDocument>
   organization: AppModel<OrganizationDocument>
+  passkey: AppModel<PasskeyDocument>
   policyAuditEntry: AppModel<PolicyAuditEntryDocument>
   session: AppModel<SessionDocument>
   subjectPolicy: AppModel<SubjectPolicyDocument>
@@ -123,6 +126,7 @@ export function createAppModels(connection: Connection): AppModels {
     oauthConsent: connectionModel(connection, 'oauthConsent', oauthConsentSchema),
     oauthRefreshToken: connectionModel(connection, 'oauthRefreshToken', oauthRefreshTokenSchema),
     organization: connectionModel(connection, 'organization', organizationSchema),
+    passkey: connectionModel(connection, 'passkey', passkeySchema),
     policyAuditEntry: connectionModel(connection, 'policyAuditEntry', policyAuditEntrySchema),
     session: connectionModel(connection, 'session', sessionSchema),
     subjectPolicy: connectionModel(connection, 'subjectPolicy', subjectPolicySchema),

@@ -7,7 +7,7 @@ import { SITE_STRINGS, formatSiteTitle } from '../../strings'
 export interface DashboardSearch {
   cloudflareIntentId?: string
   cloudflareOAuthError?: string
-  settings?: 'connectedAccounts' | 'cliAccess'
+  settings?: 'connectedAccounts' | 'domains' | 'cliAccess'
 }
 
 function validateDashboardSearch(search: Record<string, unknown>): DashboardSearch {
@@ -21,7 +21,9 @@ function validateDashboardSearch(search: Record<string, unknown>): DashboardSear
         ? search.cloudflareOAuthError
         : undefined,
     settings:
-      search.settings === 'connectedAccounts' || search.settings === 'cliAccess' ? search.settings : undefined
+      search.settings === 'domains' || search.settings === 'connectedAccounts' || search.settings === 'cliAccess'
+        ? search.settings
+        : undefined
   }
 }
 

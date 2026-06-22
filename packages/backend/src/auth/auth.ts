@@ -2,20 +2,24 @@ import { createUUIDv7, nowait } from '@main/common'
 import { createBetterAuthMongoAdapterFromMongooseConnection } from '@main/db'
 import { apiKey } from '@better-auth/api-key'
 import { oauthProvider } from '@better-auth/oauth-provider'
+import { passkey } from '@better-auth/passkey'
 import { APIError } from 'better-auth'
 import { createAuthMiddleware } from 'better-auth/api'
 import { betterAuth } from 'better-auth/minimal'
 import {
   admin,
   bearer,
+  createAccessControl,
   customSession,
   deviceAuthorization,
   genericOAuth,
   jwt,
   lastLoginMethod,
   magicLink,
+  multiSession,
   openAPI,
-  organization
+  organization,
+  username
 } from 'better-auth/plugins'
 import { auditLog } from 'better-auth-audit-logs'
 import debug from 'debug'
@@ -39,6 +43,7 @@ import {
   AGENTTEAM_OAUTH_ACCESS_TOKEN_CLAIMS,
   AGENTTEAM_OAUTH_SCOPES
 } from './oauth-provider-config'
+import type { ApiKeyConfigurationOptions } from '@better-auth/api-key'
 import type { BetterAuthOptions } from 'better-auth/minimal'
 import type { OrganizationId, UserId } from '@main/db'
 import type { Database } from '../db/db'
@@ -54,12 +59,76 @@ const BETTER_AUTH_ROUTE = `${PUBLIC_VARS.PUBLIC_HOSTNAME}/rpc/auth/api`
 const BETTER_AUTH_BASE_PATH = '/api'
 const MANUAL_BASE_PATH = '/rpc/auth/api'
 
+export const organizationAccessControl = createAccessControl({
+  organization: ['update', 'delete'],
+  member: ['create', 'update', 'delete'],
+  invitation: ['create', 'cancel'],
+  team: ['create', 'update', 'delete'],
+  ac: ['create', 'read', 'update', 'delete'],
+  apiKey: ['create', 'read', 'update', 'delete']
+} as const)
+
+export const organizationRoles = {
+  admin: organizationAccessControl.newRole({
+    organization: ['update'],
+    member: ['create', 'update', 'delete'],
+    invitation: ['create', 'cancel'],
+    team: ['create', 'update', 'delete'],
+    ac: ['create', 'read', 'update', 'delete'],
+    apiKey: ['create', 'read', 'update', 'delete']
+  }),
+  owner: organizationAccessControl.newRole({
+    organization: ['update', 'delete'],
+    member: ['create', 'update', 'delete'],
+    invitation: ['create', 'cancel'],
+    team: ['create', 'update', 'delete'],
+    ac: ['create', 'read', 'update', 'delete'],
+    apiKey: ['create', 'read', 'update', 'delete']
+  }),
+  member: organizationAccessControl.newRole({
+    organization: [],
+    member: [],
+    invitation: [],
+    team: [],
+    ac: ['read'],
+    apiKey: []
+  })
+} as const
+
+export const apiKeyConfigurationDefaults = {
+  enableMetadata: true,
+  enableSessionForAPIKeys: false,
+  defaultPrefix: '_secret_api_',
+  storage: 'secondary-storage',
+  fallbackToDatabase: true,
+  rateLimit: {
+    enabled: true,
+    timeWindow: 60_000,
+    maxRequests: 200
+  }
+} as const
+
+export const apiKeyConfigurations = [
+  {
+    ...apiKeyConfigurationDefaults,
+    configId: 'default',
+    references: 'user'
+  },
+  {
+    ...apiKeyConfigurationDefaults,
+    configId: 'organization',
+    references: 'organization'
+  }
+] satisfies ApiKeyConfigurationOptions[]
+
 const AUTH_AUDIT_LOG_PATHS = [
   '/sign-in/email',
+  '/sign-in/username',
   '/sign-in/oauth2',
   '/sign-in/social',
   '/sign-in/magic-link',
   '/magic-link/verify',
+  '/is-username-available',
   '/sign-up/email',
   '/sign-out',
   '/callback/:id',
@@ -80,10 +149,20 @@ const AUTH_AUDIT_LOG_PATHS = [
   '/revoke-session',
   '/revoke-sessions',
   '/revoke-other-sessions',
+  '/multi-session/list-device-sessions',
+  '/multi-session/set-active',
+  '/multi-session/revoke',
   '/link-social',
   '/unlink-account',
   '/get-access-token',
   '/refresh-token',
+  '/passkey/generate-register-options',
+  '/passkey/generate-authenticate-options',
+  '/passkey/verify-registration',
+  '/passkey/verify-authentication',
+  '/passkey/list-user-passkeys',
+  '/passkey/delete-passkey',
+  '/passkey/update-passkey',
   '/api-key/create',
   '/api-key/get',
   '/api-key/list',
@@ -147,6 +226,7 @@ export type GlobalAuthSessionUser = {
   banReason?: string | null
   banned?: boolean | null
   createdAt?: Date | string | null
+  displayUsername?: string | null
   email?: string | null
   emailVerified?: boolean | null
   id: string
@@ -155,6 +235,7 @@ export type GlobalAuthSessionUser = {
   name?: string | null
   role?: string | null
   updatedAt?: Date | string | null
+  username?: string | null
 }
 
 export type GlobalAuthSession = {
@@ -261,7 +342,10 @@ function compareAuthUrls(betterAuthUrl: string, manualUrl: string) {
 export function createGlobalAuth(db: Database): GlobalAuth {
   const cloudflareOAuthConfig = createCloudflareGenericOAuthConfig()
   const plugins = [
-    organization(),
+    organization({
+      ac: organizationAccessControl,
+      roles: organizationRoles
+    }),
     bearer(),
     deviceAuthorization({
       verificationUri: '/device',
@@ -282,6 +366,9 @@ export function createGlobalAuth(db: Database): GlobalAuth {
     }),
     ...(PUBLIC_VARS.DEV ? [openAPI()] : []),
     ...(cloudflareOAuthConfig ? [genericOAuth({ config: [cloudflareOAuthConfig] })] : []),
+    username(),
+    passkey(),
+    multiSession(),
     jwt({
       ...WEBAPP_JWT_SIGNING_OPTIONS,
       disableSettingJwtHeader: true,
@@ -383,18 +470,7 @@ export function createGlobalAuth(db: Database): GlobalAuth {
         )
       }
     }),
-    apiKey({
-      enableMetadata: true,
-      enableSessionForAPIKeys: false,
-      defaultPrefix: '_secret_api_',
-      storage: 'secondary-storage',
-      fallbackToDatabase: true,
-      rateLimit: {
-        enabled: true,
-        timeWindow: 60_000,
-        maxRequests: 200
-      }
-    }),
+    apiKey(apiKeyConfigurations),
     admin()
   ] satisfies BetterAuthOptions['plugins']
 

@@ -96,6 +96,7 @@ catalog:
   '@tanstack/react-router-ssr-query': 1.167.0
   '@tanstack/react-start-client': 1.168.3
   '@tanstack/react-start-server': 1.167.8
+  '@tanstack/router-cli': 1.167.17
   '@tanstack/router-plugin': 1.168.11
   '@tanstack/start-plugin-core': 1.171.4
   '@tanstack/start-server-core': 1.169.3

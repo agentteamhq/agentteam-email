@@ -9,20 +9,219 @@ import blockedRemoteImagesHtml from './fixtures/emails/blocked-remote-images.fix
 import conversationLatestHtml from './fixtures/emails/conversation-latest.fixture?raw'
 import conversationOriginalHtml from './fixtures/emails/conversation-original.fixture?raw'
 import welcomeEmailHtml from './fixtures/emails/welcome-email.fixture?raw'
+import { storyAuthClient } from './auth-client-fixtures'
 import { authenticatedSettingsRouteState, storyPublicEnv } from './screen-fixtures'
 import type { DashboardScreenProps } from '../screens/dashboard-screen'
+import type {
+  DomainSettingsState,
+  DomainSettingsStatus
+} from '../partials/authenticated/settings-dialog'
 import type {
   AuthenticatedDashboardView,
   AuthenticatedEmailPreview,
   AuthenticatedSidebarView
 } from '../partials/authenticated/authenticated-shell-models'
 
+type CloudflareGrantFixture = DomainSettingsStatus['grants'][number]
+type CloudflareConnectionFixture = DomainSettingsStatus['connections'][number]
+
+const cloudflareGrantPublicId = (value: string) => value as CloudflareGrantFixture['publicId']
+const cloudflareConnectionPublicId = (value: string) => value as CloudflareConnectionFixture['publicId']
+
+const requiredCloudflareScopes = [
+  'account:read',
+  'user:read',
+  'zone:read',
+  'workers:write',
+  'workers_routes:write',
+  'r2:write'
+]
+
+const activeCloudflareGrant = {
+  publicId: cloudflareGrantPublicId('4k8wVa7Z5pM9eT2hQ0nYbC'),
+  cloudflareUserId: 'cloudflare-user-9f52',
+  cloudflareEmail: 'admin@example.com',
+  grantedScopes: requiredCloudflareScopes,
+  requiredScopes: requiredCloudflareScopes,
+  status: 'active',
+  lastTokenCheckAt: new Date('2026-06-21T16:12:00.000Z'),
+  lastErrorMessage: null
+} satisfies CloudflareGrantFixture
+
+const connectedCloudflareAccounts = [
+  {
+    id: '3d6f2b2d8e2a49a2bb6f2fb97e4c9d17',
+    name: 'AgentTeam Production',
+    type: 'standard'
+  }
+] satisfies DomainSettingsState['accounts']
+
+const connectedCloudflareZones = [
+  {
+    accountId: '3d6f2b2d8e2a49a2bb6f2fb97e4c9d17',
+    accountName: 'AgentTeam Production',
+    id: '0f8b5f1816a946f28d263671a8f5e4aa',
+    name: 'agentteam.example',
+    status: 'active'
+  }
+] satisfies DomainSettingsState['zones']
+
+const pendingCloudflareConnection = {
+  publicId: cloudflareConnectionPublicId('5Ue0nPqJ3xVb1ZyL8sTaMn'),
+  cloudflareAccountId: '3d6f2b2d8e2a49a2bb6f2fb97e4c9d17',
+  cloudflareAccountName: 'AgentTeam Production',
+  cloudflareZoneId: '0f8b5f1816a946f28d263671a8f5e4aa',
+  cloudflareZoneName: 'agentteam.example',
+  domain: 'agentteam.example',
+  r2BucketName: null,
+  workerScriptName: null,
+  status: 'provisioning',
+  provisioningStatus: 'pending',
+  lastProvisionedAt: null,
+  lastErrorMessage: null,
+  updatedAt: new Date('2026-06-21T16:18:00.000Z')
+} satisfies CloudflareConnectionFixture
+
+const liveCloudflareConnection = {
+  ...pendingCloudflareConnection,
+  r2BucketName: 'agent-mail-archive-production',
+  workerScriptName: 'agent-mail-ingest-agentteam-example',
+  status: 'active',
+  provisioningStatus: 'succeeded',
+  lastProvisionedAt: new Date('2026-06-21T16:24:00.000Z'),
+  updatedAt: new Date('2026-06-21T16:26:00.000Z')
+} satisfies CloudflareConnectionFixture
+
+const connectedCloudflareConnection = {
+  ...pendingCloudflareConnection,
+  status: 'connected',
+  provisioningStatus: 'not_started',
+  updatedAt: new Date('2026-06-21T16:16:00.000Z')
+} satisfies CloudflareConnectionFixture
+
+const degradedCloudflareConnection = {
+  ...pendingCloudflareConnection,
+  status: 'degraded',
+  provisioningStatus: 'failed',
+  lastErrorMessage: 'Cloudflare worker route could not be applied to the selected zone.',
+  updatedAt: new Date('2026-06-21T16:20:00.000Z')
+} satisfies CloudflareConnectionFixture
+
+const denseCloudflareConnections = [
+  liveCloudflareConnection,
+  {
+    ...liveCloudflareConnection,
+    publicId: cloudflareConnectionPublicId('6yc0nPqJ3xVb1ZyL8sTbQa'),
+    domain: 'ops.agentteam.example',
+    cloudflareZoneName: 'ops.agentteam.example',
+    workerScriptName: 'agent-mail-ingest-ops-agentteam-example',
+    updatedAt: new Date('2026-06-21T16:31:00.000Z')
+  },
+  {
+    ...connectedCloudflareConnection,
+    publicId: cloudflareConnectionPublicId('7Tq0nPqJ3xVb1ZyL8sTbRc'),
+    domain: 'support.agentteam.example',
+    cloudflareZoneName: 'support.agentteam.example'
+  },
+  {
+    ...degradedCloudflareConnection,
+    publicId: cloudflareConnectionPublicId('8Kp0nPqJ3xVb1ZyL8sTbSd'),
+    domain: 'reply.agentteam.example',
+    cloudflareZoneName: 'reply.agentteam.example'
+  },
+  {
+    ...pendingCloudflareConnection,
+    publicId: cloudflareConnectionPublicId('9Da0nPqJ3xVb1ZyL8sTbTe'),
+    domain: 'notify.agentteam.example',
+    cloudflareZoneName: 'notify.agentteam.example'
+  }
+] satisfies CloudflareConnectionFixture[]
+
+export const domainSettingsEmptyFirstUseState = {
+  mode: 'addDomain',
+  status: {
+    connections: [],
+    grants: []
+  }
+} satisfies DomainSettingsState
+
+export const domainSettingsAddDomainAuthorizeCloudflareState = domainSettingsEmptyFirstUseState
+
+export const domainSettingsAddDomainSelectZoneState = {
+  accounts: connectedCloudflareAccounts,
+  draftDomain: 'agentteam.example',
+  mode: 'addDomain',
+  selectedAccountId: connectedCloudflareAccounts[0]?.id,
+  selectedZoneId: connectedCloudflareZones[0]?.id,
+  status: {
+    connections: [],
+    grants: [activeCloudflareGrant]
+  },
+  zones: connectedCloudflareZones
+} satisfies DomainSettingsState
+
+export const domainSettingsDomainConnectedState = {
+  ...domainSettingsAddDomainSelectZoneState,
+  mode: 'domain',
+  selectedDomainPublicId: connectedCloudflareConnection.publicId,
+  status: {
+    connections: [connectedCloudflareConnection],
+    grants: [activeCloudflareGrant]
+  }
+} satisfies DomainSettingsState
+
+export const domainSettingsDomainProvisioningState = {
+  ...domainSettingsAddDomainSelectZoneState,
+  message: 'Domain provisioning is queued for Cloudflare.',
+  mode: 'domain',
+  selectedDomainPublicId: pendingCloudflareConnection.publicId,
+  status: {
+    connections: [pendingCloudflareConnection],
+    grants: [activeCloudflareGrant]
+  }
+} satisfies DomainSettingsState
+
+export const domainSettingsDomainLiveState = {
+  ...domainSettingsAddDomainSelectZoneState,
+  message: 'Agent email is live for mailboxes on agentteam.example.',
+  mode: 'domain',
+  selectedDomainPublicId: liveCloudflareConnection.publicId,
+  status: {
+    connections: [liveCloudflareConnection],
+    grants: [activeCloudflareGrant]
+  }
+} satisfies DomainSettingsState
+
+export const domainSettingsDomainNeedsAttentionState = {
+  ...domainSettingsAddDomainSelectZoneState,
+  mode: 'domain',
+  selectedDomainPublicId: degradedCloudflareConnection.publicId,
+  status: {
+    connections: [degradedCloudflareConnection],
+    grants: [activeCloudflareGrant]
+  }
+} satisfies DomainSettingsState
+
+export const domainSettingsDenseDomainListState = {
+  ...domainSettingsAddDomainSelectZoneState,
+  mode: 'domain',
+  selectedDomainPublicId: denseCloudflareConnections[0]?.publicId,
+  status: {
+    connections: denseCloudflareConnections,
+    grants: [activeCloudflareGrant]
+  }
+} satisfies DomainSettingsState
+
 export const authenticatedSectionBaseArgs = {
+  authClient: storyAuthClient,
   dashboardView: defaultAuthenticatedDashboardView,
   publicEnv: storyPublicEnv,
   routeState: authenticatedSettingsRouteState,
   sessionCleanupEnabled: false
-} satisfies Pick<DashboardScreenProps, 'dashboardView' | 'publicEnv' | 'routeState' | 'sessionCleanupEnabled'>
+} satisfies Pick<
+  DashboardScreenProps,
+  'authClient' | 'dashboardView' | 'publicEnv' | 'routeState' | 'sessionCleanupEnabled'
+>
 
 export const loadingAuthenticatedSidebarView = {
   ...defaultAuthenticatedSidebarView,
