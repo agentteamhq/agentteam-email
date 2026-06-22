@@ -2,8 +2,8 @@
 
 These guides describe the intended public self-host interface for this mail
 stack. They are written as the target operator experience: every hostname,
-secret, image, tunnel, and Cloudflare value must be supplied by the self-hosting
-operator through explicit configuration.
+secret, image, ingress route, and Cloudflare value must be supplied by the
+self-hosting operator through explicit configuration.
 
 Public repository: `https://github.com/agentteamhq/agentteam-email`
 
@@ -35,7 +35,8 @@ The self-hosted stack has these runtime parts:
 - Rspamd
 - ZoneMTA
 - R2-compatible archive storage
-- optional fast-path notification URL for Cloudflare Email Worker notifications
+- public web route `/agent-mail/ingest/v1` for Cloudflare Email Worker
+  notifications
 
 The public self-host target does not expose a separate operator UI or control
 API. Mail administration and message review belong behind the authenticated web
@@ -47,14 +48,13 @@ network. The browser talks only to the web server.
 Every self-host install must provide:
 
 - public web app URL, for example `https://mail.company.example`
-- inbound fast-path notification URL, for example
-  `https://mail-ingress.company.example/agent-mail/ingest/v1`
+- public web app URL reachable at `/agent-mail/ingest/v1` for Worker
+  notifications, for example `https://mail.company.example/agent-mail/ingest/v1`
 - MongoDB connection URLs for the web app, WildDuck, and control databases
 - Redis URL for the mail stack
 - R2-compatible archive endpoint, bucket, access key, and secret
 - WildDuck admin access token and access-control secret
 - mail control API token
-- fast-path HMAC secret shared by the Worker and control service
 - outbound provider selection: `cloudflare` or `ses`
 - Cloudflare account, zone, token, Worker, R2, DNS, and Email Routing settings
 - production auth and encryption secrets for the web app

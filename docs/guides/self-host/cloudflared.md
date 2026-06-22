@@ -1,130 +1,98 @@
 # Cloudflare Tunnel
 
-This guide defines the target `cloudflared` option for AgentTeam Email public
-web traffic and Worker fast-path ingest.
+The web server receives Cloudflare Worker ingress at
+`/agent-mail/ingest/v1`. Cloudflare Tunnel can expose that route by forwarding
+the full Worker request to the web server.
 
-Use example values below:
+HMAC-signed Worker notifications are valid. Unknown requests and requests with
+missing or invalid signatures are rejected.
 
-- application hostname: `mail.company.example`
-- tunnel hostname: `mail-ingress.company.example`
-- web service listener: `http://atemail-web-server`
-- fast-path route: `/agent-mail/ingest/v1`
-- fast-path backend: the mail-control-service `fastpath-gate` path
+Example public hostnames:
 
-## Purpose
-
-Cloudflare Tunnel is an alternative to Tailscale for browser/web traffic and
-Worker fast-path ingest.
-
-Browser/web traffic goes to the web service.
-
-Worker fast-path ingest must use this full public URL:
-
-```text
-https://mail-ingress.company.example/agent-mail/ingest/v1
-```
-
-The fast-path route must forward to the public fast-path ingress/gate backed by
-the mail-control-service fastpath gate path, not to the web service:
-
-```text
-http://<fastpath-gate-backend>/agent-mail/ingest/v1
-```
-
-It must not expose WildDuck, MongoDB, Redis, Haraka, ZoneMTA, Rspamd, or the
-internal control API.
-
-## Cloudflare DNS
-
-Create a tunnel in Cloudflare and route:
-
-```text
-mail-ingress.company.example -> cloudflared tunnel
-```
-
-The Worker can then call:
-
-```text
-https://mail-ingress.company.example/agent-mail/ingest/v1
-```
+- Web app: `https://mail.company.example`
+- Worker ingest:
+  `https://mail.company.example/agent-mail/ingest/v1`
+- Compose web server service: `http://atemail-web-server:4321`
+- Kubernetes web server service: `http://atemail-web-server:80`
 
 ## Environment
 
-Set the external URL to the full public Worker ingest URL. Do not append
-`/agent-mail/ingest/v1` anywhere else:
+Configure AgentTeam Email with the public web origin. Product Worker
+provisioning derives the ingest URL by appending `/agent-mail/ingest/v1` and
+stores the per-connection Worker HMAC secret in the web database.
 
-```text
-AGENT_MAIL_CF_TUNNEL_LISTEN_URL=http://0.0.0.0:8080
-AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL=https://mail-ingress.company.example/agent-mail/ingest/v1
-AGENT_MAIL_CF_TUNNEL_HMAC_SECRET=<random-fast-path-secret>
+```dotenv
+PUBLIC_HOSTNAME=https://mail.company.example
+AGENT_MAIL_CONTROL_API_TOKEN=<random-control-token>
+ENCRYPT_SECRET_KEY=<base64url-32-byte-key>
 ```
 
-Set the same external URL and HMAC secret in the Worker:
+Cloudflared itself needs the tunnel token:
 
-```text
-AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL=https://mail-ingress.company.example/agent-mail/ingest/v1
-AGENT_MAIL_CF_TUNNEL_HMAC_SECRET=<random-fast-path-secret>
+```dotenv
+TUNNEL_TOKEN=<cloudflare-tunnel-token>
 ```
 
-For `cloudflared`, provide the tunnel token through the selected Secret:
+## Cloudflare Routes
+
+Create a Cloudflare Tunnel and configure public hostname routes in Cloudflare.
+Route the ingest path before any broader catch-all rule.
+
+For Docker Compose:
 
 ```text
-CLOUDFLARED_TUNNEL_TOKEN=
+mail.company.example -> http://atemail-web-server:4321
 ```
 
-## Helm Values
+For Kubernetes:
 
-Enable `cloudflared` through Helm values:
+```text
+mail.company.example -> http://atemail-web-server:80
+```
+
+Do not expose WildDuck, MongoDB, Redis, Haraka, ZoneMTA, Rspamd, or the
+internal control API.
+
+## Docker Compose
+
+The Compose stack does not configure Cloudflare Tunnel. Run `cloudflared` as
+operator-owned infrastructure on the same network as the web server:
 
 ```yaml
-tunnel:
-  provider: cloudflared
-  listenUrl:
-    value: http://0.0.0.0:8080
-  externalUrl:
-    value: https://mail-ingress.company.example/agent-mail/ingest/v1
-  hmacSecret:
-    valueFrom:
-      secretKeyRef:
-        name: mail-secrets
-        key: AGENT_MAIL_CF_TUNNEL_HMAC_SECRET
-
-cloudflared:
-  tunnelToken:
-    valueFrom:
-      secretKeyRef:
-        name: mail-secrets
-        key: CLOUDFLARED_TUNNEL_TOKEN
+services:
+  cloudflared:
+    image: docker.io/cloudflare/cloudflared:2026.6.1
+    command:
+      - tunnel
+      - --no-autoupdate
+      - run
+    environment:
+      TUNNEL_TOKEN: '${TUNNEL_TOKEN:?missing TUNNEL_TOKEN}'
+    restart: unless-stopped
 ```
 
-Browser/web routes forward to the web service.
+Cloudflare owns the hostname and path routing for token-run tunnels; the
+connector only starts the tunnel.
 
-The Worker fast-path route forwards only `POST /agent-mail/ingest/v1` to the
-fast-path ingress/gate backed by the mail-control-service fastpath gate path.
+## Kubernetes
 
-## Setup Flow
+The Helm chart does not install or configure `cloudflared`. Run Cloudflare
+Tunnel as operator-owned infrastructure and point the public hostname routes at
+the web server service in the release namespace:
 
-1. Create a Cloudflare Tunnel.
-2. Create DNS route `mail-ingress.company.example`.
-3. Store the tunnel token in the selected Secret.
-4. Configure browser/web ingress to target the web service and Worker
-   fast-path ingress to target the fast-path gate.
-5. Set `AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL`.
-6. Set `AGENT_MAIL_CF_TUNNEL_HMAC_SECRET`.
-7. Apply the Helm release.
-8. Deploy or update the Cloudflare Worker with the same external URL and HMAC
-   secret.
-9. Send a test email and confirm fast-path delivery.
+```text
+http://atemail-web-server:80
+```
 
-## Verification
+If the `cloudflared` workload runs outside the release namespace, use the fully
+qualified Kubernetes service DNS name for `atemail-web-server`.
 
-Check that the frontend and fast-path endpoint are reachable through the
-configured public routes:
+## Verify
 
 ```bash
-curl -i https://mail-ingress.company.example/agent-mail/ingest/v1
 curl -i https://mail.company.example/
+curl -i -X POST https://mail.company.example/agent-mail/ingest/v1
 ```
 
-The fast-path endpoint should reject unsigned requests and accept signed Worker
-requests.
+The web hostname should reach the web app. An unsigned ingest request should be
+rejected. Signed Worker notifications should be accepted.

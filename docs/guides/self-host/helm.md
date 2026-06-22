@@ -19,7 +19,7 @@ Example install shape:
 
 - namespace: `agentteam-email`
 - frontend URL: `https://mail.company.example`
-- fast-path ingest URL: `https://mail-ingress.company.example/agent-mail/ingest/v1`
+- Worker ingest URL: `https://mail.company.example/agent-mail/ingest/v1`
 - inbound mail domain: `company.example`
 
 ## Chart Layout
@@ -48,7 +48,6 @@ The chart renders:
 - packaged service config ConfigMaps
 - PVCs
 - optional frontend Ingress
-- optional Tailscale or `cloudflared` tunnel
 
 ## Values Model
 
@@ -65,8 +64,6 @@ Operators provide only deployment-specific values:
 - internal mail runtime secrets
 - object-storage archive endpoint, bucket, and credentials
 - Cloudflare account, API token, and worker script name
-- full fast-path ingest URL and HMAC secret
-- optional Tailscale or Cloudflare Tunnel credentials
 - outbound provider and provider-specific credentials
 - persistence, ingress, scheduling, and resource policy
 
@@ -154,15 +151,6 @@ cloudflare:
     scriptName: agent-mail-ingress
     archiveBucket:
       value: company-agent-mail-archive
-
-tunnel:
-  provider: none
-  listenUrl:
-    value: http://0.0.0.0:8080
-  externalUrl:
-    value: https://mail-ingress.company.example/agent-mail/ingest/v1
-  hmacSecret:
-    value: '<random-fast-path-secret>'
 
 outbound:
   provider:
@@ -259,77 +247,28 @@ kubectl -n agentteam-email rollout status deployment/atemail-mail-control-servic
 kubectl -n agentteam-email rollout status deployment/atemail-web-server --timeout=180s
 ```
 
-## Tunnel Modes
+## Worker Ingress
 
-Use one tunnel mode.
+The chart does not install or configure Tailscale, `cloudflared`, or any other
+operator-owned ingress workload.
 
-No tunnel:
-
-```yaml
-tunnel:
-  provider: none
-```
-
-Tailscale:
-
-```yaml
-tunnel:
-  provider: tailscale
-  externalUrl:
-    value: https://mail-ingress.company.example/agent-mail/ingest/v1
-  hmacSecret:
-    valueFrom:
-      secretKeyRef:
-        name: mail-secrets
-        key: AGENT_MAIL_CF_TUNNEL_HMAC_SECRET
-
-tailscale:
-  hostname: mail-ingress
-  certDomain: mail-ingress.company.example
-  authKey:
-    valueFrom:
-      secretKeyRef:
-        name: mail-secrets
-        key: AGENT_MAIL_TAILSCALE_AUTH_KEY
-```
-
-Cloudflare Tunnel:
-
-```yaml
-tunnel:
-  provider: cloudflared
-  externalUrl:
-    value: https://mail-ingress.company.example/agent-mail/ingest/v1
-  hmacSecret:
-    valueFrom:
-      secretKeyRef:
-        name: mail-secrets
-        key: AGENT_MAIL_CF_TUNNEL_HMAC_SECRET
-
-cloudflared:
-  tunnelToken:
-    valueFrom:
-      secretKeyRef:
-        name: mail-secrets
-        key: CLOUDFLARED_TUNNEL_TOKEN
-```
-
-Browser/web ingress should expose the web service at `publicHostname`.
-Worker fast-path ingress should use the exact `tunnel.externalUrl.value` URL:
+The web server owns Worker ingest verification. Product Cloudflare provisioning
+binds each generated Worker to:
 
 ```text
-https://mail-ingress.company.example/agent-mail/ingest/v1
+<publicHostname>/agent-mail/ingest/v1
 ```
 
-Do not append `/agent-mail/ingest/v1` to `tunnel.externalUrl.value`; the field
-already includes the path.
-
-The Worker fast-path route should forward to the public fast-path ingress/gate
-backed by the mail-control-service fastpath gate path inside the release namespace:
+Configure operator-owned ingress to forward that full request to the web server
+service:
 
 ```text
-http://<fastpath-gate-backend>/agent-mail/ingest/v1
+https://mail.company.example/agent-mail/ingest/v1 -> http://atemail-web-server:80
 ```
+
+The generated Worker signs notifications with a per-connection secret stored by
+the web server. Do not configure a deployment-wide Worker HMAC secret for the
+chart.
 
 Do not expose the internal control API, WildDuck, MongoDB, Redis, Haraka,
 ZoneMTA, or Rspamd.
@@ -340,8 +279,6 @@ Raw values files are in `docs/examples/helm`:
 
 - [Basic Helm values](/examples/helm/values-basic.yaml)
 - [Existing Secret values](/examples/helm/values-existing-secret.yaml)
-- [Tailscale values](/examples/helm/values-tailscale.yaml)
-- [Cloudflared values](/examples/helm/values-cloudflared.yaml)
 
 ## Validation
 

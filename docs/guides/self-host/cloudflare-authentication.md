@@ -8,7 +8,7 @@ Use example values below:
 - inbound mail domain: `company.example`
 - Worker script name: `agent-mail-ingress`
 - archive bucket: `company-agent-mail-archive`
-- tunnel hostname: `mail-ingress.company.example`
+- public web hostname: `mail.company.example`
 
 ## What Cloudflare Does
 
@@ -23,12 +23,13 @@ Cloudflare owns four separate concerns:
 The Worker must archive each inbound message to R2 and then call:
 
 ```text
-https://mail-ingress.company.example/agent-mail/ingest/v1
+https://mail.company.example/agent-mail/ingest/v1
 ```
 
-The call is signed with `AGENT_MAIL_CF_TUNNEL_HMAC_SECRET`. Public Worker
-traffic must enter through the fast-path ingress/gate backed by the
-mail-control-service fastpath gate path. The control API remains internal.
+The call is signed with a per-connection `AGENTTEAM_HMAC_SECRET` and includes
+`X-Agent-Mail-Connection-Id`. Public Worker traffic must enter through
+operator-owned ingress that forwards the request to the web server. The control
+API remains internal.
 
 ## Token Model
 
@@ -57,21 +58,22 @@ Create or select:
 - R2 bucket named `company-agent-mail-archive`
 - Email Routing destination address controlled by the Worker
 - Worker script named `agent-mail-ingress`
-- tunnel hostname `mail-ingress.company.example`
+- public web hostname `mail.company.example`
 
-The Worker receives these bindings:
+Product provisioning creates the Worker with these bindings:
 
 ```text
 ARCHIVE_BUCKET=company-agent-mail-archive
-AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL=https://mail-ingress.company.example/agent-mail/ingest/v1
-AGENT_MAIL_CF_TUNNEL_HMAC_SECRET=<shared-fast-path-secret>
+AGENTTEAM_CONNECTION_ID=<web-owned-connection-id>
+AGENTTEAM_INGEST_URL=https://mail.company.example/agent-mail/ingest/v1
+AGENTTEAM_HMAC_SECRET=<per-connection-worker-secret>
 EMAIL=<Cloudflare send_email binding>
 ```
 
 The Worker posts to the configured fast-path URL:
 
 ```text
-https://mail-ingress.company.example/agent-mail/ingest/v1
+https://mail.company.example/agent-mail/ingest/v1
 ```
 
 ## Routing Shape
@@ -119,21 +121,23 @@ AGENT_MAIL_R2_BUCKET=company-agent-mail-archive
 AGENT_MAIL_R2_ACCESS_KEY_ID=
 AGENT_MAIL_R2_SECRET_ACCESS_KEY=
 
-AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL=https://mail-ingress.company.example/agent-mail/ingest/v1
-AGENT_MAIL_CF_TUNNEL_HMAC_SECRET=
+PUBLIC_HOSTNAME=https://mail.company.example
+AGENT_MAIL_CONTROL_API_TOKEN=
+ENCRYPT_SECRET_KEY=
 ```
 
 ## Setup Flow
 
 1. Create the R2 bucket.
 2. Create the Cloudflare API token with the scopes above.
-3. Configure the tunnel endpoint using either Tailscale or Cloudflare Tunnel.
-4. Set `AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL` to the full public HTTPS ingest URL.
-5. Set the same `AGENT_MAIL_CF_TUNNEL_HMAC_SECRET` in the Worker and service
-   environment.
-6. Deploy the Worker.
+3. Configure operator-owned ingress so
+   `https://mail.company.example/agent-mail/ingest/v1` reaches the web server.
+4. Set `PUBLIC_HOSTNAME` to the public web server origin.
+5. Set `AGENT_MAIL_CONTROL_API_TOKEN` for the internal web-to-control API
+   boundary and `ENCRYPT_SECRET_KEY` so web can store Worker secrets.
+6. Provision the Cloudflare connection through the authenticated web surface.
 7. Apply the Email Routing catch-all route for each inbound zone.
 8. Send a test email to the domain.
 9. Verify the R2 archive contains `raw.eml`, `edge.json`, and `result.json`.
-10. Verify the fast-path gate accepted the notification and the message was
+10. Verify the signed Worker notification was accepted and the message was
     processed internally.

@@ -13,9 +13,10 @@ store, or delivery database.
   identities.
 - `raw_sha256` and `provider_raw_sha256` are integrity fields only. They must
   never be used as object IDs.
-- Message artifacts are grouped by direction, canonical domain, UTC date,
-  UUIDv7 ID, then file. Do not reintroduce top-level `queue/`, `receipt/`, or
-  `deadletter/` prefixes.
+- Worker-origin inbound artifacts are grouped by organization public ID,
+  canonical recipient domain, direction, UTC date, UUIDv7 ID, then file:
+  `orgs/<org_public_id>/domains/<recipient_domain>/mail/inbound/...`. Do not
+  reintroduce top-level `queue/`, `receipt/`, or `deadletter/` prefixes.
 - Domain and subdomain path segments are parser-derived canonical Agent Mail
   mailbox domains. Inbound uses the recipient mailbox domain. Provider-bound
   outbound uses the active provider sender domain. Local routed outbound uses
@@ -44,7 +45,7 @@ Cloudflare routing data.
 Required inbound bundle path:
 
 ```text
-mail/inbound/<recipient_domain>/YYYY/MM/DD/<ingest_id>/
+orgs/<org_public_id>/domains/<recipient_domain>/mail/inbound/YYYY/MM/DD/<ingest_id>/
   raw.eml
   edge.json
   dsn.eml
@@ -57,15 +58,17 @@ before this object is written.
 
 For Worker-origin inbound bundles, `edge.json` is the Worker boundary metadata
 and inbound commit marker. It is written after `raw.eml` succeeds. The
-reconciler discovers inbound edge objects by listing `mail/inbound/` for objects
-ending in `/edge.json`, then classifies them by schema.
+reconciler discovers inbound edge objects by listing the active domain's
+service-owned archive prefix for objects ending in `/edge.json`, then
+classifies them by schema.
 
 After `edge.json` is committed, the Worker must attempt one HMAC-signed
-fast-path notification through the configured fast-path URL. The notification is
-not an R2 artifact, does not carry raw mail bytes, and does not define
-completion. It only tells the control service fast-path listener to insert the
-committed bundle into Mongo state and wake the same processing loop used by the
-six-hour sweep.
+fast-path notification through the configured web-owned ingest URL. The
+notification is not an R2 artifact, does not carry raw mail bytes, and does not
+define completion. The web server verifies the Worker request and calls
+`agentMail.ingest.enqueue`; mail-control then validates the metadata against
+active control state before inserting the committed bundle into Mongo state and
+waking the same processing loop used by the six-hour sweep.
 
 Required `edge.json` fields:
 
@@ -73,7 +76,7 @@ Required `edge.json` fields:
 {
   "schema": "agent-mail.inbound.edge.v1",
   "ingest_id": "018f0000-0000-7000-8000-000000000000",
-  "raw_key": "mail/inbound/<recipient_domain>/YYYY/MM/DD/<ingest_id>/raw.eml",
+  "raw_key": "orgs/<org_public_id>/domains/<recipient_domain>/mail/inbound/YYYY/MM/DD/<ingest_id>/raw.eml",
   "raw_sha256": "<sha256-of-raw-eml>",
   "mailbox": "agent@example.com",
   "envelope_from": "",
@@ -163,8 +166,8 @@ Required `result.json` fields:
   "status": "delivered",
   "attempt": 1,
   "processed_at": "YYYY-MM-DDTHH:MM:SSZ",
-  "raw_key": "mail/inbound/<recipient_domain>/YYYY/MM/DD/<ingest_id>/raw.eml",
-  "edge_key": "mail/inbound/<recipient_domain>/YYYY/MM/DD/<ingest_id>/edge.json",
+  "raw_key": "orgs/<org_public_id>/domains/<recipient_domain>/mail/inbound/YYYY/MM/DD/<ingest_id>/raw.eml",
+  "edge_key": "orgs/<org_public_id>/domains/<recipient_domain>/mail/inbound/YYYY/MM/DD/<ingest_id>/edge.json",
   "wildduck_user_id": "...",
   "wildduck_mailbox_id": "...",
   "wildduck_message_id": "...",
@@ -182,9 +185,9 @@ provenance:
   "status": "delivery_failed_dsn_submitted",
   "attempt": 1,
   "processed_at": "YYYY-MM-DDTHH:MM:SSZ",
-  "raw_key": "mail/inbound/<recipient_domain>/YYYY/MM/DD/<ingest_id>/raw.eml",
-  "edge_key": "mail/inbound/<recipient_domain>/YYYY/MM/DD/<ingest_id>/edge.json",
-  "dsn_raw_key": "mail/inbound/<recipient_domain>/YYYY/MM/DD/<ingest_id>/dsn.eml",
+  "raw_key": "orgs/<org_public_id>/domains/<recipient_domain>/mail/inbound/YYYY/MM/DD/<ingest_id>/raw.eml",
+  "edge_key": "orgs/<org_public_id>/domains/<recipient_domain>/mail/inbound/YYYY/MM/DD/<ingest_id>/edge.json",
+  "dsn_raw_key": "orgs/<org_public_id>/domains/<recipient_domain>/mail/inbound/YYYY/MM/DD/<ingest_id>/dsn.eml",
   "dsn_raw_sha256": "<sha256-of-dsn-eml>",
   "dsn_id": "018f0000-0000-7000-8000-000000000001",
   "dsn_message_id": "<018f0000-0000-7000-8000-000000000001@recipient-domain>",
@@ -339,31 +342,38 @@ Inbound:
 1. Worker receives a Cloudflare Email Routing message.
 2. Worker parses the envelope recipient address and derives canonical
    `recipient_domain`.
-3. Worker generates UUIDv7 `ingest_id` and computes `raw_sha256`.
-4. Worker writes `raw.eml`.
-5. Worker writes `edge.json`; this is the durable inbound commit marker.
-6. Worker sends one HMAC-signed fast-path notification containing
+3. Worker resolves the authenticated web-owned domain deployment to
+   `organization_id`, `organization_public_id`, `archive_prefix`,
+   `worker_connection_id`, and `worker_domain_deployment_id`.
+4. Worker generates UUIDv7 `ingest_id` and computes `raw_sha256`.
+5. Worker writes `raw.eml`.
+6. Worker writes `edge.json`; this is the durable inbound commit marker.
+7. Worker sends one HMAC-signed fast-path notification to the web-owned ingest
+   boundary containing `organization_id`, `organization_public_id`,
+   `archive_prefix`, `worker_connection_id`, `worker_domain_deployment_id`,
    `ingest_id`, `recipient_domain`, `raw_key`, `edge_key`, `result_key`,
    `received_at`, and `raw_sha256`. Notification failure is logged and not
    retried by the Worker. A failed notification does not change the R2 archive
    state.
-7. The control service fast-path listener validates the HMAC, timestamp,
-   UUIDv7, canonical domain, key shape, and hash shape, then upserts the bundle
-   into Mongo as `pending` and wakes the replay processing loop.
-8. The reconciler sweep also discovers `edge.json`, classifies the edge schema,
+8. The web-owned ingest boundary verifies the Worker connection and calls
+   `agentMail.ingest.enqueue` on the internal control API. The control service
+   validates the org, archive prefix, domain, and Worker deployment metadata
+   against active control state, then upserts the bundle into Mongo as
+   `pending` and wakes the replay processing loop.
+9. The reconciler sweep also discovers `edge.json`, classifies the edge schema,
    and checks for sibling `result.json`.
-9. If `result.json` exists, the bundle is complete and no body object is read.
-10. The reconciler reads `edge.json` and `raw.eml`, verifies `raw_sha256`, checks
-   WildDuck for an existing `X-ATM-Ingest-ID`, then replays if needed.
-11. After WildDuck delivery is proven, the reconciler writes `result.json` with
-   status `delivered`.
-12. If WildDuck address resolution or Haraka replay returns a permanent
-   no-local-mailbox failure, the reconciler stores DSN state in Mongo,
-   writes `dsn.eml`, submits it to ZoneMTA with `MAIL FROM:<>`, then writes
-   `result.json` with status `delivery_failed_dsn_submitted`.
-13. If the original envelope sender is null or invalid, the reconciler writes
-   `result.json` with status `delivery_failed_dsn_suppressed` and does not
-   create `dsn.eml`.
+10. If `result.json` exists, the bundle is complete and no body object is read.
+11. The reconciler reads `edge.json` and `raw.eml`, verifies `raw_sha256`, checks
+    WildDuck for an existing `X-ATM-Ingest-ID`, then replays if needed.
+12. After WildDuck delivery is proven, the reconciler writes `result.json` with
+    status `delivered`.
+13. If WildDuck address resolution or Haraka replay returns a permanent
+    no-local-mailbox failure, the reconciler stores DSN state in Mongo,
+    writes `dsn.eml`, submits it to ZoneMTA with `MAIL FROM:<>`, then writes
+    `result.json` with status `delivery_failed_dsn_submitted`.
+14. If the original envelope sender is null or invalid, the reconciler writes
+    `result.json` with status `delivery_failed_dsn_suppressed` and does not
+    create `dsn.eml`.
 
 Inbound retry:
 
@@ -423,8 +433,9 @@ SQLite files, or in-memory maps for retry state, blocked-item state, or sweep
 cursors.
 
 The control service reconciler is the only component that leases and processes
-work items. The control service fast-path listener only upserts committed
-inbound bundles into the same Mongo queue and wakes the normal due-work loop.
+work items. The internal `agentMail.ingest.enqueue` handler only upserts
+committed inbound bundles into the same Mongo queue and wakes the normal
+due-work loop.
 
 Required inbound work item fields:
 
@@ -527,7 +538,7 @@ Processing order for each due row:
 9. If WildDuck does not contain the message, replay through the configured
    inbound SMTP path.
 10. If SMTP replay returns a permanent local recipient failure, handle it
-   through the DSN path.
+    through the DSN path.
 11. Wait for WildDuck user, mailbox, and message IDs.
 12. Write `result.json` with `delivery_source: "replayed"`.
 13. Mark queue status `delivered`.
@@ -611,8 +622,9 @@ Sweep order:
 2. For each domain, compute `sweep_start` and `sweep_end` in UTC.
 3. Expand every UTC calendar date touched by the window using standard
    date/time APIs.
-4. List `mail/inbound/<domain>/YYYY/MM/DD/` and select keys ending in
-   `/edge.json`.
+4. List
+   `orgs/<org_public_id>/domains/<domain>/mail/inbound/YYYY/MM/DD/` from the
+   active domain's `archive_prefix` and select keys ending in `/edge.json`.
 5. Ignore keys whose UUIDv7 timestamp falls outside the sweep window.
 6. For each eligible `edge.json`, derive sibling `result.json` and issue a
    `HEAD`.

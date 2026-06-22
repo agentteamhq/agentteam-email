@@ -1,6 +1,6 @@
 ---
-title: "Configuration"
-description: "Required configuration surfaces for self-hosted installs."
+title: 'Configuration'
+description: 'Required configuration surfaces for self-hosted installs.'
 ---
 
 Self-hosted installs must provide configuration explicitly through Helm values,
@@ -15,13 +15,12 @@ oci://ghcr.io/agentteamhq/agentteam-email
 ## Required operator inputs
 
 - public web app URL
-- inbound fast-path tunnel URL
+- public web app URL reachable at `/agent-mail/ingest/v1`
 - MongoDB connection URLs for app, WildDuck, and control databases
 - Redis URL for the mail stack
 - R2-compatible archive endpoint, bucket, access key, and secret
 - WildDuck admin access token and access-control secret
 - mail control API token
-- fast-path HMAC secret shared by the Worker and control service
 - outbound provider selection: `cloudflare` or `ses`
 - Cloudflare account, zone, token, Worker, R2, DNS, and Email Routing settings
 - production auth and encryption secrets for the web app

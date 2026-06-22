@@ -19,8 +19,8 @@ The mail runtime consists of:
 - Haraka for canonical inbound SMTP delivery into WildDuck.
 - ZoneMTA for canonical outbound queueing, retries, and bounce generation.
 - Mail Control Service for live provisioning, runtime domain registry
-  coordination, control/status APIs, inbound replay/reconciliation, the
-  fast-path ingest listener, the internal SMTP relay listener, outbound
+  coordination, control/status APIs, inbound replay/reconciliation, internal
+  fast-path enqueue handling, the internal SMTP relay listener, outbound
   provider handling, and feedback processing.
 - Internal ZoneMTA-only SMTP relay listener for Cloudflare Email Sending, SES,
   and active local-domain routing. ZoneMTA reaches this listener through the
@@ -28,14 +28,13 @@ The mail runtime consists of:
 - Inbound replay/reconciliation loop for archived inbound replay, recovery, and
   fast-path notification handling. Its queue/state store is the
   `agent_mail_control` MongoDB database on the shared Agent Mail MongoDB server.
-- Optional tunnel sidecar and fast-path gate for the inbound fast path.
 - Authenticated web server for operator and agent mailbox access.
 - Configured Cloudflare Email Worker for inbound edge archiving.
 
 The Mail Control Service is one process and one deployment with separate
 runtime surfaces:
 
-- fast-path ingest HTTP and health listener on `8080`
+- optional legacy fast-path ingest HTTP and health listener on `8080`
 - internal ZoneMTA-only SMTP relay listener on `2587`
 - provider feedback mailbox processing workflow
 - internal Huma control HTTP API on `8081`
@@ -49,10 +48,9 @@ Cloudflare/WildDuck feedback readiness to trusted internal callers.
 ## Control Service Contract
 
 The Mail Control Service wires the inbound replay/reconciliation module,
-internal SMTP relay module, feedback processing module, Huma control/status API,
-optional fast-path tunnel, and fast-path gate. ZoneMTA targets the
-Mail Control Service endpoint for the internal SMTP relay hop, and the replay
-queue/state store is `agent_mail_control` in MongoDB.
+internal SMTP relay module, feedback processing module, and Huma control/status
+API. ZoneMTA targets the Mail Control Service endpoint for the internal SMTP
+relay hop, and the replay queue/state store is `agent_mail_control` in MongoDB.
 
 The internal Huma control API service contract is:
 
@@ -62,6 +60,10 @@ The internal Huma control API service contract is:
 - `POST /rpc/agentMail.domain.modify`
 - `POST /rpc/agentMail.domain.remove`
 - `POST /rpc/agentMail.provision.apply`
+- `POST /rpc/agentMail.runtime.sync`
+- `POST /rpc/agentMail.ingest.enqueue`
+- `POST /rpc/agentMail.worker.archiveCredentials.issue`
+- `POST /rpc/agentMail.send.submit`
 - `POST /rpc/agentMail.message.provenance.get`
 - `POST /rpc/agentMail.message.view.get`
 - `POST /rpc/agentMail.message.security.get`
@@ -78,6 +80,29 @@ mailbox/address behavior for enabled domains, updates runtime registry/config
 projections, records applied state, logs every step, and returns structured
 changed/skipped/failed details. Cloudflare, WildDuck, registry, and Worker
 rollout work are coordinated internal steps of that one control operation.
+
+`agentMail.runtime.sync` is the transition bridge from web-owned application
+state into the Mail Control Service runtime projection. The web server calls it
+after authenticated Cloudflare/domain provisioning changes with organization
+identity, the service-owned archive prefix, and Worker deployment identifiers so
+replay, relay, feedback, and status operate from the same active-domain view
+without granting mail-control access to the web app database.
+
+`agentMail.ingest.enqueue` is the internal queue handoff for web-owned Worker
+ingest. The web server verifies the public Worker request, resolves the active
+connection, then calls this method with bundle metadata only. Mail-control
+validates the organization identity, archive prefix, recipient domain, Worker
+deployment identifiers, and archive keys against active control state before it
+enqueues the bundle into the same Mongo-backed queue used by the R2 sweep.
+
+`agentMail.worker.archiveCredentials.issue` is the internal seam for
+prefix-scoped temporary Worker archive credentials. The credential issuer owns
+secret material inside mail-control and must return it only in the authenticated
+internal control API response.
+
+`agentMail.send.submit` reserves the internal send handoff from web to
+mail-control. Until a send executor is wired, the endpoint must fail with a
+not-implemented response rather than pretending an email was accepted.
 
 `agentMail.message.provenance.get` is a narrow read-only handoff API for
 controller-owned inbound tasking. Callers provide the WildDuck delivery
@@ -175,6 +200,12 @@ The desired domain record is intentionally small:
 }
 ```
 
+`mail_from_domain` is optional. When omitted, it defaults to the exact domain.
+When set, it must be the exact domain or a subdomain of that domain, such as
+`mail.example.com`; wildcard and unrelated-domain MAIL FROM values are rejected.
+The MAIL FROM domain does not create a separate active Agent Mail recipient or
+sender domain.
+
 The selected outbound provider is not a domain API field. It is selected by
 `AGENT_MAIL_OUTBOUND_PROVIDER`. The feedback address is not a domain API field.
 Provision apply derives and ensures the required service-owned feedback setup
@@ -271,25 +302,24 @@ must not bind a single domain or zone name as runtime configuration.
 ## Fast Path Ingest
 
 After the Worker commits `edge.json`, it must attempt one signed HTTPS
-notification to the configured public fast-path URL. That notification carries
-only bundle metadata and HMAC headers; it never carries raw mail bytes. In
-self-hosted deployments, an optional tunnel can terminate TLS and forward raw
-HTTP to the service-owned `fastpath-gate`. The gate allows only
-`POST /agent-mail/ingest/v1`, then proxies to the control service fast-path
-listener. That listener validates the notification, upserts the committed bundle
-into the same Mongo-backed queue used by the R2 sweep, and wakes the same replay
+notification to the web server at `/agent-mail/ingest/v1`. That notification
+carries only bundle metadata, `X-Agent-Mail-Connection-Id`,
+`X-Agent-Mail-Timestamp`, and `X-Agent-Mail-Signature`; it never carries raw
+mail bytes. The web server verifies the per-connection HMAC and calls internal
+`agentMail.ingest.enqueue`. Accepted notifications upsert the committed bundle
+into the same Mongo-backed queue used by the R2 sweep and wake the same replay
 loop that leases due work and replays mail through Haraka.
 
 The fast-path route is not the source of truth. Worker notification
 failure is logged and not retried by the Worker. Archive success is unchanged
 because the R2 sweep is the authoritative recovery path for missed
-notifications, temporary tunnel outages, DNS issues, and listener outages.
+notifications, temporary ingress outages, DNS issues, and listener outages.
 
-The fast-path public URL is a deployment dependency. Worker configuration binds
-the Worker to the configured public URL and HMAC secret, but it does not create
-provider-specific tunnel credentials or access policy. When an operator uses a
-tunnel, the tunnel component must be running, authenticated, and forwarding the
-fast-path route before the fast path can be considered live.
+The Worker ingest public URL is derived from the public web origin. Product
+Cloudflare provisioning binds the Worker to the ingest URL, public connection
+identifier, and per-connection HMAC secret. Operator-owned ingress must be
+running and forwarding the Worker ingest route to the web server before the fast
+path can be considered live.
 
 The Worker deployment task is the mutating task for Worker deployment and
 Cloudflare setup. Per-domain Email Routing desired state is managed through
@@ -306,17 +336,19 @@ The short form is:
 1. Worker writes exact `raw.eml`.
 2. Worker writes `edge.json` as the inbound commit marker.
 3. Worker sends one HMAC-signed fast-path notification through the configured
-   tunnel.
-4. The fast-path gate restricts the public surface to
-   `POST /agent-mail/ingest/v1`, then the fast-path listener validates the
-   notification, upserts the bundle into Mongo, and wakes the normal due-work
-   processing loop.
-5. The periodic reconciler sweep lists committed bundles missing `result.json`
+   Worker ingest URL.
+4. The web server accepts signed `POST /agent-mail/ingest/v1` notifications,
+   resolves the active org/domain Worker deployment, and calls internal
+   `agentMail.ingest.enqueue`.
+5. Mail-control validates the org, archive prefix, domain, and Worker metadata,
+   then upserts the bundle into Mongo and wakes the normal due-work processing
+   loop.
+6. The periodic reconciler sweep lists committed bundles missing `result.json`
    and backfills anything the fast path missed into that same Mongo queue.
-6. The reconciler processes due Mongo queue items and writes `result.json` only
+7. The reconciler processes due Mongo queue items and writes `result.json` only
    after WildDuck delivery is proven or after a no-local-mailbox failure is
    handled by the DSN path.
-7. A six-hour sliding-window sweeper backfills Mongo queue items for any bundle
+8. A six-hour sliding-window sweeper backfills Mongo queue items for any bundle
    missed by an earlier pass.
 
 Internal SMTP relay local routing may also create target-side inbound records

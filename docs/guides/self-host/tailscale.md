@@ -1,111 +1,131 @@
-# Tailscale Tunnel
+# Tailscale Funnel
 
-This guide defines the target Tailscale option for AgentTeam Email public web
-traffic and Worker fast-path ingest.
+The web server receives Cloudflare Worker ingress at
+`/agent-mail/ingest/v1`. Tailscale Funnel can expose that route by forwarding
+the full Worker request to the web server.
 
-Use example values below:
+HMAC-signed Worker notifications are valid. Unknown requests and requests with
+missing or invalid signatures are rejected.
 
-- application hostname: `mail.company.example`
-- tunnel hostname: `mail-ingress.company.example`
-- web service listener: `http://atemail-web-server`
-- fast-path route: `/agent-mail/ingest/v1`
-- fast-path backend: the mail-control-service `fastpath-gate` path
+Example values:
 
-## Purpose
-
-The tunnel exists to expose the authenticated web app and the public fast-path
-ingest route that must be reachable by Cloudflare Email Workers.
-
-Browser/web traffic goes to the web service.
-
-Worker fast-path ingest must use this full public URL:
-
-```text
-https://mail-ingress.company.example/agent-mail/ingest/v1
-```
-
-The fast-path route must forward to the public fast-path ingress/gate backed by
-the mail-control-service fastpath gate path, not to the web service:
-
-```text
-http://<fastpath-gate-backend>/agent-mail/ingest/v1
-```
-
-The tunnel must not expose WildDuck, MongoDB, Redis, Haraka, ZoneMTA, or the
-internal control API.
+- Tailscale hostname: `mail-ingress`
+- Tailnet DNS name: `example.ts.net`
+- Public ingest URL:
+  `https://mail-ingress.example.ts.net/agent-mail/ingest/v1`
+- Compose web server listener: `http://127.0.0.1:4321`
+- Kubernetes web server service: `http://atemail-web-server:80`
 
 ## Environment
 
-Set the external URL to the full public Worker ingest URL. Do not append
-`/agent-mail/ingest/v1` anywhere else:
+Configure AgentTeam Email with the public web origin served by Funnel. Product
+Worker provisioning derives the ingest URL by appending `/agent-mail/ingest/v1`
+and stores the per-connection Worker HMAC secret in the web database.
 
-```text
-AGENT_MAIL_CF_TUNNEL_LISTEN_URL=http://0.0.0.0:8080
-AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL=https://mail-ingress.company.example/agent-mail/ingest/v1
-AGENT_MAIL_CF_TUNNEL_HMAC_SECRET=<random-fast-path-secret>
+```dotenv
+PUBLIC_HOSTNAME=https://mail-ingress.example.ts.net
+AGENT_MAIL_CONTROL_API_TOKEN=<random-control-token>
+ENCRYPT_SECRET_KEY=<base64url-32-byte-key>
 ```
 
-Set the same external URL and HMAC secret in the Worker:
+## Docker Compose
 
-```text
-AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL=https://mail-ingress.company.example/agent-mail/ingest/v1
-AGENT_MAIL_CF_TUNNEL_HMAC_SECRET=<random-fast-path-secret>
-```
-
-For Tailscale, also provide:
-
-```text
-TAILSCALE_AUTHKEY=
-TAILSCALE_HOSTNAME=mail-ingress
-```
-
-## Helm Values
-
-Enable Tailscale through Helm values:
+The Tailscale container is configured with `TS_SERVE_CONFIG`. There is no
+env-only Funnel declaration; `TS_SERVE_CONFIG` points at a JSON file.
 
 ```yaml
-tunnel:
-  provider: tailscale
-  listenUrl:
-    value: http://0.0.0.0:8080
-  externalUrl:
-    value: https://mail-ingress.company.example/agent-mail/ingest/v1
-  hmacSecret:
-    valueFrom:
-      secretKeyRef:
-        name: mail-secrets
-        key: AGENT_MAIL_CF_TUNNEL_HMAC_SECRET
+services:
+  tailscale:
+    image: ghcr.io/tailscale/tailscale:v1.96.5
+    network_mode: 'service:atemail-web-server'
+    environment:
+      TS_AUTHKEY: '${TS_AUTHKEY:?missing TS_AUTHKEY}'
+      TS_HOSTNAME: '${TS_HOSTNAME:-mail-ingress}'
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /etc/tailscale/serve/serve.json
+      TS_USERSPACE: 'true'
+      TS_AUTH_ONCE: 'true'
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      - ./tailscale:/etc/tailscale/serve:ro
+    depends_on:
+      - atemail-web-server
+    restart: unless-stopped
 
-tailscale:
-  hostname: mail-ingress
-  certDomain: mail-ingress.company.example
-  authKey:
-    valueFrom:
-      secretKeyRef:
-        name: mail-secrets
-        key: AGENT_MAIL_TAILSCALE_AUTH_KEY
+volumes:
+  tailscale-state:
 ```
 
-## Setup Flow
+Create `./tailscale/serve.json`:
 
-1. Create a Tailscale auth key for this service.
-2. Configure the Tailscale service hostname.
-3. Configure HTTPS serving for `mail-ingress.company.example`.
-4. Set `AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL`.
-5. Set `AGENT_MAIL_CF_TUNNEL_HMAC_SECRET`.
-6. Apply the Helm release.
-7. Confirm the frontend and fast-path routes are reachable through Tailscale.
-8. Deploy or update the Cloudflare Worker with the same external URL and HMAC
-   secret.
-9. Send a test email and confirm fast-path delivery.
+```json
+{
+  "TCP": {
+    "443": {
+      "TCPForward": "127.0.0.1:4321",
+      "TerminateTLS": "mail-ingress.example.ts.net"
+    }
+  },
+  "AllowFunnel": {
+    "mail-ingress.example.ts.net:443": true
+  }
+}
+```
 
-## Verification
+Because the Tailscale service uses
+`network_mode: "service:atemail-web-server"`, `127.0.0.1:4321` is the
+web server listener.
 
-Expected public route:
+## Kubernetes
+
+The Helm chart does not install or configure Tailscale. Run Tailscale as
+operator-owned infrastructure and point Funnel at the web server service in the
+release namespace:
+
+```text
+http://atemail-web-server:80
+```
+
+If the Tailscale workload runs outside the release namespace, use the fully
+qualified Kubernetes service DNS name for `atemail-web-server`.
+
+## Verify
 
 ```bash
-curl -i https://mail-ingress.company.example/agent-mail/ingest/v1
+docker compose exec tailscale tailscale serve status --json
 ```
 
-An unsigned request should not enqueue mail. A signed Worker request should
-return success and create a delivery record.
+Expected Compose shape:
+
+```json
+{
+  "TCP": {
+    "443": {
+      "TCPForward": "127.0.0.1:4321",
+      "TerminateTLS": "mail-ingress.example.ts.net"
+    }
+  },
+  "AllowFunnel": {
+    "mail-ingress.example.ts.net:443": true
+  }
+}
+```
+
+Expected Kubernetes shape:
+
+```json
+{
+  "TCP": {
+    "443": {
+      "TCPForward": "atemail-web-server:80",
+      "TerminateTLS": "mail-ingress.example.ts.net"
+    }
+  },
+  "AllowFunnel": {
+    "mail-ingress.example.ts.net:443": true
+  }
+}
+```
+
+An unsigned request to the ingest path should be rejected. Signed Worker
+notifications should be accepted.
