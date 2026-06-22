@@ -10,8 +10,10 @@ import (
 	"net/http"
 	"time"
 
+	"agent-mail/internal/archive/r2archive"
 	"agent-mail/internal/control/controlstate"
 	"agent-mail/internal/control/messageprovenance"
+	"agent-mail/internal/modules/poller"
 	"agent-mail/internal/provisioning/mailprovisioner"
 	"agent-mail/internal/registry/domainregistry"
 
@@ -27,6 +29,10 @@ const (
 	domainModifyRPCMethod   = "agentMail.domain.modify"
 	domainRemoveRPCMethod   = "agentMail.domain.remove"
 	provisionApplyRPCMethod = "agentMail.provision.apply"
+	runtimeSyncMethod       = "agentMail.runtime.sync"
+	ingestEnqueueMethod     = "agentMail.ingest.enqueue"
+	workerArchiveCredMethod = "agentMail.worker.archiveCredentials.issue"
+	sendSubmitMethod        = "agentMail.send.submit"
 	messageProvenanceMethod = "agentMail.message.provenance.get"
 	messageViewMethod       = "agentMail.message.view.get"
 	messageSecurityMethod   = "agentMail.message.security.get"
@@ -54,14 +60,36 @@ type MessageProvenanceProvider interface {
 	Security(ctx context.Context, params messageprovenance.Params) (messageprovenance.MessageSecurityResult, error)
 }
 
+type IngestEnqueuer interface {
+	EnqueueNotification(ctx context.Context, notification poller.Notification) (r2archive.InboundBundle, error)
+}
+
+type WorkerArchiveCredentialIssuer interface {
+	IssueWorkerArchiveCredentials(ctx context.Context, params WorkerArchiveCredentialsParams, now time.Time) (WorkerArchiveCredentialsResult, error)
+}
+
+type RuntimeSyncer interface {
+	SyncRuntime(ctx context.Context, params RuntimeSyncParams, now time.Time) (RuntimeSyncResult, error)
+}
+
+type SendSubmitter interface {
+	SubmitSend(ctx context.Context, params SendSubmitParams, now time.Time) (SendSubmitResult, error)
+}
+
+type Option func(*Server)
+
 type Server struct {
 	cfg         Config
 	provider    StatusProvider
 	provisioner DomainProvisioner
 	provenance  MessageProvenanceProvider
+	ingest      IngestEnqueuer
+	credentials WorkerArchiveCredentialIssuer
+	runtime     RuntimeSyncer
+	send        SendSubmitter
 }
 
-func New(cfg Config, provider StatusProvider, provisioner DomainProvisioner, provenance MessageProvenanceProvider) (*Server, error) {
+func New(cfg Config, provider StatusProvider, provisioner DomainProvisioner, provenance MessageProvenanceProvider, options ...Option) (*Server, error) {
 	if cfg.ListenAddress == "" {
 		return nil, fmt.Errorf("missing admin API listen address")
 	}
@@ -77,7 +105,35 @@ func New(cfg Config, provider StatusProvider, provisioner DomainProvisioner, pro
 	if provenance == nil {
 		return nil, fmt.Errorf("missing message provenance provider")
 	}
-	return &Server{cfg: cfg, provider: provider, provisioner: provisioner, provenance: provenance}, nil
+	server := &Server{cfg: cfg, provider: provider, provisioner: provisioner, provenance: provenance}
+	for _, option := range options {
+		option(server)
+	}
+	return server, nil
+}
+
+func WithIngestEnqueuer(ingest IngestEnqueuer) Option {
+	return func(s *Server) {
+		s.ingest = ingest
+	}
+}
+
+func WithRuntimeSyncer(runtime RuntimeSyncer) Option {
+	return func(s *Server) {
+		s.runtime = runtime
+	}
+}
+
+func WithWorkerArchiveCredentialIssuer(credentials WorkerArchiveCredentialIssuer) Option {
+	return func(s *Server) {
+		s.credentials = credentials
+	}
+}
+
+func WithSendSubmitter(send SendSubmitter) Option {
+	return func(s *Server) {
+		s.send = send
+	}
 }
 
 func (s *Server) Run(ctx context.Context) error {
@@ -176,6 +232,42 @@ func (s *Server) register(mux *http.ServeMux) huma.API {
 		Description: "JSON-RPC-style full provision apply. This reads service-owned desired domain state and applies Worker, Cloudflare, WildDuck feedback, and runtime registry steps.",
 		Tags:        []string{"provision"},
 	}, s.handleProvisionApply)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "agentMailRuntimeSync",
+		Method:      http.MethodPost,
+		Path:        "/rpc/agentMail.runtime.sync",
+		Summary:     "Sync Agent Mail runtime projection",
+		Description: "JSON-RPC-style internal runtime projection sync from the authenticated web server.",
+		Tags:        []string{"runtime"},
+	}, s.handleRuntimeSync)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "agentMailIngestEnqueue",
+		Method:      http.MethodPost,
+		Path:        "/rpc/agentMail.ingest.enqueue",
+		Summary:     "Enqueue verified Agent Mail inbound archive bundle",
+		Description: "JSON-RPC-style internal enqueue handoff for Worker notifications already verified by the web server.",
+		Tags:        []string{"ingest"},
+	}, s.handleIngestEnqueue)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "agentMailWorkerArchiveCredentialsIssue",
+		Method:      http.MethodPost,
+		Path:        "/rpc/agentMail.worker.archiveCredentials.issue",
+		Summary:     "Issue prefix-scoped Worker archive credentials",
+		Description: "JSON-RPC-style internal credential handoff for a verified Worker domain deployment. Credential material is returned only in this internal control API response.",
+		Tags:        []string{"worker"},
+	}, s.handleWorkerArchiveCredentials)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "agentMailSendSubmit",
+		Method:      http.MethodPost,
+		Path:        "/rpc/agentMail.send.submit",
+		Summary:     "Submit an authorized Agent Mail send operation",
+		Description: "JSON-RPC-style internal send handoff from the authenticated web server.",
+		Tags:        []string{"send"},
+	}, s.handleSendSubmit)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "agentMailMessageProvenanceGet",
@@ -329,6 +421,143 @@ type ProvisionApplyRPCResponse struct {
 	JSONRPC string                                 `json:"jsonrpc"`
 	ID      string                                 `json:"id,omitempty"`
 	Result  mailprovisioner.ControlProvisionResult `json:"result"`
+}
+
+type RuntimeSyncInput struct {
+	Token string                `header:"X-Agent-Mail-Control-Token" required:"true" doc:"Agent Mail control API token"`
+	Body  RuntimeSyncRPCRequest `contentType:"application/json"`
+}
+
+type RuntimeSyncRPCRequest struct {
+	JSONRPC string            `json:"jsonrpc" enum:"2.0" doc:"JSON-RPC protocol version"`
+	ID      string            `json:"id,omitempty" doc:"Caller-supplied request id"`
+	Method  string            `json:"method" enum:"agentMail.runtime.sync" doc:"RPC method name"`
+	Params  RuntimeSyncParams `json:"params"`
+}
+
+type RuntimeSyncParams struct {
+	Domains []controlstate.DomainConfigParams `json:"domains"`
+}
+
+type RuntimeSyncOutput struct {
+	Body RuntimeSyncRPCResponse `contentType:"application/json"`
+}
+
+type RuntimeSyncRPCResponse struct {
+	JSONRPC string            `json:"jsonrpc"`
+	ID      string            `json:"id,omitempty"`
+	Result  RuntimeSyncResult `json:"result"`
+}
+
+type RuntimeSyncResult struct {
+	Domains []mailprovisioner.DomainConfigResult `json:"domains"`
+	Changed bool                                 `json:"changed"`
+}
+
+type IngestEnqueueInput struct {
+	Token string                  `header:"X-Agent-Mail-Control-Token" required:"true" doc:"Agent Mail control API token"`
+	Body  IngestEnqueueRPCRequest `contentType:"application/json"`
+}
+
+type IngestEnqueueRPCRequest struct {
+	JSONRPC string              `json:"jsonrpc" enum:"2.0" doc:"JSON-RPC protocol version"`
+	ID      string              `json:"id,omitempty" doc:"Caller-supplied request id"`
+	Method  string              `json:"method" enum:"agentMail.ingest.enqueue" doc:"RPC method name"`
+	Params  poller.Notification `json:"params"`
+}
+
+type IngestEnqueueOutput struct {
+	Body IngestEnqueueRPCResponse `contentType:"application/json"`
+}
+
+type IngestEnqueueRPCResponse struct {
+	JSONRPC string              `json:"jsonrpc"`
+	ID      string              `json:"id,omitempty"`
+	Result  IngestEnqueueResult `json:"result"`
+}
+
+type IngestEnqueueResult struct {
+	Status   string `json:"status"`
+	IngestID string `json:"ingest_id"`
+}
+
+type WorkerArchiveCredentialsInput struct {
+	Token string                             `header:"X-Agent-Mail-Control-Token" required:"true" doc:"Agent Mail control API token"`
+	Body  WorkerArchiveCredentialsRPCRequest `contentType:"application/json"`
+}
+
+type WorkerArchiveCredentialsRPCRequest struct {
+	JSONRPC string                         `json:"jsonrpc" enum:"2.0" doc:"JSON-RPC protocol version"`
+	ID      string                         `json:"id,omitempty" doc:"Caller-supplied request id"`
+	Method  string                         `json:"method" enum:"agentMail.worker.archiveCredentials.issue" doc:"RPC method name"`
+	Params  WorkerArchiveCredentialsParams `json:"params"`
+}
+
+type WorkerArchiveCredentialsParams struct {
+	OrganizationID           string `json:"organization_id"`
+	OrganizationPublicID     string `json:"organization_public_id"`
+	Domain                   string `json:"domain"`
+	ArchivePrefix            string `json:"archive_prefix"`
+	WorkerConnectionID       string `json:"worker_connection_id"`
+	WorkerDomainDeploymentID string `json:"worker_domain_deployment_id"`
+}
+
+type WorkerArchiveCredentialsOutput struct {
+	Body WorkerArchiveCredentialsRPCResponse `contentType:"application/json"`
+}
+
+type WorkerArchiveCredentialsRPCResponse struct {
+	JSONRPC string                         `json:"jsonrpc"`
+	ID      string                         `json:"id,omitempty"`
+	Result  WorkerArchiveCredentialsResult `json:"result"`
+}
+
+type WorkerArchiveCredentialsResult struct {
+	Status          string    `json:"status"`
+	ArchivePrefix   string    `json:"archive_prefix"`
+	Bucket          string    `json:"bucket"`
+	Endpoint        string    `json:"endpoint"`
+	Region          string    `json:"region"`
+	AccessKeyID     string    `json:"access_key_id"`
+	SecretAccessKey string    `json:"secret_access_key"`
+	SessionToken    string    `json:"session_token,omitempty"`
+	ExpiresAt       time.Time `json:"expires_at"`
+	RotationDate    string    `json:"rotation_date"`
+}
+
+type SendSubmitInput struct {
+	Token string               `header:"X-Agent-Mail-Control-Token" required:"true" doc:"Agent Mail control API token"`
+	Body  SendSubmitRPCRequest `contentType:"application/json"`
+}
+
+type SendSubmitRPCRequest struct {
+	JSONRPC string           `json:"jsonrpc" enum:"2.0" doc:"JSON-RPC protocol version"`
+	ID      string           `json:"id,omitempty" doc:"Caller-supplied request id"`
+	Method  string           `json:"method" enum:"agentMail.send.submit" doc:"RPC method name"`
+	Params  SendSubmitParams `json:"params"`
+}
+
+type SendSubmitParams struct {
+	IdempotencyKey string `json:"idempotency_key"`
+	Domain         string `json:"domain"`
+	From           string `json:"from"`
+	To             string `json:"to"`
+	Raw            string `json:"raw"`
+}
+
+type SendSubmitOutput struct {
+	Body SendSubmitRPCResponse `contentType:"application/json"`
+}
+
+type SendSubmitRPCResponse struct {
+	JSONRPC string           `json:"jsonrpc"`
+	ID      string           `json:"id,omitempty"`
+	Result  SendSubmitResult `json:"result"`
+}
+
+type SendSubmitResult struct {
+	Status         string `json:"status"`
+	IdempotencyKey string `json:"idempotency_key,omitempty"`
 }
 
 type MessageProvenanceInput struct {
@@ -516,6 +745,120 @@ func (s *Server) handleProvisionApply(ctx context.Context, input *ProvisionApply
 	}
 	return &ProvisionApplyOutput{
 		Body: ProvisionApplyRPCResponse{
+			JSONRPC: "2.0",
+			ID:      input.Body.ID,
+			Result:  result,
+		},
+	}, nil
+}
+
+func (s *Server) handleRuntimeSync(ctx context.Context, input *RuntimeSyncInput) (*RuntimeSyncOutput, error) {
+	if err := s.requireToken(input.Token); err != nil {
+		return nil, err
+	}
+	if input.Body.JSONRPC != "2.0" {
+		return nil, huma.Error400BadRequest("jsonrpc must be 2.0")
+	}
+	if input.Body.Method != runtimeSyncMethod {
+		return nil, huma.Error400BadRequest("method must be agentMail.runtime.sync")
+	}
+	if s.runtime == nil {
+		return nil, huma.Error503ServiceUnavailable("runtime sync is not configured")
+	}
+	result, err := s.runtime.SyncRuntime(ctx, input.Body.Params, time.Now().UTC())
+	if err != nil {
+		return nil, huma.Error400BadRequest("sync runtime projection", err)
+	}
+	return &RuntimeSyncOutput{
+		Body: RuntimeSyncRPCResponse{
+			JSONRPC: "2.0",
+			ID:      input.Body.ID,
+			Result:  result,
+		},
+	}, nil
+}
+
+func (s *Server) handleIngestEnqueue(ctx context.Context, input *IngestEnqueueInput) (*IngestEnqueueOutput, error) {
+	if err := s.requireToken(input.Token); err != nil {
+		return nil, err
+	}
+	if input.Body.JSONRPC != "2.0" {
+		return nil, huma.Error400BadRequest("jsonrpc must be 2.0")
+	}
+	if input.Body.Method != ingestEnqueueMethod {
+		return nil, huma.Error400BadRequest("method must be agentMail.ingest.enqueue")
+	}
+	if s.ingest == nil {
+		return nil, huma.Error503ServiceUnavailable("ingest enqueue is not configured")
+	}
+	bundle, err := s.ingest.EnqueueNotification(ctx, input.Body.Params)
+	if err != nil {
+		log.Printf(
+			"agent-mail-control-api event=ingest_enqueue_rejected ingest_id=%s recipient_domain=%s worker_connection_id=%s error=%q",
+			input.Body.Params.IngestID,
+			input.Body.Params.RecipientDomain,
+			input.Body.Params.WorkerConnectionID,
+			err,
+		)
+		return nil, huma.Error400BadRequest(fmt.Sprintf("enqueue verified ingest notification: %s", err.Error()))
+	}
+	return &IngestEnqueueOutput{
+		Body: IngestEnqueueRPCResponse{
+			JSONRPC: "2.0",
+			ID:      input.Body.ID,
+			Result: IngestEnqueueResult{
+				Status:   "enqueued",
+				IngestID: bundle.IngestID,
+			},
+		},
+	}, nil
+}
+
+func (s *Server) handleWorkerArchiveCredentials(ctx context.Context, input *WorkerArchiveCredentialsInput) (*WorkerArchiveCredentialsOutput, error) {
+	if err := s.requireToken(input.Token); err != nil {
+		return nil, err
+	}
+	if input.Body.JSONRPC != "2.0" {
+		return nil, huma.Error400BadRequest("jsonrpc must be 2.0")
+	}
+	if input.Body.Method != workerArchiveCredMethod {
+		return nil, huma.Error400BadRequest("method must be agentMail.worker.archiveCredentials.issue")
+	}
+	if s.credentials == nil {
+		return nil, huma.Error503ServiceUnavailable("worker archive credential issuer is not configured")
+	}
+	result, err := s.credentials.IssueWorkerArchiveCredentials(ctx, input.Body.Params, time.Now().UTC())
+	if err != nil {
+		return nil, huma.Error400BadRequest("issue worker archive credentials", err)
+	}
+	return &WorkerArchiveCredentialsOutput{
+		Body: WorkerArchiveCredentialsRPCResponse{
+			JSONRPC: "2.0",
+			ID:      input.Body.ID,
+			Result:  result,
+		},
+	}, nil
+}
+
+func (s *Server) handleSendSubmit(ctx context.Context, input *SendSubmitInput) (*SendSubmitOutput, error) {
+	if err := s.requireToken(input.Token); err != nil {
+		return nil, err
+	}
+	if input.Body.JSONRPC != "2.0" {
+		return nil, huma.Error400BadRequest("jsonrpc must be 2.0")
+	}
+	if input.Body.Method != sendSubmitMethod {
+		return nil, huma.Error400BadRequest("method must be agentMail.send.submit")
+	}
+	if s.send == nil {
+		return nil, huma.Error501NotImplemented("send submit is not configured")
+	}
+	result, err := s.send.SubmitSend(ctx, input.Body.Params, time.Now().UTC())
+	if err != nil {
+		return nil, huma.Error400BadRequest("submit send", err)
+	}
+	return &SendSubmitOutput{
+		Body: SendSubmitRPCResponse{
 			JSONRPC: "2.0",
 			ID:      input.Body.ID,
 			Result:  result,

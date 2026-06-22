@@ -392,7 +392,7 @@ func (s *mongoStateStore) QueueStatus(ctx context.Context) (QueueStatus, error) 
 	for cursor.Next(ctx) {
 		var row struct {
 			ID    string `bson:"_id"`
-			Count int   `bson:"count"`
+			Count int    `bson:"count"`
 		}
 		if err := cursor.Decode(&row); err != nil {
 			return QueueStatus{}, err

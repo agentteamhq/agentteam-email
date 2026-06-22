@@ -13,6 +13,7 @@ import (
 	"net/smtp"
 	"net/textproto"
 	"os"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -107,8 +108,16 @@ type runtimeConfig struct {
 type Manifest struct {
 	Schema                 string            `json:"schema"`
 	IngestID               string            `json:"ingest_id"`
+	OrganizationPublicID   string            `json:"organization_public_id,omitempty"`
+	OrgPublicID            string            `json:"org_public_id,omitempty"`
+	ArchivePrefix          string            `json:"archive_prefix,omitempty"`
+	ConnectionID           string            `json:"connection_id,omitempty"`
+	WorkerConnectionID     string            `json:"worker_connection_id,omitempty"`
+	DomainID               string            `json:"domain_id,omitempty"`
+	Domain                 string            `json:"domain,omitempty"`
 	RawKey                 string            `json:"raw_key"`
 	EdgeKey                string            `json:"edge_key"`
+	ResultKey              string            `json:"result_key,omitempty"`
 	Mailbox                string            `json:"mailbox"`
 	EnvelopeFrom           string            `json:"envelope_from"`
 	EnvelopeTo             string            `json:"envelope_to"`
@@ -233,8 +242,13 @@ type DomainSource interface {
 }
 
 type Domain struct {
-	Name            string
-	FeedbackAddress string
+	Name                     string
+	OrganizationID           string
+	OrganizationPublicID     string
+	ArchivePrefix            string
+	WorkerConnectionID       string
+	WorkerDomainDeploymentID string
+	FeedbackAddress          string
 }
 
 func New(ctx context.Context, configPath string) (*Poller, error) {
@@ -297,13 +311,10 @@ func newPoller(ctx context.Context, cfg Config, source DomainSource) (*Poller, e
 	if err != nil {
 		return nil, err
 	}
-	notifyListenURL, err := configfile.RequireEnv("AGENT_MAIL_CF_TUNNEL_LISTEN_URL")
-	if err != nil {
-		return nil, err
-	}
-	notifyHMACSecret, err := configfile.RequireEnv("AGENT_MAIL_CF_TUNNEL_HMAC_SECRET")
-	if err != nil {
-		return nil, err
+	notifyListenURL := os.Getenv("AGENT_MAIL_CF_TUNNEL_LISTEN_URL")
+	notifyHMACSecret := os.Getenv("AGENT_MAIL_CF_TUNNEL_HMAC_SECRET")
+	if notifyListenURL != "" && notifyHMACSecret == "" {
+		return nil, fmt.Errorf("missing AGENT_MAIL_CF_TUNNEL_HMAC_SECRET")
 	}
 
 	runtimeCfg.R2 = r2archive.Config{
@@ -516,6 +527,18 @@ func (p *Poller) processDue(ctx context.Context) error {
 	return nil
 }
 
+func (p *Poller) EnqueueNotification(ctx context.Context, notification Notification) (r2archive.InboundBundle, error) {
+	bundle, err := ValidateNotification(notification)
+	if err != nil {
+		return r2archive.InboundBundle{}, err
+	}
+	if err := p.upsertPending(ctx, bundle); err != nil {
+		return r2archive.InboundBundle{}, err
+	}
+	p.signalProcessDue()
+	return bundle, nil
+}
+
 func stopTimer(timer *time.Timer) {
 	if timer == nil {
 		return
@@ -543,7 +566,7 @@ func (p *Poller) sweep(ctx context.Context, now time.Time) error {
 		if !sweepStart.Before(sweepEnd) {
 			continue
 		}
-		if err := p.sweepDomain(ctx, domain.Name, sweepStart, sweepEnd); err != nil {
+		if err := p.sweepDomain(ctx, domain, sweepStart, sweepEnd); err != nil {
 			return err
 		}
 		if err := p.advanceSweepCursor(ctx, domain.Name, sweepEnd); err != nil {
@@ -571,11 +594,24 @@ func (p *Poller) activeDomains(ctx context.Context) ([]Domain, error) {
 	return domains, nil
 }
 
-func (p *Poller) sweepDomain(ctx context.Context, domain string, sweepStart time.Time, sweepEnd time.Time) error {
+func (p *Poller) sweepDomain(ctx context.Context, domain Domain, sweepStart time.Time, sweepEnd time.Time) error {
 	for date := utcDate(sweepStart); !date.After(utcDate(sweepEnd)); date = date.AddDate(0, 0, 1) {
-		prefix, err := r2archive.InboundDailyPrefix(domain, date)
-		if err != nil {
-			return err
+		prefix := ""
+		if domain.ArchivePrefix != "" {
+			parsed, err := r2archive.ParseInboundArchivePrefix(domain.ArchivePrefix)
+			if err != nil {
+				return err
+			}
+			if parsed.RecipientDomain != domain.Name {
+				return fmt.Errorf("archive_prefix domain %q does not match active domain %q", parsed.RecipientDomain, domain.Name)
+			}
+			prefix = path.Join(domain.ArchivePrefix, utcDate(date).Format("2006/01/02")) + "/"
+		} else {
+			var err error
+			prefix, err = r2archive.InboundDailyPrefix(domain.Name, date)
+			if err != nil {
+				return err
+			}
 		}
 		var continuation *string
 		for {
@@ -587,9 +623,9 @@ func (p *Poller) sweepDomain(ctx context.Context, domain string, sweepStart time
 				if object.Key == nil || !r2archive.IsInboundEdgeKey(*object.Key) {
 					continue
 				}
-				if err := p.discoverEdgeKey(ctx, *object.Key, sweepStart, sweepEnd); err != nil {
-					p.logFailure("sweep_discovery", workItem{EdgeKey: *object.Key, RecipientDomain: domain}, 0, failureInvariant, err, "")
-					_ = p.recordDiscoveryDiagnostic(ctx, *object.Key, domain, failureInvariant, err)
+				if err := p.discoverEdgeKey(ctx, *object.Key, domain, sweepStart, sweepEnd); err != nil {
+					p.logFailure("sweep_discovery", workItem{EdgeKey: *object.Key, RecipientDomain: domain.Name}, 0, failureInvariant, err, "")
+					_ = p.recordDiscoveryDiagnostic(ctx, *object.Key, domain.Name, failureInvariant, err)
 					continue
 				}
 			}
@@ -602,10 +638,16 @@ func (p *Poller) sweepDomain(ctx context.Context, domain string, sweepStart time
 	return nil
 }
 
-func (p *Poller) discoverEdgeKey(ctx context.Context, edgeKey string, sweepStart time.Time, sweepEnd time.Time) error {
+func (p *Poller) discoverEdgeKey(ctx context.Context, edgeKey string, domain Domain, sweepStart time.Time, sweepEnd time.Time) error {
 	bundle, err := r2archive.ParseInboundEdgeKey(edgeKey)
 	if err != nil {
 		return err
+	}
+	if domain.ArchivePrefix != "" && bundle.ArchivePrefix != domain.ArchivePrefix {
+		return fmt.Errorf("edge key archive_prefix %q does not match active domain archive_prefix %q", bundle.ArchivePrefix, domain.ArchivePrefix)
+	}
+	if bundle.RecipientDomain != domain.Name {
+		return fmt.Errorf("edge key recipient domain %q does not match active domain %q", bundle.RecipientDomain, domain.Name)
 	}
 	createdAt, err := r2archive.UUIDv7Time(bundle.IngestID)
 	if err != nil {

@@ -12,8 +12,10 @@ import (
 	"testing"
 	"time"
 
+	"agent-mail/internal/archive/r2archive"
 	"agent-mail/internal/control/controlstate"
 	"agent-mail/internal/control/messageprovenance"
+	"agent-mail/internal/modules/poller"
 	"agent-mail/internal/provisioning/cloudflareprovisioner"
 	"agent-mail/internal/provisioning/mailprovisioner"
 	"agent-mail/internal/provisioning/wildduckprovisioner"
@@ -45,6 +47,49 @@ func (f *fakeMessageSourceFetcher) FetchMessageSource(ctx context.Context, userI
 	return append([]byte(nil), f.source...), nil
 }
 
+type fakeIngestEnqueuer struct {
+	calls []poller.Notification
+	err   error
+}
+
+func (f *fakeIngestEnqueuer) EnqueueNotification(ctx context.Context, notification poller.Notification) (r2archive.InboundBundle, error) {
+	_ = ctx
+	f.calls = append(f.calls, notification)
+	if f.err != nil {
+		return r2archive.InboundBundle{}, f.err
+	}
+	bundle, err := poller.ValidateNotification(notification)
+	if err != nil {
+		return r2archive.InboundBundle{}, err
+	}
+	return bundle, nil
+}
+
+type fakeWorkerArchiveCredentialIssuer struct {
+	calls []WorkerArchiveCredentialsParams
+	err   error
+}
+
+func (f *fakeWorkerArchiveCredentialIssuer) IssueWorkerArchiveCredentials(ctx context.Context, params WorkerArchiveCredentialsParams, now time.Time) (WorkerArchiveCredentialsResult, error) {
+	_ = ctx
+	f.calls = append(f.calls, params)
+	if f.err != nil {
+		return WorkerArchiveCredentialsResult{}, f.err
+	}
+	return WorkerArchiveCredentialsResult{
+		Status:          "issued",
+		ArchivePrefix:   params.ArchivePrefix,
+		Bucket:          "agent-mail-archive",
+		Endpoint:        "https://r2.example.test",
+		Region:          "auto",
+		AccessKeyID:     "worker-access-key",
+		SecretAccessKey: "worker-secret-key",
+		SessionToken:    "worker-session-token",
+		ExpiresAt:       now.Add(7 * 24 * time.Hour),
+		RotationDate:    now.Format("2006-01-02"),
+	}, nil
+}
+
 func TestStatusRPCRequiresToken(t *testing.T) {
 	server := newTestServer(t)
 	body := bytes.NewBufferString(`{"jsonrpc":"2.0","id":"request-1","method":"agentMail.status.get","params":{}}`)
@@ -56,6 +101,50 @@ func TestStatusRPCRequiresToken(t *testing.T) {
 
 	if response.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("response.Code = %d, want %d", response.Code, http.StatusUnprocessableEntity)
+	}
+}
+
+func TestControlAPITokenIsHeaderOnlyAndHealthIsUnauthenticated(t *testing.T) {
+	server := newTestServer(t)
+
+	healthRequest := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	healthResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(healthResponse, healthRequest)
+	if healthResponse.Code != http.StatusOK {
+		t.Fatalf("health response.Code = %d, want %d", healthResponse.Code, http.StatusOK)
+	}
+	if strings.Contains(healthResponse.Body.String(), "test-token") {
+		t.Fatalf("health response exposed auth token: %s", healthResponse.Body.String())
+	}
+
+	tests := []struct {
+		name string
+		path string
+		body string
+	}{
+		{
+			name: "query token",
+			path: "/rpc/agentMail.status.get?X-Agent-Mail-Control-Token=test-token",
+			body: `{"jsonrpc":"2.0","id":"query-token","method":"agentMail.status.get","params":{}}`,
+		},
+		{
+			name: "body token",
+			path: "/rpc/agentMail.status.get",
+			body: `{"jsonrpc":"2.0","id":"body-token","method":"agentMail.status.get","token":"test-token","params":{}}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, tt.path, bytes.NewBufferString(tt.body))
+			request.Header.Set("Content-Type", "application/json")
+			response := httptest.NewRecorder()
+
+			server.Handler().ServeHTTP(response, request)
+
+			if response.Code != http.StatusUnprocessableEntity {
+				t.Fatalf("response.Code = %d, want %d; body=%s", response.Code, http.StatusUnprocessableEntity, response.Body.String())
+			}
+		})
 	}
 }
 
@@ -134,6 +223,10 @@ func TestOpenAPISpecDocumentsControlContract(t *testing.T) {
 		"agentMailDomainModify",
 		"agentMailDomainRemove",
 		"agentMailProvisionApply",
+		"agentMailRuntimeSync",
+		"agentMailIngestEnqueue",
+		"agentMailWorkerArchiveCredentialsIssue",
+		"agentMailSendSubmit",
 		"agentMailMessageProvenanceGet",
 		"agentMailMessageViewGet",
 		"agentMailMessageSecurityGet",
@@ -152,6 +245,205 @@ func TestOpenAPISpecDocumentsControlContract(t *testing.T) {
 		if strings.Contains(spec, oldOperation) {
 			t.Fatalf("openapi response still exposes old operation %s", oldOperation)
 		}
+	}
+}
+
+func TestIngestEnqueueRPCRequiresControlToken(t *testing.T) {
+	server := newTestServer(t)
+	body := `{"jsonrpc":"2.0","id":"ingest-1","method":"agentMail.ingest.enqueue","params":{}}`
+	request := httptest.NewRequest(http.MethodPost, "/rpc/agentMail.ingest.enqueue", bytes.NewBufferString(body))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("response.Code = %d, want %d", response.Code, http.StatusUnprocessableEntity)
+	}
+}
+
+func TestIngestEnqueueRPCEnqueuesVerifiedNotification(t *testing.T) {
+	ingestID, err := r2archive.NewUUIDv7String()
+	if err != nil {
+		t.Fatalf("NewUUIDv7String: %v", err)
+	}
+	receivedAt, err := r2archive.UUIDv7Time(ingestID)
+	if err != nil {
+		t.Fatalf("UUIDv7Time: %v", err)
+	}
+	bundle, err := r2archive.OrganizationInboundBundleKeys("org_pub_123", "example.com", receivedAt, ingestID)
+	if err != nil {
+		t.Fatalf("OrganizationInboundBundleKeys: %v", err)
+	}
+	ingest := &fakeIngestEnqueuer{}
+	server := newTestServerWithOptions(t, WithIngestEnqueuer(ingest))
+	body := `{
+		"jsonrpc":"2.0",
+		"id":"ingest-1",
+		"method":"agentMail.ingest.enqueue",
+		"params":{
+			"schema":"agent-mail.inbound.fastpath.v1",
+			"organization_id":"org-1",
+			"organization_public_id":"org_pub_123",
+			"archive_prefix":"` + bundle.ArchivePrefix + `",
+			"worker_connection_id":"worker-connection-1",
+			"worker_domain_deployment_id":"worker-deployment-1",
+			"ingest_id":"` + ingestID + `",
+			"recipient_domain":"example.com",
+			"raw_key":"` + bundle.RawKey + `",
+			"edge_key":"` + bundle.EdgeKey + `",
+			"result_key":"` + bundle.ResultKey + `",
+			"received_at":"` + receivedAt.Format(time.RFC3339Nano) + `",
+			"raw_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		}
+	}`
+
+	response := postControlRPC(t, server, "/rpc/agentMail.ingest.enqueue", body)
+	if response.Code != http.StatusOK {
+		t.Fatalf("response.Code = %d, body=%s", response.Code, response.Body.String())
+	}
+	var payload IngestEnqueueRPCResponse
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.Result.Status != "enqueued" || payload.Result.IngestID != ingestID {
+		t.Fatalf("payload.Result = %#v", payload.Result)
+	}
+	if len(ingest.calls) != 1 || ingest.calls[0].IngestID != ingestID {
+		t.Fatalf("ingest calls = %#v", ingest.calls)
+	}
+}
+
+func TestIngestEnqueueRPCReportsValidationReasonWithoutSecrets(t *testing.T) {
+	ingestID, err := r2archive.NewUUIDv7String()
+	if err != nil {
+		t.Fatalf("NewUUIDv7String: %v", err)
+	}
+	receivedAt, err := r2archive.UUIDv7Time(ingestID)
+	if err != nil {
+		t.Fatalf("UUIDv7Time: %v", err)
+	}
+	bundle, err := r2archive.OrganizationInboundBundleKeys("org_pub_123", "example.com", receivedAt, ingestID)
+	if err != nil {
+		t.Fatalf("OrganizationInboundBundleKeys: %v", err)
+	}
+	ingest := &fakeIngestEnqueuer{err: errors.New("organization_id does not match active domain")}
+	server := newTestServerWithOptions(t, WithIngestEnqueuer(ingest))
+	body := `{
+		"jsonrpc":"2.0",
+		"id":"ingest-1",
+		"method":"agentMail.ingest.enqueue",
+		"params":{
+			"schema":"agent-mail.inbound.fastpath.v1",
+			"organization_id":"org-1",
+			"organization_public_id":"org_pub_123",
+			"archive_prefix":"` + bundle.ArchivePrefix + `",
+			"worker_connection_id":"worker-connection-1",
+			"worker_domain_deployment_id":"worker-deployment-1",
+			"ingest_id":"` + ingestID + `",
+			"recipient_domain":"example.com",
+			"raw_key":"` + bundle.RawKey + `",
+			"edge_key":"` + bundle.EdgeKey + `",
+			"result_key":"` + bundle.ResultKey + `",
+			"received_at":"` + receivedAt.Format(time.RFC3339Nano) + `",
+			"raw_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		}
+	}`
+
+	response := postControlRPC(t, server, "/rpc/agentMail.ingest.enqueue", body)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("response.Code = %d, want %d, body=%s", response.Code, http.StatusBadRequest, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), "organization_id does not match active domain") {
+		t.Fatalf("response did not include validation reason: %s", response.Body.String())
+	}
+	if strings.Contains(response.Body.String(), "worker-secret-key") || strings.Contains(response.Body.String(), "session-token") {
+		t.Fatalf("response exposed credential material: %s", response.Body.String())
+	}
+}
+
+func TestWorkerArchiveCredentialsRPCUsesConfiguredIssuer(t *testing.T) {
+	issuer := &fakeWorkerArchiveCredentialIssuer{}
+	server := newTestServerWithOptions(t, WithWorkerArchiveCredentialIssuer(issuer))
+	body := `{
+		"jsonrpc":"2.0",
+		"id":"worker-creds-1",
+		"method":"agentMail.worker.archiveCredentials.issue",
+		"params":{
+			"organization_id":"org-1",
+			"organization_public_id":"org_pub_123",
+			"domain":"example.com",
+			"archive_prefix":"orgs/org_pub_123/domains/example.com/mail/inbound",
+			"worker_connection_id":"worker-connection-1",
+			"worker_domain_deployment_id":"worker-deployment-1"
+		}
+	}`
+
+	response := postControlRPC(t, server, "/rpc/agentMail.worker.archiveCredentials.issue", body)
+	if response.Code != http.StatusOK {
+		t.Fatalf("response.Code = %d, body=%s", response.Code, response.Body.String())
+	}
+	var payload WorkerArchiveCredentialsRPCResponse
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.JSONRPC != "2.0" || payload.ID != "worker-creds-1" {
+		t.Fatalf("unexpected JSON-RPC envelope: %#v", payload)
+	}
+	if payload.Result.Status != "issued" || payload.Result.ArchivePrefix != "orgs/org_pub_123/domains/example.com/mail/inbound" {
+		t.Fatalf("unexpected credential result: %#v", payload.Result)
+	}
+	if payload.Result.SecretAccessKey != "worker-secret-key" || payload.Result.SessionToken != "worker-session-token" {
+		t.Fatalf("credential material was not returned in the internal response: %#v", payload.Result)
+	}
+	if len(issuer.calls) != 1 || issuer.calls[0].WorkerDomainDeploymentID != "worker-deployment-1" {
+		t.Fatalf("issuer calls = %#v", issuer.calls)
+	}
+}
+
+func TestWorkerArchiveCredentialsRPCDoesNotPretendWithoutIssuer(t *testing.T) {
+	server := newTestServer(t)
+	body := `{
+		"jsonrpc":"2.0",
+		"id":"worker-creds-1",
+		"method":"agentMail.worker.archiveCredentials.issue",
+		"params":{
+			"organization_id":"org-1",
+			"organization_public_id":"org_pub_123",
+			"domain":"example.com",
+			"archive_prefix":"orgs/org_pub_123/domains/example.com/mail/inbound",
+			"worker_connection_id":"worker-connection-1",
+			"worker_domain_deployment_id":"worker-deployment-1"
+		}
+	}`
+
+	response := postControlRPC(t, server, "/rpc/agentMail.worker.archiveCredentials.issue", body)
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("response.Code = %d, want %d, body=%s", response.Code, http.StatusServiceUnavailable, response.Body.String())
+	}
+	if strings.Contains(response.Body.String(), "worker-secret-key") {
+		t.Fatalf("unconfigured issuer response exposed credential material: %s", response.Body.String())
+	}
+}
+
+func TestSendSubmitRPCDoesNotPretendToSendWithoutExecutor(t *testing.T) {
+	server := newTestServer(t)
+	body := `{
+		"jsonrpc":"2.0",
+		"id":"send-1",
+		"method":"agentMail.send.submit",
+		"params":{
+			"idempotency_key":"send-1",
+			"domain":"example.com",
+			"from":"agent@example.com",
+			"to":"recipient@example.net",
+			"raw":"Subject: Test\r\n\r\nBody"
+		}
+	}`
+
+	response := postControlRPC(t, server, "/rpc/agentMail.send.submit", body)
+	if response.Code != http.StatusNotImplemented {
+		t.Fatalf("response.Code = %d, want %d, body=%s", response.Code, http.StatusNotImplemented, response.Body.String())
 	}
 }
 
@@ -396,12 +688,17 @@ func TestDomainAddModifyRemoveMutateDesiredControlStateOnly(t *testing.T) {
 		"jsonrpc":"2.0",
 		"id":"domain-add-1",
 		"method":"agentMail.domain.add",
-		"params":{
-			"domain":"example.com",
-			"enabled":true,
-			"cloudflare_zone_name":"example.com",
-			"mail_from_domain":"ei.example.com"
-		}
+			"params":{
+				"organization_id":"org-1",
+				"organization_public_id":"org_pub_123",
+				"domain":"example.com",
+				"enabled":true,
+				"cloudflare_zone_name":"example.com",
+				"archive_prefix":"orgs/org_pub_123/domains/example.com/mail/inbound",
+				"worker_connection_id":"worker-connection-1",
+				"worker_domain_deployment_id":"worker-deployment-1",
+				"mail_from_domain":"ei.example.com"
+			}
 	}`
 	addResponse := postControlRPC(t, server, "/rpc/agentMail.domain.add", addBody)
 	if addResponse.Code != http.StatusOK {
@@ -431,12 +728,17 @@ func TestDomainAddModifyRemoveMutateDesiredControlStateOnly(t *testing.T) {
 		"jsonrpc":"2.0",
 		"id":"domain-modify-1",
 		"method":"agentMail.domain.modify",
-		"params":{
-			"domain":"example.com",
-			"enabled":false,
-			"cloudflare_zone_name":"example.com",
-			"mail_from_domain":"mail.example.com"
-		}
+			"params":{
+				"organization_id":"org-1",
+				"organization_public_id":"org_pub_123",
+				"domain":"example.com",
+				"enabled":false,
+				"cloudflare_zone_name":"example.com",
+				"archive_prefix":"orgs/org_pub_123/domains/example.com/mail/inbound",
+				"worker_connection_id":"worker-connection-1",
+				"worker_domain_deployment_id":"worker-deployment-1",
+				"mail_from_domain":"mail.example.com"
+			}
 	}`
 	modifyResponse := postControlRPC(t, server, "/rpc/agentMail.domain.modify", modifyBody)
 	if modifyResponse.Code != http.StatusOK {
@@ -494,6 +796,62 @@ func TestDomainAddModifyRemoveMutateDesiredControlStateOnly(t *testing.T) {
 	}
 }
 
+func TestDomainAddDefaultsAndValidatesMailFromDomain(t *testing.T) {
+	defaultStore := controlstate.NewMemoryStore()
+	defaultServer := newTestServerWithStore(t, defaultStore)
+	defaultBody := `{
+		"jsonrpc":"2.0",
+		"id":"domain-add-default-mail-from",
+		"method":"agentMail.domain.add",
+			"params":{
+				"organization_id":"org-1",
+				"organization_public_id":"org_pub_123",
+				"domain":"example.com",
+				"enabled":true,
+				"cloudflare_zone_name":"example.com",
+				"archive_prefix":"orgs/org_pub_123/domains/example.com/mail/inbound",
+				"worker_connection_id":"worker-connection-1",
+				"worker_domain_deployment_id":"worker-deployment-1"
+			}
+	}`
+	defaultResponse := postControlRPC(t, defaultServer, "/rpc/agentMail.domain.add", defaultBody)
+	if defaultResponse.Code != http.StatusOK {
+		t.Fatalf("default mail-from response.Code = %d, body=%s", defaultResponse.Code, defaultResponse.Body.String())
+	}
+	var defaultPayload DomainAddRPCResponse
+	if err := json.NewDecoder(defaultResponse.Body).Decode(&defaultPayload); err != nil {
+		t.Fatalf("decode default response: %v", err)
+	}
+	if defaultPayload.Result.Domain.ProviderMetadata.SES.MailFromDomain != "example.com" {
+		t.Fatalf("default mail-from domain = %q, want example.com", defaultPayload.Result.Domain.ProviderMetadata.SES.MailFromDomain)
+	}
+
+	rejectServer := newTestServerWithStore(t, controlstate.NewMemoryStore())
+	rejectBody := `{
+		"jsonrpc":"2.0",
+		"id":"domain-add-cross-mail-from",
+		"method":"agentMail.domain.add",
+			"params":{
+				"organization_id":"org-1",
+				"organization_public_id":"org_pub_123",
+				"domain":"example.com",
+				"enabled":true,
+				"cloudflare_zone_name":"example.com",
+				"archive_prefix":"orgs/org_pub_123/domains/example.com/mail/inbound",
+				"worker_connection_id":"worker-connection-1",
+				"worker_domain_deployment_id":"worker-deployment-1",
+				"mail_from_domain":"mail.example.net"
+			}
+	}`
+	rejectResponse := postControlRPC(t, rejectServer, "/rpc/agentMail.domain.add", rejectBody)
+	if rejectResponse.Code != http.StatusBadRequest {
+		t.Fatalf("cross-domain mail-from response.Code = %d, body=%s", rejectResponse.Code, rejectResponse.Body.String())
+	}
+	if !strings.Contains(rejectResponse.Body.String(), "mail_from_domain") {
+		t.Fatalf("cross-domain mail-from response missing field context: %s", rejectResponse.Body.String())
+	}
+}
+
 func TestProvisionApplyMutatesWildDuckCloudflareAndControlState(t *testing.T) {
 	// Service contract: provision.apply is the single public full-apply
 	// operation. The assertion verifies actual downstream effects so the API
@@ -536,12 +894,17 @@ func TestProvisionApplyMutatesWildDuckCloudflareAndControlState(t *testing.T) {
 		"jsonrpc":"2.0",
 		"id":"domain-add-1",
 		"method":"agentMail.domain.add",
-		"params":{
-			"domain":"example.com",
-			"enabled":true,
-			"cloudflare_zone_name":"example.com",
-			"mail_from_domain":"ei.example.com"
-		}
+			"params":{
+				"organization_id":"org-1",
+				"organization_public_id":"org_pub_123",
+				"domain":"example.com",
+				"enabled":true,
+				"cloudflare_zone_name":"example.com",
+				"archive_prefix":"orgs/org_pub_123/domains/example.com/mail/inbound",
+				"worker_connection_id":"worker-connection-1",
+				"worker_domain_deployment_id":"worker-deployment-1",
+				"mail_from_domain":"ei.example.com"
+			}
 	}`
 	if response := postControlRPC(t, server, "/rpc/agentMail.domain.add", addBody); response.Code != http.StatusOK {
 		t.Fatalf("add response.Code = %d, body=%s", response.Code, response.Body.String())
@@ -586,6 +949,39 @@ func TestProvisionApplyMutatesWildDuckCloudflareAndControlState(t *testing.T) {
 	if state.Domains[0].CloudflareProvision.LastProvisionStatus != "applied" {
 		t.Fatalf("stored Cloudflare status = %q", state.Domains[0].CloudflareProvision.LastProvisionStatus)
 	}
+
+	secondResponse := postControlRPC(t, server, "/rpc/agentMail.provision.apply", provisionBody)
+	if secondResponse.Code != http.StatusOK {
+		t.Fatalf("second provision response.Code = %d, body=%s", secondResponse.Code, secondResponse.Body.String())
+	}
+	var secondPayload ProvisionApplyRPCResponse
+	if err := json.NewDecoder(secondResponse.Body).Decode(&secondPayload); err != nil {
+		t.Fatalf("decode second provision response: %v", err)
+	}
+	if !secondPayload.Result.OK {
+		t.Fatalf("second provision result OK = false: %#v", secondPayload.Result)
+	}
+	if !cloudflareMock.catchAll.Enabled || len(cloudflareMock.regularRules) != 0 {
+		t.Fatalf("second provision was not idempotent: catchAll=%#v regular=%#v", cloudflareMock.catchAll, cloudflareMock.regularRules)
+	}
+}
+
+func TestProvisionApplyFailsClearlyWithoutEnabledDomains(t *testing.T) {
+	server := newTestServerWithStore(t, controlstate.NewMemoryStore())
+	body := `{
+		"jsonrpc":"2.0",
+		"id":"provision-no-domains",
+		"method":"agentMail.provision.apply",
+		"params":{}
+	}`
+
+	response := postControlRPC(t, server, "/rpc/agentMail.provision.apply", body)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("response.Code = %d, want %d, body=%s", response.Code, http.StatusBadRequest, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), "no enabled domains") {
+		t.Fatalf("response body missing no-enabled-domains detail: %s", response.Body.String())
+	}
 }
 
 func postControlRPC(t *testing.T, server *Server, path string, body string) *httptest.ResponseRecorder {
@@ -624,6 +1020,19 @@ func newTestServer(t *testing.T) *Server {
 	return newTestServerWithStore(t, controlstate.NewMemoryStore())
 }
 
+func newTestServerWithOptions(t *testing.T, options ...Option) *Server {
+	t.Helper()
+	source := []byte("Message-ID: <default@example.net>\r\nX-ATM-Ingest-ID: default-ingest\r\n\r\nbody")
+	provenance, err := messageprovenance.New(&fakeMessageSourceFetcher{source: source})
+	if err != nil {
+		t.Fatalf("messageprovenance.New: %v", err)
+	}
+	return newTestServerWithProvisionerProvenanceAndOptions(t, mailprovisioner.New(
+		controlstate.NewMemoryStore(),
+		mailprovisioner.WithSelectedProvider(controlstate.ProviderSES),
+	), provenance, options...)
+}
+
 func newTestServerWithStore(t *testing.T, store *controlstate.MemoryStore) *Server {
 	t.Helper()
 	return newTestServerWithProvisioner(t, mailprovisioner.New(
@@ -651,6 +1060,11 @@ func newTestServerWithProvenance(t *testing.T, provenance MessageProvenanceProvi
 }
 
 func newTestServerWithProvisionerAndProvenance(t *testing.T, provisioner *mailprovisioner.Service, provenance MessageProvenanceProvider) *Server {
+	t.Helper()
+	return newTestServerWithProvisionerProvenanceAndOptions(t, provisioner, provenance)
+}
+
+func newTestServerWithProvisionerProvenanceAndOptions(t *testing.T, provisioner *mailprovisioner.Service, provenance MessageProvenanceProvider, options ...Option) *Server {
 	t.Helper()
 	server, err := New(Config{
 		ListenAddress: "127.0.0.1:0",
@@ -727,7 +1141,7 @@ func newTestServerWithProvisionerAndProvenance(t *testing.T, provisioner *mailpr
 				},
 			},
 		},
-	}}, provisioner, provenance)
+	}}, provisioner, provenance, options...)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

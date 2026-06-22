@@ -2,6 +2,7 @@ package poller
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
@@ -52,6 +53,45 @@ func TestNotifyRejectsInvalidSignature(t *testing.T) {
 	}
 }
 
+func TestNotifyRejectsInactiveDomainBeforeQueueMutation(t *testing.T) {
+	handler, store, notification, _, wakeCh := newTestNotifyHandlerAndNotification(t)
+	handler.now = func() time.Time { return notification.ReceivedAt.Add(time.Minute) }
+
+	bundle, err := r2archive.OrganizationInboundBundleKeys("org_pub_123", "inactive.example.com", notification.ReceivedAt, notification.IngestID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	notification.ArchivePrefix = bundle.ArchivePrefix
+	notification.RecipientDomain = bundle.RecipientDomain
+	notification.RawKey = bundle.RawKey
+	notification.EdgeKey = bundle.EdgeKey
+	notification.ResultKey = bundle.ResultKey
+	body, err := json.Marshal(notification)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	request := httptest.NewRequest(http.MethodPost, NotifyPath, bytes.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set(HeaderTimestamp, notification.ReceivedAt.Format(time.RFC3339Nano))
+	request.Header.Set(HeaderSignature, hex.EncodeToString(expectedSignature([]byte(handler.cfg.NotifyHMACSecret), request.Header.Get(HeaderTimestamp), body)))
+
+	response := httptest.NewRecorder()
+	handler.routes().ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("unexpected status %d: %s", response.Code, response.Body.String())
+	}
+	if len(store.items) != 0 {
+		t.Fatalf("inactive domain notification mutated queue: %#v", store.items)
+	}
+	select {
+	case <-wakeCh:
+		t.Fatal("inactive domain notification woke poller processing")
+	default:
+	}
+}
+
 func TestValidateNotificationRejectsInconsistentBundleKeys(t *testing.T) {
 	_, _, notification, _, _ := newTestNotifyHandlerAndNotification(t)
 	notification.ResultKey = "mail/inbound/example.com/2026/04/18/not-the-same/result.json"
@@ -72,19 +112,24 @@ func newTestNotifyHandlerAndNotification(t *testing.T) (*notifyHandler, *testSta
 	if err != nil {
 		t.Fatal(err)
 	}
-	bundle, err := r2archive.InboundBundleKeys("example.com", receivedAt, ingestID)
+	bundle, err := r2archive.OrganizationInboundBundleKeys("org_pub_123", "example.com", receivedAt, ingestID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	notification := Notification{
-		Schema:          FastPathSchema,
-		IngestID:        ingestID,
-		RecipientDomain: "example.com",
-		RawKey:          bundle.RawKey,
-		EdgeKey:         bundle.EdgeKey,
-		ResultKey:       bundle.ResultKey,
-		ReceivedAt:      receivedAt,
-		RawSHA256:       "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		Schema:                   FastPathSchema,
+		OrganizationID:           "org-1",
+		OrganizationPublicID:     "org_pub_123",
+		ArchivePrefix:            bundle.ArchivePrefix,
+		WorkerConnectionID:       "worker-connection-1",
+		WorkerDomainDeploymentID: "worker-deployment-1",
+		IngestID:                 ingestID,
+		RecipientDomain:          "example.com",
+		RawKey:                   bundle.RawKey,
+		EdgeKey:                  bundle.EdgeKey,
+		ResultKey:                bundle.ResultKey,
+		ReceivedAt:               receivedAt,
+		RawSHA256:                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 	}
 	body, err := json.Marshal(notification)
 	if err != nil {
@@ -99,7 +144,18 @@ func newTestNotifyHandlerAndNotification(t *testing.T) (*notifyHandler, *testSta
 			NotifyHMACSecret: "test-secret",
 			NotifyClockSkew:  5 * time.Minute,
 		},
-		state:          store,
+		state: store,
+		activeDomains: func(context.Context) ([]Domain, error) {
+			return []Domain{{
+				Name:                     "example.com",
+				OrganizationID:           "org-1",
+				OrganizationPublicID:     "org_pub_123",
+				ArchivePrefix:            "orgs/org_pub_123/domains/example.com/mail/inbound",
+				WorkerConnectionID:       "worker-connection-1",
+				WorkerDomainDeploymentID: "worker-deployment-1",
+				FeedbackAddress:          "bounces@example.com",
+			}}, nil
+		},
 		enqueuePending: p.upsertPending,
 		wakeProcess: func() {
 			wakeCh <- struct{}{}

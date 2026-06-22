@@ -42,6 +42,14 @@ description = "Run Mail Control Service Go tests"
 dir = "{{config_root}}"
 run = "go test ./..."
 
+[tasks."test:e2e"]
+description = "Run Mail Control Service end-to-end test-container suites"
+depends = [
+  "//apps/mail-control-service/test-containers/inbound-replay-smoke-e2e:test",
+  "//apps/mail-control-service/test-containers/smtp-relay-contract-e2e:test",
+]
+run = "true"
+
 [tasks.check]
 description = "Run Mail Control Service Go formatting, module, and test checks"
 depends = [":fmt:check", ":mod:check", ":test"]

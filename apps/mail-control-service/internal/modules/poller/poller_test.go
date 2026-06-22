@@ -92,6 +92,17 @@ func TestValidateConfigRequiresDSNFeedbackForEachDomain(t *testing.T) {
 	}
 }
 
+func TestStartNotifyServerSkipsLegacyListenerWhenListenURLMissing(t *testing.T) {
+	p := &Poller{}
+	errCh, err := p.startNotifyServer(context.Background())
+	if err != nil {
+		t.Fatalf("startNotifyServer returned error: %v", err)
+	}
+	if errCh != nil {
+		t.Fatal("expected nil notify error channel when legacy listener is disabled")
+	}
+}
+
 func TestRetryPolicyBlocksAfterInitialAttemptAndTwoRetries(t *testing.T) {
 	cfg := validTestConfig()
 	runtimeCfg, err := validateConfig(cfg, false)

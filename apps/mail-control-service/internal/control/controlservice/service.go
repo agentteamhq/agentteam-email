@@ -1,16 +1,22 @@
 package controlservice
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"log"
+	"net"
+	"net/http"
+	"net/smtp"
 	"net/url"
 	"os"
 	"strings"
 	"time"
 
+	"agent-mail/internal/archive/r2archive"
 	"agent-mail/internal/config/configfile"
 	"agent-mail/internal/control/controlapi"
 	"agent-mail/internal/control/controlstate"
@@ -41,11 +47,411 @@ type runtimeDatabases struct {
 	ControlMongoDatabase  string
 }
 
+type runtimeEndpoints struct {
+	HarakaSMTPAddress   string
+	ZoneMTADSNAddress   string
+	WildDuckAPIBaseURL  string
+	WildDuckIMAPAddress string
+}
+
 type Service struct {
 	poller         *poller.Poller
 	providerRelay  *smtprelay.Server
 	feedbackRouter *feedbackrouter.Router
 	adminAPI       *controlapi.Server
+}
+
+type controlRuntimeAPI struct {
+	poller        *poller.Poller
+	provisioner   *mailprovisioner.Service
+	stateStore    controlstate.Store
+	relayAddress  string
+	relayUsername string
+	relayPassword string
+}
+
+const workerArchiveCredentialTTL = 7 * 24 * time.Hour
+
+type cloudflareWorkerArchiveCredentialIssuer struct {
+	apiBaseURL        string
+	accountID         string
+	apiToken          string
+	bucket            string
+	endpoint          string
+	region            string
+	parentAccessKeyID string
+	httpClient        *http.Client
+}
+
+func (a *controlRuntimeAPI) EnqueueNotification(ctx context.Context, notification poller.Notification) (r2archive.InboundBundle, error) {
+	if err := a.validateIngestNotification(ctx, notification); err != nil {
+		return r2archive.InboundBundle{}, err
+	}
+	return a.poller.EnqueueNotification(ctx, notification)
+}
+
+func (a *controlRuntimeAPI) validateIngestNotification(ctx context.Context, notification poller.Notification) error {
+	bundle, err := poller.ValidateNotification(notification)
+	if err != nil {
+		return err
+	}
+	records, err := controlstate.ActiveDomainRecords(ctx, a.stateStore, []string{bundle.RecipientDomain})
+	if err != nil {
+		return err
+	}
+	if len(records) != 1 {
+		record, err := selectIngestDomainRecord(bundle.RecipientDomain, records, notification)
+		if err != nil {
+			return err
+		}
+		return validateIngestNotificationMatchesRecord(notification, record)
+	}
+	return validateIngestNotificationMatchesRecord(notification, records[0])
+}
+
+func selectIngestDomainRecord(recipientDomain string, records []controlstate.DomainRecord, notification poller.Notification) (controlstate.DomainRecord, error) {
+	matches := make([]controlstate.DomainRecord, 0, 1)
+	for _, record := range records {
+		if notification.OrganizationID != record.OrganizationID {
+			continue
+		}
+		if notification.OrganizationPublicID != record.OrganizationPublicID {
+			continue
+		}
+		if notification.ArchivePrefix != record.ArchivePrefix {
+			continue
+		}
+		if notification.WorkerConnectionID != record.WorkerConnectionID {
+			continue
+		}
+		if notification.WorkerDomainDeploymentID != record.WorkerDeploymentID {
+			continue
+		}
+		matches = append(matches, record)
+	}
+	switch len(matches) {
+	case 1:
+		return matches[0], nil
+	case 0:
+		return controlstate.DomainRecord{}, fmt.Errorf("active domain %q does not match inbound worker authority", recipientDomain)
+	default:
+		return controlstate.DomainRecord{}, fmt.Errorf("active domain %q inbound worker authority is not unique", recipientDomain)
+	}
+}
+
+func validateIngestNotificationMatchesRecord(notification poller.Notification, record controlstate.DomainRecord) error {
+	if notification.OrganizationID != record.OrganizationID {
+		return fmt.Errorf("organization_id does not match active domain")
+	}
+	if notification.OrganizationPublicID != record.OrganizationPublicID {
+		return fmt.Errorf("organization_public_id does not match active domain")
+	}
+	if notification.ArchivePrefix != record.ArchivePrefix {
+		return fmt.Errorf("archive_prefix does not match active domain")
+	}
+	if notification.WorkerConnectionID != record.WorkerConnectionID {
+		return fmt.Errorf("worker_connection_id does not match active domain")
+	}
+	if notification.WorkerDomainDeploymentID != record.WorkerDeploymentID {
+		return fmt.Errorf("worker_domain_deployment_id does not match active domain")
+	}
+	return nil
+}
+
+func newCloudflareWorkerArchiveCredentialIssuer() (*cloudflareWorkerArchiveCredentialIssuer, error) {
+	apiToken, err := configfile.RequireEnv("AGENT_MAIL_CLOUDFLARE_API_TOKEN")
+	if err != nil {
+		return nil, err
+	}
+	accountID, err := configfile.RequireEnv("AGENT_MAIL_CLOUDFLARE_ACCOUNT_ID")
+	if err != nil {
+		return nil, err
+	}
+	bucket, err := configfile.RequireEnv("AGENT_MAIL_R2_BUCKET")
+	if err != nil {
+		return nil, err
+	}
+	endpoint, err := configfile.RequireEnv("AGENT_MAIL_R2_ENDPOINT")
+	if err != nil {
+		return nil, err
+	}
+	region, err := configfile.RequireEnv("AGENT_MAIL_R2_REGION")
+	if err != nil {
+		return nil, err
+	}
+	parentAccessKeyID, err := configfile.RequireEnv("AGENT_MAIL_R2_ACCESS_KEY_ID")
+	if err != nil {
+		return nil, err
+	}
+	return &cloudflareWorkerArchiveCredentialIssuer{
+		apiBaseURL:        cloudflareAPIBaseURL(),
+		accountID:         accountID,
+		apiToken:          apiToken,
+		bucket:            bucket,
+		endpoint:          endpoint,
+		region:            region,
+		parentAccessKeyID: parentAccessKeyID,
+		httpClient:        http.DefaultClient,
+	}, nil
+}
+
+func cloudflareAPIBaseURL() string {
+	apiBaseURL := strings.TrimRight(os.Getenv("AGENT_MAIL_CLOUDFLARE_API_BASE_URL"), "/")
+	if apiBaseURL == "" {
+		return "https://api.cloudflare.com/client/v4"
+	}
+	return apiBaseURL
+}
+
+func (i *cloudflareWorkerArchiveCredentialIssuer) IssueWorkerArchiveCredentials(ctx context.Context, params controlapi.WorkerArchiveCredentialsParams, now time.Time) (controlapi.WorkerArchiveCredentialsResult, error) {
+	if i == nil {
+		return controlapi.WorkerArchiveCredentialsResult{}, fmt.Errorf("worker archive credential issuer is not configured")
+	}
+	archivePrefix, err := r2archive.ParseInboundArchivePrefix(params.ArchivePrefix)
+	if err != nil {
+		return controlapi.WorkerArchiveCredentialsResult{}, fmt.Errorf("archive_prefix: %w", err)
+	}
+	if strings.TrimSpace(params.OrganizationID) == "" {
+		return controlapi.WorkerArchiveCredentialsResult{}, fmt.Errorf("organization_id is required")
+	}
+	if archivePrefix.OrganizationPublicID != strings.TrimSpace(params.OrganizationPublicID) {
+		return controlapi.WorkerArchiveCredentialsResult{}, fmt.Errorf("organization_public_id does not match archive_prefix")
+	}
+	domain, err := r2archive.CanonicalDomain(params.Domain)
+	if err != nil {
+		return controlapi.WorkerArchiveCredentialsResult{}, fmt.Errorf("domain: %w", err)
+	}
+	if archivePrefix.RecipientDomain != domain {
+		return controlapi.WorkerArchiveCredentialsResult{}, fmt.Errorf("domain does not match archive_prefix")
+	}
+	if strings.TrimSpace(params.WorkerConnectionID) == "" {
+		return controlapi.WorkerArchiveCredentialsResult{}, fmt.Errorf("worker_connection_id is required")
+	}
+	if strings.TrimSpace(params.WorkerDomainDeploymentID) == "" {
+		return controlapi.WorkerArchiveCredentialsResult{}, fmt.Errorf("worker_domain_deployment_id is required")
+	}
+
+	body := map[string]any{
+		"bucket":            i.bucket,
+		"parentAccessKeyId": i.parentAccessKeyID,
+		"permission":        "object-read-write",
+		"prefixes":          []string{archivePrefix.ArchivePrefix + "/"},
+		"ttlSeconds":        int(workerArchiveCredentialTTL.Seconds()),
+	}
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		return controlapi.WorkerArchiveCredentialsResult{}, fmt.Errorf("marshal Cloudflare temporary credential request: %w", err)
+	}
+	url := fmt.Sprintf("%s/accounts/%s/r2/temp-access-credentials", i.apiBaseURL, url.PathEscape(i.accountID))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return controlapi.WorkerArchiveCredentialsResult{}, fmt.Errorf("create Cloudflare temporary credential request: %w", err)
+	}
+	request.Header.Set("Authorization", "Bearer "+i.apiToken)
+	request.Header.Set("Content-Type", "application/json")
+
+	response, err := i.httpClient.Do(request)
+	if err != nil {
+		return controlapi.WorkerArchiveCredentialsResult{}, fmt.Errorf("call Cloudflare temporary credential API: %w", err)
+	}
+	defer response.Body.Close()
+
+	var payload struct {
+		Success bool `json:"success"`
+		Result  struct {
+			AccessKeyID     string `json:"accessKeyId"`
+			SecretAccessKey string `json:"secretAccessKey"`
+			SessionToken    string `json:"sessionToken"`
+		} `json:"result"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		return controlapi.WorkerArchiveCredentialsResult{}, fmt.Errorf("decode Cloudflare temporary credential response: %w", err)
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 || !payload.Success {
+		return controlapi.WorkerArchiveCredentialsResult{}, fmt.Errorf("Cloudflare temporary credential API failed with HTTP %d", response.StatusCode)
+	}
+	if payload.Result.AccessKeyID == "" || payload.Result.SecretAccessKey == "" || payload.Result.SessionToken == "" {
+		return controlapi.WorkerArchiveCredentialsResult{}, fmt.Errorf("Cloudflare temporary credential response was missing credential material")
+	}
+
+	return controlapi.WorkerArchiveCredentialsResult{
+		Status:          "issued",
+		ArchivePrefix:   archivePrefix.ArchivePrefix,
+		Bucket:          i.bucket,
+		Endpoint:        i.endpoint,
+		Region:          i.region,
+		AccessKeyID:     payload.Result.AccessKeyID,
+		SecretAccessKey: payload.Result.SecretAccessKey,
+		SessionToken:    payload.Result.SessionToken,
+		ExpiresAt:       now.UTC().Add(workerArchiveCredentialTTL),
+		RotationDate:    now.UTC().Format("2006-01-02"),
+	}, nil
+}
+
+func (a *controlRuntimeAPI) SubmitSend(ctx context.Context, params controlapi.SendSubmitParams, _ time.Time) (controlapi.SendSubmitResult, error) {
+	if a == nil {
+		return controlapi.SendSubmitResult{}, fmt.Errorf("send submitter is not configured")
+	}
+	domain, err := r2archive.CanonicalDomain(params.Domain)
+	if err != nil {
+		return controlapi.SendSubmitResult{}, fmt.Errorf("domain: %w", err)
+	}
+	from := strings.ToLower(strings.TrimSpace(params.From))
+	to := strings.ToLower(strings.TrimSpace(params.To))
+	if from == "" || to == "" {
+		return controlapi.SendSubmitResult{}, fmt.Errorf("from and to are required")
+	}
+	if senderDomain := domainFromMailbox(from); senderDomain != domain {
+		return controlapi.SendSubmitResult{}, fmt.Errorf("from domain does not match authorized domain")
+	}
+	idempotencyKey := strings.TrimSpace(params.IdempotencyKey)
+	if idempotencyKey == "" {
+		idempotencyKey, err = r2archive.NewUUIDv7String()
+		if err != nil {
+			return controlapi.SendSubmitResult{}, fmt.Errorf("generate idempotency key: %w", err)
+		}
+	}
+	if strings.ContainsAny(idempotencyKey, "\r\n") || len(idempotencyKey) > 200 {
+		return controlapi.SendSubmitResult{}, fmt.Errorf("invalid idempotency key")
+	}
+	raw, err := stampOutboundQueueID([]byte(params.Raw), idempotencyKey)
+	if err != nil {
+		return controlapi.SendSubmitResult{}, err
+	}
+	if err := a.submitSMTP(ctx, from, to, raw); err != nil {
+		return controlapi.SendSubmitResult{}, err
+	}
+	return controlapi.SendSubmitResult{
+		Status:         "submitted",
+		IdempotencyKey: idempotencyKey,
+	}, nil
+}
+
+func (a *controlRuntimeAPI) submitSMTP(ctx context.Context, from string, to string, raw []byte) error {
+	address, host, err := loopbackRelayAddress(a.relayAddress)
+	if err != nil {
+		return err
+	}
+	dialer := net.Dialer{Timeout: 10 * time.Second}
+	conn, err := dialer.DialContext(ctx, "tcp", address)
+	if err != nil {
+		return fmt.Errorf("dial internal provider relay: %w", err)
+	}
+	client, err := smtp.NewClient(conn, host)
+	if err != nil {
+		_ = conn.Close()
+		return fmt.Errorf("open internal provider relay SMTP client: %w", err)
+	}
+	defer client.Close()
+
+	if err := client.Hello("agent-mail-control-api.local"); err != nil {
+		return fmt.Errorf("provider relay EHLO: %w", err)
+	}
+	if err := client.Auth(smtp.PlainAuth("", a.relayUsername, a.relayPassword, host)); err != nil {
+		return fmt.Errorf("provider relay auth: %w", err)
+	}
+	if err := client.Mail(from); err != nil {
+		return fmt.Errorf("provider relay MAIL FROM: %w", err)
+	}
+	if err := client.Rcpt(to); err != nil {
+		return fmt.Errorf("provider relay RCPT TO: %w", err)
+	}
+	writer, err := client.Data()
+	if err != nil {
+		return fmt.Errorf("provider relay DATA: %w", err)
+	}
+	if _, err := writer.Write(raw); err != nil {
+		_ = writer.Close()
+		return fmt.Errorf("write provider relay DATA: %w", err)
+	}
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("close provider relay DATA: %w", err)
+	}
+	if err := client.Quit(); err != nil {
+		return fmt.Errorf("provider relay QUIT: %w", err)
+	}
+	return nil
+}
+
+func loopbackRelayAddress(listenAddress string) (string, string, error) {
+	address := strings.TrimSpace(listenAddress)
+	if address == "" {
+		return "", "", fmt.Errorf("provider relay listen address is missing")
+	}
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return "", "", fmt.Errorf("parse provider relay listen address: %w", err)
+	}
+	if host == "" || host == "::" || host == "0.0.0.0" || host == "[::]" {
+		host = "127.0.0.1"
+	}
+	authHost := host
+	if host == "127.0.0.1" || host == "::1" {
+		authHost = "localhost"
+	}
+	return net.JoinHostPort(host, port), authHost, nil
+}
+
+func stampOutboundQueueID(raw []byte, idempotencyKey string) ([]byte, error) {
+	if len(raw) == 0 {
+		return nil, fmt.Errorf("raw message is required")
+	}
+	text := string(raw)
+	separator := "\r\n\r\n"
+	headerEnd := strings.Index(text, separator)
+	if headerEnd < 0 {
+		separator = "\n\n"
+		headerEnd = strings.Index(text, separator)
+	}
+	if headerEnd < 0 {
+		return nil, fmt.Errorf("raw message is missing a header/body separator")
+	}
+	headers := text[:headerEnd]
+	if strings.Contains(strings.ToLower(headers), "x-agent-mail-zonemta-queue-id:") {
+		return nil, fmt.Errorf("raw message must not include internal ZoneMTA queue provenance")
+	}
+	stamped := "X-Agent-Mail-ZoneMTA-Queue-ID: " + idempotencyKey + "\r\n" + text
+	return []byte(stamped), nil
+}
+
+func domainFromMailbox(mailbox string) string {
+	at := strings.LastIndex(mailbox, "@")
+	if at < 0 || at == len(mailbox)-1 {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(mailbox[at+1:]))
+}
+
+func (a *controlRuntimeAPI) SyncRuntime(ctx context.Context, params controlapi.RuntimeSyncParams, now time.Time) (controlapi.RuntimeSyncResult, error) {
+	state, err := a.provisioner.State(ctx)
+	if err != nil {
+		return controlapi.RuntimeSyncResult{}, err
+	}
+	known := make(map[string]struct{}, len(state.Domains))
+	for _, domain := range state.Domains {
+		known[domain.Domain] = struct{}{}
+	}
+
+	result := controlapi.RuntimeSyncResult{Domains: make([]mailprovisioner.DomainConfigResult, 0, len(params.Domains))}
+	for _, domain := range params.Domains {
+		var synced mailprovisioner.DomainConfigResult
+		if _, ok := known[strings.ToLower(strings.TrimSpace(domain.Domain))]; ok {
+			synced, err = a.provisioner.ModifyDomain(ctx, domain, now)
+		} else {
+			synced, err = a.provisioner.AddDomain(ctx, domain, now)
+		}
+		if err != nil {
+			return controlapi.RuntimeSyncResult{}, err
+		}
+		if synced.Changed {
+			result.Changed = true
+		}
+		result.Domains = append(result.Domains, synced)
+	}
+	return result, nil
 }
 
 func Main(ctx context.Context, args []string) error {
@@ -91,12 +497,16 @@ func New(ctx context.Context, cfg Config) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	endpoints, err := runtimeEndpointsFromEnv()
+	if err != nil {
+		return nil, err
+	}
 	stateStore, err := controlstate.NewStoreFromEnv()
 	if err != nil {
 		return nil, err
 	}
 	runtimeSource := controlStateRuntimeSource{store: stateStore}
-	moduleConfig := canonicalModuleConfig(secrets, databases)
+	moduleConfig := canonicalModuleConfig(secrets, databases, endpoints)
 	pollerModule, err := poller.NewWithDomainSourceConfig(ctx, moduleConfig.Poller, runtimeSource)
 	if err != nil {
 		return nil, fmt.Errorf("initialize poller module: %w", err)
@@ -143,18 +553,8 @@ func New(ctx context.Context, cfg Config) (*Service, error) {
 		mailprovisioner.WithCloudflare(cloudflareProvisioner),
 		mailprovisioner.WithWildDuck(wildduckProvisioner),
 	)
-	fastPathExternalHost, err := configfile.RequireEnv("AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL")
-	if err != nil {
-		_ = providerRelayModule.Close(context.Background())
-		_ = pollerModule.Close(context.Background())
-		return nil, err
-	}
-	fastPathListenURL, err := configfile.RequireEnv("AGENT_MAIL_CF_TUNNEL_LISTEN_URL")
-	if err != nil {
-		_ = providerRelayModule.Close(context.Background())
-		_ = pollerModule.Close(context.Background())
-		return nil, err
-	}
+	fastPathExternalHost := os.Getenv("AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL")
+	fastPathListenURL := os.Getenv("AGENT_MAIL_CF_TUNNEL_LISTEN_URL")
 	statusProjector, err := domainregistry.NewProjector(domainregistry.ProjectedStatusConfig{
 		PollerConfig:        moduleConfig.Poller,
 		ProviderRelayConfig: moduleConfig.ProviderRelay,
@@ -181,10 +581,29 @@ func New(ctx context.Context, cfg Config) (*Service, error) {
 		adminListen:      cfg.AdminListenAddress,
 		feedbackIMAP:     moduleConfig.FeedbackRouter.IMAP.Address,
 	}
+	runtimeAPI := &controlRuntimeAPI{
+		poller:        pollerModule,
+		provisioner:   domainProvisioner,
+		stateStore:    stateStore,
+		relayAddress:  moduleConfig.ProviderRelay.ListenAddress,
+		relayUsername: moduleConfig.ProviderRelay.RelayAuth.Username,
+		relayPassword: moduleConfig.ProviderRelay.RelayAuth.Password,
+	}
+	workerArchiveCredentialIssuer, err := newCloudflareWorkerArchiveCredentialIssuer()
+	if err != nil {
+		_ = providerRelayModule.Close(context.Background())
+		_ = pollerModule.Close(context.Background())
+		return nil, fmt.Errorf("initialize Worker archive credential issuer: %w", err)
+	}
 	adminAPIModule, err := controlapi.New(controlapi.Config{
 		ListenAddress: cfg.AdminListenAddress,
 		AuthToken:     adminAPIToken,
-	}, statusProvider, domainProvisioner, messageProvenance)
+	}, statusProvider, domainProvisioner, messageProvenance,
+		controlapi.WithIngestEnqueuer(runtimeAPI),
+		controlapi.WithRuntimeSyncer(runtimeAPI),
+		controlapi.WithWorkerArchiveCredentialIssuer(workerArchiveCredentialIssuer),
+		controlapi.WithSendSubmitter(runtimeAPI),
+	)
 	if err != nil {
 		_ = providerRelayModule.Close(context.Background())
 		_ = pollerModule.Close(context.Background())
@@ -291,6 +710,31 @@ func runtimeDatabasesFromEnv() (runtimeDatabases, error) {
 	}, nil
 }
 
+func runtimeEndpointsFromEnv() (runtimeEndpoints, error) {
+	harakaSMTPAddress, err := configfile.RequireEnv("AGENT_MAIL_HARAKA_SMTP_ADDRESS")
+	if err != nil {
+		return runtimeEndpoints{}, err
+	}
+	zoneMTADSNAddress, err := configfile.RequireEnv("AGENT_MAIL_ZONEMTA_DSN_ADDRESS")
+	if err != nil {
+		return runtimeEndpoints{}, err
+	}
+	wildDuckAPIBaseURL, err := configfile.RequireEnv("AGENT_MAIL_WILDDUCK_API_BASE_URL")
+	if err != nil {
+		return runtimeEndpoints{}, err
+	}
+	wildDuckIMAPAddress, err := configfile.RequireEnv("AGENT_MAIL_WILDDUCK_IMAP_ADDRESS")
+	if err != nil {
+		return runtimeEndpoints{}, err
+	}
+	return runtimeEndpoints{
+		HarakaSMTPAddress:   harakaSMTPAddress,
+		ZoneMTADSNAddress:   zoneMTADSNAddress,
+		WildDuckAPIBaseURL:  wildDuckAPIBaseURL,
+		WildDuckIMAPAddress: wildDuckIMAPAddress,
+	}, nil
+}
+
 func mongoDatabaseFromURI(value string) (string, error) {
 	parsed, err := url.Parse(value)
 	if err != nil {
@@ -309,7 +753,7 @@ func mongoDatabaseFromURI(value string) (string, error) {
 	return database, nil
 }
 
-func canonicalModuleConfig(secrets runtimeSecrets, databases runtimeDatabases) moduleConfig {
+func canonicalModuleConfig(secrets runtimeSecrets, databases runtimeDatabases, endpoints runtimeEndpoints) moduleConfig {
 	helloName := "atemail-mail-control-service.agentteam-email.local"
 
 	var pollerCfg poller.Config
@@ -322,11 +766,11 @@ func canonicalModuleConfig(secrets runtimeSecrets, databases runtimeDatabases) m
 	pollerCfg.Domains = []string{}
 	pollerCfg.State.Mongo.URI = databases.ControlMongoURI
 	pollerCfg.State.Mongo.Database = databases.ControlMongoDatabase
-	pollerCfg.Haraka.Address = "haraka:10025"
+	pollerCfg.Haraka.Address = endpoints.HarakaSMTPAddress
 	pollerCfg.Haraka.HelloName = helloName
-	pollerCfg.DSN.SMTPAddress = "zonemta:2526"
+	pollerCfg.DSN.SMTPAddress = endpoints.ZoneMTADSNAddress
 	pollerCfg.DSN.HelloName = helloName
-	pollerCfg.WildDuck.APIBaseURL = "http://wildduck:8080"
+	pollerCfg.WildDuck.APIBaseURL = endpoints.WildDuckAPIBaseURL
 	pollerCfg.WildDuck.MongoURI = databases.WildDuckMongoURI
 	pollerCfg.WildDuck.MongoDatabase = databases.WildDuckMongoDatabase
 
@@ -335,17 +779,17 @@ func canonicalModuleConfig(secrets runtimeSecrets, databases runtimeDatabases) m
 	relayCfg.Hostname = helloName
 	relayCfg.RelayAuth.Username = "zonemta"
 	relayCfg.RelayAuth.Password = secrets.ZoneMTARelayPassword
-	relayCfg.Cloudflare.APIBaseURL = "https://api.cloudflare.com/client/v4"
-	relayCfg.LocalDelivery.SMTPAddress = "haraka:10025"
+	relayCfg.Cloudflare.APIBaseURL = cloudflareAPIBaseURL()
+	relayCfg.LocalDelivery.SMTPAddress = endpoints.HarakaSMTPAddress
 	relayCfg.LocalDelivery.HelloName = helloName
-	relayCfg.LocalDelivery.APIBaseURL = "http://wildduck:8080"
+	relayCfg.LocalDelivery.APIBaseURL = endpoints.WildDuckAPIBaseURL
 	relayCfg.LocalDelivery.MongoURI = databases.WildDuckMongoURI
 	relayCfg.LocalDelivery.MongoDatabase = databases.WildDuckMongoDatabase
 	relayCfg.Delivery.Domains = []smtprelay.DeliveryDomain{}
 
 	var feedbackCfg feedbackrouter.Config
-	feedbackCfg.WildDuck.APIBaseURL = "http://wildduck:8080"
-	feedbackCfg.IMAP.Address = "wildduck:10143"
+	feedbackCfg.WildDuck.APIBaseURL = endpoints.WildDuckAPIBaseURL
+	feedbackCfg.IMAP.Address = endpoints.WildDuckIMAPAddress
 	feedbackCfg.IMAP.Username = "bounces@example.com"
 	feedbackCfg.IMAP.Password = secrets.FeedbackMailboxPassword
 	feedbackCfg.IMAP.DisplayName = "Agent Mail Bounces"
@@ -353,7 +797,7 @@ func canonicalModuleConfig(secrets runtimeSecrets, databases runtimeDatabases) m
 	feedbackCfg.IMAP.Mailbox = "INBOX"
 	feedbackCfg.IMAP.Insecure = true
 	feedbackCfg.IMAP.IdleTimeout = "29m"
-	feedbackCfg.Haraka.Address = "haraka:10025"
+	feedbackCfg.Haraka.Address = endpoints.HarakaSMTPAddress
 	feedbackCfg.Haraka.HelloName = helloName
 	feedbackCfg.Routes = []feedbackrouter.RouteConfig{}
 
@@ -712,8 +1156,13 @@ func (s controlStateRuntimeSource) ActivePollerDomains(ctx context.Context) ([]p
 			return nil, fmt.Errorf("active domain %q is missing feedback address", record.Domain)
 		}
 		domains = append(domains, poller.Domain{
-			Name:            record.Domain,
-			FeedbackAddress: record.FeedbackAddress,
+			Name:                     record.Domain,
+			OrganizationID:           record.OrganizationID,
+			OrganizationPublicID:     record.OrganizationPublicID,
+			ArchivePrefix:            record.ArchivePrefix,
+			WorkerConnectionID:       record.WorkerConnectionID,
+			WorkerDomainDeploymentID: record.WorkerDeploymentID,
+			FeedbackAddress:          record.FeedbackAddress,
 		})
 	}
 	return domains, nil

@@ -15,6 +15,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"agent-mail/internal/archive/r2archive"
@@ -32,25 +33,34 @@ const (
 )
 
 type Notification struct {
-	Schema          string    `json:"schema"`
-	IngestID        string    `json:"ingest_id"`
-	RecipientDomain string    `json:"recipient_domain"`
-	RawKey          string    `json:"raw_key"`
-	EdgeKey         string    `json:"edge_key"`
-	ResultKey       string    `json:"result_key"`
-	ReceivedAt      time.Time `json:"received_at"`
-	RawSHA256       string    `json:"raw_sha256"`
+	Schema                   string    `json:"schema"`
+	OrganizationID           string    `json:"organization_id"`
+	OrganizationPublicID     string    `json:"organization_public_id"`
+	ArchivePrefix            string    `json:"archive_prefix"`
+	WorkerConnectionID       string    `json:"worker_connection_id"`
+	WorkerDomainDeploymentID string    `json:"worker_domain_deployment_id"`
+	IngestID                 string    `json:"ingest_id"`
+	RecipientDomain          string    `json:"recipient_domain"`
+	RawKey                   string    `json:"raw_key"`
+	EdgeKey                  string    `json:"edge_key"`
+	ResultKey                string    `json:"result_key"`
+	ReceivedAt               time.Time `json:"received_at"`
+	RawSHA256                string    `json:"raw_sha256"`
 }
 
 type notifyHandler struct {
 	cfg            runtimeConfig
 	state          stateStore
 	now            func() time.Time
+	activeDomains  func(context.Context) ([]Domain, error)
 	enqueuePending func(context.Context, r2archive.InboundBundle) error
 	wakeProcess    func()
 }
 
 func (p *Poller) startNotifyServer(ctx context.Context) (<-chan error, error) {
+	if p.cfg.NotifyListenURL == "" {
+		return nil, nil
+	}
 	parsedListenURL, err := url.Parse(p.cfg.NotifyListenURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse notify listen URL: %w", err)
@@ -73,6 +83,7 @@ func (p *Poller) startNotifyServer(ctx context.Context) (<-chan error, error) {
 		cfg:            p.cfg,
 		state:          p.state,
 		now:            func() time.Time { return time.Now().UTC() },
+		activeDomains:  p.activeDomains,
 		enqueuePending: p.upsertPending,
 		wakeProcess:    p.signalProcessDue,
 	}
@@ -181,6 +192,15 @@ func (h *notifyHandler) handleNotify(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid notification\n", http.StatusBadRequest)
 		return
 	}
+	if err := h.validateActiveRecipientDomain(r.Context(), notification, bundle); err != nil {
+		log.Printf("agent-mail-reconciler event=fastpath_domain_rejected ingest_id=%s domain=%s edge_key=%s error=%q", bundle.IngestID, bundle.RecipientDomain, bundle.EdgeKey, err)
+		if errors.Is(err, errInactiveRecipientDomain) {
+			http.Error(w, "invalid notification\n", http.StatusBadRequest)
+			return
+		}
+		http.Error(w, "domain state unavailable\n", http.StatusServiceUnavailable)
+		return
+	}
 	if err := h.enqueuePending(r.Context(), bundle); err != nil {
 		log.Printf("agent-mail-reconciler event=fastpath_enqueue_failed ingest_id=%s edge_key=%s error=%q", notification.IngestID, notification.EdgeKey, err)
 		http.Error(w, "enqueue failed\n", http.StatusInternalServerError)
@@ -193,6 +213,46 @@ func (h *notifyHandler) handleNotify(w http.ResponseWriter, r *http.Request) {
 		"status":    "enqueued",
 		"ingest_id": bundle.IngestID,
 	})
+}
+
+var errInactiveRecipientDomain = errors.New("recipient domain is not active")
+
+func (h *notifyHandler) validateActiveRecipientDomain(ctx context.Context, notification Notification, bundle r2archive.InboundBundle) error {
+	if h.activeDomains == nil {
+		return fmt.Errorf("active domain source is not configured")
+	}
+	domains, err := h.activeDomains(ctx)
+	if err != nil {
+		return err
+	}
+	for _, domain := range domains {
+		activeDomain, err := r2archive.CanonicalDomain(domain.Name)
+		if err != nil {
+			return fmt.Errorf("active domain %q is invalid: %w", domain.Name, err)
+		}
+		if activeDomain != bundle.RecipientDomain {
+			continue
+		}
+		if domain.OrganizationID != "" && notification.OrganizationID != domain.OrganizationID {
+			return fmt.Errorf("organization_id does not match active domain")
+		}
+		if domain.OrganizationPublicID != "" && notification.OrganizationPublicID != domain.OrganizationPublicID {
+			return fmt.Errorf("organization_public_id does not match active domain")
+		}
+		if domain.ArchivePrefix != "" && notification.ArchivePrefix != domain.ArchivePrefix {
+			return fmt.Errorf("archive_prefix does not match active domain")
+		}
+		if domain.WorkerConnectionID != "" && notification.WorkerConnectionID != domain.WorkerConnectionID {
+			return fmt.Errorf("worker_connection_id does not match active domain")
+		}
+		if domain.WorkerDomainDeploymentID != "" && notification.WorkerDomainDeploymentID != domain.WorkerDomainDeploymentID {
+			return fmt.Errorf("worker_domain_deployment_id does not match active domain")
+		}
+		if bundle.ArchivePrefix != "" && notification.ArchivePrefix == bundle.ArchivePrefix {
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: %s", errInactiveRecipientDomain, bundle.RecipientDomain)
 }
 
 func (h *notifyHandler) verifySignature(r *http.Request, body []byte) error {
@@ -259,6 +319,24 @@ func ValidateNotification(notification Notification) (r2archive.InboundBundle, e
 	bundle, err := r2archive.ParseInboundEdgeKey(notification.EdgeKey)
 	if err != nil {
 		return r2archive.InboundBundle{}, err
+	}
+	if strings.TrimSpace(notification.OrganizationID) == "" {
+		return r2archive.InboundBundle{}, fmt.Errorf("organization_id is required")
+	}
+	if notification.OrganizationPublicID == "" {
+		return r2archive.InboundBundle{}, fmt.Errorf("organization_public_id is required")
+	}
+	if notification.OrganizationPublicID != bundle.OrganizationPublicID {
+		return r2archive.InboundBundle{}, fmt.Errorf("organization_public_id does not match edge key")
+	}
+	if notification.ArchivePrefix != bundle.ArchivePrefix {
+		return r2archive.InboundBundle{}, fmt.Errorf("archive_prefix does not match edge key")
+	}
+	if strings.TrimSpace(notification.WorkerConnectionID) == "" {
+		return r2archive.InboundBundle{}, fmt.Errorf("worker_connection_id is required")
+	}
+	if strings.TrimSpace(notification.WorkerDomainDeploymentID) == "" {
+		return r2archive.InboundBundle{}, fmt.Errorf("worker_domain_deployment_id is required")
 	}
 	if notification.IngestID != bundle.IngestID {
 		return r2archive.InboundBundle{}, fmt.Errorf("ingest_id does not match edge key")
