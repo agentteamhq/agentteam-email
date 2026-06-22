@@ -1,19 +1,18 @@
 import { subject } from '@casl/ability'
-import {
-  type ActorPublicId,
-  type AuditActorEntry,
-  type PermissionPolicyActionType,
-  PermissionPolicyV1,
-  publicIdFromUUIDv7,
-  type SubjectPolicyDocument,
-  type SubjectPolicyId,
-  type UserId
+import { PermissionPolicyV1, publicIdFromUUIDv7 } from '@main/db'
+import { abilityForActor } from './permission-policy-schema'
+import type { Policy } from './permission-policy-schema'
+import type {
+  ActorPublicId,
+  AuditActorEntry,
+  PermissionPolicyActionType,
+  SubjectPolicyDocument,
+  SubjectPolicyId,
+  UserId
 } from '@main/db'
 import type { Patch, WritableDraft } from 'immer'
 
 import type { Database } from '../db/db'
-
-import { abilityForActor, type Policy } from './permission-policy-schema'
 
 type SubjectPolicyRow = SubjectPolicyDocument
 

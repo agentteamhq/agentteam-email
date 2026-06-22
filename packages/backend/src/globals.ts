@@ -15,12 +15,14 @@
  * (e.g. waiting for DB readiness). Callers must always await it.
  */
 
-import { ShutdownManager } from '@main/common'
+import { ShutdownManager } from '@main/shutdown-manager'
 import debug from 'debug'
 
-import { createGlobalAuth, type GlobalAuth } from './auth/auth'
-import { createDatabase, type Database } from './db/db'
+import { createGlobalAuth } from './auth/auth'
+import { createDatabase } from './db/db'
 import { PRIVATE_VARS } from './vars.private'
+import type { GlobalAuth } from './auth/auth'
+import type { Database } from './db/db'
 
 // Unique symbol key for globalThis - guarantees no collisions
 const GLOBALS_KEY = Symbol.for('server.globals')
@@ -50,14 +52,35 @@ type GlobalWithServerGlobals = typeof globalThis & {
 
 const typedGlobal = globalThis as GlobalWithServerGlobals
 
+function assertServerGlobals(
+  container: ServerGlobalsStorage
+): asserts container is ServerGlobalsStorage & ServerGlobals {
+  if (!container.db || !container.auth || !container.shutdownManager) {
+    throw new Error('Server globals are missing required initialized singletons')
+  }
+}
+
+async function createServerGlobals(container: ServerGlobalsStorage): Promise<ServerGlobals> {
+  container.db ??= await createDatabase(PRIVATE_VARS.DATABASE_URL)
+  container.auth ??= createGlobalAuth(container.db)
+  container.shutdownManager ??= new ShutdownManager(debug('app:shutdown'))
+  container.shutdownManager.add('database', container.db.close)
+
+  container.initialized = true
+  assertServerGlobals(container)
+  return container
+}
+
 /**
  * Initialize all globals lazily.
  * Only runs once, subsequent calls return cached instance.
  */
 async function initializeGlobals(): Promise<ServerGlobals> {
   // Return existing if already initialized
-  if (typedGlobal[GLOBALS_KEY]?.initialized) {
-    return typedGlobal[GLOBALS_KEY] as ServerGlobals
+  const existingContainer = typedGlobal[GLOBALS_KEY]
+  if (existingContainer?.initialized) {
+    assertServerGlobals(existingContainer)
+    return existingContainer
   }
 
   // Create container if needed
@@ -65,15 +88,7 @@ async function initializeGlobals(): Promise<ServerGlobals> {
 
   const container = typedGlobal[GLOBALS_KEY]
 
-  container.initializationPromise ??= (async () => {
-    container.db ??= await createDatabase(PRIVATE_VARS.DATABASE_URL)
-    container.auth ??= createGlobalAuth(container.db)
-    container.shutdownManager ??= new ShutdownManager(debug('app:shutdown'))
-    container.shutdownManager.add('database', container.db.close)
-
-    container.initialized = true
-    return container as ServerGlobals
-  })()
+  container.initializationPromise ??= createServerGlobals(container)
 
   try {
     return await container.initializationPromise

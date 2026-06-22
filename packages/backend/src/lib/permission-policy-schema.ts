@@ -1,4 +1,5 @@
-import { AbilityBuilder, type ForcedSubject, type MatchConditions, PureAbility } from '@casl/ability'
+import { AbilityBuilder, PureAbility } from '@casl/ability'
+import type { ForcedSubject, MatchConditions } from '@casl/ability'
 import type { AuditActorEntry, PermissionPolicyActionType, PermissionPolicyV1Schema } from '@main/db'
 
 export type Policy = PermissionPolicyV1Schema

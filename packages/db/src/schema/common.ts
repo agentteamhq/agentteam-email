@@ -1,6 +1,6 @@
-import type { Base62UUIDv7, StrictOmit, UUIDv7 } from '@main/common'
 import { bytesToUUIDv7, createUUIDv7, parseUUIDv7, uuidv7ToBase62UUIDv7 } from '@main/common'
 import { Schema } from 'mongoose'
+import type { Base62UUIDv7, StrictOmit, UUIDv7 } from '@main/common'
 
 export const mongooseSchemaOptions = {
   id: false,
@@ -63,21 +63,29 @@ export function updatedAtField() {
   } as const
 }
 
-export type SchemaFieldConstructorValue<TType> =
-  TType extends typeof Schema.Types.UUID ? UUIDv7
-  : TType extends typeof Schema.Types.Mixed ? unknown
-  : TType extends StringConstructor ? string
-  : TType extends BooleanConstructor ? boolean
-  : TType extends DateConstructor ? Date
-  : TType extends NumberConstructor ? number
-  : TType extends ArrayConstructor ? unknown[]
-  : unknown
+export type SchemaFieldConstructorValue<TType> = TType extends typeof Schema.Types.UUID
+  ? UUIDv7
+  : TType extends typeof Schema.Types.Mixed
+    ? unknown
+    : TType extends StringConstructor
+      ? string
+      : TType extends BooleanConstructor
+        ? boolean
+        : TType extends DateConstructor
+          ? Date
+          : TType extends NumberConstructor
+            ? number
+            : TType extends ArrayConstructor
+              ? unknown[]
+              : unknown
 
-export type SchemaFieldValue<TField> =
-  TField extends { type: infer TType; required: true } ? SchemaFieldConstructorValue<TType>
-  : TField extends { type: infer TType; default: null } ? SchemaFieldConstructorValue<TType> | null
-  : TField extends { type: infer TType } ? SchemaFieldConstructorValue<TType> | null
-  : unknown
+export type SchemaFieldValue<TField> = TField extends { type: infer TType; required: true }
+  ? SchemaFieldConstructorValue<TType>
+  : TField extends { type: infer TType; default: null }
+    ? SchemaFieldConstructorValue<TType> | null
+    : TField extends { type: infer TType }
+      ? SchemaFieldConstructorValue<TType> | null
+      : unknown
 
 export type SchemaRawDocument<TSchemaDefinition extends Record<PropertyKey, unknown>> = {
   [TKey in keyof TSchemaDefinition]: SchemaFieldValue<TSchemaDefinition[TKey]>
@@ -101,7 +109,7 @@ export type UUIDBufferObject = {
   buffer: Uint8Array
 }
 
-export type MongooseUUIDValue = string | Uint8Array | UUIDBufferObject | { toString(): string }
+export type MongooseUUIDValue = string | Uint8Array | UUIDBufferObject | { toString: () => string }
 
 export function normalizeMongooseUUIDv7(value: MongooseUUIDValue): UUIDv7 {
   if (typeof value === 'string') {

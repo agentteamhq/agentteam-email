@@ -1,3 +1,4 @@
+import { publicIdFromUUIDv7 } from '@main/db'
 import type {
   CloudflareConnectionDocument,
   CloudflareConnectionPublicId,
@@ -9,7 +10,6 @@ import type {
   CloudflareOAuthGrantPublicId,
   CloudflareOAuthGrantPublicView
 } from '@main/db'
-import { publicIdFromUUIDv7 } from '@main/db'
 
 export function cloudflareOAuthConnectionIntentPublicView(
   intent: CloudflareOAuthConnectionIntentDocument
@@ -60,14 +60,23 @@ export function cloudflareConnectionPublicView(
     publicId: publicIdFromUUIDv7(connection._id) as CloudflareConnectionPublicId,
     userId: connection.userId,
     organizationId: connection.organizationId,
+    organizationPublicId: connection.organizationPublicId,
     grantId: connection.grantId,
+    agentMailDomainId: connection.agentMailDomainId,
+    agentMailWorkerDeploymentId: connection.agentMailWorkerDeploymentId,
     cloudflareAccountId: connection.cloudflareAccountId,
     cloudflareAccountName: connection.cloudflareAccountName,
     cloudflareZoneId: connection.cloudflareZoneId,
     cloudflareZoneName: connection.cloudflareZoneName,
     domain: connection.domain,
+    archivePrefix: connection.archivePrefix,
     r2BucketName: connection.r2BucketName,
+    r2Endpoint: connection.r2Endpoint,
+    r2Region: connection.r2Region,
     workerScriptName: connection.workerScriptName,
+    workerCredentialIssuedAt: connection.workerCredentialIssuedAt,
+    workerCredentialRefreshAfter: connection.workerCredentialRefreshAfter,
+    workerCredentialExpiresAt: connection.workerCredentialExpiresAt,
     status: connection.status,
     provisioningStatus: connection.provisioningStatus,
     lastProvisionedAt: connection.lastProvisionedAt,

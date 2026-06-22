@@ -1,21 +1,24 @@
 import { createUUIDv7, nowait } from '@main/common'
-import {
-  createBetterAuthMongoAdapterFromMongooseConnection,
-  type OrganizationId,
-  type UserId
-} from '@main/db'
+import { createBetterAuthMongoAdapterFromMongooseConnection } from '@main/db'
 import { apiKey } from '@better-auth/api-key'
 import { oauthProvider } from '@better-auth/oauth-provider'
 import { APIError } from 'better-auth'
 import { createAuthMiddleware } from 'better-auth/api'
-import { betterAuth, type BetterAuthOptions } from 'better-auth/minimal'
-import { customSession, genericOAuth, lastLoginMethod } from 'better-auth/plugins'
-import { admin, jwt, magicLink, organization, openAPI } from 'better-auth/plugins'
+import { betterAuth } from 'better-auth/minimal'
+import {
+  admin,
+  customSession,
+  genericOAuth,
+  jwt,
+  lastLoginMethod,
+  magicLink,
+  openAPI,
+  organization
+} from 'better-auth/plugins'
 import { auditLog } from 'better-auth-audit-logs'
 import debug from 'debug'
 import { adjectives, animals, colors, uniqueNamesGenerator } from 'unique-names-generator'
 
-import type { Database } from '../db/db'
 import {
   CLOUDFLARE_OAUTH_PROVIDER_ID,
   createCloudflareGenericOAuthConfig,
@@ -34,6 +37,9 @@ import {
   AGENTTEAM_OAUTH_ACCESS_TOKEN_CLAIMS,
   AGENTTEAM_OAUTH_SCOPES
 } from './oauth-provider-config'
+import type { BetterAuthOptions } from 'better-auth/minimal'
+import type { OrganizationId, UserId } from '@main/db'
+import type { Database } from '../db/db'
 
 const log = debug('app:auth')
 
@@ -527,10 +533,7 @@ export function createGlobalAuth(db: Database): GlobalAuth {
     },
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
-        if (
-          ctx.path === '/sign-in/oauth2' &&
-          readAuthProviderId(ctx.body) === CLOUDFLARE_OAUTH_PROVIDER_ID
-        ) {
+        if (ctx.path === '/sign-in/oauth2' && readAuthProviderId(ctx.body) === CLOUDFLARE_OAUTH_PROVIDER_ID) {
           throw APIError.from('BAD_REQUEST', {
             code: 'CLOUDFLARE_SIGN_IN_DISABLED',
             message: 'Cloudflare is a connected account provider, not an app sign-in provider.'

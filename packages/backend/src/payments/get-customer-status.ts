@@ -1,10 +1,10 @@
-import type { UserId } from '@main/db'
 import { copyHeaders } from '@main/common'
 import { formatISO } from 'date-fns'
 import debug from 'debug'
 import startCase from 'lodash.startcase'
 
 import { globals } from '../globals'
+import type { UserId } from '@main/db'
 
 const log = debug('app:customer-status')
 

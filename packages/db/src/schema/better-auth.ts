@@ -1,19 +1,17 @@
-import type { Base62UUIDv7, UUIDv7 } from '@main/common'
 import { Schema } from 'mongoose'
 
 import {
   createdAtField,
   mongooseCreatedAtOnlySchemaOptions,
   mongooseTimestampSchemaOptions,
-  type MongoosePublicView,
   optionalUUIDv7Field,
   publicIdVirtual,
-  type ReplaceDocumentFields,
   requiredUUIDv7Field,
-  type SchemaRawDocument,
   updatedAtField,
   uuidV7IdField
 } from './common'
+import type { MongoosePublicView, ReplaceDocumentFields, SchemaRawDocument } from './common'
+import type { Base62UUIDv7, UUIDv7 } from '@main/common'
 
 declare const UserIdBrand: unique symbol
 export type UserId = UUIDv7 & { readonly [UserIdBrand]: true }
@@ -168,7 +166,7 @@ export type UserRawDocument = SchemaRawDocument<typeof userSchemaDefinition>
 export type UserDocument = ReplaceDocumentFields<UserRawDocument, { _id: UserId; role?: AuthUserRole | null }>
 export type UserPublicView = MongoosePublicView<UserDocument, UserId, UserPublicId>
 
-export const userSchema = new Schema(userSchemaDefinition, {
+export const userSchema = new Schema<UserDocument>(userSchemaDefinition, {
   ...mongooseTimestampSchemaOptions,
   collection: 'user',
   virtuals: { publicId: publicIdVirtual }
@@ -196,7 +194,7 @@ export type TwoFactorDocument = ReplaceDocumentFields<
   { _id: TwoFactorId; userId: UserId }
 >
 
-export const twoFactorSchema = new Schema(twoFactorSchemaDefinition, {
+export const twoFactorSchema = new Schema<TwoFactorDocument>(twoFactorSchemaDefinition, {
   ...mongooseTimestampSchemaOptions,
   collection: 'twoFactor'
 }).index({ userId: 1 }, { name: 'twoFactor_userId' })
@@ -225,7 +223,7 @@ export type SessionDocument = ReplaceDocumentFields<
   }
 >
 
-export const sessionSchema = new Schema(sessionSchemaDefinition, {
+export const sessionSchema = new Schema<SessionDocument>(sessionSchemaDefinition, {
   ...mongooseTimestampSchemaOptions,
   collection: 'session'
 })
@@ -252,7 +250,7 @@ export const accountSchemaDefinition = {
 export type AccountRawDocument = SchemaRawDocument<typeof accountSchemaDefinition>
 export type AccountDocument = ReplaceDocumentFields<AccountRawDocument, { _id: AccountId; userId: UserId }>
 
-export const accountSchema = new Schema(accountSchemaDefinition, {
+export const accountSchema = new Schema<AccountDocument>(accountSchemaDefinition, {
   ...mongooseTimestampSchemaOptions,
   collection: 'account'
 })
@@ -271,7 +269,7 @@ export const verificationSchemaDefinition = {
 export type VerificationRawDocument = SchemaRawDocument<typeof verificationSchemaDefinition>
 export type VerificationDocument = ReplaceDocumentFields<VerificationRawDocument, { _id: VerificationId }>
 
-export const verificationSchema = new Schema(verificationSchemaDefinition, {
+export const verificationSchema = new Schema<VerificationDocument>(verificationSchemaDefinition, {
   ...mongooseTimestampSchemaOptions,
   collection: 'verification'
 })
@@ -304,7 +302,7 @@ export type AuditLogDocument = ReplaceDocumentFields<
 >
 export type AuditLogPublicView = MongoosePublicView<AuditLogDocument, AuditLogId, AuditLogPublicId>
 
-export const auditLogSchema = new Schema(auditLogSchemaDefinition, {
+export const auditLogSchema = new Schema<AuditLogDocument>(auditLogSchemaDefinition, {
   ...mongooseTimestampSchemaOptions,
   collection: 'auditLog',
   virtuals: { publicId: publicIdVirtual }
@@ -334,7 +332,7 @@ export type OrganizationPublicView = MongoosePublicView<
   OrganizationPublicId
 >
 
-export const organizationSchema = new Schema(organizationSchemaDefinition, {
+export const organizationSchema = new Schema<OrganizationDocument>(organizationSchemaDefinition, {
   ...mongooseTimestampSchemaOptions,
   collection: 'organization',
   virtuals: { publicId: publicIdVirtual }
@@ -356,7 +354,7 @@ export type MemberDocument = ReplaceDocumentFields<
 >
 export type MemberPublicView = MongoosePublicView<MemberDocument, MemberId, MemberPublicId>
 
-export const memberSchema = new Schema(memberSchemaDefinition, {
+export const memberSchema = new Schema<MemberDocument>(memberSchemaDefinition, {
   ...mongooseTimestampSchemaOptions,
   collection: 'member',
   virtuals: { publicId: publicIdVirtual }
@@ -380,7 +378,7 @@ export type TeamDocument = ReplaceDocumentFields<
 >
 export type TeamPublicView = MongoosePublicView<TeamDocument, TeamId, TeamPublicId>
 
-export const teamSchema = new Schema(teamSchemaDefinition, {
+export const teamSchema = new Schema<TeamDocument>(teamSchemaDefinition, {
   ...mongooseTimestampSchemaOptions,
   collection: 'team',
   virtuals: { publicId: publicIdVirtual }
@@ -409,7 +407,7 @@ export type InvitationDocument = ReplaceDocumentFields<
   }
 >
 
-export const invitationSchema = new Schema(invitationSchemaDefinition, {
+export const invitationSchema = new Schema<InvitationDocument>(invitationSchemaDefinition, {
   ...mongooseTimestampSchemaOptions,
   collection: 'invitation'
 })
@@ -452,7 +450,7 @@ export type ApiKeyDocument = ReplaceDocumentFields<
 >
 export type ApiKeyPublicView = MongoosePublicView<ApiKeyDocument, ApiKeyId, ApiKeyPublicId>
 
-export const apikeySchema = new Schema(apikeySchemaDefinition, {
+export const apikeySchema = new Schema<ApiKeyDocument>(apikeySchemaDefinition, {
   ...mongooseTimestampSchemaOptions,
   collection: 'apikey',
   virtuals: { publicId: publicIdVirtual }
@@ -474,7 +472,7 @@ export type JwkRawDocument = SchemaRawDocument<typeof jwkSchemaDefinition>
 export type JwkDocument = ReplaceDocumentFields<JwkRawDocument, { _id: JwkId }>
 export type JwkPublicView = MongoosePublicView<JwkDocument, JwkId, JwkPublicId>
 
-export const jwkSchema = new Schema(jwkSchemaDefinition, {
+export const jwkSchema = new Schema<JwkDocument>(jwkSchemaDefinition, {
   ...mongooseTimestampSchemaOptions,
   collection: 'jwk',
   virtuals: { publicId: publicIdVirtual }
@@ -527,7 +525,7 @@ export type OAuthClientDocument = ReplaceDocumentFields<
   }
 >
 
-export const oauthClientSchema = new Schema(oauthClientSchemaDefinition, {
+export const oauthClientSchema = new Schema<OAuthClientDocument>(oauthClientSchemaDefinition, {
   ...mongooseTimestampSchemaOptions,
   collection: 'oauthClient'
 })
@@ -560,10 +558,13 @@ export type OAuthRefreshTokenDocument = ReplaceDocumentFields<
   }
 >
 
-export const oauthRefreshTokenSchema = new Schema(oauthRefreshTokenSchemaDefinition, {
-  ...mongooseCreatedAtOnlySchemaOptions,
-  collection: 'oauthRefreshToken'
-})
+export const oauthRefreshTokenSchema = new Schema<OAuthRefreshTokenDocument>(
+  oauthRefreshTokenSchemaDefinition,
+  {
+    ...mongooseCreatedAtOnlySchemaOptions,
+    collection: 'oauthRefreshToken'
+  }
+)
   .index({ token: 1 }, { name: 'oauthRefreshToken_token_unique', unique: true })
   .index({ clientId: 1 }, { name: 'oauthRefreshToken_clientId' })
   .index({ sessionId: 1 }, { name: 'oauthRefreshToken_sessionId' })
@@ -595,7 +596,7 @@ export type OAuthAccessTokenDocument = ReplaceDocumentFields<
   }
 >
 
-export const oauthAccessTokenSchema = new Schema(oauthAccessTokenSchemaDefinition, {
+export const oauthAccessTokenSchema = new Schema<OAuthAccessTokenDocument>(oauthAccessTokenSchemaDefinition, {
   ...mongooseCreatedAtOnlySchemaOptions,
   collection: 'oauthAccessToken'
 })
@@ -626,7 +627,7 @@ export type OAuthConsentDocument = ReplaceDocumentFields<
   }
 >
 
-export const oauthConsentSchema = new Schema(oauthConsentSchemaDefinition, {
+export const oauthConsentSchema = new Schema<OAuthConsentDocument>(oauthConsentSchemaDefinition, {
   ...mongooseTimestampSchemaOptions,
   collection: 'oauthConsent'
 })
@@ -659,7 +660,7 @@ export type SubscriptionPublicView = MongoosePublicView<
   SubscriptionPublicId
 >
 
-export const subscriptionSchema = new Schema(subscriptionSchemaDefinition, {
+export const subscriptionSchema = new Schema<SubscriptionDocument>(subscriptionSchemaDefinition, {
   ...mongooseTimestampSchemaOptions,
   collection: 'subscription',
   virtuals: { publicId: publicIdVirtual }

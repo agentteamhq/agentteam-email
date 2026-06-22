@@ -1,7 +1,7 @@
-import { HttpStatusCode } from '@main/common'
-import { Elysia, t } from 'elysia'
 import { Buffer } from 'node:buffer'
 import { timingSafeEqual } from 'node:crypto'
+import { HttpStatusCode } from '@main/common'
+import { Elysia, t } from 'elysia'
 
 import { globals } from '../globals'
 import { PRIVATE_VARS } from '../vars.private'

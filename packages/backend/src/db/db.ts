@@ -1,7 +1,9 @@
 /* eslint-disable no-console */
-import { createAppModels, type AppModels } from '@main/db'
+import { createAppModels } from '@main/db'
 import debug from 'debug'
-import mongoose, { type Connection } from 'mongoose'
+import mongoose, { STATES } from 'mongoose'
+import type { AppModels } from '@main/db'
+import type { Connection } from 'mongoose'
 
 const log = debug('app:db')
 
@@ -41,7 +43,7 @@ export async function createDatabase(connectionString: string): Promise<Database
 
   return {
     close: async () => {
-      if (connection.readyState !== 0) {
+      if (connection.readyState !== STATES.disconnected) {
         await connection.close(false)
       }
     },

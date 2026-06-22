@@ -1,12 +1,11 @@
+import { mongodbAdapter } from '@better-auth/mongo-adapter'
+import { UUID } from 'mongodb'
+import { createUUIDv7 } from './ids'
 import type { BetterAuthOptions } from '@better-auth/core'
 import type { DBAdapter } from '@better-auth/core/db/adapter'
 import type { MongoDBAdapterConfig } from '@better-auth/mongo-adapter'
-import { mongodbAdapter } from '@better-auth/mongo-adapter'
 import type { Db, MongoClient } from 'mongodb'
-import { UUID } from 'mongodb'
 import type { Connection } from 'mongoose'
-
-import { createUUIDv7 } from './ids'
 
 export type BetterAuthMongoAdapterConfig = MongoDBAdapterConfig
 export type BetterAuthMongoAdapterFactory = (options: BetterAuthOptions) => DBAdapter

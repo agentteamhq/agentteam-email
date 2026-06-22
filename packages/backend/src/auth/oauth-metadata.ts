@@ -1,5 +1,4 @@
 import { oauthProviderResourceClient } from '@better-auth/oauth-provider/resource-client'
-import type { Auth } from 'better-auth/types'
 
 import { globals } from '../globals'
 import { PUBLIC_VARS } from '../vars.public'
@@ -8,6 +7,7 @@ import {
   AGENTTEAM_API_OAUTH_SCOPES,
   AGENTTEAM_OAUTH_PUBLIC_ROUTE
 } from './oauth-provider-config'
+import type { Auth } from 'better-auth/types'
 
 const BETTER_AUTH_LOGICAL_ROUTE = new URL('/api/', PUBLIC_VARS.PUBLIC_HOSTNAME)
 const BETTER_AUTH_PUBLIC_ROUTE = new URL(`${AGENTTEAM_OAUTH_PUBLIC_ROUTE}/`)

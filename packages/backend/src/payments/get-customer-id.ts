@@ -1,8 +1,9 @@
-import { normalizeMongooseUUIDv7, publicIdFromUUIDv7, type UserId } from '@main/db'
+import { normalizeMongooseUUIDv7, publicIdFromUUIDv7 } from '@main/db'
 import debug from 'debug'
 
 import { globals } from '../globals'
 import { stripeApi } from './stripe-api'
+import type { UserId } from '@main/db'
 
 const log = debug('app:payments')
 

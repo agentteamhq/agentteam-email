@@ -2,11 +2,12 @@
 import { EmailVerificationEmail, MagicLinkEmail, ResetPasswordEmail } from '@better-auth-ui/react/email'
 import { render } from '@react-email/render'
 import debug from 'debug'
-import { createElement, type ReactNode } from 'react'
+import { createElement } from 'react'
 import { createTransport } from 'nodemailer'
 
 import { STRINGS } from '../strings'
 import { PRIVATE_VARS } from '../vars.private'
+import type { ReactNode } from 'react'
 
 const log = debug('app:email')
 

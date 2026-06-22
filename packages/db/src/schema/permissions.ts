@@ -1,21 +1,19 @@
-import type { Base62UUIDv7, StrictOmit, UUIDv7 } from '@main/common'
 import { Schema } from 'mongoose'
-
-import type { ActorType, AuditEntrySchema, PermissionPolicyV1Schema } from '../permission-schema'
-import type { UserId } from './better-auth'
 import {
   createdAtField,
   mongooseCreatedAtOnlySchemaOptions,
   mongooseTimestampSchemaOptions,
-  type MongoosePublicView,
   optionalUUIDv7Field,
   publicIdVirtual,
-  type ReplaceDocumentFields,
   requiredUUIDv7Field,
-  type SchemaRawDocument,
   updatedAtField,
   uuidV7IdField
 } from './common'
+import type { MongoosePublicView, ReplaceDocumentFields, SchemaRawDocument } from './common'
+import type { Base62UUIDv7, StrictOmit, UUIDv7 } from '@main/common'
+
+import type { ActorType, AuditEntrySchema, PermissionPolicyV1Schema } from '../permission-schema'
+import type { UserId } from './better-auth'
 
 declare const SubjectPolicyIdBrand: unique symbol
 export type SubjectPolicyId = UUIDv7 & { readonly [SubjectPolicyIdBrand]: true }
@@ -44,7 +42,7 @@ export type SubjectPolicyPublicView = MongoosePublicView<
 >
 export type SubjectPolicyDTOType = StrictOmit<SubjectPolicyPublicView, 'id'>
 
-export const subjectPolicySchema = new Schema(subjectPolicySchemaDefinition, {
+export const subjectPolicySchema = new Schema<SubjectPolicyDocument>(subjectPolicySchemaDefinition, {
   ...mongooseTimestampSchemaOptions,
   collection: 'subjectPolicy',
   virtuals: { publicId: publicIdVirtual }
@@ -73,7 +71,7 @@ export type ActorDocument = ReplaceDocumentFields<
 >
 export type ActorPublicView = MongoosePublicView<ActorDocument, ActorId, ActorPublicId>
 
-export const actorSchema = new Schema(actorSchemaDefinition, {
+export const actorSchema = new Schema<ActorDocument>(actorSchemaDefinition, {
   ...mongooseTimestampSchemaOptions,
   collection: 'actor',
   virtuals: { publicId: publicIdVirtual }
@@ -111,7 +109,7 @@ export type PolicyAuditEntryPublicView = MongoosePublicView<
   PolicyAuditEntryPublicId
 >
 
-export const policyAuditEntrySchema = new Schema(policyAuditEntrySchemaDefinition, {
+export const policyAuditEntrySchema = new Schema<PolicyAuditEntryDocument>(policyAuditEntrySchemaDefinition, {
   ...mongooseCreatedAtOnlySchemaOptions,
   collection: 'policyAuditEntry',
   virtuals: { publicId: publicIdVirtual }

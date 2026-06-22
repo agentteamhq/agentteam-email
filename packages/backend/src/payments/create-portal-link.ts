@@ -1,4 +1,3 @@
-import type { UserId } from '@main/db'
 import { copyHeaders } from '@main/common'
 import debug from 'debug'
 
@@ -7,6 +6,7 @@ import { PUBLIC_VARS } from '../vars.public'
 
 import { getStripeCustomerId } from './get-customer-id'
 import { stripeApi } from './stripe-api'
+import type { UserId } from '@main/db'
 
 const log = debug('app:payments')
 

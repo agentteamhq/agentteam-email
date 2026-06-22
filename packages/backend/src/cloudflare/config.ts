@@ -1,6 +1,5 @@
-import type { GenericOAuthConfig } from 'better-auth/plugins'
-
 import { PRIVATE_VARS } from '../vars.private'
+import type { GenericOAuthConfig } from 'better-auth/plugins'
 
 export const CLOUDFLARE_OAUTH_PROVIDER_ID = 'cloudflare'
 
@@ -39,9 +38,7 @@ export function getCloudflareRequiredOAuthScopes(): string[] {
 }
 
 export function isCloudflareOAuthConfigured(): boolean {
-  return Boolean(
-    PRIVATE_VARS.CLOUDFLARE_OAUTH_CLIENT_ID && PRIVATE_VARS.CLOUDFLARE_OAUTH_CLIENT_SECRET
-  )
+  return Boolean(PRIVATE_VARS.CLOUDFLARE_OAUTH_CLIENT_ID && PRIVATE_VARS.CLOUDFLARE_OAUTH_CLIENT_SECRET)
 }
 
 export function getCloudflareApiBaseUrl(): string {
@@ -50,6 +47,21 @@ export function getCloudflareApiBaseUrl(): string {
 
 export function getCloudflareOAuthRevokeUrl(): string {
   return PRIVATE_VARS.CLOUDFLARE_OAUTH_REVOKE_URL ?? CLOUDFLARE_OAUTH_DEFAULTS.revokeUrl
+}
+
+export function getCloudflareOAuthTokenUrl(): string {
+  return PRIVATE_VARS.CLOUDFLARE_OAUTH_TOKEN_URL ?? CLOUDFLARE_OAUTH_DEFAULTS.tokenUrl
+}
+
+export function requireCloudflareOAuthClientCredentials(): { clientId: string; clientSecret: string } {
+  const clientId = PRIVATE_VARS.CLOUDFLARE_OAUTH_CLIENT_ID
+  const clientSecret = PRIVATE_VARS.CLOUDFLARE_OAUTH_CLIENT_SECRET
+
+  if (!clientId || !clientSecret) {
+    throw new Error('Cloudflare OAuth client credentials are not configured')
+  }
+
+  return { clientId, clientSecret }
 }
 
 export function createCloudflareGenericOAuthConfig(): GenericOAuthConfig | null {

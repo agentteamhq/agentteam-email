@@ -1,8 +1,8 @@
+import { globals } from '../globals'
+import { isPayingSubscriber } from '../user/is-paying-subscriber'
 import type { UserId } from '@main/db'
 
 import type { GlobalAuthSessionUser } from '../auth/auth'
-import { globals } from '../globals'
-import { isPayingSubscriber } from '../user/is-paying-subscriber'
 
 export const MESSAGE_DELAY_MS = 6 * 60 * 1000
 

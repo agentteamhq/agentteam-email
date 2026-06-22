@@ -1,7 +1,7 @@
-import type { ScheduledJobs } from './scheduled-jobs'
+import { globals } from '../globals'
 import { createScheduledJobs } from './scheduled-jobs'
 import { syncStripeCustomers } from './sync-stripe-customers'
-import { globals } from '../globals'
+import type { ScheduledJobs } from './scheduled-jobs'
 
 let scheduledJobs: ScheduledJobs | null = null
 

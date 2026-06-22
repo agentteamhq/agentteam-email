@@ -1,8 +1,8 @@
-import type { AuthUserRole, UserId } from '@main/db'
 import debug from 'debug'
+import { updateStripeCustomer } from '../payments/update-customer'
+import type { AuthUserRole, UserId } from '@main/db'
 
 import type { Database } from '../db/db'
-import { updateStripeCustomer } from '../payments/update-customer'
 
 const log = debug('app:job:sync-stripe-customers')
 

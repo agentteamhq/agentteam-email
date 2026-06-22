@@ -128,17 +128,21 @@ server.listen(port, '0.0.0.0', () => {
 
 async function handleCloudflareApi(request, response, url) {
   if (!hasBearerAuth(request)) {
-    sendJson(response, 401, cloudflareResponse(null, false, [{ code: 10000, message: 'Authentication error' }]))
+    sendJson(
+      response,
+      401,
+      cloudflareResponse(null, false, [{ code: 10000, message: 'Authentication error' }])
+    )
     return
   }
 
   if (request.method === 'GET' && url.pathname === '/client/v4/accounts') {
-    sendJson(response, 200, paginatedCloudflareResponse([account]))
+    sendJson(response, 200, paginatedCloudflareResponse([account], url))
     return
   }
 
   if (request.method === 'GET' && url.pathname === '/client/v4/zones') {
-    sendJson(response, 200, paginatedCloudflareResponse([zone]))
+    sendJson(response, 200, paginatedCloudflareResponse([zone], url))
     return
   }
 
@@ -161,12 +165,53 @@ async function handleCloudflareApi(request, response, url) {
     const body = await readJsonBody(request)
     const bucketName = readString(body, 'name')
     if (!bucketName) {
-      sendJson(response, 400, cloudflareResponse(null, false, [{ code: 1000, message: 'Bucket name is required' }]))
+      sendJson(
+        response,
+        400,
+        cloudflareResponse(null, false, [{ code: 1000, message: 'Bucket name is required' }])
+      )
       return
     }
 
     buckets.add(bucketName)
     sendJson(response, 200, cloudflareResponse({ name: bucketName, storage_class: 'Standard' }))
+    return
+  }
+
+  const tempCredentialMatch = url.pathname.match(
+    /^\/client\/v4\/accounts\/(?<accountId>[^/]+)\/r2\/temp-access-credentials$/u
+  )
+  if (request.method === 'POST' && tempCredentialMatch?.groups) {
+    const body = await readJsonBody(request)
+    const bucketName = readString(body, 'bucket')
+    const parentAccessKeyId = readString(body, 'parentAccessKeyId')
+    const prefixes = Array.isArray(body?.prefixes)
+      ? body.prefixes.filter((value) => typeof value === 'string')
+      : []
+    if (
+      !bucketName ||
+      !parentAccessKeyId ||
+      readString(body, 'permission') !== 'object-read-write' ||
+      prefixes.length !== 1
+    ) {
+      sendJson(
+        response,
+        400,
+        cloudflareResponse(null, false, [{ code: 1000, message: 'Invalid temporary credential request' }])
+      )
+      return
+    }
+
+    buckets.add(bucketName)
+    sendJson(
+      response,
+      200,
+      cloudflareResponse({
+        accessKeyId: 'fake-temp-r2-access-key',
+        secretAccessKey: 'fake-temp-r2-secret-access-key',
+        sessionToken: 'fake-temp-r2-session-token'
+      })
+    )
     return
   }
 
@@ -206,7 +251,13 @@ async function handleCloudflareApi(request, response, url) {
     return
   }
 
-  sendJson(response, 404, cloudflareResponse(null, false, [{ code: 1003, message: `Unhandled fake Cloudflare API route: ${request.method} ${url.pathname}` }]))
+  sendJson(
+    response,
+    404,
+    cloudflareResponse(null, false, [
+      { code: 1003, message: `Unhandled fake Cloudflare API route: ${request.method} ${url.pathname}` }
+    ])
+  )
 }
 
 function hasBearerAuth(request) {
@@ -223,14 +274,18 @@ function cloudflareResponse(result, success = true, errors = []) {
   }
 }
 
-function paginatedCloudflareResponse(result) {
+function paginatedCloudflareResponse(result, url) {
+  const page = Number(url?.searchParams?.get('page') || '1')
+  const safePage = Number.isFinite(page) && page > 0 ? page : 1
+  const pageResult = safePage === 1 ? result : []
   return {
-    ...cloudflareResponse(result),
+    ...cloudflareResponse(pageResult),
     result_info: {
-      count: result.length,
-      page: 1,
+      count: pageResult.length,
+      page: safePage,
       per_page: result.length,
-      total_count: result.length
+      total_count: result.length,
+      total_pages: 1
     }
   }
 }

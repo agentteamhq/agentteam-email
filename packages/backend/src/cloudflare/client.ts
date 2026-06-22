@@ -1,10 +1,11 @@
+import { randomBytes } from 'node:crypto'
 import Cloudflare from 'cloudflare'
 import { toFile } from 'cloudflare/uploads'
-import { randomBytes } from 'node:crypto'
 
 import { PUBLIC_VARS } from '../vars.public'
 
 import { getCloudflareApiBaseUrl } from './config'
+import { AGENT_MAIL_CLOUDFLARE_EMAIL_WORKER_SCRIPT } from './email-worker.generated'
 
 export interface CloudflareAccountSummary {
   id: string
@@ -21,18 +22,36 @@ export interface CloudflareZoneSummary {
 }
 
 export interface CloudflareProvisioningResult {
+  hmacSecret: string
+  r2Endpoint: string
+  r2Region: string
   r2BucketName: string
   workerScriptName: string
   hmacSecretReference: string
 }
 
+export interface CloudflareWorkerArchiveCredentials {
+  accessKeyId: string
+  archivePrefix: string
+  bucket: string
+  endpoint: string
+  expiresAt: Date
+  region: string
+  secretAccessKey: string
+  sessionToken: string
+}
+
 export interface CloudflareProvisioningInput {
   accessToken: string
+  archivePrefix: string
   cloudflareAccountId: string
   cloudflareZoneId: string
   connectionPublicId: string
+  domainPublicId: string
   domain: string
-  organizationId: string | null
+  hmacSecret?: string
+  organizationPublicId: string
+  workerCredentials: CloudflareWorkerArchiveCredentials
 }
 
 export function createCloudflareClient(accessToken: string): Cloudflare {
@@ -88,27 +107,31 @@ export async function listCloudflareZones({
 
 export async function applyCloudflareProvisioning({
   accessToken,
+  archivePrefix,
   cloudflareAccountId,
   cloudflareZoneId,
   connectionPublicId,
+  domainPublicId,
   domain,
-  organizationId
+  hmacSecret: existingHmacSecret,
+  organizationPublicId,
+  workerCredentials
 }: CloudflareProvisioningInput): Promise<CloudflareProvisioningResult> {
   const client = createCloudflareClient(accessToken)
-  const r2BucketName = createBucketName(domain, cloudflareZoneId)
   const workerScriptName = createWorkerScriptName(domain, cloudflareZoneId)
-  const hmacSecret = randomBytes(32).toString('base64url')
-  const hmacSecretReference = `cloudflare-worker:${workerScriptName}:AGENTTEAM_HMAC_SECRET`
+  const hmacSecret = existingHmacSecret ?? randomBytes(32).toString('base64url')
+  const hmacSecretReference = `cloudflare-worker:${workerScriptName}:AGENTTEAM_WORKER_HMAC_SECRET`
 
-  await ensureR2Bucket(client, cloudflareAccountId, r2BucketName)
   await upsertEmailWorker({
+    archivePrefix,
     client,
     cloudflareAccountId,
     connectionPublicId,
+    domainPublicId,
     domain,
     hmacSecret,
-    organizationId,
-    r2BucketName,
+    organizationPublicId,
+    workerCredentials,
     workerScriptName
   })
   await client.emailRouting.dns.create({ zone_id: cloudflareZoneId })
@@ -121,8 +144,11 @@ export async function applyCloudflareProvisioning({
   })
 
   return {
+    hmacSecret,
+    r2BucketName: workerCredentials.bucket,
+    r2Endpoint: workerCredentials.endpoint,
+    r2Region: workerCredentials.region,
     hmacSecretReference,
-    r2BucketName,
     workerScriptName
   }
 }
@@ -138,50 +164,36 @@ export function sanitizeCloudflareError(error: unknown): { code: string; message
   }
 }
 
-async function ensureR2Bucket(
-  client: Cloudflare,
-  cloudflareAccountId: string,
-  r2BucketName: string
-): Promise<void> {
-  try {
-    await client.r2.buckets.get(r2BucketName, { account_id: cloudflareAccountId })
-    return
-  } catch (error) {
-    if (readErrorNumber(error, 'status') !== 404) {
-      throw error
-    }
-  }
-
-  await client.r2.buckets.create({
-    account_id: cloudflareAccountId,
-    name: r2BucketName,
-    storageClass: 'Standard'
-  })
-}
-
 async function upsertEmailWorker({
+  archivePrefix,
   client,
   cloudflareAccountId,
   connectionPublicId,
+  domainPublicId,
   domain,
   hmacSecret,
-  organizationId,
-  r2BucketName,
+  organizationPublicId,
+  workerCredentials,
   workerScriptName
 }: {
+  archivePrefix: string
   client: Cloudflare
   cloudflareAccountId: string
   connectionPublicId: string
+  domainPublicId: string
   domain: string
   hmacSecret: string
-  organizationId: string | null
-  r2BucketName: string
+  organizationPublicId: string
+  workerCredentials: CloudflareWorkerArchiveCredentials
   workerScriptName: string
 }): Promise<void> {
-  const script = createEmailWorkerScript()
-  const scriptFile = await toFile(new TextEncoder().encode(script), 'index.js', {
-    type: 'application/javascript+module'
-  })
+  const scriptFile = await toFile(
+    new TextEncoder().encode(AGENT_MAIL_CLOUDFLARE_EMAIL_WORKER_SCRIPT),
+    'index.js',
+    {
+      type: 'application/javascript+module'
+    }
+  )
 
   await client.workers.scripts.update(workerScriptName, {
     account_id: cloudflareAccountId,
@@ -190,24 +202,36 @@ async function upsertEmailWorker({
       main_module: 'index.js',
       compatibility_date: '2026-06-19',
       bindings: [
-        { bucket_name: r2BucketName, name: 'ARCHIVE_BUCKET', type: 'r2_bucket' },
+        { name: 'AGENTTEAM_ORG_PUBLIC_ID', text: organizationPublicId, type: 'plain_text' },
         { name: 'AGENTTEAM_CONNECTION_ID', text: connectionPublicId, type: 'plain_text' },
+        { name: 'AGENTTEAM_DOMAIN_ID', text: domainPublicId, type: 'plain_text' },
         { name: 'AGENTTEAM_DOMAIN', text: domain, type: 'plain_text' },
-        { name: 'AGENTTEAM_HMAC_SECRET', text: hmacSecret, type: 'secret_text' },
+        { name: 'AGENTTEAM_ARCHIVE_PREFIX', text: archivePrefix, type: 'plain_text' },
+        { name: 'AGENTTEAM_R2_ENDPOINT', text: workerCredentials.endpoint, type: 'plain_text' },
+        { name: 'AGENTTEAM_R2_BUCKET', text: workerCredentials.bucket, type: 'plain_text' },
+        { name: 'AGENTTEAM_R2_REGION', text: workerCredentials.region, type: 'plain_text' },
         {
-          name: 'AGENTTEAM_INGEST_URL',
-          text: `${PUBLIC_VARS.PUBLIC_HOSTNAME}/api/cloudflare/email-ingest`,
+          name: 'AGENTTEAM_R2_CREDENTIAL_EXPIRES_AT',
+          text: workerCredentials.expiresAt.toISOString(),
           type: 'plain_text'
         },
-        { name: 'AGENTTEAM_TENANT_ID', text: organizationId ?? '', type: 'plain_text' }
+        { name: 'AGENTTEAM_R2_ACCESS_KEY_ID', text: workerCredentials.accessKeyId, type: 'secret_text' },
+        {
+          name: 'AGENTTEAM_R2_SECRET_ACCESS_KEY',
+          text: workerCredentials.secretAccessKey,
+          type: 'secret_text'
+        },
+        { name: 'AGENTTEAM_R2_SESSION_TOKEN', text: workerCredentials.sessionToken, type: 'secret_text' },
+        { name: 'AGENTTEAM_WORKER_HMAC_SECRET', text: hmacSecret, type: 'secret_text' },
+        {
+          name: 'AGENTTEAM_INGEST_URL',
+          text: new URL('/rpc/agent-mail/ingest/v1', PUBLIC_VARS.PUBLIC_HOSTNAME).toString(),
+          type: 'plain_text'
+        }
       ],
       tags: ['agentteam-email']
     }
   })
-}
-
-function createBucketName(domain: string, cloudflareZoneId: string): string {
-  return `agentteam-email-${normalizeResourceName(domain)}-${cloudflareZoneId.slice(0, 8).toLowerCase()}`
 }
 
 function createWorkerScriptName(domain: string, cloudflareZoneId: string): string {
@@ -221,29 +245,6 @@ function normalizeResourceName(value: string): string {
     .replace(/[^a-z0-9-]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 40)
-}
-
-function createEmailWorkerScript(): string {
-  return `
-export default {
-  async email(message, env) {
-    const receivedAt = new Date().toISOString()
-    const ingestId = crypto.randomUUID()
-    const domain = env.AGENTTEAM_DOMAIN
-    const prefix = \`mail/inbound/\${domain}/\${receivedAt.slice(0, 10).replaceAll('-', '/')}/\${ingestId}\`
-    const raw = await new Response(message.raw).arrayBuffer()
-    const edge = {
-      from: message.from,
-      to: message.to,
-      headers: Object.fromEntries(message.headers),
-      received_at: receivedAt
-    }
-
-    await env.ARCHIVE_BUCKET.put(\`\${prefix}/raw.eml\`, raw)
-    await env.ARCHIVE_BUCKET.put(\`\${prefix}/edge.json\`, JSON.stringify(edge))
-  }
-}
-`.trimStart()
 }
 
 function readErrorNumber(error: unknown, key: string): number | null {

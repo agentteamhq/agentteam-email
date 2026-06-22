@@ -1,9 +1,9 @@
-import type { UserId } from '@main/db'
 import debug from 'debug'
 
-import type { Database } from '../db/db'
 import { globals } from '../globals'
 import { stripeApi } from './stripe-api'
+import type { Database } from '../db/db'
+import type { UserId } from '@main/db'
 
 const log = debug('app:payments')
 

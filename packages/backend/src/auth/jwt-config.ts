@@ -1,6 +1,5 @@
-import type { JwtOptions } from 'better-auth/plugins'
-
 import { PUBLIC_VARS } from '../vars.public'
+import type { JwtOptions } from 'better-auth/plugins'
 
 export const WEBAPP_JWT_SIGNING_OPTIONS = {
   schema: {

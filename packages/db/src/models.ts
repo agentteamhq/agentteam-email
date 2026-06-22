@@ -1,5 +1,3 @@
-import type { Connection, Model, Schema } from 'mongoose'
-
 import {
   accountSchema,
   apikeySchema,
@@ -17,46 +15,54 @@ import {
   teamSchema,
   twoFactorSchema,
   userSchema,
-  verificationSchema,
-  type AccountDocument,
-  type ApiKeyDocument,
-  type AuditLogDocument,
-  type InvitationDocument,
-  type JwkDocument,
-  type MemberDocument,
-  type OAuthAccessTokenDocument,
-  type OAuthClientDocument,
-  type OAuthConsentDocument,
-  type OAuthRefreshTokenDocument,
-  type OrganizationDocument,
-  type SessionDocument,
-  type SubscriptionDocument,
-  type TeamDocument,
-  type TwoFactorDocument,
-  type UserDocument,
-  type VerificationDocument
+  verificationSchema
 } from './schema/better-auth'
 import {
+  agentMailDomainSchema,
+  agentMailWorkerCredentialRefreshSchema,
+  agentMailWorkerDeploymentSchema,
   cloudflareConnectionSchema,
   cloudflareOAuthConnectionIntentSchema,
-  cloudflareOAuthGrantSchema,
-  type CloudflareConnectionDocument,
-  type CloudflareOAuthConnectionIntentDocument,
-  type CloudflareOAuthGrantDocument
+  cloudflareOAuthGrantSchema
 } from './schema/cloudflare'
-import {
-  actorSchema,
-  policyAuditEntrySchema,
-  subjectPolicySchema,
-  type ActorDocument,
-  type PolicyAuditEntryDocument,
-  type SubjectPolicyDocument
-} from './schema/permissions'
+import { actorSchema, policyAuditEntrySchema, subjectPolicySchema } from './schema/permissions'
+import type {
+  AccountDocument,
+  ApiKeyDocument,
+  AuditLogDocument,
+  InvitationDocument,
+  JwkDocument,
+  MemberDocument,
+  OAuthAccessTokenDocument,
+  OAuthClientDocument,
+  OAuthConsentDocument,
+  OAuthRefreshTokenDocument,
+  OrganizationDocument,
+  SessionDocument,
+  SubscriptionDocument,
+  TeamDocument,
+  TwoFactorDocument,
+  UserDocument,
+  VerificationDocument
+} from './schema/better-auth'
+import type {
+  AgentMailDomainDocument,
+  AgentMailWorkerCredentialRefreshDocument,
+  AgentMailWorkerDeploymentDocument,
+  CloudflareConnectionDocument,
+  CloudflareOAuthConnectionIntentDocument,
+  CloudflareOAuthGrantDocument
+} from './schema/cloudflare'
+import type { ActorDocument, PolicyAuditEntryDocument, SubjectPolicyDocument } from './schema/permissions'
+import type { Connection, Model, Schema } from 'mongoose'
 
-export type AppModel<TDocument> = Model<TDocument, {}, {}, {}, TDocument>
+export type AppModel<TDocument extends object> = Model<TDocument, object, object, object, TDocument>
 
 export type AppModels = {
   account: AppModel<AccountDocument>
+  agentMailDomain: AppModel<AgentMailDomainDocument>
+  agentMailWorkerCredentialRefresh: AppModel<AgentMailWorkerCredentialRefreshDocument>
+  agentMailWorkerDeployment: AppModel<AgentMailWorkerDeploymentDocument>
   actor: AppModel<ActorDocument>
   apikey: AppModel<ApiKeyDocument>
   auditLog: AppModel<AuditLogDocument>
@@ -84,24 +90,27 @@ export type AppModels = {
 export function createAppModels(connection: Connection): AppModels {
   return {
     account: connectionModel(connection, 'account', accountSchema),
+    agentMailDomain: connectionModel(connection, 'agentMailDomain', agentMailDomainSchema),
+    agentMailWorkerCredentialRefresh: connectionModel(
+      connection,
+      'agentMailWorkerCredentialRefresh',
+      agentMailWorkerCredentialRefreshSchema
+    ),
+    agentMailWorkerDeployment: connectionModel(
+      connection,
+      'agentMailWorkerDeployment',
+      agentMailWorkerDeploymentSchema
+    ),
     actor: connectionModel(connection, 'actor', actorSchema),
     apikey: connectionModel(connection, 'apikey', apikeySchema),
     auditLog: connectionModel(connection, 'auditLog', auditLogSchema),
-    cloudflareConnection: connectionModel(
-      connection,
-      'cloudflareConnection',
-      cloudflareConnectionSchema
-    ),
+    cloudflareConnection: connectionModel(connection, 'cloudflareConnection', cloudflareConnectionSchema),
     cloudflareOAuthConnectionIntent: connectionModel(
       connection,
       'cloudflareOAuthConnectionIntent',
       cloudflareOAuthConnectionIntentSchema
     ),
-    cloudflareOAuthGrant: connectionModel(
-      connection,
-      'cloudflareOAuthGrant',
-      cloudflareOAuthGrantSchema
-    ),
+    cloudflareOAuthGrant: connectionModel(connection, 'cloudflareOAuthGrant', cloudflareOAuthGrantSchema),
     invitation: connectionModel(connection, 'invitation', invitationSchema),
     jwk: connectionModel(connection, 'jwk', jwkSchema),
     member: connectionModel(connection, 'member', memberSchema),
@@ -121,7 +130,7 @@ export function createAppModels(connection: Connection): AppModels {
   }
 }
 
-function connectionModel<TDocument>(
+function connectionModel<TDocument extends object>(
   connection: Connection,
   name: string,
   schema: Schema<TDocument>

@@ -1,7 +1,7 @@
-import type { UserId } from '@main/db'
 import { copyHeaders } from '@main/common'
 
 import { globals } from '../globals'
+import type { UserId } from '@main/db'
 
 export async function getUser(rawHeaders: Headers) {
   const headers = copyHeaders(rawHeaders)

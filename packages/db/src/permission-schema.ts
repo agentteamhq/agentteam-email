@@ -1,7 +1,7 @@
-import type { Patch } from 'immer'
 import { z } from 'zod'
 
 import { parseBase62UUIDv7 } from '@main/common'
+import type { Patch } from 'immer'
 import type { ActorPublicId } from './schema'
 
 export const ActorValues = ['anonymous', 'user'] as const
@@ -14,7 +14,9 @@ export type AuditActorEntry =
   | { actorType: 'actor'; actorId: ActorPublicId }
   | { actorType: 'anonymous'; actorId?: undefined }
 
-const ActorPublicIdSchema = z.string().transform((value): ActorPublicId => parseBase62UUIDv7(value) as ActorPublicId)
+const ActorPublicIdSchema = z
+  .string()
+  .transform((value): ActorPublicId => parseBase62UUIDv7(value) as ActorPublicId)
 
 const ImmerPatchSchema = z
   .object({
@@ -54,7 +56,9 @@ export const PermissionPolicyV1 = BasePolicySchema.extend({
   visibility: z.enum(PermissionPolicyV1VisibilityValues).default('private'),
   ownerId: ActorPublicIdSchema,
   publicPermissions: z.array(z.enum(PermissionPolicyActionValues)).optional(),
-  actorPermissions: z.record(ActorPublicIdSchema, z.array(z.enum(PermissionPolicyActionValues)).optional()).default({})
+  actorPermissions: z
+    .record(ActorPublicIdSchema, z.array(z.enum(PermissionPolicyActionValues)).optional())
+    .default({})
 })
 
 export type PermissionPolicyV1Schema = z.infer<typeof PermissionPolicyV1>
