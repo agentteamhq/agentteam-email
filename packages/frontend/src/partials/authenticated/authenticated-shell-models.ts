@@ -1,5 +1,6 @@
 export type AuthenticatedViewState = 'ready' | 'loading' | 'empty' | 'error'
 export type AuthenticatedMailNavIconKey = 'drafts' | 'folder' | 'inbox' | 'junk' | 'sent' | 'trash'
+export type AuthenticatedManagementNavIconKey = 'accounts' | 'agents' | 'groups'
 export type AuthenticatedEmailBodySize = 'compact' | 'standard' | 'tall' | 'fill'
 export type AuthenticatedComposeMode = 'new' | 'reply' | 'reply-all' | 'forward' | 'draft'
 export type AuthenticatedComposeField = 'bcc' | 'body' | 'cc' | 'subject' | 'to'
@@ -49,6 +50,13 @@ export interface AuthenticatedMailFolderActionItem {
   disabledReason?: string
   label: string
   pending?: boolean
+}
+
+export interface AuthenticatedManagementNavItem {
+  iconKey: AuthenticatedManagementNavIconKey
+  id: string
+  title: string
+  url: string
 }
 
 export interface AuthenticatedMailItem {
@@ -239,6 +247,7 @@ export interface AuthenticatedSidebarView {
   folderDelete?: AuthenticatedMailDeleteFolderView
   folderRename?: AuthenticatedMailRenameFolderView
   isRefreshing?: boolean
+  managementNav?: ReadonlyArray<AuthenticatedManagementNavItem>
   mails: ReadonlyArray<AuthenticatedMailItem>
   navMain: ReadonlyArray<AuthenticatedMailNavItem>
   pagination?: AuthenticatedMailPagination

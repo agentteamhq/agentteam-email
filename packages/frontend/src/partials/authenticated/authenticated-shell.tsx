@@ -1,5 +1,6 @@
 import * as React from 'react'
 import {
+  AddressBookIcon,
   ArchiveIcon,
   ArrowBendDoubleUpLeftIcon,
   ArrowBendUpLeftIcon,
@@ -21,9 +22,11 @@ import {
   PaperclipIcon,
   PencilSimpleIcon,
   PlusIcon,
+  RobotIcon,
   StarIcon,
   TrashIcon,
   TrayIcon,
+  UsersThreeIcon,
   WarningIcon,
   XIcon
 } from '@phosphor-icons/react'
@@ -128,6 +131,8 @@ import type {
   AuthenticatedMailOriginalSourceView,
   AuthenticatedMailPageChange,
   AuthenticatedMailPagination,
+  AuthenticatedManagementNavIconKey,
+  AuthenticatedManagementNavItem,
   AuthenticatedSidebarView
 } from './authenticated-shell-models'
 import type {
@@ -175,6 +180,7 @@ export interface AuthenticatedShellProps {
   onMailboxRefresh?: () => void
   onMailboxRetry?: () => void
   onMailSelect?: (mailId: string) => void
+  onCliAccessSessionRevoke?: (session: CLIAccessSettingsState['sessions'][number]) => void
   onSettingsOpenChange: (open: boolean) => void
   onSettingsSectionChange: (section: SettingsSectionId) => void
   onSidebarItemSelect?: (itemId: string) => void
@@ -221,6 +227,7 @@ export function AuthenticatedShell({
   onMailboxRefresh,
   onMailboxRetry,
   onMailSelect,
+  onCliAccessSessionRevoke,
   onSettingsOpenChange,
   onSettingsSectionChange,
   onSidebarItemSelect,
@@ -232,8 +239,12 @@ export function AuthenticatedShell({
   sidebarView = defaultAuthenticatedSidebarView,
   title = 'Inbox'
 }: AuthenticatedShellProps) {
+  const hasActiveManagementItem =
+    sidebarView.managementNav?.some((item) => item.id === sidebarView.activeItemId) ?? false
+
   return (
     <SidebarProvider
+      open={hasActiveManagementItem ? false : undefined}
       style={
         {
           '--sidebar-width': '350px'
@@ -277,6 +288,7 @@ export function AuthenticatedShell({
         cloudflareOAuthCallback={cloudflareOAuthCallback}
         contentState={settingsContentState}
         domainSettingsState={domainSettingsState}
+        onCliAccessSessionRevoke={onCliAccessSessionRevoke}
         onActiveSectionChange={onSettingsSectionChange}
         onOpenChange={onSettingsOpenChange}
         open={settingsOpen}
@@ -1139,7 +1151,9 @@ export function AuthenticatedSidebar({
   view = defaultAuthenticatedSidebarView
 }: AuthenticatedSidebarProps) {
   const { setOpen } = useSidebar()
-  const activeItem = view.navMain.find((item) => item.id === view.activeItemId) ?? view.navMain[0]
+  const activeMailItem = view.navMain.find((item) => item.id === view.activeItemId)
+  const activeManagementItem = view.managementNav?.find((item) => item.id === view.activeItemId)
+  const activeItem = activeMailItem ?? activeManagementItem ?? view.navMain[0]
 
   return (
     <>
@@ -1213,6 +1227,22 @@ export function AuthenticatedSidebar({
             </SidebarGroup>
           </SidebarContent>
           <SidebarFooter>
+            {view.managementNav?.length ? (
+              <SidebarMenu>
+                {view.managementNav.map((item) => (
+                  <SidebarMenuItem key={item.id}>
+                    <ManagementNavButton
+                      item={item}
+                      isActive={item.id === view.activeItemId}
+                      onSelect={() => {
+                        onSelectItem?.(item.id)
+                        setOpen(false)
+                      }}
+                    />
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            ) : null}
             <UserButton
               align='start'
               sideOffset={8}
@@ -1221,6 +1251,7 @@ export function AuthenticatedSidebar({
           </SidebarFooter>
         </Sidebar>
 
+      {!activeManagementItem ? (
         <Sidebar
           collapsible='none'
           className='hidden min-w-0 flex-1 md:flex'
@@ -1310,6 +1341,7 @@ export function AuthenticatedSidebar({
             </SidebarGroup>
           </SidebarContent>
         </Sidebar>
+      ) : null}
       </Sidebar>
       <CreateMailFolderDialog
         onNameChange={onFolderCreateNameChange}
@@ -1589,6 +1621,12 @@ const mailNavIcons = {
   trash: TrashIcon
 } satisfies Record<AuthenticatedMailNavIconKey, React.ComponentType<{ className?: string }>>
 
+const managementNavIcons = {
+  accounts: AddressBookIcon,
+  agents: RobotIcon,
+  groups: UsersThreeIcon
+} satisfies Record<AuthenticatedManagementNavIconKey, React.ComponentType<{ className?: string }>>
+
 function MailNavButton({
   isActive,
   item,
@@ -1743,6 +1781,33 @@ function MailAccountSelect({
         <p className='text-muted-foreground line-clamp-1 text-xs'>{activeAccount.description}</p>
       ) : null}
     </div>
+  )
+}
+
+function ManagementNavButton({
+  isActive,
+  item,
+  onSelect
+}: {
+  isActive: boolean
+  item: AuthenticatedManagementNavItem
+  onSelect: () => void
+}) {
+  const Icon = managementNavIcons[item.iconKey]
+
+  return (
+    <SidebarMenuButton
+      tooltip={{
+        children: item.title,
+        hidden: false
+      }}
+      onClick={onSelect}
+      isActive={isActive}
+      className='px-2.5 md:px-2'
+    >
+      <Icon />
+      <span>{item.title}</span>
+    </SidebarMenuButton>
   )
 }
 

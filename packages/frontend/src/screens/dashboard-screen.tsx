@@ -8,6 +8,11 @@ import {
   defaultAuthenticatedSidebarView,
   withActiveSidebarItem
 } from '../partials/authenticated/authenticated-shell-models'
+import {
+  getMailboxAdminSectionTitle,
+  isMailboxAdminSectionId
+} from '../partials/authenticated/mailbox-admin-models'
+import { MailboxAdminScreen } from '../partials/authenticated/mailbox-admin-screen'
 import { WebappProviders } from '../partials/webapp/webapp-providers'
 import type {
   AuthenticatedComposeField,
@@ -32,6 +37,11 @@ import type {
   SettingsDialogContentState
 } from '../partials/authenticated/settings-dialog'
 import type { SettingsSectionId } from '../partials/authenticated/settings-dialog-sections'
+import type {
+  MailboxAdminSectionId,
+  MailboxAdminStatusFilter,
+  MailboxAdminView
+} from '../partials/authenticated/mailbox-admin-models'
 import type { PublicEnv } from '../types'
 
 export interface DashboardScreenProps {
@@ -42,6 +52,7 @@ export interface DashboardScreenProps {
   defaultSettingsOpen?: boolean
   defaultSettingsSection?: SettingsSectionId
   emailPreviewsById?: Readonly<Record<string, AuthenticatedEmailPreview>>
+  mailboxAdminView?: MailboxAdminView
   mailActionView?: AuthenticatedMailActionView
   onComposeAttachmentAdd?: (files: ReadonlyArray<File>) => void
   onComposeAttachmentRemove?: (attachmentId: string) => void
@@ -54,6 +65,7 @@ export interface DashboardScreenProps {
     attachment: NonNullable<AuthenticatedEmailPreview['attachments']>[number],
     email: AuthenticatedEmailPreview
   ) => void
+  onCliAccessSessionRevoke?: (session: CLIAccessSettingsState['sessions'][number]) => void
   onEmailAction?: (action: AuthenticatedEmailAction, email: AuthenticatedEmailPreview) => void
   onMailActionDialogOpenChange?: (dialog: AuthenticatedMailActionDialogKind, open: boolean) => void
   onMailDeleteConfirm?: () => void
@@ -103,6 +115,7 @@ export function DashboardScreen({
   defaultSettingsOpen,
   defaultSettingsSection,
   emailPreviewsById,
+  mailboxAdminView,
   mailActionView,
   onComposeAttachmentRemove,
   onComposeDiscardDraft,
@@ -112,6 +125,7 @@ export function DashboardScreen({
   onComposeSubmit,
   onComposeAttachmentAdd,
   onEmailAttachmentPreview,
+  onCliAccessSessionRevoke,
   onEmailAction,
   onMailActionDialogOpenChange,
   onMailDeleteConfirm,
@@ -189,6 +203,12 @@ export function DashboardScreen({
   const [remoteImagesAllowedByMessageScope, setRemoteImagesAllowedByMessageScope] = React.useState<
     ReadonlySet<string>
   >(() => new Set())
+  const [mailboxAdminSearchBySection, setMailboxAdminSearchBySection] = React.useState<
+    Readonly<Partial<Record<MailboxAdminSectionId, string>>>
+  >({})
+  const [mailboxAdminStatusFilterBySection, setMailboxAdminStatusFilterBySection] = React.useState<
+    Readonly<Partial<Record<MailboxAdminSectionId, MailboxAdminStatusFilter>>>
+  >({})
   const [uncontrolledSettingsOpen, setUncontrolledSettingsOpen] = React.useState(
     defaultSettingsOpen ?? Boolean(requestedSettingsSection)
   )
@@ -199,6 +219,15 @@ export function DashboardScreen({
   const settingsSection = settingsSectionProp ?? uncontrolledSettingsSection
   const setSettingsOpen = onSettingsOpenChange ?? setUncontrolledSettingsOpen
   const setSettingsSection = onSettingsSectionChange ?? setUncontrolledSettingsSection
+  const activeMailboxAdminSection = isMailboxAdminSectionId(activeItemId) ? activeItemId : null
+  const mailboxAdminSearchQuery = activeMailboxAdminSection
+    ? (mailboxAdminSearchBySection[activeMailboxAdminSection] ?? mailboxAdminView?.searchQuery ?? '')
+    : ''
+  const mailboxAdminStatusFilter = activeMailboxAdminSection
+    ? (mailboxAdminStatusFilterBySection[activeMailboxAdminSection] ??
+      mailboxAdminView?.statusFilter ??
+      'all')
+    : 'all'
   const resolvedSidebarView = React.useMemo(
     () => ({
       ...withActiveSidebarItem(sidebarView, activeItemId),
@@ -297,6 +326,34 @@ export function DashboardScreen({
     },
     [onMailboxUnreadOnlyChange, unreadOnlyScopeBase]
   )
+  const handleMailboxAdminSearchChange = React.useCallback(
+    (nextQuery: string) => {
+      if (!activeMailboxAdminSection) {
+        return
+      }
+
+      setMailboxAdminSearchBySection((current) => ({
+        ...current,
+        [activeMailboxAdminSection]: nextQuery
+      }))
+      mailboxAdminView?.onSearchQueryChange?.(nextQuery)
+    },
+    [activeMailboxAdminSection, mailboxAdminView]
+  )
+  const handleMailboxAdminStatusFilterChange = React.useCallback(
+    (nextStatusFilter: MailboxAdminStatusFilter) => {
+      if (!activeMailboxAdminSection) {
+        return
+      }
+
+      setMailboxAdminStatusFilterBySection((current) => ({
+        ...current,
+        [activeMailboxAdminSection]: nextStatusFilter
+      }))
+      mailboxAdminView?.onStatusFilterChange?.(nextStatusFilter)
+    },
+    [activeMailboxAdminSection, mailboxAdminView]
+  )
 
   return (
     <WebappProviders
@@ -335,6 +392,7 @@ export function DashboardScreen({
         onMailboxPageChange={onMailboxPageChange}
         onMailboxRefresh={onMailboxRefresh}
         onMailboxRetry={onMailboxRetry}
+        onCliAccessSessionRevoke={onCliAccessSessionRevoke}
         onSettingsOpenChange={setSettingsOpen}
         onSettingsSectionChange={setSettingsSection}
         onMailSelect={handleMailboxMessageSelect}
@@ -354,13 +412,27 @@ export function DashboardScreen({
         settingsOpen={settingsOpen}
         settingsSection={settingsSection}
         sidebarView={resolvedSidebarView}
+        title={activeMailboxAdminSection ? getMailboxAdminSectionTitle(activeMailboxAdminSection) : undefined}
       >
-        <AuthenticatedDashboardContent
-          onAttachmentPreview={onEmailAttachmentPreview}
-          onEmailAction={handleEmailAction}
-          onRetry={onMessageRetry}
-          view={resolvedDashboardView}
-        />
+        {activeMailboxAdminSection && mailboxAdminView ? (
+          <MailboxAdminScreen
+            view={{
+              ...mailboxAdminView,
+              onSearchQueryChange: handleMailboxAdminSearchChange,
+              onStatusFilterChange: handleMailboxAdminStatusFilterChange,
+              searchQuery: mailboxAdminSearchQuery,
+              section: activeMailboxAdminSection,
+              statusFilter: mailboxAdminStatusFilter
+            }}
+          />
+        ) : (
+          <AuthenticatedDashboardContent
+            onAttachmentPreview={onEmailAttachmentPreview}
+            onEmailAction={handleEmailAction}
+            onRetry={onMessageRetry}
+            view={resolvedDashboardView}
+          />
+        )}
       </AuthenticatedShell>
     </WebappProviders>
   )

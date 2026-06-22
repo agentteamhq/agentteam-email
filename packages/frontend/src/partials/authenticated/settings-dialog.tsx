@@ -26,6 +26,7 @@ import {
   BreadcrumbSeparator
 } from '../../components/ui/breadcrumb'
 import { Button } from '../../components/ui/button'
+import { Card, CardContent } from '../../components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -35,6 +36,7 @@ import {
 } from '../../components/ui/dialog'
 import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
+import { Separator } from '../../components/ui/separator'
 import { Skeleton } from '../../components/ui/skeleton'
 import { Spinner } from '../../components/ui/spinner'
 import {
@@ -132,18 +134,22 @@ const settingsNavigation = [
   { id: 'cliAccess', name: 'CLI access', icon: TerminalWindowIcon },
   { id: 'organizations', name: 'Organizations', icon: SuitcaseSimpleIcon },
   { id: 'organizationSettings', name: 'Organization settings', icon: IdentificationCardIcon },
-  { id: 'organizationPeople', name: 'Organization people', icon: UsersIcon },
-  { id: 'domains', name: 'Domains', icon: GlobeHemisphereWestIcon }
+  { id: 'organizationPeople', name: 'Organization people', icon: UsersIcon }
 ] satisfies Array<{
   icon: React.ComponentType<{ className?: string }>
-  id: SettingsSectionId
+  id: Exclude<SettingsSectionId, 'domains'>
   name: string
 }>
 
-const settingsNames = Object.fromEntries(settingsNavigation.map((item) => [item.id, item.name])) as Record<
-  SettingsSectionId,
-  string
->
+const settingsNames = {
+  account: 'Account',
+  security: 'Security',
+  cliAccess: 'CLI access',
+  organizations: 'Organizations',
+  organizationSettings: 'Organization settings',
+  organizationPeople: 'Organization people',
+  domains: 'Domains'
+} satisfies Record<SettingsSectionId, string>
 
 interface SettingsDialogProps {
   activeSection?: SettingsSectionId
@@ -153,6 +159,7 @@ interface SettingsDialogProps {
   defaultActiveSection?: SettingsSectionId
   defaultOpen?: boolean
   domainSettingsState?: DomainSettingsState
+  onCliAccessSessionRevoke?: (session: CLIAccessSessionView) => void
   onActiveSectionChange?: (section: SettingsSectionId) => void
   onOpenChange?: (open: boolean) => void
   open?: boolean
@@ -167,6 +174,7 @@ export function SettingsDialog({
   defaultActiveSection = 'account',
   defaultOpen = true,
   domainSettingsState,
+  onCliAccessSessionRevoke,
   onActiveSectionChange,
   onOpenChange,
   open: openProp,
@@ -184,8 +192,10 @@ export function SettingsDialog({
     state: domainSettingsState
   })
   const activeName =
-    activeSection === 'domains' && domainSettings.mode === 'addDomain'
-      ? 'Add domain'
+    activeSection === 'domains'
+      ? domainSettings.mode === 'addDomain'
+        ? 'Add domain'
+        : domainSettings.selectedDomain?.domain ?? 'Domain'
       : settingsNames[activeSection]
 
   return (
@@ -216,9 +226,6 @@ export function SettingsDialog({
                             type='button'
                             onClick={() => {
                               setActiveSection(item.id)
-                              if (item.id === 'domains' && domainSettings.connections.length === 0) {
-                                domainSettings.onAddDomain()
-                              }
                             }}
                           >
                             <item.icon />
@@ -231,7 +238,7 @@ export function SettingsDialog({
                 </SidebarGroupContent>
               </SidebarGroup>
               <SidebarGroup className='min-h-0 flex-1'>
-                <SidebarGroupContent className='min-h-0'>
+                <SidebarGroupContent className='min-h-0 overflow-hidden'>
                   <SidebarMenu>
                     <SidebarMenuItem>
                       <SidebarMenuButton
@@ -252,34 +259,32 @@ export function SettingsDialog({
                     </SidebarMenuItem>
                   </SidebarMenu>
                   {domainSettings.connections.length > 0 ? (
-                    <div className='mt-2 grid max-h-48 gap-1 overflow-y-auto pr-1'>
+                    <SidebarMenu className='mt-1 max-h-52 overflow-y-auto pr-1'>
                       {domainSettings.connections.map((connection) => (
-                        <button
-                          className={cn(
-                            'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground flex min-w-0 items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm',
-                            activeSection === 'domains' &&
+                        <SidebarMenuItem key={connection.publicId}>
+                          <SidebarMenuButton
+                            asChild
+                            isActive={
+                              activeSection === 'domains' &&
                               domainSettings.mode === 'domain' &&
                               domainSettings.selectedDomainPublicId === connection.publicId
-                              ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                              : ''
-                          )}
-                          key={connection.publicId}
-                          type='button'
-                          onClick={() => {
-                            setActiveSection('domains')
-                            domainSettings.onSelectDomain(connection.publicId)
-                          }}
-                        >
-                          <span className='min-w-0 truncate'>{connection.domain}</span>
-                          <Badge
-                            className='shrink-0 whitespace-nowrap'
-                            variant={getDomainStatusBadgeVariant(connection)}
+                            }
+                            tooltip={connection.domain}
                           >
-                            {formatDomainStateLabel(connection)}
-                          </Badge>
-                        </button>
+                            <button
+                              type='button'
+                              onClick={() => {
+                                setActiveSection('domains')
+                                domainSettings.onSelectDomain(connection.publicId)
+                              }}
+                            >
+                              <GlobeHemisphereWestIcon />
+                              <span>{connection.domain}</span>
+                            </button>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
                       ))}
-                    </div>
+                    </SidebarMenu>
                   ) : null}
                 </SidebarGroupContent>
               </SidebarGroup>
@@ -309,6 +314,7 @@ export function SettingsDialog({
                 cliAccessState={cliAccessState}
                 contentState={contentState}
                 domainSettings={domainSettings}
+                onCliAccessSessionRevoke={onCliAccessSessionRevoke}
                 section={activeSection}
               />
             </div>
@@ -323,11 +329,13 @@ function SettingsPanelContent({
   cliAccessState,
   contentState,
   domainSettings,
+  onCliAccessSessionRevoke,
   section
 }: {
   cliAccessState?: CLIAccessSettingsState
   contentState: SettingsDialogContentState
   domainSettings: DomainSettingsController
+  onCliAccessSessionRevoke?: (session: CLIAccessSessionView) => void
   section: SettingsSectionId
 }) {
   if (contentState === 'loading') {
@@ -358,7 +366,14 @@ function SettingsPanelContent({
   }
 
   if (section === 'cliAccess') {
-    return cliAccessState ? <CLIAccessPanel {...cliAccessState} /> : <CLIAccessPanelLive />
+    return cliAccessState ? (
+      <CLIAccessPanel
+        {...cliAccessState}
+        onRevoke={onCliAccessSessionRevoke}
+      />
+    ) : (
+      <CLIAccessPanelLive />
+    )
   }
 
   if (section === 'organizations') {
@@ -478,36 +493,41 @@ export function CLIAccessPanel({
           Revoke at-email sessions that were authorized through device login.
         </p>
       </div>
-      <div className='divide-border overflow-hidden rounded-lg border'>
-        {sessions.map((session) => (
-          <div
-            className='flex items-center gap-3 p-3'
-            key={session.id}
-          >
-            <div className='bg-muted flex size-10 shrink-0 items-center justify-center rounded-md'>
-              <TerminalWindowIcon className='size-5' />
-            </div>
-            <div className='min-w-0 flex-1'>
-              <div className='flex min-w-0 flex-wrap items-center gap-2'>
-                <p className='truncate text-sm font-medium'>{session.label}</p>
-                {session.current ? <Badge variant='secondary'>Current</Badge> : null}
-              </div>
-              <p className='text-muted-foreground mt-1 truncate text-xs'>{session.metadata}</p>
-            </div>
-            <Button
-              aria-label={`Revoke ${session.label}`}
-              disabled={!onRevoke || revokingSessionId === session.id}
-              onClick={() => onRevoke?.(session)}
-              size='sm'
-              type='button'
-              variant='outline'
-            >
-              {revokingSessionId === session.id ? <Spinner className='size-3.5' /> : <TrashIcon />}
-              Revoke
-            </Button>
-          </div>
-        ))}
-      </div>
+      <Card className='p-0'>
+        <CardContent className='p-0'>
+          {sessions.map((session, index) => (
+            <React.Fragment key={session.id}>
+              {index > 0 ? <Separator /> : null}
+              <Card className='border-0 bg-transparent shadow-none ring-0'>
+                <CardContent className='flex items-center justify-between gap-3'>
+                  <div className='bg-muted flex size-10 shrink-0 items-center justify-center rounded-md'>
+                    <TerminalWindowIcon className='size-4.5' />
+                  </div>
+                  <div className='flex min-w-0 flex-col'>
+                    <div className='flex min-w-0 flex-wrap items-center gap-2'>
+                      <span className='truncate text-sm font-medium'>{session.label}</span>
+                      {session.current ? <Badge variant='secondary'>Current</Badge> : null}
+                    </div>
+                    <span className='text-muted-foreground truncate text-xs'>{session.metadata}</span>
+                  </div>
+                  <Button
+                    aria-label={`Revoke ${session.label}`}
+                    className='ml-auto shrink-0'
+                    disabled={!onRevoke || revokingSessionId === session.id}
+                    onClick={() => onRevoke?.(session)}
+                    size='sm'
+                    type='button'
+                    variant='outline'
+                  >
+                    {revokingSessionId === session.id ? <Spinner className='size-3.5' /> : <TrashIcon />}
+                    Revoke
+                  </Button>
+                </CardContent>
+              </Card>
+            </React.Fragment>
+          ))}
+        </CardContent>
+      </Card>
     </section>
   )
 }
@@ -1126,61 +1146,52 @@ function DomainDetailPanel({ settings }: { settings: DomainSettingsController })
         : 'Provisioning'
 
   return (
-    <div className='grid max-w-3xl gap-4'>
+    <section className='max-w-2xl space-y-3'>
       <div className='flex items-start justify-between gap-3'>
         <div className='min-w-0'>
-          <p className='truncate font-medium'>{domain.domain}</p>
-          <p className='text-muted-foreground truncate text-sm'>
-            {domain.cloudflareZoneName ?? domain.cloudflareZoneId}
-          </p>
+          <h2 className='truncate text-sm font-semibold'>{domain.domain}</h2>
         </div>
         <Badge variant={getDomainStatusBadgeVariant(domain)}>{formatDomainStateLabel(domain)}</Badge>
       </div>
 
-      <div className='grid gap-2 text-sm md:grid-cols-2'>
-        <IntegrationMetric
-          label='Email routing'
-          value={formatEmailRoutingStatus(domain)}
-        />
-        <IntegrationMetric
-          label='Cloudflare zone'
-          value={domain.cloudflareZoneName ?? domain.cloudflareZoneId}
-        />
-        <IntegrationMetric
-          label='Worker'
-          value={domain.workerScriptName ?? 'Not provisioned'}
-        />
-        <IntegrationMetric
-          label='Archive bucket'
-          value={domain.r2BucketName ?? 'Not provisioned'}
-        />
-        <IntegrationMetric
-          label='Last provisioned'
-          value={formatDateTime(domain.lastProvisionedAt)}
-        />
-        <IntegrationMetric
-          label='Updated'
-          value={formatDateTime(domain.updatedAt)}
-        />
-      </div>
-
-      <div className='grid gap-2 border-t pt-3 text-sm'>
-        <div className='flex items-center justify-between gap-3'>
-          <span className='text-muted-foreground'>Cloudflare account</span>
-          <span className='min-w-0 truncate font-medium'>
-            {domain.cloudflareAccountName ?? domain.cloudflareAccountId}
-          </span>
-        </div>
-        <div className='flex items-center justify-between gap-3'>
-          <span className='text-muted-foreground'>Provisioning</span>
-          <span className='font-medium'>{formatStatusLabel(domain.provisioningStatus)}</span>
-        </div>
-      </div>
+      <Card className='p-0'>
+        <CardContent className='p-0'>
+          <DomainDetailRow
+            label='Email routing'
+            value={domain.domain}
+          />
+          <Separator />
+          <DomainDetailRow
+            label='Cloudflare account'
+            value={domain.cloudflareAccountName ?? domain.cloudflareAccountId}
+          />
+          <Separator />
+          <DomainDetailRow
+            label='Cloudflare zone'
+            value={domain.cloudflareZoneName ?? domain.cloudflareZoneId}
+          />
+          <Separator />
+          <DomainDetailRow
+            label='Provisioning'
+            value={formatStatusLabel(domain.provisioningStatus)}
+          />
+          <Separator />
+          <DomainDetailRow
+            label='Worker'
+            value={domain.workerScriptName ?? 'Not provisioned'}
+          />
+          <Separator />
+          <DomainDetailRow
+            label='Last provisioned'
+            value={formatDateTime(domain.lastProvisionedAt)}
+          />
+        </CardContent>
+      </Card>
 
       {domain.lastErrorMessage ? <p className='text-destructive text-sm'>{domain.lastErrorMessage}</p> : null}
 
-      <div className='flex flex-wrap gap-2'>
-        {provisionVisible ? (
+      {provisionVisible ? (
+        <div className='flex flex-wrap gap-2'>
           <Button
             disabled={settings.busy || settings.readOnly || domain.status === 'disconnected'}
             onClick={() => {
@@ -1191,27 +1202,19 @@ function DomainDetailPanel({ settings }: { settings: DomainSettingsController })
           >
             {provisionLabel}
           </Button>
-        ) : null}
-        <Button
-          onClick={settings.onAddDomain}
-          size='sm'
-          variant='outline'
-        >
-          <PlusCircleIcon />
-          Add domain
-        </Button>
-      </div>
+        </div>
+      ) : null}
 
       {settings.message ? <p className='text-muted-foreground text-sm'>{settings.message}</p> : null}
-    </div>
+    </section>
   )
 }
 
-function IntegrationMetric({ label, value }: { label: string; value: React.ReactNode }) {
+function DomainDetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className='min-w-0 rounded-md border px-3 py-2'>
-      <p className='text-muted-foreground text-xs'>{label}</p>
-      <p className='truncate font-medium'>{value}</p>
+    <div className='flex min-h-11 items-center justify-between gap-4 px-6 py-3 text-sm'>
+      <span className='text-muted-foreground shrink-0'>{label}</span>
+      <span className='min-w-0 truncate text-right font-medium'>{value}</span>
     </div>
   )
 }
@@ -1258,22 +1261,6 @@ function getDomainStatusBadgeVariant(connection: CloudflareConnectionView): 'sec
 function formatDomainStateLabel(connection: CloudflareConnectionView): string {
   if (connection.status === 'active' && connection.provisioningStatus === 'succeeded') {
     return 'Live'
-  }
-
-  if (connection.status === 'degraded' || connection.provisioningStatus === 'failed') {
-    return 'Needs attention'
-  }
-
-  if (connection.status === 'provisioning' || connection.provisioningStatus === 'pending') {
-    return 'Provisioning'
-  }
-
-  return formatStatusLabel(connection.status)
-}
-
-function formatEmailRoutingStatus(connection: CloudflareConnectionView): string {
-  if (connection.status === 'active' && connection.provisioningStatus === 'succeeded') {
-    return `Live on ${connection.domain}`
   }
 
   if (connection.status === 'degraded' || connection.provisioningStatus === 'failed') {

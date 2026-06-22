@@ -1,5 +1,10 @@
 import {
   authenticatedSectionBaseArgs,
+  cliAccessEmptyState,
+  cliAccessErrorState,
+  cliAccessLoadingState,
+  cliAccessReadyState,
+  cliAccessRevokingState,
   domainSettingsAddDomainAuthorizeCloudflareState,
   domainSettingsAddDomainSelectZoneState,
   domainSettingsDenseDomainListState,
@@ -10,7 +15,6 @@ import {
   domainSettingsEmptyFirstUseState
 } from '../storybook/authenticated-section-fixtures'
 import { DashboardScreen } from './dashboard-screen'
-import type { CLIAccessSessionView } from '../partials/authenticated/settings-dialog'
 import type { Meta, StoryObj } from '@storybook/react'
 
 const meta = {
@@ -18,6 +22,8 @@ const meta = {
   component: DashboardScreen,
   args: {
     ...authenticatedSectionBaseArgs,
+    domainSettingsState: domainSettingsEmptyFirstUseState,
+    onCliAccessSessionRevoke: () => {},
     settingsOpen: true
   },
   parameters: {
@@ -128,32 +134,10 @@ export const DomainsDenseDomainList: Story = {
   }
 }
 
-const cliSessions = [
-  {
-    createdAt: '2026-06-22T12:00:00Z',
-    current: true,
-    expiresAt: '2026-12-19T12:00:00Z',
-    id: 'session-cli-current',
-    label: 'at-email 0.4.0',
-    metadata: 'linux/amd64 - created Jun 22, 2026 - expires Dec 19, 2026'
-  },
-  {
-    createdAt: '2026-06-20T09:30:00Z',
-    current: false,
-    expiresAt: '2026-12-17T09:30:00Z',
-    id: 'session-cli-remote',
-    label: 'at-email 0.4.0',
-    metadata: 'darwin/arm64 - created Jun 20, 2026 - expires Dec 17, 2026'
-  }
-] satisfies CLIAccessSessionView[]
-
 export const CLIAccess: Story = {
   name: 'settings / cli access',
   args: {
-    cliAccessState: {
-      sessions: cliSessions,
-      state: 'ready'
-    },
+    cliAccessState: cliAccessReadyState,
     settingsSection: 'cliAccess'
   }
 }
@@ -161,10 +145,7 @@ export const CLIAccess: Story = {
 export const CLIAccessEmpty: Story = {
   name: 'settings / cli access / empty',
   args: {
-    cliAccessState: {
-      sessions: [],
-      state: 'ready'
-    },
+    cliAccessState: cliAccessEmptyState,
     settingsSection: 'cliAccess'
   }
 }
@@ -172,10 +153,7 @@ export const CLIAccessEmpty: Story = {
 export const CLIAccessLoading: Story = {
   name: 'settings / cli access / loading',
   args: {
-    cliAccessState: {
-      sessions: [],
-      state: 'loading'
-    },
+    cliAccessState: cliAccessLoadingState,
     settingsSection: 'cliAccess'
   }
 }
@@ -183,11 +161,7 @@ export const CLIAccessLoading: Story = {
 export const CLIAccessRevoking: Story = {
   name: 'settings / cli access / revoking',
   args: {
-    cliAccessState: {
-      revokingSessionId: 'session-cli-remote',
-      sessions: cliSessions,
-      state: 'ready'
-    },
+    cliAccessState: cliAccessRevokingState,
     settingsSection: 'cliAccess'
   }
 }
@@ -195,11 +169,7 @@ export const CLIAccessRevoking: Story = {
 export const CLIAccessError: Story = {
   name: 'settings / cli access / error',
   args: {
-    cliAccessState: {
-      error: 'Session list failed.',
-      sessions: [],
-      state: 'error'
-    },
+    cliAccessState: cliAccessErrorState,
     settingsSection: 'cliAccess'
   }
 }
