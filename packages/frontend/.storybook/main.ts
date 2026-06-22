@@ -1,5 +1,6 @@
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { mergeConfig } from 'vite'
 import type { StorybookConfig } from '@storybook/react-vite'
 import type { InlineConfig } from 'vite'
 
@@ -25,10 +26,8 @@ const config: StorybookConfig = {
     }
   },
   addons: ['@storybook/addon-themes', '@storybook/addon-vitest'],
-  viteFinal: async (config_: InlineConfig) => {
-    const { mergeConfig } = await import('vite')
-
-    return mergeConfig(config_, {
+  viteFinal: (config_: InlineConfig) =>
+    mergeConfig(config_, {
       build: {
         // Storybook bundles its preview runtime and all story surfaces together;
         // keep production app builds on Vite's normal chunk warning threshold.
@@ -37,7 +36,7 @@ const config: StorybookConfig = {
       resolve: {
         alias: {
           '#runtime-public-env': runtimePublicEnvPath,
-          '@': resolve(frontendRoot, 'src')
+          src: resolve(frontendRoot, 'src')
         }
       },
       server: {
@@ -45,7 +44,6 @@ const config: StorybookConfig = {
         host: '0.0.0.0'
       }
     })
-  }
 }
 
 export default config

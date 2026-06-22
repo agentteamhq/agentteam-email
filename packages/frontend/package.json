@@ -32,6 +32,7 @@
     "storybook:screenshots": "node ./scripts/storybook-screenshots.mjs",
     "storybook:test": "vitest run --config vitest.storybook.config.ts",
     "storybook:test:watch": "vitest --config vitest.storybook.config.ts",
+    "routes:generate": "tsr generate",
     "typecheck": "tsc --noEmit",
     "typecheck:debug": "tsc --noEmit --listFiles"
   },
@@ -112,6 +113,7 @@
     "@tanstack/react-router-ssr-query": "catalog:",
     "@tanstack/react-start-client": "catalog:",
     "@tanstack/react-start-server": "catalog:",
+    "@tanstack/router-cli": "catalog:",
     "@tanstack/start-plugin-core": "catalog:",
     "@tanstack/start-server-core": "catalog:",
     "@testing-library/dom": "catalog:",

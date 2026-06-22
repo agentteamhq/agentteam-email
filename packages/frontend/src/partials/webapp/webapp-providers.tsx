@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
+import { ThemeProvider } from 'next-themes'
 
 import { Toaster } from '../../components/ui/sonner'
 
@@ -34,13 +35,20 @@ export function WebappProviders(props: PropsWithChildren<WebappProvidersProps>) 
             console.error('Error logged via onError:', error, info)
           }}
         >
-          <BetterAuthUIProvider
-            authClient={props.authClient}
-            redirectTo={props.redirectTo}
-            sessionCleanupEnabled={props.sessionCleanupEnabled}
+          <ThemeProvider
+            attribute='class'
+            defaultTheme='system'
+            disableTransitionOnChange
+            enableSystem
           >
-            {props.children}
-          </BetterAuthUIProvider>
+            <BetterAuthUIProvider
+              authClient={props.authClient}
+              redirectTo={props.redirectTo}
+              sessionCleanupEnabled={props.sessionCleanupEnabled}
+            >
+              {props.children}
+            </BetterAuthUIProvider>
+          </ThemeProvider>
           <Toaster />
         </ErrorBoundary>
       </EnvProvider>

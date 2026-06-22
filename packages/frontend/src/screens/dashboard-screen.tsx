@@ -19,7 +19,8 @@ import type { DashboardSearch } from '../routes/_authenticated/dashboard'
 import type { AuthProviderProps } from '@better-auth-ui/react'
 import type { SettingsRouteState } from '@main/backend/routes/webapp'
 
-import type { SettingsDialogContentState, SettingsSectionId } from '../partials/authenticated/settings-dialog'
+import type { SettingsDialogContentState } from '../partials/authenticated/settings-dialog'
+import type { SettingsSectionId } from '../partials/authenticated/settings-dialog-sections'
 import type { PublicEnv } from '../types'
 
 export interface DashboardScreenProps {
@@ -29,11 +30,15 @@ export interface DashboardScreenProps {
   defaultSettingsSection?: SettingsSectionId
   emailPreviewsById?: Readonly<Record<string, AuthenticatedEmailPreview>>
   onEmailAction?: (action: AuthenticatedEmailAction, email: AuthenticatedEmailPreview) => void
+  onSettingsOpenChange?: (open: boolean) => void
+  onSettingsSectionChange?: (section: SettingsSectionId) => void
   publicEnv: PublicEnv
   routeState: SettingsRouteState
   routeSearch?: DashboardSearch
   sessionCleanupEnabled?: boolean
+  settingsOpen?: boolean
   settingsContentState?: SettingsDialogContentState
+  settingsSection?: SettingsSectionId
   sidebarView?: AuthenticatedSidebarView
 }
 
@@ -44,11 +49,15 @@ export function DashboardScreen({
   defaultSettingsSection,
   emailPreviewsById,
   onEmailAction,
+  onSettingsOpenChange,
+  onSettingsSectionChange,
   publicEnv,
   routeState,
   routeSearch,
   sessionCleanupEnabled,
+  settingsOpen: settingsOpenProp,
   settingsContentState,
+  settingsSection: settingsSectionProp,
   sidebarView = defaultAuthenticatedSidebarView
 }: DashboardScreenProps) {
   const requestedSettingsSection =
@@ -62,12 +71,16 @@ export function DashboardScreen({
   const [remoteImagesAllowedByEmailId, setRemoteImagesAllowedByEmailId] = React.useState<ReadonlySet<string>>(
     () => new Set()
   )
-  const [settingsOpen, setSettingsOpen] = React.useState(
+  const [uncontrolledSettingsOpen, setUncontrolledSettingsOpen] = React.useState(
     defaultSettingsOpen ?? Boolean(requestedSettingsSection)
   )
-  const [settingsSection, setSettingsSection] = React.useState<SettingsSectionId>(
-    requestedSettingsSection ?? defaultSettingsSection ?? 'messagesMedia'
+  const [uncontrolledSettingsSection, setUncontrolledSettingsSection] = React.useState<SettingsSectionId>(
+    requestedSettingsSection ?? defaultSettingsSection ?? 'account'
   )
+  const settingsOpen = settingsOpenProp ?? uncontrolledSettingsOpen
+  const settingsSection = settingsSectionProp ?? uncontrolledSettingsSection
+  const setSettingsOpen = onSettingsOpenChange ?? setUncontrolledSettingsOpen
+  const setSettingsSection = onSettingsSectionChange ?? setUncontrolledSettingsSection
   const resolvedSidebarView = React.useMemo(
     () => ({
       ...withActiveSidebarItem(sidebarView, activeItemId),
@@ -141,7 +154,6 @@ export function DashboardScreen({
         settingsOpen={settingsOpen}
         settingsSection={settingsSection}
         sidebarView={resolvedSidebarView}
-        user={routeState.user}
       >
         <AuthenticatedDashboardContent
           onEmailAction={handleEmailAction}

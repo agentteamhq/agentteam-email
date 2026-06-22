@@ -1,22 +1,18 @@
 import * as React from 'react'
 import {
-  BellIcon,
-  ChatCircleIcon,
-  CheckIcon,
   CloudIcon,
-  GearSixIcon,
   GlobeHemisphereWestIcon,
-  GlobeIcon,
-  HouseIcon,
-  KeyboardIcon,
+  IdentificationCardIcon,
   LinkIcon,
-  ListIcon,
   LockIcon,
-  PaintBrushIcon,
-  VideoCameraIcon
+  SuitcaseSimpleIcon,
+  UserCircleIcon,
+  UsersIcon
 } from '@phosphor-icons/react'
 import { useRouter } from '@tanstack/react-router'
 
+import { Organization } from '../../components/auth/organization/organization'
+import { Settings } from '../../components/auth/settings/settings'
 import { Badge } from '../../components/ui/badge'
 import {
   Breadcrumb,
@@ -48,21 +44,8 @@ import {
   SidebarProvider
 } from '../../components/ui/sidebar'
 import { rpc } from '../../lib/rpc-api-client'
+import type { SettingsSectionId } from './settings-dialog-sections'
 import type { CloudflareAccountSummary, CloudflareStatusResult, CloudflareZoneSummary } from '@main/backend'
-
-export type SettingsSectionId =
-  | 'notifications'
-  | 'navigation'
-  | 'home'
-  | 'appearance'
-  | 'messagesMedia'
-  | 'languageRegion'
-  | 'accessibility'
-  | 'markAsRead'
-  | 'audioVideo'
-  | 'connectedAccounts'
-  | 'privacyVisibility'
-  | 'advanced'
 
 export type SettingsDialogContentState = 'ready' | 'loading' | 'empty'
 
@@ -72,18 +55,12 @@ export interface CloudflareOAuthCallbackState {
 }
 
 const settingsNavigation = [
-  { id: 'notifications', name: 'Notifications', icon: BellIcon },
-  { id: 'navigation', name: 'Navigation', icon: ListIcon },
-  { id: 'home', name: 'Home', icon: HouseIcon },
-  { id: 'appearance', name: 'Appearance', icon: PaintBrushIcon },
-  { id: 'messagesMedia', name: 'Messages & media', icon: ChatCircleIcon },
-  { id: 'languageRegion', name: 'Language & region', icon: GlobeIcon },
-  { id: 'accessibility', name: 'Accessibility', icon: KeyboardIcon },
-  { id: 'markAsRead', name: 'Mark as read', icon: CheckIcon },
-  { id: 'audioVideo', name: 'Audio & video', icon: VideoCameraIcon },
-  { id: 'connectedAccounts', name: 'Connected accounts', icon: LinkIcon },
-  { id: 'privacyVisibility', name: 'Privacy & visibility', icon: LockIcon },
-  { id: 'advanced', name: 'Advanced', icon: GearSixIcon }
+  { id: 'account', name: 'Account', icon: UserCircleIcon },
+  { id: 'security', name: 'Security', icon: LockIcon },
+  { id: 'organizations', name: 'Organizations', icon: SuitcaseSimpleIcon },
+  { id: 'organizationSettings', name: 'Organization settings', icon: IdentificationCardIcon },
+  { id: 'organizationPeople', name: 'Organization people', icon: UsersIcon },
+  { id: 'connectedAccounts', name: 'Connected accounts', icon: LinkIcon }
 ] satisfies Array<{
   icon: React.ComponentType<{ className?: string }>
   id: SettingsSectionId
@@ -111,7 +88,7 @@ export function SettingsDialog({
   activeSection: activeSectionProp,
   cloudflareOAuthCallback,
   contentState = 'ready',
-  defaultActiveSection = 'messagesMedia',
+  defaultActiveSection = 'account',
   defaultOpen = true,
   onActiveSectionChange,
   onOpenChange,
@@ -133,9 +110,9 @@ export function SettingsDialog({
       onOpenChange={setOpen}
     >
       {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
-      <DialogContent className='overflow-hidden p-0 md:max-h-[500px] md:max-w-[700px] lg:max-w-[800px]'>
+      <DialogContent className='overflow-hidden p-0 md:max-h-[760px] md:max-w-[860px] lg:max-w-[980px]'>
         <DialogTitle className='sr-only'>Settings</DialogTitle>
-        <DialogDescription className='sr-only'>Customize your settings here.</DialogDescription>
+        <DialogDescription className='sr-only'>Manage account, security, organization, and connected account settings.</DialogDescription>
         <SidebarProvider className='items-start'>
           <Sidebar
             collapsible='none'
@@ -168,7 +145,7 @@ export function SettingsDialog({
               </SidebarGroup>
             </SidebarContent>
           </Sidebar>
-          <main className='flex h-[480px] min-w-0 flex-1 flex-col overflow-hidden'>
+          <main className='flex h-[min(760px,calc(100svh-2rem))] min-w-0 flex-1 flex-col overflow-hidden'>
             <header
               className='flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear
                 group-has-data-[collapsible=icon]/sidebar-wrapper:h-12'
@@ -187,7 +164,7 @@ export function SettingsDialog({
                 </Breadcrumb>
               </div>
             </header>
-            <div className='flex flex-1 flex-col gap-4 overflow-y-auto p-4 pt-0'>
+            <div className='flex flex-1 flex-col gap-4 overflow-y-auto p-4 pt-0 md:p-6 md:pt-0'>
               <SettingsPanelContent
                 cloudflareOAuthCallback={cloudflareOAuthCallback}
                 contentState={contentState}
@@ -220,31 +197,38 @@ function SettingsPanelContent({
         description={
           section === 'connectedAccounts'
             ? 'Connected Cloudflare domains will appear here after an account is linked.'
-            : 'No configurable options are available for this settings section yet.'
+            : 'This settings section has no records to show yet.'
         }
-        title={section === 'connectedAccounts' ? 'No connected domains' : 'No settings yet'}
+        title={section === 'connectedAccounts' ? 'No connected domains' : 'Nothing to show'}
       />
     )
+  }
+
+  if (section === 'account') {
+    return <Settings view='account' hideNav />
+  }
+
+  if (section === 'security') {
+    return <Settings view='security' hideNav />
+  }
+
+  if (section === 'organizations') {
+    return <Settings view='organizations' hideNav />
+  }
+
+  if (section === 'organizationSettings') {
+    return <Organization view='settings' hideNav />
+  }
+
+  if (section === 'organizationPeople') {
+    return <Organization view='people' hideNav />
   }
 
   if (section === 'connectedAccounts') {
     return <CloudflareConnectedAccountsPanel cloudflareOAuthCallback={cloudflareOAuthCallback} />
   }
 
-  return <SettingsPlaceholderContent />
-}
-
-function SettingsPlaceholderContent() {
-  return (
-    <>
-      {Array.from({ length: 10 }).map((_, index) => (
-        <div
-          key={index}
-          className='bg-muted/50 aspect-video max-w-3xl rounded-xl'
-        />
-      ))}
-    </>
-  )
+  return null
 }
 
 function SettingsLoadingContent() {

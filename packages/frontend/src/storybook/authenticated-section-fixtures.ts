@@ -9,6 +9,7 @@ import blockedRemoteImagesHtml from './fixtures/emails/blocked-remote-images.fix
 import conversationLatestHtml from './fixtures/emails/conversation-latest.fixture?raw'
 import conversationOriginalHtml from './fixtures/emails/conversation-original.fixture?raw'
 import welcomeEmailHtml from './fixtures/emails/welcome-email.fixture?raw'
+import { storyAuthClient } from './auth-client-fixtures'
 import { authenticatedSettingsRouteState, storyPublicEnv } from './screen-fixtures'
 import type { DashboardScreenProps } from '../screens/dashboard-screen'
 import type {
@@ -18,11 +19,15 @@ import type {
 } from '../partials/authenticated/authenticated-shell-models'
 
 export const authenticatedSectionBaseArgs = {
+  authClient: storyAuthClient,
   dashboardView: defaultAuthenticatedDashboardView,
   publicEnv: storyPublicEnv,
   routeState: authenticatedSettingsRouteState,
   sessionCleanupEnabled: false
-} satisfies Pick<DashboardScreenProps, 'dashboardView' | 'publicEnv' | 'routeState' | 'sessionCleanupEnabled'>
+} satisfies Pick<
+  DashboardScreenProps,
+  'authClient' | 'dashboardView' | 'publicEnv' | 'routeState' | 'sessionCleanupEnabled'
+>
 
 export const loadingAuthenticatedSidebarView = {
   ...defaultAuthenticatedSidebarView,

@@ -25,6 +25,10 @@ declare const TwoFactorIdBrand: unique symbol
 export type TwoFactorId = UUIDv7 & { readonly [TwoFactorIdBrand]: true }
 export { TwoFactorIdBrand }
 
+declare const PasskeyIdBrand: unique symbol
+export type PasskeyId = UUIDv7 & { readonly [PasskeyIdBrand]: true }
+export { PasskeyIdBrand }
+
 declare const SessionIdBrand: unique symbol
 export type SessionId = UUIDv7 & { readonly [SessionIdBrand]: true }
 export { SessionIdBrand }
@@ -143,6 +147,8 @@ export const userSchemaDefinition = {
   isGenerated: { default: false, required: true, type: Boolean },
   generatedFromSeed: { default: null, type: String },
   name: { default: null, type: String },
+  username: { default: null, type: String },
+  displayUsername: { default: null, type: String },
   image: { default: null, type: String },
   isAnonymous: { default: null, type: Boolean },
   twoFactorEnabled: { default: null, type: Boolean },
@@ -170,14 +176,23 @@ export const userSchema = new Schema<UserDocument>(userSchemaDefinition, {
   ...mongooseTimestampSchemaOptions,
   collection: 'user',
   virtuals: { publicId: publicIdVirtual }
-}).index(
-  { email: 1 },
-  {
-    name: 'user_email_unique',
-    partialFilterExpression: { email: { $type: 'string' } },
-    unique: true
-  }
-)
+})
+  .index(
+    { email: 1 },
+    {
+      name: 'user_email_unique',
+      partialFilterExpression: { email: { $type: 'string' } },
+      unique: true
+    }
+  )
+  .index(
+    { username: 1 },
+    {
+      name: 'user_username_unique',
+      partialFilterExpression: { username: { $type: 'string' } },
+      unique: true
+    }
+  )
 
 export const twoFactorSchemaDefinition = {
   _id: uuidV7IdField(),
@@ -198,6 +213,33 @@ export const twoFactorSchema = new Schema<TwoFactorDocument>(twoFactorSchemaDefi
   ...mongooseTimestampSchemaOptions,
   collection: 'twoFactor'
 }).index({ userId: 1 }, { name: 'twoFactor_userId' })
+
+export const passkeySchemaDefinition = {
+  _id: uuidV7IdField(),
+  name: { default: null, type: String },
+  publicKey: { required: true, type: String },
+  userId: requiredUUIDv7Field(),
+  credentialID: { required: true, type: String },
+  counter: { required: true, type: Number },
+  deviceType: { required: true, type: String },
+  backedUp: { required: true, type: Boolean },
+  transports: { default: null, type: String },
+  createdAt: createdAtField(),
+  aaguid: { default: null, type: String }
+} as const
+
+export type PasskeyRawDocument = SchemaRawDocument<typeof passkeySchemaDefinition>
+export type PasskeyDocument = ReplaceDocumentFields<
+  PasskeyRawDocument,
+  { _id: PasskeyId; userId: UserId }
+>
+
+export const passkeySchema = new Schema<PasskeyDocument>(passkeySchemaDefinition, {
+  ...mongooseCreatedAtOnlySchemaOptions,
+  collection: 'passkey'
+})
+  .index({ userId: 1 }, { name: 'passkey_userId' })
+  .index({ credentialID: 1 }, { name: 'passkey_credentialID_unique', unique: true })
 
 export const sessionSchemaDefinition = {
   _id: uuidV7IdField(),
@@ -681,6 +723,7 @@ export const betterAuthSchemas = {
   oauthConsent: oauthConsentSchema,
   oauthRefreshToken: oauthRefreshTokenSchema,
   organization: organizationSchema,
+  passkey: passkeySchema,
   session: sessionSchema,
   subscription: subscriptionSchema,
   team: teamSchema,

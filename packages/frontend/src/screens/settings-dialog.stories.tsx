@@ -1,40 +1,62 @@
-import { SettingsDialog } from '../partials/authenticated/settings-dialog'
+import { authenticatedSectionBaseArgs } from '../storybook/authenticated-section-fixtures'
+import { DashboardScreen } from './dashboard-screen'
 import type { Meta, StoryObj } from '@storybook/react'
 
 const meta = {
   title: 'Mail Client/Settings',
-  component: SettingsDialog,
+  component: DashboardScreen,
+  args: {
+    ...authenticatedSectionBaseArgs,
+    settingsOpen: true
+  },
   parameters: {
     layout: 'fullscreen'
   }
-} satisfies Meta<typeof SettingsDialog>
+} satisfies Meta<typeof DashboardScreen>
 
 export default meta
 
 type Story = StoryObj<typeof meta>
 
-export const Open: Story = {
-  name: 'settings / open'
-}
-
-export const Loading: Story = {
-  name: 'settings / loading',
+export const Account: Story = {
+  name: 'settings / account',
   args: {
-    contentState: 'loading'
+    settingsSection: 'account'
   }
 }
 
-export const Empty: Story = {
-  name: 'settings / empty',
+export const Security: Story = {
+  name: 'settings / security',
   args: {
-    contentState: 'empty'
+    settingsSection: 'security'
   }
 }
 
-export const ConnectedAccounts: Story = {
-  name: 'settings / connected accounts',
+export const Organizations: Story = {
+  name: 'settings / organizations',
   args: {
-    activeSection: 'connectedAccounts',
-    contentState: 'empty'
+    settingsSection: 'organizations'
+  }
+}
+
+export const OrganizationSettings: Story = {
+  name: 'organization / settings',
+  args: {
+    settingsSection: 'organizationSettings'
+  }
+}
+
+export const OrganizationPeople: Story = {
+  name: 'organization / people',
+  args: {
+    settingsSection: 'organizationPeople'
+  }
+}
+
+export const ConnectedAccountsEmpty: Story = {
+  name: 'settings / connected accounts empty',
+  args: {
+    settingsContentState: 'empty',
+    settingsSection: 'connectedAccounts'
   }
 }

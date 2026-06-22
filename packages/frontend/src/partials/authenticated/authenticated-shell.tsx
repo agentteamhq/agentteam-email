@@ -6,7 +6,6 @@ import {
   ArrowBendUpRightIcon,
   ArrowLeftIcon,
   CodeIcon,
-  CommandIcon,
   DotsThreeIcon,
   EnvelopeSimpleIcon,
   FileIcon,
@@ -21,7 +20,8 @@ import {
   XIcon
 } from '@phosphor-icons/react'
 
-import { NavUser } from '../../components/nav-user'
+import { OrganizationSwitcher } from '../../components/auth/organization/organization-switcher'
+import { UserButton } from '../../components/auth/user/user-button'
 import { Button } from '../../components/ui/button'
 import {
   Dialog,
@@ -71,12 +71,8 @@ import type {
   AuthenticatedMailNavIconKey,
   AuthenticatedSidebarView
 } from './authenticated-shell-models'
-import type {
-  CloudflareOAuthCallbackState,
-  SettingsDialogContentState,
-  SettingsSectionId
-} from './settings-dialog'
-import type { WebappRouteUser } from '@main/backend/routes/webapp'
+import type { CloudflareOAuthCallbackState, SettingsDialogContentState } from './settings-dialog'
+import type { SettingsSectionId } from './settings-dialog-sections'
 
 export interface AuthenticatedShellProps {
   children: React.ReactNode
@@ -92,7 +88,6 @@ export interface AuthenticatedShellProps {
   settingsSection: SettingsSectionId
   sidebarView?: AuthenticatedSidebarView
   title?: string
-  user: WebappRouteUser
 }
 
 export function AuthenticatedShell({
@@ -108,13 +103,8 @@ export function AuthenticatedShell({
   settingsOpen,
   settingsSection,
   sidebarView = defaultAuthenticatedSidebarView,
-  title = 'Inbox',
-  user
+  title = 'Inbox'
 }: AuthenticatedShellProps) {
-  const openSettings = React.useCallback(() => {
-    onSettingsOpenChange(true)
-  }, [onSettingsOpenChange])
-
   return (
     <SidebarProvider
       style={
@@ -125,11 +115,9 @@ export function AuthenticatedShell({
     >
       <AuthenticatedSidebar
         onMailSelect={onMailSelect}
-        onOpenSettings={openSettings}
         onSearchChange={onSidebarSearchChange}
         onSelectItem={onSidebarItemSelect}
         onUnreadOnlyChange={onSidebarUnreadOnlyChange}
-        user={toNavUser(user)}
         view={sidebarView}
       />
       <SidebarInset>
@@ -154,25 +142,17 @@ export function AuthenticatedShell({
 
 export interface AuthenticatedSidebarProps {
   onMailSelect?: (mailId: string) => void
-  onOpenSettings?: () => void
   onSearchChange?: (query: string) => void
   onSelectItem?: (itemId: string) => void
   onUnreadOnlyChange?: (unreadOnly: boolean) => void
-  user: {
-    avatar: string
-    email: string
-    name: string
-  }
   view?: AuthenticatedSidebarView
 }
 
 export function AuthenticatedSidebar({
   onMailSelect,
-  onOpenSettings,
   onSearchChange,
   onSelectItem,
   onUnreadOnlyChange,
-  user,
   view = defaultAuthenticatedSidebarView
 }: AuthenticatedSidebarProps) {
   const { setOpen } = useSidebar()
@@ -200,11 +180,11 @@ export function AuthenticatedSidebar({
                     className='bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8
                       items-center justify-center rounded-lg'
                   >
-                    <CommandIcon className='size-4' />
+                    <EnvelopeSimpleIcon className='size-4' />
                   </div>
                   <div className='grid flex-1 text-left text-sm leading-tight'>
-                    <span className='truncate font-medium'>Acme Inc</span>
-                    <span className='truncate text-xs'>Enterprise</span>
+                    <span className='truncate font-medium'>AgentTeam Email</span>
+                    <span className='truncate text-xs'>Mail client</span>
                   </div>
                 </a>
               </SidebarMenuButton>
@@ -236,9 +216,10 @@ export function AuthenticatedSidebar({
           </SidebarGroup>
         </SidebarContent>
         <SidebarFooter>
-          <NavUser
-            user={user}
-            onOpenSettings={onOpenSettings}
+          <UserButton
+            align='start'
+            sideOffset={8}
+            size='icon'
           />
         </SidebarFooter>
       </Sidebar>
@@ -247,7 +228,12 @@ export function AuthenticatedSidebar({
         collapsible='none'
         className='hidden min-w-0 flex-1 md:flex'
       >
-        <SidebarHeader className='gap-3.5 border-b p-4'>
+        <SidebarHeader className='gap-3 border-b p-3'>
+          <OrganizationSwitcher
+            align='start'
+            className='w-full justify-between border px-2'
+            hideSlug={false}
+          />
           <div className='flex w-full items-center justify-between'>
             <div className='text-foreground text-base font-medium'>{activeItem?.title ?? 'Inbox'}</div>
             <Label className='flex items-center gap-2 text-sm'>
@@ -1027,16 +1013,4 @@ function SidebarRailLoading() {
       ))}
     </div>
   )
-}
-
-function toNavUser(user: WebappRouteUser): {
-  avatar: string
-  email: string
-  name: string
-} {
-  return {
-    avatar: user?.image ?? '',
-    email: user?.email ?? 'm@example.com',
-    name: user?.name ?? 'shadcn'
-  }
 }

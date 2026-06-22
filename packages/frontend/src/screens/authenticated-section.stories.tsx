@@ -145,17 +145,12 @@ export const MessageRowSelection: Story = {
   }
 }
 
-export const SettingsFromAccountMenu: Story = {
-  name: 'settings / account menu',
+export const AccountMenu: Story = {
+  name: 'account / user menu',
   play: async ({ canvasElement }) => {
     const body = within(canvasElement.ownerDocument.body)
 
-    await userEvent.click(await body.findByRole('button', { name: /open account menu/i }))
-    await userEvent.click(await body.findByRole('menuitem', { name: /billing/i }))
-
-    const dialog = await body.findByRole('dialog')
-
-    await expect(dialog).toBeInTheDocument()
-    await expect(dialog).toHaveTextContent(/Messages & media/i)
+    await userEvent.click(await body.findByRole('button', { name: /^account$/i }))
+    await expect(await body.findByRole('menuitem', { name: /^settings$/i })).toBeInTheDocument()
   }
 }

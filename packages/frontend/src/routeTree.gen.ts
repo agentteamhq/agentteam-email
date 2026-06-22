@@ -23,7 +23,10 @@ import { Route as CallbackRouteImport } from './routes/callback'
 import { Route as AcceptInviteRouteImport } from './routes/accept-invite'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedSettingsSectionRouteImport } from './routes/_authenticated/settings.$section'
+import { Route as AuthenticatedOrganizationSectionRouteImport } from './routes/_authenticated/organization.$section'
 
 const VerificationEmailSentRoute = VerificationEmailSentRouteImport.update({
   id: '/verification-email-sent',
@@ -94,11 +97,28 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedSettingsSectionRoute =
+  AuthenticatedSettingsSectionRouteImport.update({
+    id: '/$section',
+    path: '/$section',
+    getParentRoute: () => AuthenticatedSettingsRoute,
+  } as any)
+const AuthenticatedOrganizationSectionRoute =
+  AuthenticatedOrganizationSectionRouteImport.update({
+    id: '/organization/$section',
+    path: '/organization/$section',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -115,6 +135,9 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/verification-email-sent': typeof VerificationEmailSentRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/settings': typeof AuthenticatedSettingsRouteWithChildren
+  '/organization/$section': typeof AuthenticatedOrganizationSectionRoute
+  '/settings/$section': typeof AuthenticatedSettingsSectionRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -131,6 +154,9 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/verification-email-sent': typeof VerificationEmailSentRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/settings': typeof AuthenticatedSettingsRouteWithChildren
+  '/organization/$section': typeof AuthenticatedOrganizationSectionRoute
+  '/settings/$section': typeof AuthenticatedSettingsSectionRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -149,6 +175,9 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/verification-email-sent': typeof VerificationEmailSentRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/settings': typeof AuthenticatedSettingsRouteWithChildren
+  '/_authenticated/organization/$section': typeof AuthenticatedOrganizationSectionRoute
+  '/_authenticated/settings/$section': typeof AuthenticatedSettingsSectionRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -167,6 +196,9 @@ export interface FileRouteTypes {
     | '/signup'
     | '/verification-email-sent'
     | '/dashboard'
+    | '/settings'
+    | '/organization/$section'
+    | '/settings/$section'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -183,6 +215,9 @@ export interface FileRouteTypes {
     | '/signup'
     | '/verification-email-sent'
     | '/dashboard'
+    | '/settings'
+    | '/organization/$section'
+    | '/settings/$section'
   id:
     | '__root__'
     | '/'
@@ -200,6 +235,9 @@ export interface FileRouteTypes {
     | '/signup'
     | '/verification-email-sent'
     | '/_authenticated/dashboard'
+    | '/_authenticated/settings'
+    | '/_authenticated/organization/$section'
+    | '/_authenticated/settings/$section'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -319,6 +357,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/settings': {
+      id: '/_authenticated/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AuthenticatedSettingsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/dashboard': {
       id: '/_authenticated/dashboard'
       path: '/dashboard'
@@ -326,15 +371,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/settings/$section': {
+      id: '/_authenticated/settings/$section'
+      path: '/$section'
+      fullPath: '/settings/$section'
+      preLoaderRoute: typeof AuthenticatedSettingsSectionRouteImport
+      parentRoute: typeof AuthenticatedSettingsRoute
+    }
+    '/_authenticated/organization/$section': {
+      id: '/_authenticated/organization/$section'
+      path: '/organization/$section'
+      fullPath: '/organization/$section'
+      preLoaderRoute: typeof AuthenticatedOrganizationSectionRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
+interface AuthenticatedSettingsRouteChildren {
+  AuthenticatedSettingsSectionRoute: typeof AuthenticatedSettingsSectionRoute
+}
+
+const AuthenticatedSettingsRouteChildren: AuthenticatedSettingsRouteChildren = {
+  AuthenticatedSettingsSectionRoute: AuthenticatedSettingsSectionRoute,
+}
+
+const AuthenticatedSettingsRouteWithChildren =
+  AuthenticatedSettingsRoute._addFileChildren(
+    AuthenticatedSettingsRouteChildren,
+  )
+
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRouteWithChildren
+  AuthenticatedOrganizationSectionRoute: typeof AuthenticatedOrganizationSectionRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedSettingsRoute: AuthenticatedSettingsRouteWithChildren,
+  AuthenticatedOrganizationSectionRoute: AuthenticatedOrganizationSectionRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

@@ -1,11 +1,18 @@
 import { useSession } from '@better-auth-ui/react'
 import { useLocation, useRouter } from '@tanstack/react-router'
 import debug from 'debug'
+import { useTheme } from 'next-themes'
 import { useCallback, useEffect, useRef } from 'react'
 
 import { AuthProvider } from '../../components/auth/auth-provider'
+import { apiKeyPlugin } from '../../lib/auth/api-key-plugin'
 import { deleteUserPlugin } from '../../lib/auth/delete-user-plugin'
 import { magicLinkPlugin } from '../../lib/auth/magic-link-plugin'
+import { multiSessionPlugin } from '../../lib/auth/multi-session-plugin'
+import { organizationPlugin } from '../../lib/auth/organization-plugin'
+import { passkeyPlugin } from '../../lib/auth/passkey-plugin'
+import { themePlugin } from '../../lib/auth/theme-plugin'
+import { usernamePlugin } from '../../lib/auth/username-plugin'
 import { authReactClient } from '../../lib/auth-react-client'
 import { clearPersistedStore } from '../../store/use-store'
 
@@ -123,7 +130,16 @@ export function BetterAuthUIProvider({
       }}
       redirectTo={redirectTo}
       navigate={navigate}
-      plugins={[magicLinkPlugin(), deleteUserPlugin({ sendDeleteAccountVerification: true })]}
+      plugins={[
+        magicLinkPlugin(),
+        usernamePlugin(),
+        passkeyPlugin(),
+        multiSessionPlugin(),
+        organizationPlugin(),
+        apiKeyPlugin({ organization: true }),
+        themePlugin({ useTheme }),
+        deleteUserPlugin({ sendDeleteAccountVerification: true })
+      ]}
       Link={Link}
       viewPaths={{
         auth: {
@@ -135,7 +151,8 @@ export function BetterAuthUIProvider({
         },
         settings: {
           account: 'account',
-          security: 'account'
+          security: 'security',
+          organizations: 'organizations'
         }
       }}
       socialProviders={[

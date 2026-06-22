@@ -16,7 +16,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '#runtime-public-env': resolve(frontendRoot, 'src/runtime-public-env.ts'),
-      '@': resolve(frontendRoot, 'src')
+      src: resolve(frontendRoot, 'src')
     },
     dedupe: ['react', 'react-dom']
   },
