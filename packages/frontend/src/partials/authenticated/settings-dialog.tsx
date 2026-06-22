@@ -15,7 +15,7 @@ import {
   PaintBrushIcon,
   VideoCameraIcon
 } from '@phosphor-icons/react'
-import type { CloudflareAccountSummary, CloudflareStatusResult, CloudflareZoneSummary } from '@main/backend'
+import { useRouter } from '@tanstack/react-router'
 
 import { Badge } from '../../components/ui/badge'
 import {
@@ -48,6 +48,7 @@ import {
   SidebarProvider
 } from '../../components/ui/sidebar'
 import { rpc } from '../../lib/rpc-api-client'
+import type { CloudflareAccountSummary, CloudflareStatusResult, CloudflareZoneSummary } from '@main/backend'
 
 export type SettingsSectionId =
   | 'notifications'
@@ -64,6 +65,11 @@ export type SettingsSectionId =
   | 'advanced'
 
 export type SettingsDialogContentState = 'ready' | 'loading' | 'empty'
+
+export interface CloudflareOAuthCallbackState {
+  intentPublicId: string
+  oauthError?: string
+}
 
 const settingsNavigation = [
   { id: 'notifications', name: 'Notifications', icon: BellIcon },
@@ -91,6 +97,7 @@ const settingsNames = Object.fromEntries(settingsNavigation.map((item) => [item.
 
 interface SettingsDialogProps {
   activeSection?: SettingsSectionId
+  cloudflareOAuthCallback?: CloudflareOAuthCallbackState | null
   contentState?: SettingsDialogContentState
   defaultActiveSection?: SettingsSectionId
   defaultOpen?: boolean
@@ -102,6 +109,7 @@ interface SettingsDialogProps {
 
 export function SettingsDialog({
   activeSection: activeSectionProp,
+  cloudflareOAuthCallback,
   contentState = 'ready',
   defaultActiveSection = 'messagesMedia',
   defaultOpen = true,
@@ -181,6 +189,7 @@ export function SettingsDialog({
             </header>
             <div className='flex flex-1 flex-col gap-4 overflow-y-auto p-4 pt-0'>
               <SettingsPanelContent
+                cloudflareOAuthCallback={cloudflareOAuthCallback}
                 contentState={contentState}
                 section={activeSection}
               />
@@ -193,9 +202,11 @@ export function SettingsDialog({
 }
 
 function SettingsPanelContent({
+  cloudflareOAuthCallback,
   contentState,
   section
 }: {
+  cloudflareOAuthCallback?: CloudflareOAuthCallbackState | null
   contentState: SettingsDialogContentState
   section: SettingsSectionId
 }) {
@@ -217,7 +228,7 @@ function SettingsPanelContent({
   }
 
   if (section === 'connectedAccounts') {
-    return <CloudflareConnectedAccountsPanel />
+    return <CloudflareConnectedAccountsPanel cloudflareOAuthCallback={cloudflareOAuthCallback} />
   }
 
   return <SettingsPlaceholderContent />
@@ -261,7 +272,12 @@ function SettingsEmptyContent({ description, title }: { description: string; tit
   )
 }
 
-function CloudflareConnectedAccountsPanel() {
+function CloudflareConnectedAccountsPanel({
+  cloudflareOAuthCallback
+}: {
+  cloudflareOAuthCallback?: CloudflareOAuthCallbackState | null
+}) {
+  const router = useRouter()
   const [status, setStatus] = React.useState<CloudflareStatusResult | null>(null)
   const [accounts, setAccounts] = React.useState<CloudflareAccountSummary[]>([])
   const [zones, setZones] = React.useState<CloudflareZoneSummary[]>([])
@@ -270,6 +286,7 @@ function CloudflareConnectedAccountsPanel() {
   const [domain, setDomain] = React.useState('')
   const [message, setMessage] = React.useState<string | null>(null)
   const [busy, setBusy] = React.useState(false)
+  const handledCloudflareIntentIdsRef = React.useRef(new Set<string>())
 
   const activeGrant = status?.grants.find((grant) => grant.status === 'active') ?? null
   const inactiveGrants = status?.grants.filter((grant) => grant.status !== 'active') ?? []
@@ -284,28 +301,31 @@ function CloudflareConnectedAccountsPanel() {
     }
     setStatus(result.data)
   }, [])
+  const handleUnexpectedCloudflareActionError = React.useCallback((error: unknown) => {
+    setMessage(error instanceof Error ? error.message : 'Cloudflare action failed')
+    setBusy(false)
+  }, [])
 
   React.useEffect(() => {
-    refreshStatus().catch((error: unknown) => {
-      setMessage(error instanceof Error ? error.message : 'Failed to load Cloudflare status')
-    })
+    Promise.resolve()
+      .then(refreshStatus)
+      .catch((error: unknown) => {
+        setMessage(error instanceof Error ? error.message : 'Failed to load Cloudflare status')
+      })
   }, [refreshStatus])
 
   React.useEffect(() => {
-    if (typeof window === 'undefined') {
+    const intentPublicId = cloudflareOAuthCallback?.intentPublicId
+    const oauthError = cloudflareOAuthCallback?.oauthError
+
+    if (!intentPublicId || handledCloudflareIntentIdsRef.current.has(intentPublicId)) {
       return
     }
+    handledCloudflareIntentIdsRef.current.add(intentPublicId)
 
-    const url = new URL(window.location.href)
-    const intentPublicId = url.searchParams.get('cloudflareIntentId')
-    const oauthError = url.searchParams.get('cloudflareOAuthError')
-
-    if (!intentPublicId) {
-      return
-    }
-
-    setBusy(true)
     const finalize = async () => {
+      setBusy(true)
+
       if (oauthError) {
         throw new Error('Cloudflare authorization was not completed')
       }
@@ -321,21 +341,23 @@ function CloudflareConnectedAccountsPanel() {
         setMessage('Cloudflare account connected')
       }
 
-      url.searchParams.delete('settings')
-      url.searchParams.delete('cloudflareIntentId')
-      url.searchParams.delete('cloudflareOAuthError')
-      window.history.replaceState(null, '', url)
+      await router.navigate({
+        to: '/dashboard/',
+        search: {},
+        replace: true
+      })
       await refreshStatus()
     }
 
-    finalize()
+    Promise.resolve()
+      .then(finalize)
       .catch((error: unknown) => {
         setMessage(error instanceof Error ? error.message : 'Failed to finalize Cloudflare OAuth')
       })
       .finally(() => {
         setBusy(false)
       })
-  }, [refreshStatus])
+  }, [cloudflareOAuthCallback?.intentPublicId, cloudflareOAuthCallback?.oauthError, refreshStatus, router])
 
   const startOAuth = async () => {
     setBusy(true)
@@ -345,7 +367,7 @@ function CloudflareConnectedAccountsPanel() {
       if (result.error) {
         throw createRpcError(result.error, result.status)
       }
-      window.location.assign(result.data.redirectUrl)
+      await router.navigate({ href: result.data.redirectUrl })
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to start Cloudflare OAuth')
       setBusy(false)
@@ -453,7 +475,9 @@ function CloudflareConnectedAccountsPanel() {
         <div className='mt-4 flex flex-wrap gap-2'>
           <Button
             disabled={busy}
-            onClick={startOAuth}
+            onClick={() => {
+              startOAuth().catch(handleUnexpectedCloudflareActionError)
+            }}
             size='sm'
           >
             <CloudIcon />
@@ -461,7 +485,9 @@ function CloudflareConnectedAccountsPanel() {
           </Button>
           <Button
             disabled={!activeGrant || busy}
-            onClick={loadAccounts}
+            onClick={() => {
+              loadAccounts().catch(handleUnexpectedCloudflareActionError)
+            }}
             size='sm'
             variant='outline'
           >
@@ -544,7 +570,9 @@ function CloudflareConnectedAccountsPanel() {
             <div className='flex items-end'>
               <Button
                 disabled={!selectedAccountId || busy}
-                onClick={loadZones}
+                onClick={() => {
+                  loadZones().catch(handleUnexpectedCloudflareActionError)
+                }}
                 size='sm'
                 variant='outline'
               >
@@ -591,7 +619,9 @@ function CloudflareConnectedAccountsPanel() {
           <Button
             className='w-fit'
             disabled={!selectedAccountId || !selectedZoneId || !domain || busy}
-            onClick={connectDomain}
+            onClick={() => {
+              connectDomain().catch(handleUnexpectedCloudflareActionError)
+            }}
             size='sm'
           >
             Connect domain
@@ -707,7 +737,7 @@ function CloudflareConnectedAccountsPanel() {
                 className='w-fit'
                 disabled={busy || connection.status === 'disconnected'}
                 onClick={() => {
-                  void provisionConnection(connection.publicId)
+                  provisionConnection(connection.publicId).catch(handleUnexpectedCloudflareActionError)
                 }}
                 size='sm'
                 variant='outline'
