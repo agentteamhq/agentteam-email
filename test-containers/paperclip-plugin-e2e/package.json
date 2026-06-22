@@ -1,0 +1,30 @@
+{
+  "name": "@main/paperclip-plugin-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "preview:logs": "node ./paperclip-preview.mjs logs",
+    "preview:reset": "node ./paperclip-preview.mjs reset",
+    "preview:smoke": "node ./paperclip-preview.mjs smoke",
+    "preview:start": "node ./paperclip-preview.mjs start",
+    "preview:status": "node ./paperclip-preview.mjs status",
+    "preview:stop": "node ./paperclip-preview.mjs stop",
+    "sandbox:install": "node ./paperclip-sandbox.mjs install",
+    "sandbox:logs": "node ./paperclip-sandbox.mjs logs",
+    "sandbox:reset": "node ./paperclip-sandbox.mjs reset",
+    "sandbox:seed": "node ./paperclip-sandbox.mjs seed",
+    "sandbox:smoke": "node ./paperclip-sandbox.mjs smoke",
+    "sandbox:start": "node ./paperclip-sandbox.mjs start",
+    "sandbox:status": "node ./paperclip-sandbox.mjs status",
+    "sandbox:stop": "node ./paperclip-sandbox.mjs stop",
+    "test": "pnpm run test:paperclip-plugin",
+    "test:dev": "pnpm run test:paperclip-plugin",
+    "test:paperclip-plugin": "node ./paperclip-plugin.e2e.mjs"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@paperclipai/shared": "catalog:"
+  }
+}

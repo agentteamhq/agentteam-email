@@ -1,0 +1,77 @@
+[tasks.test]
+description = "Run the AgentTeam Email Paperclip plugin E2E harness"
+dir = "{{config_root}}"
+run = "pnpm test:paperclip-plugin"
+
+[tasks."sandbox:start"]
+description = "Start an isolated Paperclip sandbox and install the local AgentTeam Email plugin"
+dir = "{{config_root}}"
+run = "pnpm sandbox:start"
+
+[tasks."sandbox:stop"]
+description = "Stop the isolated Paperclip sandbox container"
+dir = "{{config_root}}"
+run = "pnpm sandbox:stop"
+
+[tasks."sandbox:status"]
+description = "Print isolated Paperclip sandbox status and URLs"
+dir = "{{config_root}}"
+run = "pnpm sandbox:status"
+
+[tasks."sandbox:logs"]
+description = "Follow isolated Paperclip sandbox container logs"
+dir = "{{config_root}}"
+run = "pnpm sandbox:logs"
+
+[tasks."sandbox:install"]
+description = "Rebuild and reinstall the local AgentTeam Email plugin into the running sandbox"
+dir = "{{config_root}}"
+run = "pnpm sandbox:install"
+
+[tasks."sandbox:seed"]
+description = "Seed the running Paperclip sandbox with the example workspace when empty"
+dir = "{{config_root}}"
+run = "pnpm sandbox:seed"
+
+[tasks."sandbox:smoke"]
+description = "Smoke-check the running Paperclip sandbox and installed plugin"
+depends = [":sandbox:start"]
+dir = "{{config_root}}"
+run = "pnpm sandbox:smoke"
+
+[tasks."sandbox:reset"]
+description = "Stop the sandbox and remove sandbox volumes plus ignored artifacts"
+dir = "{{config_root}}"
+run = "pnpm sandbox:reset"
+
+[tasks."preview:start"]
+description = "Start an unauthenticated LAN preview proxy for the Paperclip sandbox"
+depends = [":sandbox:start"]
+dir = "{{config_root}}"
+run = "pnpm preview:start"
+
+[tasks."preview:stop"]
+description = "Stop the unauthenticated LAN preview proxy"
+dir = "{{config_root}}"
+run = "pnpm preview:stop"
+
+[tasks."preview:status"]
+description = "Print unauthenticated LAN preview proxy status and URLs"
+dir = "{{config_root}}"
+run = "pnpm preview:status"
+
+[tasks."preview:logs"]
+description = "Follow unauthenticated LAN preview proxy logs"
+dir = "{{config_root}}"
+run = "pnpm preview:logs"
+
+[tasks."preview:smoke"]
+description = "Smoke-check the unauthenticated LAN preview proxy"
+depends = [":preview:start"]
+dir = "{{config_root}}"
+run = "pnpm preview:smoke"
+
+[tasks."preview:reset"]
+description = "Stop the preview proxy and remove preview volumes plus ignored artifacts"
+dir = "{{config_root}}"
+run = "pnpm preview:reset"
