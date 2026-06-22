@@ -1,0 +1,24 @@
+[tasks."build:go-runner"]
+description = "Build service-owned Go test runner image"
+depends = ["//apps/mail-control-service/test-containers/go-testing-container:build"]
+run = "true"
+
+[tasks.build]
+description = "Build images required by the SMTP relay contract test"
+depends = ["build:go-runner"]
+run = "true"
+
+[tasks.test]
+description = "Run SMTP relay contract test via Go Testcontainers"
+depends = ["build"]
+run = """
+: "${WT:?missing WT}"
+runner_image="atemail.${WT}.mail-control-service-go-testing-container"
+bash "../go-testing-container/scripts/run-go-test-with-artifacts.sh" \
+  "agentteam/mail-control-service" \
+  "smtp-relay-contract-e2e" \
+  "$(pwd)" \
+  "localhost/${runner_image}:base" \
+  -timeout 5m \
+  .
+"""
