@@ -1,0 +1,6 @@
+FROM golang:bookworm AS base
+
+WORKDIR /workspace
+
+COPY scripts /opt/go-testing-container/scripts
+RUN chmod +x /opt/go-testing-container/scripts/*.sh

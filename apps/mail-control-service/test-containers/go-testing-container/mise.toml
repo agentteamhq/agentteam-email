@@ -1,0 +1,11 @@
+[tasks.build]
+description = "Build Go Testcontainers runner image"
+run = """
+: "${WT:?missing WT}"
+runner_image="atemail.${WT}.mail-control-service-go-testing-container"
+"${CONTAINER_ENGINE:-podman}" build \
+  --file "Containerfile" \
+  --target "base" \
+  --tag "localhost/${runner_image}:base" \
+  .
+"""
