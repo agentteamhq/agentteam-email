@@ -44,11 +44,10 @@ or weakening them locally.
 Code must import upstream package types, generated contract types, or exported
 workspace types from the owning package.
 
-## Generated Contracts
+## Generated Outputs
 
-Generated database, API, OpenAPI, RPC, DTO, route, and protocol artifacts must be
-changed by updating the owning source contract and running the canonical
-generator.
+Generated outputs must not be manually edited. Agents must update the owning
+source, configuration, or inputs and rerun the process that generates them.
 
 ## Definitions And Defaults
 
