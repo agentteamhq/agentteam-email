@@ -19,9 +19,20 @@ export interface DeviceCodeVerificationScreenProps {
 }
 
 export interface DeviceCodeApprovalScreenProps {
+  approveLabel?: string
+  approvedMessage?: string
+  codeLabel?: string
+  decisionDisabled?: boolean
+  decisionDisabledMessage?: string
+  denyLabel?: string
+  deniedMessage?: string
+  description?: React.ReactNode
   initialError?: string | null
   onApprove: (userCode: string) => Promise<void>
   onDeny: (userCode: string) => Promise<void>
+  requiresUserCode?: boolean
+  signedInLabel?: string
+  title?: string
   userCode: string | null
   userEmail?: string | null
   userName?: string | null
@@ -118,27 +129,53 @@ export function DeviceCodeVerificationScreen({
 }
 
 export function DeviceCodeApprovalScreen({
+  approveLabel = 'Approve',
+  approvedMessage = 'at-email is connected. Return to the CLI.',
+  codeLabel = 'Device code',
+  decisionDisabled = false,
+  decisionDisabledMessage,
+  denyLabel = 'Deny',
+  deniedMessage = 'The device request was denied. Return to the CLI.',
+  description,
   initialError = null,
   onApprove,
   onDeny,
+  requiresUserCode = true,
+  signedInLabel = 'Signed in as',
+  title = 'Approve at-email CLI',
   userCode,
   userEmail,
   userName
 }: DeviceCodeApprovalScreenProps) {
   const [phase, setPhase] = React.useState<DeviceDecisionPhase>('idle')
   const [error, setError] = React.useState<string | null>(initialError)
-  const formattedUserCode = userCode ? formatDeviceUserCode(userCode) : null
+  const [draftUserCode, setDraftUserCode] = React.useState(formatDeviceUserCode(userCode ?? ''))
+  const codeInputId = React.useId()
+  const normalizedUserCode = userCode
+    ? normalizeDeviceUserCode(userCode)
+    : normalizeDeviceUserCode(draftUserCode)
+  const formattedUserCode = requiresUserCode && userCode ? formatDeviceUserCode(userCode) : null
   const accountLabel = userEmail ?? userName ?? 'this account'
   const busy = phase === 'approving' || phase === 'denying'
+  const finalPhase = phase === 'approved' || phase === 'denied'
+  const disabled = busy || finalPhase || decisionDisabled || (requiresUserCode && normalizedUserCode === '')
+
+  const handleDraftUserCodeChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    setDraftUserCode(formatDeviceUserCode(event.target.value))
+  }, [])
 
   const approve = React.useCallback(() => {
-    if (!userCode) {
+    if (decisionDisabled) {
+      setError(decisionDisabledMessage ?? 'This request cannot be changed.')
+      return
+    }
+    if (requiresUserCode && normalizedUserCode === '') {
       setError('Device code is missing.')
       return
     }
     setError(null)
     setPhase('approving')
-    Promise.resolve(onApprove(userCode))
+    Promise.resolve(onApprove(normalizedUserCode))
       .then(() => {
         setPhase('approved')
       })
@@ -146,16 +183,20 @@ export function DeviceCodeApprovalScreen({
         setPhase('idle')
         setError(caught instanceof Error ? caught.message : 'Device approval failed.')
       })
-  }, [onApprove, userCode])
+  }, [decisionDisabled, decisionDisabledMessage, normalizedUserCode, onApprove, requiresUserCode])
 
   const deny = React.useCallback(() => {
-    if (!userCode) {
+    if (decisionDisabled) {
+      setError(decisionDisabledMessage ?? 'This request cannot be changed.')
+      return
+    }
+    if (requiresUserCode && normalizedUserCode === '') {
       setError('Device code is missing.')
       return
     }
     setError(null)
     setPhase('denying')
-    Promise.resolve(onDeny(userCode))
+    Promise.resolve(onDeny(normalizedUserCode))
       .then(() => {
         setPhase('denied')
       })
@@ -163,7 +204,7 @@ export function DeviceCodeApprovalScreen({
         setPhase('idle')
         setError(caught instanceof Error ? caught.message : 'Device denial failed.')
       })
-  }, [onDeny, userCode])
+  }, [decisionDisabled, decisionDisabledMessage, normalizedUserCode, onDeny, requiresUserCode])
 
   return (
     <AuthScreenFrame>
@@ -178,35 +219,62 @@ export function DeviceCodeApprovalScreen({
             <ShieldCheckIcon className='size-5' />
           </div>
           <div>
-            <h1 className='text-xl font-semibold'>Approve at-email CLI</h1>
+            <h1 className='text-xl font-semibold'>{title}</h1>
             <p className='text-muted-foreground mt-1 text-sm'>
-              This gives the CLI a revocable session for {accountLabel}.
+              {description ?? <>This gives the CLI a revocable session for {accountLabel}.</>}
             </p>
           </div>
         </div>
 
         <div className='space-y-4'>
-          <div className='bg-muted/50 rounded-md border p-4'>
-            <p className='text-muted-foreground text-xs font-medium uppercase'>Device code</p>
-            <p className='mt-1 font-mono text-lg'>{formattedUserCode ?? 'Missing'}</p>
-          </div>
+          {requiresUserCode ? (
+            formattedUserCode ? (
+              <div className='bg-muted/50 rounded-md border p-4'>
+                <p className='text-muted-foreground text-xs font-medium uppercase'>{codeLabel}</p>
+                <p className='mt-1 font-mono text-lg'>{formattedUserCode}</p>
+              </div>
+            ) : (
+              <div className='bg-muted/50 space-y-2 rounded-md border p-4'>
+                <Label htmlFor={codeInputId}>{codeLabel}</Label>
+                <Input
+                  id={codeInputId}
+                  autoComplete='one-time-code'
+                  autoFocus
+                  className='font-mono text-base uppercase'
+                  disabled={busy || finalPhase || decisionDisabled}
+                  inputMode='text'
+                  maxLength={12}
+                  onChange={handleDraftUserCodeChange}
+                  placeholder='ABCD-EFGH'
+                  value={draftUserCode}
+                />
+              </div>
+            )
+          ) : null}
 
           <div className='bg-muted/50 rounded-md border p-4'>
-            <p className='text-muted-foreground text-xs font-medium uppercase'>Signed in as</p>
+            <p className='text-muted-foreground text-xs font-medium uppercase'>{signedInLabel}</p>
             <p className='mt-1 truncate text-sm font-medium'>{accountLabel}</p>
           </div>
 
           {phase === 'approved' ? (
             <Alert>
               <CheckCircleIcon />
-              <AlertDescription>at-email is connected. Return to the CLI.</AlertDescription>
+              <AlertDescription>{approvedMessage}</AlertDescription>
             </Alert>
           ) : null}
 
           {phase === 'denied' ? (
             <Alert>
               <XCircleIcon />
-              <AlertDescription>The device request was denied. Return to the CLI.</AlertDescription>
+              <AlertDescription>{deniedMessage}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          {decisionDisabled && decisionDisabledMessage ? (
+            <Alert>
+              <XCircleIcon />
+              <AlertDescription>{decisionDisabledMessage}</AlertDescription>
             </Alert>
           ) : null}
 
@@ -218,21 +286,21 @@ export function DeviceCodeApprovalScreen({
 
           <div className='grid grid-cols-2 gap-3'>
             <Button
-              disabled={busy || phase === 'approved' || phase === 'denied'}
+              disabled={disabled}
               onClick={deny}
               type='button'
               variant='outline'
             >
               {phase === 'denying' ? <Spinner /> : <XCircleIcon />}
-              Deny
+              {denyLabel}
             </Button>
             <Button
-              disabled={busy || phase === 'approved' || phase === 'denied'}
+              disabled={disabled}
               onClick={approve}
               type='button'
             >
               {phase === 'approving' ? <Spinner /> : <CheckCircleIcon />}
-              Approve
+              {approveLabel}
             </Button>
           </div>
         </div>

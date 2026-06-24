@@ -1,8 +1,19 @@
 import addressparser from 'nodemailer/lib/addressparser/index.js'
+import {
+  AgentMailAbilityActionByCapability,
+  AgentMailCapability,
+  AgentMailMailboxCapabilityGrantConstraints
+} from '@main/db'
 
 import { globals } from '../globals'
-import { requireAgentMailOrganizationContext } from './service'
+import { agentMailCapabilityGrantConstraints, agentMailSubject } from './permission-policy'
+import {
+  consumeAgentMailTrialSendQuota,
+  requireAgentMailOrganizationContext,
+  requireAgentMailPaperclipOperation
+} from './service'
 import { WildDuckAPIError, createWildDuckClient } from './wildduck-client'
+import type { AgentMailPaperclipOperation } from './service'
 import type {
   WildDuckAddressInput,
   WildDuckMailbox,
@@ -11,7 +22,7 @@ import type {
   WildDuckMessageAttachment,
   WildDuckUser
 } from './wildduck-client'
-import type { OrganizationId } from '@main/db'
+import type { AgentMailAbilityAction, OrganizationId } from '@main/db'
 import type { Database } from '../db/db'
 
 const ACTIVE_MAIL_DOMAIN_STATUSES = ['active', 'degraded'] as const
@@ -26,7 +37,7 @@ export interface AgentMailWebAccount {
   description?: string
   id: string
   name: string
-  state: 'ready'
+  state: 'disabled' | 'ready'
 }
 
 export interface AgentMailWebFolder {
@@ -68,6 +79,8 @@ export interface AgentMailWebThreadMessage extends AgentMailWebMessageSummary {
   cc: string[]
   html: string
   messageId?: string
+  plainText: string
+  replyTo: string[]
   sourceUrl: string
   to: string[]
 }
@@ -115,6 +128,7 @@ export interface AgentMailComposeInput {
     mailboxId: string
     messageId: string
   }
+  replyTo?: string
   subject?: string
   to?: string
 }
@@ -139,14 +153,18 @@ export function isAgentMailWebmailError(error: unknown): error is AgentMailWebma
   return error instanceof AgentMailWebmailError
 }
 
-export async function getAgentMailAccountsForWeb(headers: Headers): Promise<{
+export async function getAgentMailAccountsForWeb(
+  headers: Headers,
+  options: { includeDisabled?: boolean } = {}
+): Promise<{
   accounts: AgentMailWebAccount[]
 }> {
   const { db } = await globals()
   const context = await requireAgentMailOrganizationContext(headers)
+  requireAgentMailPaperclipOperation(context, ['status', 'search', 'read', 'reply', 'send'])
   const client = createWildDuckClient()
   const domains = await listAuthorizedMailDomains(db, context.organizationId)
-  const accounts = await listAuthorizedAccounts(client, domains)
+  const accounts = await listAuthorizedAccountsForContext(client, domains, context, 'list', options)
 
   return { accounts }
 }
@@ -160,9 +178,15 @@ export async function getAgentMailWorkspaceForWeb({
 }): Promise<AgentMailWebWorkspace> {
   const { db } = await globals()
   const context = await requireAgentMailOrganizationContext(headers)
+  requireWorkspacePaperclipOperation(context, input)
   const client = createWildDuckClient()
   const domains = await listAuthorizedMailDomains(db, context.organizationId)
-  const accounts = await listAuthorizedAccounts(client, domains)
+  const accounts = await listAuthorizedAccountsForContext(
+    client,
+    domains,
+    context,
+    input.query?.trim() ? 'search' : 'list'
+  )
   const requestedAccountId = normalizeMailboxAddress(input.accountId)
   const account = requestedAccountId
     ? accounts.find((candidate) => candidate.id === requestedAccountId)
@@ -172,7 +196,7 @@ export async function getAgentMailWorkspaceForWeb({
     return emptyWorkspace(accounts)
   }
 
-  const userId = await resolveAuthorizedWildDuckUser(client, domains, account.id)
+  const userId = await resolveWildDuckUserForAuthorizedAddress(client, account.id)
   const mailboxes = normalizeListResults(await client.listMailboxes(userId))
   const folders = mailboxes.map(toFolderView)
   const selectedMailbox = resolveSelectedMailbox(mailboxes, input.folderId)
@@ -200,19 +224,27 @@ export async function getAgentMailWorkspaceForWeb({
         previous: input.direction === 'previous' ? input.cursor : undefined,
         unseen: input.unreadOnly
       })
-  const messages = normalizeListResults(messagesEnvelope).map((message) =>
-    toMessageSummary(message, selectedMailboxId)
+  const rawMessages = normalizeListResults(messagesEnvelope)
+  const visibleMessages = rawMessages.filter((message) =>
+    messageBelongsToAccount(
+      message,
+      account.id,
+      ownershipOptionsForMailbox(mailboxes, stringValue(message.mailbox) || selectedMailboxId)
+    )
   )
+  const messages = visibleMessages.map((message) => toMessageSummary(message, selectedMailboxId))
   const selectedMessageId = input.messageId ?? messages[0]?.id
   const selectedMessageSummary = selectedMessageId
     ? messages.find((message) => message.id === selectedMessageId)
     : undefined
   const selectedMessageMailboxId = selectedMessageSummary?.mailboxId ?? activeFolderId
+  const canReadSelectedMessage = !!selectedMessageMailboxId && canMailboxAction(context, 'read', account.id)
   const selectedMessage =
-    selectedMessageId && selectedMessageMailboxId
+    selectedMessageId && selectedMessageMailboxId && canReadSelectedMessage
       ? await getMessageDetailWithThread({
           accountId: account.id,
           client,
+          mailboxes,
           mailboxId: selectedMessageMailboxId,
           messageId: selectedMessageId,
           userId
@@ -229,7 +261,10 @@ export async function getAgentMailWorkspaceForWeb({
       limit,
       nextCursor: cursorValue(messagesEnvelope.nextCursor ?? messagesEnvelope.next),
       previousCursor: cursorValue(messagesEnvelope.previousCursor ?? messagesEnvelope.previous),
-      total: typeof messagesEnvelope.total === 'number' ? messagesEnvelope.total : null
+      total:
+        rawMessages.length === visibleMessages.length && typeof messagesEnvelope.total === 'number'
+          ? messagesEnvelope.total
+          : null
     },
     selectedMessage
   }
@@ -248,12 +283,22 @@ export async function getAgentMailAttachmentForWeb({
   mailboxId: string
   messageId: string
 }): Promise<Response> {
-  const client = createWildDuckClient()
-  const { userId } = await resolveAuthorizedAccountFromHeaders(headers, accountId, client)
+  const { address, client, userId } = await resolveAuthorizedAccountFromHeaders(
+    headers,
+    accountId,
+    'read',
+    'read'
+  )
+  const authorizedMailboxId = requireRouteToken(mailboxId, 'mailboxId')
+  const authorizedMessageId = requireRouteToken(messageId, 'messageId')
+  const mailboxes = normalizeListResults(await client.listMailboxes(userId))
+  await requireAuthorizedWildDuckMessage(client, userId, authorizedMailboxId, authorizedMessageId, address, {
+    ownership: ownershipOptionsForMailbox(mailboxes, authorizedMailboxId)
+  })
   const upstream = await client.fetchAttachment(
     userId,
-    requireRouteToken(mailboxId, 'mailboxId'),
-    requireRouteToken(messageId, 'messageId'),
+    authorizedMailboxId,
+    authorizedMessageId,
     requireRouteToken(attachmentId, 'attachmentId')
   )
   return safeAttachmentResponse(upstream)
@@ -270,13 +315,19 @@ export async function getAgentMailOriginalSourceForWeb({
   mailboxId: string
   messageId: string
 }): Promise<Response> {
-  const client = createWildDuckClient()
-  const { userId } = await resolveAuthorizedAccountFromHeaders(headers, accountId, client)
-  const upstream = await client.fetchMessageSource(
-    userId,
-    requireRouteToken(mailboxId, 'mailboxId'),
-    requireRouteToken(messageId, 'messageId')
+  const { address, client, userId } = await resolveAuthorizedAccountFromHeaders(
+    headers,
+    accountId,
+    'read',
+    'read'
   )
+  const authorizedMailboxId = requireRouteToken(mailboxId, 'mailboxId')
+  const authorizedMessageId = requireRouteToken(messageId, 'messageId')
+  const mailboxes = normalizeListResults(await client.listMailboxes(userId))
+  await requireAuthorizedWildDuckMessage(client, userId, authorizedMailboxId, authorizedMessageId, address, {
+    ownership: ownershipOptionsForMailbox(mailboxes, authorizedMailboxId)
+  })
+  const upstream = await client.fetchMessageSource(userId, authorizedMailboxId, authorizedMessageId)
   return safeOriginalSourceResponse(upstream)
 }
 
@@ -287,12 +338,35 @@ export async function sendAgentMailMessageForWeb({
   headers: Headers
   input: AgentMailComposeInput
 }) {
-  const client = createWildDuckClient()
-  const { address, userId } = await resolveAuthorizedAccountFromHeaders(headers, input.accountId, client)
+  const action = requiresReplyCapability(input) ? 'reply' : 'send'
+  const { address, context } = await resolveAuthorizedMailboxFromHeaders(headers, input.accountId, action)
+  requireAgentMailPaperclipOperation(context, action)
   const payload = normalizeComposePayload(input, address, { requireRecipient: true })
+  requireMessageAction(context, action, address, composeRecipientAddresses(payload))
+  const client = createWildDuckClient()
+  const userId = await resolveWildDuckUserForAuthorizedAddress(client, address)
+  if (payload.reference) {
+    const mailboxes = normalizeListResults(await client.listMailboxes(userId))
+    const referenceMailbox = resolveMailboxById(mailboxes, payload.reference.mailbox)
+    await requireAuthorizedWildDuckMessage(
+      client,
+      userId,
+      referenceMailbox.id,
+      payload.reference.id.toString(),
+      address,
+      {
+        ownership: ownershipOptionsForMailbox(mailboxes, referenceMailbox.id)
+      }
+    )
+  }
 
+  await consumeAgentMailTrialSendQuota(context, address)
   await client.submitMessage(userId, payload)
   return { success: true }
+}
+
+function requiresReplyCapability(input: AgentMailComposeInput) {
+  return input.reference?.action === 'reply' || input.reference?.action === 'replyAll'
 }
 
 export async function saveAgentMailDraftForWeb({
@@ -302,17 +376,20 @@ export async function saveAgentMailDraftForWeb({
   headers: Headers
   input: AgentMailComposeInput
 }) {
-  const client = createWildDuckClient()
-  const { address, userId } = await resolveAuthorizedAccountFromHeaders(headers, input.accountId, client)
+  const { address, client, context, userId } = await resolveAuthorizedAccountFromHeaders(
+    headers,
+    input.accountId,
+    'createDraft',
+    []
+  )
+  requireDraftAction(context, 'createDraft', address)
   const mailboxes = normalizeListResults(await client.listMailboxes(userId))
   const draftsMailbox = await resolveDraftsMailbox(client, userId, mailboxes)
-  const replacePrevious =
-    input.draftMailboxId && input.draftMessageId
-      ? {
-          id: requirePositiveMessageId(input.draftMessageId),
-          mailbox: resolveMailboxById(mailboxes, input.draftMailboxId).id
-        }
-      : undefined
+  let replacePrevious: { id: number; mailbox: string } | undefined
+  if (input.draftMailboxId && input.draftMessageId) {
+    requireDraftAction(context, 'read', address)
+    replacePrevious = await resolveAuthorizedDraftReplacement(client, userId, address, mailboxes, input)
+  }
   const payload = normalizeComposePayload(input, address, { requireRecipient: false })
   const result = await client.uploadMessage(userId, draftsMailbox.id, {
     ...payload,
@@ -340,11 +417,26 @@ export async function sendAgentMailDraftForWeb({
   headers: Headers
   input: AgentMailMessageActionInput
 }) {
-  const client = createWildDuckClient()
-  const { userId } = await resolveAuthorizedAccountFromHeaders(headers, input.accountId, client)
+  const { address, client, context, userId } = await resolveAuthorizedAccountFromHeaders(
+    headers,
+    input.accountId,
+    'send',
+    'send'
+  )
+  requireDraftAction(context, 'send', address)
   const mailboxes = normalizeListResults(await client.listMailboxes(userId))
-  const mailbox = resolveMailboxById(mailboxes, input.mailboxId)
-  await client.submitDraft(userId, mailbox.id, requirePositiveMessageId(input.messageId).toString())
+  const mailbox = requireDraftsMailbox(resolveMailboxById(mailboxes, input.mailboxId))
+  const messageId = requirePositiveMessageId(input.messageId).toString()
+  requireDraftAction(context, 'read', address)
+  const draft = await client.getMessage(userId, mailbox.id, messageId)
+  requireMessageBelongsToAccount(draft, address, { includeSender: true })
+  const recipientAddresses = messageRecipientAddresses(draft)
+  if (!recipientAddresses.length) {
+    throw new AgentMailWebmailError('Draft must include at least one recipient', 400)
+  }
+  requireMessageAction(context, 'send', address, recipientAddresses)
+  await consumeAgentMailTrialSendQuota(context, address)
+  await client.submitDraft(userId, mailbox.id, messageId)
   return { success: true }
 }
 
@@ -358,10 +450,16 @@ export async function updateAgentMailMessageForWeb({
     seen?: boolean
   }
 }) {
-  const client = createWildDuckClient()
-  const { userId } = await resolveAuthorizedAccountFromHeaders(headers, input.accountId, client)
+  const action = typeof input.seen === 'boolean' && typeof input.flagged !== 'boolean' ? 'markRead' : 'manage'
+  const { address, client, context, userId } = await resolveAuthorizedAccountFromHeaders(
+    headers,
+    input.accountId,
+    action,
+    action === 'markRead' ? 'read' : []
+  )
   const mailboxes = normalizeListResults(await client.listMailboxes(userId))
   const mailbox = resolveMailboxById(mailboxes, input.mailboxId)
+  const messageId = requirePositiveMessageId(input.messageId).toString()
   const updates = {
     ...(typeof input.flagged === 'boolean' ? { flagged: input.flagged } : {}),
     ...(typeof input.seen === 'boolean' ? { seen: input.seen } : {})
@@ -371,12 +469,10 @@ export async function updateAgentMailMessageForWeb({
     throw new AgentMailWebmailError('No message update was requested', 400)
   }
 
-  await client.updateMessage(
-    userId,
-    mailbox.id,
-    requirePositiveMessageId(input.messageId).toString(),
-    updates
-  )
+  await requireAuthorizedWildDuckMessage(client, userId, mailbox.id, messageId, address, {
+    ownership: ownershipOptionsForMailbox(mailboxes, mailbox.id)
+  })
+  await client.updateMessage(userId, mailbox.id, messageId, updates)
   return { success: true }
 }
 
@@ -389,12 +485,21 @@ export async function moveAgentMailMessageForWeb({
     targetMailboxId: string
   }
 }) {
-  const client = createWildDuckClient()
-  const { userId } = await resolveAuthorizedAccountFromHeaders(headers, input.accountId, client)
+  const { address, client, context, userId } = await resolveAuthorizedAccountFromHeaders(
+    headers,
+    input.accountId,
+    ['archive', 'manage'],
+    []
+  )
   const mailboxes = normalizeListResults(await client.listMailboxes(userId))
   const mailbox = resolveMailboxById(mailboxes, input.mailboxId)
   const targetMailbox = resolveMailboxById(mailboxes, input.targetMailboxId)
-  await client.updateMessage(userId, mailbox.id, requirePositiveMessageId(input.messageId).toString(), {
+  requireMailboxAction(context, isArchiveMailbox(targetMailbox) ? 'archive' : 'manage', address)
+  const messageId = requirePositiveMessageId(input.messageId).toString()
+  await requireAuthorizedWildDuckMessage(client, userId, mailbox.id, messageId, address, {
+    ownership: ownershipOptionsForMailbox(mailboxes, mailbox.id)
+  })
+  await client.updateMessage(userId, mailbox.id, messageId, {
     moveTo: targetMailbox.id
   })
   return { success: true }
@@ -407,11 +512,19 @@ export async function deleteAgentMailMessageForWeb({
   headers: Headers
   input: AgentMailMessageActionInput
 }) {
-  const client = createWildDuckClient()
-  const { userId } = await resolveAuthorizedAccountFromHeaders(headers, input.accountId, client)
+  const { address, client, context, userId } = await resolveAuthorizedAccountFromHeaders(
+    headers,
+    input.accountId,
+    'manage',
+    []
+  )
   const mailboxes = normalizeListResults(await client.listMailboxes(userId))
   const mailbox = resolveMailboxById(mailboxes, input.mailboxId)
-  await client.deleteMessage(userId, mailbox.id, requirePositiveMessageId(input.messageId).toString())
+  const messageId = requirePositiveMessageId(input.messageId).toString()
+  await requireAuthorizedWildDuckMessage(client, userId, mailbox.id, messageId, address, {
+    ownership: ownershipOptionsForMailbox(mailboxes, mailbox.id)
+  })
+  await client.deleteMessage(userId, mailbox.id, messageId)
   return { success: true }
 }
 
@@ -424,8 +537,7 @@ export async function createAgentMailFolderForWeb({
   headers: Headers
   name: string
 }) {
-  const client = createWildDuckClient()
-  const { userId } = await resolveAuthorizedAccountFromHeaders(headers, accountId, client)
+  const { client, userId } = await resolveAuthorizedAccountFromHeaders(headers, accountId, 'manage', [])
   const folderName = normalizeFolderName(name)
   await client.createMailbox(userId, folderName)
   const mailboxes = normalizeListResults(await client.listMailboxes(userId))
@@ -442,6 +554,40 @@ export async function createAgentMailFolderForWeb({
   return { folder: toFolderView(created), success: true }
 }
 
+export async function renameAgentMailFolderForWeb({
+  accountId,
+  headers,
+  mailboxId,
+  name
+}: {
+  accountId: string
+  headers: Headers
+  mailboxId: string
+  name: string
+}) {
+  const { client, userId } = await resolveAuthorizedAccountFromHeaders(headers, accountId, 'manage', [])
+  const folderName = normalizeFolderName(name)
+  const mailboxes = normalizeListResults(await client.listMailboxes(userId))
+  const mailbox = resolveMailboxById(mailboxes, mailboxId)
+  if (isProtectedMailbox(mailbox.specialUse)) {
+    throw new AgentMailWebmailError('System folders cannot be renamed', 400)
+  }
+  if (hasMailboxPathOrName(mailboxes, folderName, mailbox.id)) {
+    throw new AgentMailWebmailError('Folder name already exists', 400)
+  }
+
+  await client.updateMailbox(userId, mailbox.id, { path: folderName })
+  const refreshedMailboxes = normalizeListResults(await client.listMailboxes(userId))
+  const updated =
+    refreshedMailboxes.find((candidate) => candidate.id === mailbox.id) ??
+    findMailboxByPath(refreshedMailboxes, folderName)
+  if (!updated?.id) {
+    throw new AgentMailWebmailError('WildDuck did not return the renamed folder', 502)
+  }
+
+  return { folder: toFolderView(updated), success: true }
+}
+
 export async function deleteAgentMailFolderForWeb({
   accountId,
   headers,
@@ -451,8 +597,7 @@ export async function deleteAgentMailFolderForWeb({
   headers: Headers
   mailboxId: string
 }) {
-  const client = createWildDuckClient()
-  const { userId } = await resolveAuthorizedAccountFromHeaders(headers, accountId, client)
+  const { client, userId } = await resolveAuthorizedAccountFromHeaders(headers, accountId, 'manage', [])
   const mailboxes = normalizeListResults(await client.listMailboxes(userId))
   const mailbox = resolveMailboxById(mailboxes, mailboxId)
   if (isProtectedMailbox(mailbox.specialUse)) {
@@ -465,15 +610,165 @@ export async function deleteAgentMailFolderForWeb({
 async function resolveAuthorizedAccountFromHeaders(
   headers: Headers,
   accountId: string,
-  client: ReturnType<typeof createWildDuckClient>
+  action: AgentMailAbilityAction | ReadonlyArray<AgentMailAbilityAction>,
+  paperclipOperation?: AgentMailPaperclipOperation | ReadonlyArray<AgentMailPaperclipOperation>
+) {
+  const { address, context } = await resolveAuthorizedMailboxFromHeaders(headers, accountId, action)
+  if (paperclipOperation !== undefined) {
+    requireAgentMailPaperclipOperation(context, paperclipOperation)
+  }
+  const client = createWildDuckClient()
+  const userId = await resolveWildDuckUserForAuthorizedAddress(client, address)
+
+  return { address, client, context, userId }
+}
+
+async function resolveAuthorizedMailboxFromHeaders(
+  headers: Headers,
+  accountId: string,
+  action: AgentMailAbilityAction | ReadonlyArray<AgentMailAbilityAction>
 ) {
   const { db } = await globals()
   const context = await requireAgentMailOrganizationContext(headers)
   const domains = await listAuthorizedMailDomains(db, context.organizationId)
-  const address = requireAuthorizedMailboxAddress(accountId, domains)
-  const userId = await resolveAuthorizedWildDuckUser(client, domains, address)
+  const address = requireAuthorizedMailboxAddress(accountId, domains, context, action)
+  requireAnyMailboxAction(context, action, address)
 
-  return { address, userId }
+  return { address, context, domains }
+}
+
+async function resolveAuthorizedDraftReplacement(
+  client: ReturnType<typeof createWildDuckClient>,
+  userId: string,
+  accountId: string,
+  mailboxes: ReadonlyArray<WildDuckMailbox>,
+  input: Pick<AgentMailComposeInput, 'draftMailboxId' | 'draftMessageId'>
+) {
+  if (!input.draftMailboxId || !input.draftMessageId) {
+    throw new AgentMailWebmailError('Draft replacement requires a mailbox and message id', 400)
+  }
+  const mailbox = requireDraftsMailbox(
+    resolveMailboxById(mailboxes, requireRouteToken(input.draftMailboxId, 'draftMailboxId'))
+  )
+  const id = requirePositiveMessageId(requireRouteToken(input.draftMessageId, 'draftMessageId'))
+  const previousDraft = await client.getMessage(userId, mailbox.id, id.toString())
+  requireMessageBelongsToAccount(previousDraft, accountId, { includeSender: true })
+
+  return {
+    id,
+    mailbox: mailbox.id
+  }
+}
+
+async function requireAuthorizedWildDuckMessage(
+  client: ReturnType<typeof createWildDuckClient>,
+  userId: string,
+  mailboxId: string,
+  messageId: string,
+  accountId: string,
+  options: { ownership?: MessageOwnershipOptions } = {}
+) {
+  const message = await client.getMessage(userId, mailboxId, messageId)
+  requireMessageBelongsToAccount(message, accountId, options.ownership)
+  return message
+}
+
+type AgentMailOrganizationContext = Awaited<ReturnType<typeof requireAgentMailOrganizationContext>>
+
+function requireWorkspacePaperclipOperation(
+  context: AgentMailOrganizationContext,
+  input: AgentMailWorkspaceInput
+) {
+  if (input.query?.trim()) {
+    requireAgentMailPaperclipOperation(context, 'search')
+    return
+  }
+  if (input.messageId) {
+    requireAgentMailPaperclipOperation(context, ['read', 'reply'])
+    return
+  }
+  requireAgentMailPaperclipOperation(context, ['status', 'search', 'read', 'reply', 'send'])
+}
+
+function filterAuthorizedAccounts(
+  accounts: ReadonlyArray<AgentMailWebAccount>,
+  context: AgentMailOrganizationContext,
+  action: AgentMailAbilityAction
+): AgentMailWebAccount[] {
+  return accounts.filter((account) => canMailboxAction(context, action, account.id))
+}
+
+function requireMailboxAction(
+  context: AgentMailOrganizationContext,
+  action: AgentMailAbilityAction,
+  mailboxAddress: string
+) {
+  if (!canMailboxAction(context, action, mailboxAddress)) {
+    throw new AgentMailWebmailError('Mailbox operation is not authorized', 403)
+  }
+}
+
+function requireAnyMailboxAction(
+  context: AgentMailOrganizationContext,
+  action: AgentMailAbilityAction | ReadonlyArray<AgentMailAbilityAction>,
+  mailboxAddress: string
+) {
+  const actions = typeof action === 'string' ? [action] : action
+  if (!actions.some((candidate) => canMailboxAction(context, candidate, mailboxAddress))) {
+    throw new AgentMailWebmailError('Mailbox operation is not authorized', 403)
+  }
+}
+
+function requireDraftAction(
+  context: AgentMailOrganizationContext,
+  action: AgentMailAbilityAction,
+  mailboxAddress: string
+) {
+  if (
+    !context.ability.can(
+      action,
+      agentMailSubject('Draft', {
+        mailboxAddress,
+        organizationId: context.organizationId
+      })
+    )
+  ) {
+    throw new AgentMailWebmailError('Draft operation is not authorized', 403)
+  }
+}
+
+function requireMessageAction(
+  context: AgentMailOrganizationContext,
+  action: AgentMailAbilityAction,
+  mailboxAddress: string,
+  recipientAddresses: ReadonlyArray<string>
+) {
+  if (
+    !context.ability.can(
+      action,
+      agentMailSubject('Message', {
+        mailboxAddress,
+        organizationId: context.organizationId,
+        recipientAddresses
+      })
+    )
+  ) {
+    throw new AgentMailWebmailError('Message operation is not authorized', 403)
+  }
+}
+
+function canMailboxAction(
+  context: AgentMailOrganizationContext,
+  action: AgentMailAbilityAction,
+  mailboxAddress: string
+) {
+  return context.ability.can(
+    action,
+    agentMailSubject('Mailbox', {
+      mailboxAddress,
+      organizationId: context.organizationId
+    })
+  )
 }
 
 async function listAuthorizedMailDomains(db: Database, organizationId: OrganizationId) {
@@ -503,13 +798,18 @@ async function listAuthorizedMailDomains(db: Database, organizationId: Organizat
 
 async function listAuthorizedAccounts(
   client: ReturnType<typeof createWildDuckClient>,
-  domains: ReadonlyArray<string>
+  domains: ReadonlyArray<string>,
+  options: { includeDisabled?: boolean } = {}
 ) {
   const accountsByAddress = new Map<string, AgentMailWebAccount>()
 
   for (const domain of domains) {
     const users = normalizeListResults(await client.listUsers(domain))
     for (const user of users) {
+      const disabled = Boolean(user.disabled || user.suspended)
+      if (disabled && !options.includeDisabled) {
+        continue
+      }
       for (const address of addressesForUser(user)) {
         if (!mailboxBelongsToDomains(address, domains)) {
           continue
@@ -519,7 +819,7 @@ async function listAuthorizedAccounts(
           description: `WildDuck mailbox for ${domainPart(address)}`,
           id: address,
           name: user.name?.trim() || localPart(address),
-          state: 'ready'
+          state: disabled ? 'disabled' : 'ready'
         })
       }
     }
@@ -528,16 +828,83 @@ async function listAuthorizedAccounts(
   return [...accountsByAddress.values()].sort((left, right) => left.address.localeCompare(right.address))
 }
 
-async function resolveAuthorizedWildDuckUser(
+async function listAuthorizedAccountsForContext(
   client: ReturnType<typeof createWildDuckClient>,
   domains: ReadonlyArray<string>,
+  context: AgentMailOrganizationContext,
+  action: AgentMailAbilityAction,
+  options: { includeDisabled?: boolean } = {}
+) {
+  if (hasBroadMailboxListAccess(context, action)) {
+    return filterAuthorizedAccounts(await listAuthorizedAccounts(client, domains, options), context, action)
+  }
+
+  return scopedMailboxAccounts(context, action)
+}
+
+function hasBroadMailboxListAccess(context: AgentMailOrganizationContext, action: AgentMailAbilityAction) {
+  return context.ability.can(
+    action,
+    agentMailSubject('Mailbox', {
+      organizationId: context.organizationId
+    })
+  )
+}
+
+function scopedMailboxAccounts(context: AgentMailOrganizationContext, action: AgentMailAbilityAction) {
+  return scopedMailboxAddresses(context, action)
+    .filter((address) => canMailboxAction(context, action, address))
+    .map((address) => ({
+      address,
+      description: `WildDuck mailbox for ${domainPart(address)}`,
+      id: address,
+      name: localPart(address),
+      state: 'ready' as const
+    }))
+    .sort((left, right) => left.address.localeCompare(right.address))
+}
+
+function scopedMailboxAddresses(context: AgentMailOrganizationContext, action: AgentMailAbilityAction) {
+  const addresses = new Set<string>()
+
+  for (const grant of context.mailboxGrants) {
+    if (String(grant.organizationId) === String(context.organizationId)) {
+      addNormalizedMailbox(addresses, grant.mailboxAddress)
+    }
+  }
+
+  for (const grant of context.capabilityGrants) {
+    const capability = AgentMailCapability.safeParse(grant.capability)
+    if (!capability.success || AgentMailAbilityActionByCapability[capability.data] !== action) {
+      continue
+    }
+    const constraints = AgentMailMailboxCapabilityGrantConstraints.safeParse(
+      agentMailCapabilityGrantConstraints(grant.constraints)
+    )
+    if (constraints.success && constraints.data.organizationId === String(context.organizationId)) {
+      addNormalizedMailbox(addresses, constraints.data.mailboxAddress)
+    }
+  }
+
+  return [...addresses]
+}
+
+async function resolveWildDuckUserForAuthorizedAddress(
+  client: ReturnType<typeof createWildDuckClient>,
   accountId: string
 ) {
-  const address = requireAuthorizedMailboxAddress(accountId, domains)
+  const address = normalizeMailboxAddress(accountId)
+  if (!address) {
+    throw new AgentMailWebmailError('Mailbox account is not available', 403)
+  }
   const resolution = await client.resolveAddress(address)
   const userId = resolution.user || resolution.id
   if (!userId) {
     throw new AgentMailWebmailError('Mailbox account was not found', 404)
+  }
+  const user = await client.getUser(userId)
+  if (user.disabled || user.suspended) {
+    throw new AgentMailWebmailError('Mailbox account is disabled', 403)
   }
   return userId
 }
@@ -602,18 +969,22 @@ function toMessageSummary(message: WildDuckMessage, fallbackMailboxId: string): 
 async function getMessageDetailWithThread({
   accountId,
   client,
+  mailboxes,
   mailboxId,
   messageId,
   userId
 }: {
   accountId: string
   client: ReturnType<typeof createWildDuckClient>
+  mailboxes: ReadonlyArray<WildDuckMailbox>
   mailboxId: string
   messageId: string
   userId: string
 }): Promise<AgentMailWebMessageDetail> {
   const selectedMessage = toMessageDetail(
-    await client.getMessage(userId, mailboxId, messageId),
+    await requireAuthorizedWildDuckMessage(client, userId, mailboxId, messageId, accountId, {
+      ownership: ownershipOptionsForMailbox(mailboxes, mailboxId)
+    }),
     accountId,
     mailboxId
   )
@@ -625,6 +996,7 @@ async function getMessageDetailWithThread({
     accountId,
     client,
     fallbackMailboxId: mailboxId,
+    mailboxes,
     threadId: selectedMessage.threadId,
     userId
   })
@@ -639,12 +1011,14 @@ async function listThreadMessageDetails({
   accountId,
   client,
   fallbackMailboxId,
+  mailboxes,
   threadId,
   userId
 }: {
   accountId: string
   client: ReturnType<typeof createWildDuckClient>
   fallbackMailboxId: string
+  mailboxes: ReadonlyArray<WildDuckMailbox>
   threadId: string
   userId: string
 }): Promise<AgentMailWebThreadMessage[]> {
@@ -657,6 +1031,13 @@ async function listThreadMessageDetails({
   })
   const seen = new Set<string>()
   const summaries = normalizeListResults(envelope)
+    .filter((message) =>
+      messageBelongsToAccount(
+        message,
+        accountId,
+        conversationOwnershipOptionsForMailbox(mailboxes, stringValue(message.mailbox) || fallbackMailboxId)
+      )
+    )
     .map((message) => toMessageSummary(message, fallbackMailboxId))
     .filter((message) => {
       const key = `${message.mailboxId}:${message.id}`
@@ -672,9 +1053,102 @@ async function listThreadMessageDetails({
     summaries.map((message) =>
       client
         .getMessage(userId, message.mailboxId, message.id)
-        .then((detail) => toMessageDetail(detail, accountId, message.mailboxId))
+        .then((detail) =>
+          messageBelongsToAccount(
+            detail,
+            accountId,
+            conversationOwnershipOptionsForMailbox(mailboxes, message.mailboxId)
+          )
+            ? toMessageDetail(detail, accountId, message.mailboxId)
+            : null
+        )
     )
-  )
+  ).then((messages) => messages.filter((message): message is AgentMailWebThreadMessage => message !== null))
+}
+
+interface MessageOwnershipOptions {
+  includeSender?: boolean
+}
+
+function requireMessageBelongsToAccount(
+  message: WildDuckMessage,
+  accountId: string,
+  options: MessageOwnershipOptions = {}
+) {
+  if (!messageBelongsToAccount(message, accountId, options)) {
+    throw new AgentMailWebmailError('Message is not available for this mailbox account', 403)
+  }
+}
+
+function messageBelongsToAccount(
+  message: WildDuckMessage,
+  accountId: string,
+  options: MessageOwnershipOptions = {}
+) {
+  const accountAddress = normalizeMailboxAddress(accountId)
+  return Boolean(accountAddress && messageEnvelopeAddresses(message, options).has(accountAddress))
+}
+
+function messageEnvelopeAddresses(message: WildDuckMessage, options: MessageOwnershipOptions) {
+  const addresses = new Set<string>()
+  if (options.includeSender) {
+    addMessageAddressValues(addresses, message.from)
+  }
+  addMessageAddressValues(addresses, message.to)
+  addMessageAddressValues(addresses, message.cc)
+  addMessageAddressValues(addresses, message.bcc)
+  return addresses
+}
+
+function ownershipOptionsForMailbox(
+  mailboxes: ReadonlyArray<WildDuckMailbox>,
+  mailboxId: string
+): MessageOwnershipOptions {
+  const mailbox = mailboxes.find((candidate) => candidate.id === mailboxId)
+  return { includeSender: mailbox ? isOutboundMailbox(mailbox) : false }
+}
+
+function conversationOwnershipOptionsForMailbox(
+  mailboxes: ReadonlyArray<WildDuckMailbox>,
+  mailboxId: string
+): MessageOwnershipOptions {
+  return {
+    ...ownershipOptionsForMailbox(mailboxes, mailboxId),
+    includeSender: true
+  }
+}
+
+function addMessageAddressValues(
+  addresses: Set<string>,
+  value: ReadonlyArray<WildDuckMessageAddress> | WildDuckMessageAddress | string | undefined
+) {
+  if (!value) {
+    return
+  }
+  if (typeof value === 'string') {
+    for (const parsed of addressparser(value)) {
+      addParsedAddress(addresses, parsed)
+    }
+    addNormalizedMailbox(addresses, value)
+    return
+  }
+  if (isMessageAddressArray(value)) {
+    for (const item of value) {
+      addNormalizedMailbox(addresses, item.address)
+    }
+    return
+  }
+  addNormalizedMailbox(addresses, value.address)
+}
+
+function addParsedAddress(addresses: Set<string>, parsed: addressparser.AddressOrGroup) {
+  if ('address' in parsed) {
+    addNormalizedMailbox(addresses, parsed.address)
+    return
+  }
+  for (const item of parsed.group) {
+    addParsedAddress(addresses, item)
+  }
 }
 
 function toMessageDetail(
@@ -692,6 +1166,8 @@ function toMessageDetail(
     cc: addressList(message.cc),
     html: htmlBody(message),
     messageId: stringValue(message.messageId) || undefined,
+    plainText: stringValue(message.text) || stripHTML(htmlBody(message)),
+    replyTo: addressList(message.replyTo),
     sourceUrl: mailRoutePath(
       `/accounts/${encodeURIComponent(accountId)}/mailboxes/${encodeURIComponent(mailboxId)}/messages/${encodeURIComponent(summary.id)}/source`
     ),
@@ -789,6 +1265,13 @@ function resolveMailboxById(mailboxes: ReadonlyArray<WildDuckMailbox>, mailboxId
   return { ...mailbox, id: mailbox.id }
 }
 
+function requireDraftsMailbox(mailbox: WildDuckMailbox & { id: string }) {
+  if (!isDraftsMailbox(mailbox)) {
+    throw new AgentMailWebmailError('Draft operations require the Drafts folder', 400)
+  }
+  return mailbox
+}
+
 function findSpecialMailbox(mailboxes: ReadonlyArray<WildDuckMailbox>, specialUse: string) {
   const normalizedSpecialUse = specialUse.toLowerCase()
   return mailboxes.find((mailbox) => mailbox.specialUse?.toLowerCase() === normalizedSpecialUse)
@@ -803,6 +1286,20 @@ function findMailboxByPath(mailboxes: ReadonlyArray<WildDuckMailbox>, path: stri
   )
 }
 
+function hasMailboxPathOrName(
+  mailboxes: ReadonlyArray<WildDuckMailbox>,
+  path: string,
+  exceptMailboxId: string
+) {
+  const normalizedPath = path.toLowerCase()
+  return mailboxes.some(
+    (mailbox) =>
+      mailbox.id !== exceptMailboxId &&
+      (mailbox.path?.trim().toLowerCase() === normalizedPath ||
+        mailbox.name?.trim().toLowerCase() === normalizedPath)
+  )
+}
+
 function normalizeComposePayload(
   input: AgentMailComposeInput,
   fromAddress: string,
@@ -813,9 +1310,13 @@ function normalizeComposePayload(
   const to = normalizeAddressList(input.to, 'to')
   const cc = normalizeAddressList(input.cc, 'cc')
   const bcc = normalizeAddressList(input.bcc, 'bcc')
+  const replyTo = normalizeAddressList(input.replyTo, 'replyTo')
   const text = input.body.replace(/\r?\n/gu, '\r\n').trim()
   const html = input.html?.trim()
 
+  if (replyTo.length > 1) {
+    throw new AgentMailWebmailError('replyTo must include one email address', 400)
+  }
   if (options.requireRecipient && to.length + cc.length + bcc.length === 0) {
     throw new AgentMailWebmailError('At least one recipient is required', 400)
   }
@@ -829,10 +1330,44 @@ function normalizeComposePayload(
     from: { address: fromAddress },
     ...(html ? { html } : {}),
     ...(input.reference ? { reference: normalizeMessageReference(input.reference) } : {}),
+    ...(replyTo[0] ? { replyTo: replyTo[0] } : {}),
     subject: normalizeHeaderText(input.subject),
     ...(text ? { text } : {}),
     ...(to.length ? { to } : {})
   }
+}
+
+function composeRecipientAddresses(payload: ReturnType<typeof normalizeComposePayload>): string[] {
+  return [...(payload.to ?? []), ...(payload.cc ?? []), ...(payload.bcc ?? [])]
+    .map((address) => address.address.trim().toLowerCase())
+    .filter(Boolean)
+}
+
+function messageRecipientAddresses(message: WildDuckMessage): string[] {
+  const recipients = new Set<string>()
+  addMessageRecipientAddresses(recipients, message.to)
+  addMessageRecipientAddresses(recipients, message.cc)
+  addMessageRecipientAddresses(recipients, message.bcc)
+  return [...recipients].sort()
+}
+
+function addMessageRecipientAddresses(
+  recipients: Set<string>,
+  value: ReadonlyArray<WildDuckMessageAddress> | WildDuckMessageAddress | string | undefined
+) {
+  if (typeof value === 'string') {
+    for (const address of addressparser(value, { flatten: true })) {
+      addNormalizedMailbox(recipients, address.address)
+    }
+    return
+  }
+  if (isMessageAddressArray(value)) {
+    for (const address of value) {
+      addNormalizedMailbox(recipients, address.address)
+    }
+    return
+  }
+  addNormalizedMailbox(recipients, value?.address)
 }
 
 function normalizeAddressList(value: string | undefined, label: string): WildDuckAddressInput[] {
@@ -937,12 +1472,33 @@ function safeAttachmentContentType(headers: Headers) {
   return SAFE_INLINE_ATTACHMENT_TYPES.has(mediaType) ? mediaType : 'application/octet-stream'
 }
 
-function requireAuthorizedMailboxAddress(value: string, domains: ReadonlyArray<string>) {
+function requireAuthorizedMailboxAddress(
+  value: string,
+  domains: ReadonlyArray<string>,
+  context: AgentMailOrganizationContext,
+  action: AgentMailAbilityAction | ReadonlyArray<AgentMailAbilityAction>
+) {
   const address = normalizeMailboxAddress(value)
-  if (!address || !mailboxBelongsToDomains(address, domains)) {
+  if (
+    !address ||
+    (!mailboxBelongsToDomains(address, domains) &&
+      !hasExactScopedMailboxAuthorization(context, action, address))
+  ) {
     throw new AgentMailWebmailError('Mailbox account is not available', 403)
   }
   return address
+}
+
+function hasExactScopedMailboxAuthorization(
+  context: AgentMailOrganizationContext,
+  action: AgentMailAbilityAction | ReadonlyArray<AgentMailAbilityAction>,
+  mailboxAddress: string
+) {
+  const actions = typeof action === 'string' ? [action] : action
+  return actions.some((candidate) => {
+    const scopedAddresses = scopedMailboxAddresses(context, candidate)
+    return scopedAddresses.includes(mailboxAddress) && canMailboxAction(context, candidate, mailboxAddress)
+  })
 }
 
 function normalizeMailboxAddress(value: string | undefined) {
@@ -1038,10 +1594,36 @@ function finiteNumber(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
-function isProtectedMailbox(specialUse: string | undefined) {
+function isDraftsMailbox(mailbox: WildDuckMailbox) {
+  return (
+    mailbox.specialUse?.toLowerCase() === '\\drafts' ||
+    mailbox.path?.trim().toLowerCase() === 'drafts' ||
+    mailbox.name?.trim().toLowerCase() === 'drafts'
+  )
+}
+
+function isOutboundMailbox(mailbox: WildDuckMailbox) {
+  const specialUse = mailbox.specialUse?.toLowerCase()
+  const path = mailbox.path?.trim().toLowerCase()
+  const name = mailbox.name?.trim().toLowerCase()
+  return (
+    specialUse === '\\drafts' ||
+    specialUse === '\\sent' ||
+    path === 'drafts' ||
+    path === 'sent' ||
+    name === 'drafts' ||
+    name === 'sent'
+  )
+}
+
+function isProtectedMailbox(specialUse: string | null | undefined) {
   return Boolean(
     specialUse && ['\\drafts', '\\inbox', '\\junk', '\\sent', '\\trash'].includes(specialUse.toLowerCase())
   )
+}
+
+function isArchiveMailbox(mailbox: WildDuckMailbox) {
+  return mailbox.specialUse?.toLowerCase() === '\\archive'
 }
 
 function isDraftMessage(message: WildDuckMessage) {
@@ -1095,14 +1677,20 @@ function addressLabel(value: WildDuckMessage['from']): string {
   return addressDisplay(value)
 }
 
-function addressList(value: WildDuckMessage['to']) {
+function addressList(
+  value: ReadonlyArray<WildDuckMessageAddress> | WildDuckMessageAddress | string | undefined
+) {
   if (typeof value === 'string') {
     return [value]
   }
-  if (!Array.isArray(value)) {
+  if (isMessageAddressArray(value)) {
+    return value.map(addressDisplay).filter(Boolean)
+  }
+  if (!value) {
     return []
   }
-  return value.map(addressDisplay).filter(Boolean)
+  const rendered = addressDisplay(value)
+  return rendered ? [rendered] : []
 }
 
 function addressDisplay(value: WildDuckMessageAddress | undefined) {

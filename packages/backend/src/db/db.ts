@@ -13,9 +13,18 @@ export type Database = {
   close: () => Promise<void>
 }
 
-export async function createDatabase(connectionString: string): Promise<Database> {
+export type DatabaseOptions = {
+  maxPoolSize?: number
+}
+
+const DEFAULT_DATABASE_MAX_POOL_SIZE = 8
+
+export async function createDatabase(
+  connectionString: string,
+  options: DatabaseOptions = {}
+): Promise<Database> {
   const connection = mongoose.createConnection(connectionString, {
-    maxPoolSize: 40,
+    maxPoolSize: options.maxPoolSize ?? DEFAULT_DATABASE_MAX_POOL_SIZE,
     serverSelectionTimeoutMS: 10_000
   })
 

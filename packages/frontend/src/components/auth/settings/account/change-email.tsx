@@ -1,5 +1,5 @@
 import { useAuth, useChangeEmail, useSession } from "@better-auth-ui/react"
-import { type SyntheticEvent, useState } from "react"
+import {  useState } from "react"
 import { toast } from "sonner"
 
 import { Button } from "src/components/ui/button"
@@ -10,6 +10,7 @@ import { Label } from "src/components/ui/label"
 import { Skeleton } from "src/components/ui/skeleton"
 import { Spinner } from "src/components/ui/spinner"
 import { cn } from "src/lib/utils"
+import type { SyntheticEvent } from "react";
 
 export type ChangeEmailProps = {
   className?: string

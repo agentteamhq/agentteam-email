@@ -25,6 +25,14 @@ func (e configError) Error() string {
 	return e.message
 }
 
+type agentCredentialRequiredError struct {
+	message string
+}
+
+func (e agentCredentialRequiredError) Error() string {
+	return e.message
+}
+
 type protocolError struct {
 	message string
 }
@@ -55,6 +63,12 @@ func newAgentMailError(message string) error {
 
 func newConfigError(message string) error {
 	return configError{message: message}
+}
+
+func newAgentCredentialRequiredError() error {
+	return agentCredentialRequiredError{
+		message: "missing local Agent Auth credential; run `at-email agent connect`, `at-email agent trial`, or `at-email agent enroll TOKEN` before using mailbox commands",
+	}
 }
 
 func newProtocolError(message string) error {

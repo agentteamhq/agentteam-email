@@ -45,16 +45,22 @@ export function NewApiKeyDialog({
 
   const [copied, setCopied] = useState(false)
 
-  const copySecretKey = async () => {
-    if (!secretKey) return
-
-    try {
-      await navigator.clipboard.writeText(secretKey)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+  const copySecretKey = () => {
+    if (!secretKey) {
+      return
     }
+
+    globalThis.navigator.clipboard
+      .writeText(secretKey)
+      .then(() => {
+        setCopied(true)
+        globalThis.setTimeout(() => {
+          setCopied(false)
+        }, 1500)
+      })
+      .catch((error: unknown) => {
+        toast.error(error instanceof Error ? error.message : String(error))
+      })
   }
 
   return (

@@ -44,8 +44,12 @@ const minioImage =
   process.env.AGENTTEAM_EMAIL_SMOKE_MINIO_IMAGE || 'docker.io/minio/minio:RELEASE.2025-09-07T16-13-09Z'
 const mailpitImage = process.env.AGENTTEAM_EMAIL_DEV_MAILPIT_IMAGE || 'docker.io/axllent/mailpit:v1.30.1'
 const supportToken = 'full-stack-e2e-support-token'
+const trialAdmissionToken = 'full-stack-e2e-trial-admission-token'
 const testPassword = `FullStackE2E-${randomBytes(12).toString('base64url')}!1`
 const testEmail = `full-stack-e2e-${Date.now()}-${randomBytes(4).toString('hex')}@example.test`
+const fakeCloudflareOAuthIdentity = sanitizeIdentifier(runId)
+const fakeCloudflareOAuthEmail = `cloudflare-${fakeCloudflareOAuthIdentity}@example.test`
+const fakeCloudflareOAuthSubject = `cloudflare-user-${fakeCloudflareOAuthIdentity}`
 const domains = ['example.test', 'second.test']
 const minioAccessKey = 'full-stack-e2e-minio'
 const minioSecretKey = 'full-stack-e2e-minio-secret'
@@ -60,10 +64,12 @@ const runtime = {
   webBaseUrl: null,
   minioBaseUrl: null,
   cookieHeader: null,
+  organizationId: null,
   ingestId: null,
   connections: new Map(),
   workers: new Map()
 }
+const dynamicRedactions = new Map()
 
 await mkdir(logsDir, { recursive: true })
 await mkdir(renderedDir, { recursive: true })
@@ -115,6 +121,11 @@ try {
     checkInboundNotificationThroughWebServer,
     checkInboundResultAndWildDuckProof,
     checkWebmailClientThroughWebServer,
+    checkAtEmailAgentEnrollmentGrantAuthorizesMailOperation,
+    checkAtEmailAgentEnrollmentDeniesUngrantedMailOperation,
+    checkAtEmailAgentConnectApprovalAuthorizesMailOperation,
+    checkAtEmailAgentConnectFreshSignupApprovalAuthorizesMailOperation,
+    checkAtEmailAgentTrialSendsWithinLimitsThenClaimAuthorizesPostClaimSend,
     checkInboundIdempotencyAndSweepContract,
     checkInboundInvalidDomainRejection
   ])
@@ -221,6 +232,9 @@ async function setupCluster() {
     })
     createdCluster = true
   }
+  await runCommand('kind', ['export', 'kubeconfig', '--name', clusterName, '--kubeconfig', kubeconfigPath], {
+    logName: 'kind-export-kubeconfig'
+  })
   await runCommand('kubectl', ['config', 'use-context', `kind-${clusterName}`], {
     logName: 'kubectl-use-context'
   })
@@ -270,6 +284,8 @@ async function setupCluster() {
     }
   )
 
+  await restartLocalImageDeployments(['atemail-mail-control-service', 'atemail-web-server'])
+
   for (const deployment of [
     'mongodb',
     'redis',
@@ -285,6 +301,14 @@ async function setupCluster() {
 
   await startPortForward('web-server', 'service/atemail-web-server', `${webPort}:80`)
   await waitForHttpOk(`${runtime.webBaseUrl}/health`, 'web-server health')
+}
+
+async function restartLocalImageDeployments(deployments) {
+  for (const deployment of deployments) {
+    await runCommand('kubectl', ['rollout', 'restart', `deployment/${deployment}`, '-n', namespace], {
+      logName: `restart-${deployment}`
+    })
+  }
 }
 
 async function saveAndLoadImage(name, image) {
@@ -692,13 +716,13 @@ async function checkE2eSupportInvalidEmail() {
   return 'test support route rejects non-.test principal emails'
 }
 
-async function checkE2eSupportPrincipalCreation() {
+async function createE2ePrincipal({ artifactFile, email, name, password }) {
   const response = await postJson(
     '/rpc/internal/e2e/test-principals',
     {
-      email: testEmail,
-      name: 'Full Stack E2E User',
-      password: testPassword
+      email,
+      name,
+      password
     },
     {
       authorization: `Bearer ${supportToken}`
@@ -706,11 +730,59 @@ async function checkE2eSupportPrincipalCreation() {
   )
   assert(
     response.status === 200,
-    `principal creation returned ${response.status}: ${bodySnippet(response.bodyText)}`
+    `principal creation for ${email} returned ${response.status}: ${bodySnippet(response.bodyText)}`
   )
   const body = parseJson(response.bodyText)
-  assert(body.principal?.email === testEmail, 'created principal email must match requested test user')
-  await writeJson(path.join(scenariosDir, 'phase-1-web-server-actor', 'test-principal.json'), body.principal)
+  assert(body.principal?.email === email, 'created principal email must match requested test user')
+  if (artifactFile) {
+    await writeJson(artifactFile, body.principal)
+  }
+  return body.principal
+}
+
+async function signInE2ePrincipal({ artifactFile, email, password }) {
+  const response = await postJson(
+    '/rpc/auth/api/sign-in/email',
+    {
+      email,
+      password,
+      rememberMe: false
+    },
+    {
+      origin: runtime.webBaseUrl
+    }
+  )
+  assert(response.status >= 200 && response.status < 300, `sign-in for ${email} returned ${response.status}`)
+  const cookieHeader = extractCookieHeader(response.raw)
+  assert(cookieHeader, 'sign-in did not return a session cookie')
+  const sessionResponse = await fetch(`${runtime.webBaseUrl}/rpc/auth/api/get-session`, {
+    headers: {
+      accept: 'application/json',
+      cookie: cookieHeader
+    }
+  })
+  assert(sessionResponse.status === 200, `get-session for ${email} returned ${sessionResponse.status}`)
+  const session = await sessionResponse.json()
+  assert(session?.user?.email === email, 'authenticated session must belong to the requested principal')
+  const organizationId = session?.session?.activeOrganizationId ?? null
+  assert(organizationId, 'authenticated session did not select an active organization')
+  if (artifactFile) {
+    await writeJson(artifactFile, redactSession(session))
+  }
+  return {
+    cookieHeader,
+    organizationId,
+    session
+  }
+}
+
+async function checkE2eSupportPrincipalCreation() {
+  await createE2ePrincipal({
+    artifactFile: path.join(scenariosDir, 'phase-1-web-server-actor', 'test-principal.json'),
+    email: testEmail,
+    name: 'Full Stack E2E User',
+    password: testPassword
+  })
   return 'test principal created through the web-server route'
 }
 
@@ -762,6 +834,8 @@ async function checkBetterAuthSignIn() {
   assert(sessionResponse.status === 200, `get-session returned ${sessionResponse.status}`)
   const session = await sessionResponse.json()
   assert(session?.user?.email === testEmail, 'authenticated session must belong to the E2E principal')
+  runtime.organizationId = session?.session?.activeOrganizationId ?? null
+  assert(runtime.organizationId, 'authenticated session did not select an active organization')
   await writeJson(path.join(scenariosDir, 'phase-1-web-server-actor', 'session.json'), redactSession(session))
   return 'E2E principal signed in through Better Auth on the web-server boundary'
 }
@@ -887,8 +961,10 @@ async function checkDomainConnectionThroughWebServer() {
       `provisioned connection for ${domain} was not active: ${bodySnippet(provision.bodyText)}`
     )
     assert(
-      provisioned.connection?.archivePrefix?.includes(`/domains/${domain}/mail/inbound`),
-      `archive prefix for ${domain} did not include the org/domain inbound path`
+      !JSON.stringify(provisioned.connection).includes('agent-mail-archive') &&
+        !JSON.stringify(provisioned.connection).includes('cloudflare-worker:secret') &&
+        !JSON.stringify(provisioned.connection).includes('AGENTTEAM_WORKER_HMAC_SECRET'),
+      `public provisioned connection for ${domain} leaked storage or credential details`
     )
     runtime.connections.set(domain, provisioned.connection)
   }
@@ -904,17 +980,15 @@ async function checkExactDomainWorkerContract() {
     assert(worker, `missing provisioned Worker metadata for ${domain}`)
     assert(worker.domain === domain, `Worker domain binding for ${domain} was ${worker.domain}`)
     assert(
-      worker.archivePrefix === connection.archivePrefix,
-      `Worker archive prefix for ${domain} does not match connection state`
-    )
-    assert(
       worker.connectionId === connection.publicId,
       `Worker connection id for ${domain} does not match connection public id`
     )
     assert(
-      worker.archivePrefix.startsWith(
-        `orgs/${connection.organizationPublicId}/domains/${domain}/mail/inbound`
-      ),
+      worker.archivePrefix === `orgs/${worker.organizationPublicId}/domains/${domain}/mail/inbound`,
+      `Worker archive prefix for ${domain} is not scoped to its org/domain binding`
+    )
+    assert(
+      /^orgs\/[^/]+\/domains\/[^/]+\/mail\/inbound$/u.test(worker.archivePrefix),
       `Worker archive prefix for ${domain} is not org/domain scoped`
     )
     const scriptFileNames = worker.scriptFiles.map((file) => file.name)
@@ -1012,7 +1086,9 @@ async function checkInboundArchiveObjects() {
 }
 
 async function checkWildDuckRecipientSeeded() {
-  const probe = await retry(() => execNodeInWebServer(`
+  const probe = await retry(
+    () =>
+      execNodeInWebServer(`
     const token = 'full-stack-e2e-wildduck-admin-token';
     const baseUrl = 'http://wildduck-api:8080';
     const address = 'agent@example.test';
@@ -1057,7 +1133,9 @@ async function checkWildDuckRecipientSeeded() {
       created: created ? created.status : null,
       resolved: resolved.status
     }));
-  `), { attempts: 12, delayMs: 2500, description: 'WildDuck recipient seed' })
+  `),
+    { attempts: 12, delayMs: 2500, description: 'WildDuck recipient seed' }
+  )
   await writeFile(path.join(scenariosDir, 'phase-3-inbound-mail', 'wildduck-recipient.json'), probe.stdout)
   return 'test-owned WildDuck recipient mailbox exists for inbound replay proof'
 }
@@ -1264,6 +1342,501 @@ async function checkWebmailClientThroughWebServer() {
   return 'webmail RPC lists accounts, paginates, threads, proxies resources, mutates messages, drafts, sends, and switches accounts through the web-server boundary'
 }
 
+async function checkAtEmailAgentEnrollmentGrantAuthorizesMailOperation() {
+  assert(runtime.cookieHeader, 'authenticated cookie is required for Agent Auth enrollment checks')
+  const agentName = `Full Stack E2E Enrolled Agent ${runId}`
+  const accountId = 'agent@example.test'
+  const enrollmentResponse = await postJson(
+    '/rpc/mail/admin/agents',
+    {
+      grantExpiresAt: null,
+      mailboxGrants: [
+        {
+          accountId,
+          capabilities: ['readMailbox', 'sendAs']
+        }
+      ],
+      name: agentName,
+      systemPermissions: []
+    },
+    {
+      cookie: runtime.cookieHeader
+    }
+  )
+  assert(
+    enrollmentResponse.status === 200,
+    `agent enrollment create returned ${enrollmentResponse.status}: ${bodySnippet(enrollmentResponse.bodyText)}`
+  )
+  const enrollmentBody = parseJson(enrollmentResponse.bodyText)
+  const enrollment = enrollmentBody.enrollment
+  assert(enrollmentBody.success === true, 'agent enrollment create did not return success')
+  assert(
+    typeof enrollment?.enrollmentToken === 'string' && enrollment.enrollmentToken.length > 0,
+    'agent enrollment token is missing'
+  )
+  assert(
+    enrollment.mailboxGrantCount === 2,
+    `agent enrollment mailbox grant count = ${enrollment.mailboxGrantCount}, want 2`
+  )
+  registerRedaction(enrollment.enrollmentToken, '<redacted-agent-enrollment-token>')
+
+  const cliConfigDir = path.join(runDir, 'at-email-agent-cli-config')
+  const cliWorkdir = path.join(repoRoot, 'apps', 'at-email-cli')
+  await mkdir(cliConfigDir, { recursive: true })
+
+  const enrollStdout = await runCommand(
+    'bash',
+    [
+      '-lc',
+      'go run ./cmd/at-email agent enroll "$AT_EMAIL_AGENT_ENROLLMENT_TOKEN" --api-base-url "$AT_EMAIL_API_BASE_URL" --name "$AT_EMAIL_AGENT_NAME" --json'
+    ],
+    {
+      cwd: cliWorkdir,
+      env: {
+        AT_EMAIL_AGENT_ENROLLMENT_TOKEN: enrollment.enrollmentToken,
+        AT_EMAIL_AGENT_NAME: agentName,
+        AT_EMAIL_API_BASE_URL: runtime.webBaseUrl,
+        XDG_CONFIG_HOME: cliConfigDir
+      },
+      logName: 'at-email-agent-enroll',
+      returnStdout: true,
+      stdoutFile: path.join(scenariosDir, 'phase-3-inbound-mail', 'at-email-agent-enroll.json')
+    }
+  )
+  assertNoInternalCredentialMaterial(enrollStdout, 'at-email agent enroll output')
+  const enrollResult = parseJson(enrollStdout)
+  assert(enrollResult.agent_id, 'at-email agent enroll did not return an agent id')
+  assert(
+    enrollResult.host_id === enrollment.hostId,
+    'at-email agent enroll host id did not match enrollment host'
+  )
+
+  const sendStdout = await runCommand(
+    'bash',
+    [
+      '-lc',
+      'go run ./cmd/at-email send --json --to recipient@example.net --subject "$AT_EMAIL_AGENT_SEND_SUBJECT" --body "Boundary delivery fixture."'
+    ],
+    {
+      cwd: cliWorkdir,
+      env: {
+        AT_EMAIL_AGENT_SEND_SUBJECT: `Agent Enrollment E2E ${runId}`,
+        AT_EMAIL_MAILBOX_ADDRESS: accountId,
+        XDG_CONFIG_HOME: cliConfigDir
+      },
+      logName: 'at-email-agent-send',
+      returnStdout: true,
+      stdoutFile: path.join(scenariosDir, 'phase-3-inbound-mail', 'at-email-agent-send.json')
+    }
+  )
+  assertNoInternalCredentialMaterial(sendStdout, 'at-email send output')
+  const sendResult = parseJson(sendStdout)
+  assert(sendResult.subject === `Agent Enrollment E2E ${runId}`, 'at-email send subject did not match')
+  assert(
+    Array.isArray(sendResult.to) && sendResult.to.includes('recipient@example.net'),
+    'at-email send recipients did not match'
+  )
+  assert(
+    sendResult.message && typeof sendResult.message === 'object',
+    'at-email send did not return a message result'
+  )
+
+  await writeJson(path.join(scenariosDir, 'phase-3-inbound-mail', 'agent-enrollment-mail-summary.json'), {
+    accountId,
+    agentId: enrollResult.agent_id,
+    hostId: enrollResult.host_id,
+    mailboxGrantCount: enrollment.mailboxGrantCount,
+    status: enrollResult.status
+  })
+
+  return 'human-created Agent Auth enrollment grants authorize an enrolled at-email agent to send mail through the web-server boundary'
+}
+
+async function checkAtEmailAgentEnrollmentDeniesUngrantedMailOperation() {
+  assert(runtime.cookieHeader, 'authenticated cookie is required for Agent Auth enrollment denial checks')
+  const agentName = `Full Stack E2E Read Only Agent ${runId}`
+  const accountId = 'agent@example.test'
+  const enrollmentResponse = await postJson(
+    '/rpc/mail/admin/agents',
+    {
+      grantExpiresAt: null,
+      mailboxGrants: [
+        {
+          accountId,
+          capabilities: ['readMailbox']
+        }
+      ],
+      name: agentName,
+      systemPermissions: []
+    },
+    {
+      cookie: runtime.cookieHeader
+    }
+  )
+  assert(
+    enrollmentResponse.status === 200,
+    `read-only agent enrollment create returned ${enrollmentResponse.status}: ${bodySnippet(enrollmentResponse.bodyText)}`
+  )
+  const enrollmentBody = parseJson(enrollmentResponse.bodyText)
+  const enrollment = enrollmentBody.enrollment
+  assert(enrollmentBody.success === true, 'read-only agent enrollment create did not return success')
+  assert(
+    typeof enrollment?.enrollmentToken === 'string' && enrollment.enrollmentToken.length > 0,
+    'read-only agent enrollment token is missing'
+  )
+  registerRedaction(enrollment.enrollmentToken, '<redacted-read-only-agent-enrollment-token>')
+
+  const cliConfigDir = path.join(runDir, 'at-email-read-only-agent-cli-config')
+  const cliWorkdir = path.join(repoRoot, 'apps', 'at-email-cli')
+  await mkdir(cliConfigDir, { recursive: true })
+
+  const enrollStdout = await runCommand(
+    'bash',
+    [
+      '-lc',
+      'go run ./cmd/at-email agent enroll "$AT_EMAIL_AGENT_ENROLLMENT_TOKEN" --api-base-url "$AT_EMAIL_API_BASE_URL" --name "$AT_EMAIL_AGENT_NAME" --json'
+    ],
+    {
+      cwd: cliWorkdir,
+      env: {
+        AT_EMAIL_AGENT_ENROLLMENT_TOKEN: enrollment.enrollmentToken,
+        AT_EMAIL_AGENT_NAME: agentName,
+        AT_EMAIL_API_BASE_URL: runtime.webBaseUrl,
+        XDG_CONFIG_HOME: cliConfigDir
+      },
+      logName: 'at-email-read-only-agent-enroll',
+      returnStdout: true,
+      stdoutFile: path.join(scenariosDir, 'phase-3-inbound-mail', 'at-email-read-only-agent-enroll.json')
+    }
+  )
+  assertNoInternalCredentialMaterial(enrollStdout, 'at-email read-only agent enroll output')
+  const enrollResult = parseJson(enrollStdout)
+  assert(enrollResult.agent_id, 'read-only at-email agent enroll did not return an agent id')
+  const deniedSubject = `Read Only Agent Send Denial ${runId}`
+  const beforeProviderRequests = await waitForOutboundProviderRequestsToSettle()
+  const beforeWildDuckMatches = await wildDuckMessageCountBySubject(accountId, deniedSubject)
+
+  const sendResult = await runCommand(
+    'bash',
+    [
+      '-lc',
+      'go run ./cmd/at-email send --json --to recipient@example.net --subject "$AT_EMAIL_AGENT_SEND_SUBJECT" --body "This should be rejected."'
+    ],
+    {
+      allowFailure: true,
+      cwd: cliWorkdir,
+      env: {
+        AT_EMAIL_AGENT_SEND_SUBJECT: deniedSubject,
+        AT_EMAIL_MAILBOX_ADDRESS: accountId,
+        XDG_CONFIG_HOME: cliConfigDir
+      },
+      logName: 'at-email-read-only-agent-send-denied',
+      returnResult: true,
+      stderrFile: path.join(
+        scenariosDir,
+        'phase-3-inbound-mail',
+        'at-email-read-only-agent-send-denied.stderr'
+      ),
+      stdoutFile: path.join(
+        scenariosDir,
+        'phase-3-inbound-mail',
+        'at-email-read-only-agent-send-denied.stdout'
+      )
+    }
+  )
+  assert(sendResult.code !== 0, 'read-only at-email agent send unexpectedly succeeded')
+  assert(sendResult.stdout.trim() === '', 'read-only at-email send denial wrote to stdout in JSON mode')
+  assertNoInternalCredentialMaterial(sendResult.stdout, 'read-only at-email send denial stdout')
+  assertNoInternalCredentialMaterial(sendResult.stderr, 'read-only at-email send denial stderr')
+  assert(
+    sendResult.stderr.includes('Mailbox operation is not authorized'),
+    `read-only at-email send did not fail with an authorization error: ${bodySnippet(sendResult.stderr)}`
+  )
+  const afterProviderRequests = await waitForOutboundProviderRequestsToSettle()
+  assert(
+    afterProviderRequests.length === beforeProviderRequests.length,
+    `read-only at-email send reached an outbound provider: before=${beforeProviderRequests.length} after=${afterProviderRequests.length}`
+  )
+  const afterWildDuckMatches = await wildDuckMessageCountBySubject(accountId, deniedSubject)
+  assert(
+    afterWildDuckMatches === beforeWildDuckMatches,
+    `read-only at-email send created WildDuck messages for denied subject: before=${beforeWildDuckMatches} after=${afterWildDuckMatches}`
+  )
+
+  await writeJson(path.join(scenariosDir, 'phase-3-inbound-mail', 'agent-enrollment-denial-summary.json'), {
+    accountId,
+    agentId: enrollResult.agent_id,
+    exitCode: sendResult.code,
+    providerRequestCount: afterProviderRequests.length,
+    hostId: enrollResult.host_id,
+    mailboxGrantCount: enrollment.mailboxGrantCount,
+    wildDuckDeniedSubjectMatches: afterWildDuckMatches,
+    status: enrollResult.status
+  })
+
+  return 'read-only Agent Auth enrollment grants deny at-email send through the web-server permission boundary'
+}
+
+async function checkAtEmailAgentConnectApprovalAuthorizesMailOperation() {
+  assert(runtime.cookieHeader, 'authenticated cookie is required for Agent Auth connect approval')
+  assert(runtime.organizationId, 'active organization is required for Agent Auth connect approval')
+
+  const agentName = `Full Stack E2E Connected Agent ${runId}`
+  const accountId = 'agent@example.test'
+  const cliConfigDir = path.join(runDir, 'at-email-agent-connect-cli-config')
+  const cliWorkdir = path.join(repoRoot, 'apps', 'at-email-cli')
+  await mkdir(cliConfigDir, { recursive: true })
+
+  const connect = await runAtEmailAgentConnectWithWebApproval({
+    accountId,
+    agentName,
+    cliConfigDir,
+    cliWorkdir,
+    logName: 'at-email-agent-connect',
+    stderrFile: path.join(scenariosDir, 'phase-3-inbound-mail', 'at-email-agent-connect-pending.json'),
+    stdoutFile: path.join(scenariosDir, 'phase-3-inbound-mail', 'at-email-agent-connect.json')
+  })
+
+  assertNoInternalCredentialMaterial(connect.stdout, 'at-email agent connect output')
+  assertNoInternalCredentialMaterial(connect.stderr, 'at-email agent connect pending output')
+  const connectResult = parseJson(connect.stdout)
+  assert(connectResult.agent_id, 'at-email agent connect did not return an agent id')
+  assert(connectResult.status === 'active', `at-email agent connect status = ${connectResult.status}`)
+  assert(connectResult.mode === 'delegated', `at-email agent connect mode = ${connectResult.mode}`)
+  assert(
+    connect.pending.operation === 'agent_connect',
+    'at-email agent connect did not emit an approval event'
+  )
+  assert(connect.decision.success === true, 'agent connect approval decision did not return success')
+
+  const statusStdout = await runCommand('bash', ['-lc', 'go run ./cmd/at-email status --json'], {
+    cwd: cliWorkdir,
+    env: {
+      AT_EMAIL_MAILBOX_ADDRESS: accountId,
+      XDG_CONFIG_HOME: cliConfigDir
+    },
+    logName: 'at-email-agent-connect-status',
+    returnStdout: true,
+    stdoutFile: path.join(scenariosDir, 'phase-3-inbound-mail', 'at-email-agent-connect-status.json')
+  })
+  assertNoInternalCredentialMaterial(statusStdout, 'at-email agent connect status output')
+  const status = parseJson(statusStdout)
+  assert(status.user_id === connectResult.agent_id, 'agent connect status did not use the connected agent id')
+  assert(
+    Array.isArray(status.mailboxes) && status.mailboxes.length > 0,
+    'connected agent could not list mailboxes'
+  )
+
+  await writeJson(path.join(scenariosDir, 'phase-3-inbound-mail', 'agent-connect-mail-summary.json'), {
+    accountId,
+    agentId: connectResult.agent_id,
+    capabilityCount: Array.isArray(connectResult.capabilities) ? connectResult.capabilities.length : 0,
+    hostId: connectResult.host_id,
+    status: connectResult.status
+  })
+
+  return 'dynamic Agent Auth connect approval authorizes a connected at-email agent to read mail status through the web-server boundary'
+}
+
+async function checkAtEmailAgentConnectFreshSignupApprovalAuthorizesMailOperation() {
+  const password = `FullStackE2E-Connect-${randomBytes(12).toString('base64url')}!1`
+  const email = `full-stack-e2e-connect-${Date.now()}-${randomBytes(4).toString('hex')}@example.test`
+  const principal = await createE2ePrincipal({
+    artifactFile: path.join(scenariosDir, 'phase-3-inbound-mail', 'agent-connect-signup-principal.json'),
+    email,
+    name: 'Full Stack E2E Connect Signup User',
+    password
+  })
+  const session = await signInE2ePrincipal({
+    artifactFile: path.join(scenariosDir, 'phase-3-inbound-mail', 'agent-connect-signup-session.json'),
+    email,
+    password
+  })
+  const agentName = `Full Stack E2E Signup Connected Agent ${runId}`
+  const accountId = 'agent@example.test'
+  const cliConfigDir = path.join(runDir, 'at-email-agent-connect-signup-cli-config')
+  const cliWorkdir = path.join(repoRoot, 'apps', 'at-email-cli')
+  await mkdir(cliConfigDir, { recursive: true })
+
+  const connect = await runAtEmailAgentConnectWithWebApproval({
+    accountId,
+    agentName,
+    cliConfigDir,
+    cliWorkdir,
+    cookieHeader: session.cookieHeader,
+    logName: 'at-email-agent-connect-signup',
+    organizationId: session.organizationId,
+    stderrFile: path.join(
+      scenariosDir,
+      'phase-3-inbound-mail',
+      'at-email-agent-connect-signup-pending.json'
+    ),
+    stdoutFile: path.join(scenariosDir, 'phase-3-inbound-mail', 'at-email-agent-connect-signup.json')
+  })
+
+  assertNoInternalCredentialMaterial(connect.stdout, 'at-email signup agent connect output')
+  assertNoInternalCredentialMaterial(connect.stderr, 'at-email signup agent connect pending output')
+  const connectResult = parseJson(connect.stdout)
+  assert(connectResult.agent_id, 'signup at-email agent connect did not return an agent id')
+  assert(connectResult.status === 'active', `signup at-email agent connect status = ${connectResult.status}`)
+  assert(connect.decision.success === true, 'signup agent connect approval decision did not return success')
+
+  const statusStdout = await runCommand('bash', ['-lc', 'go run ./cmd/at-email status --json'], {
+    cwd: cliWorkdir,
+    env: {
+      AT_EMAIL_MAILBOX_ADDRESS: accountId,
+      XDG_CONFIG_HOME: cliConfigDir
+    },
+    logName: 'at-email-agent-connect-signup-status',
+    returnStdout: true,
+    stdoutFile: path.join(
+      scenariosDir,
+      'phase-3-inbound-mail',
+      'at-email-agent-connect-signup-status.json'
+    )
+  })
+  assertNoInternalCredentialMaterial(statusStdout, 'at-email signup agent connect status output')
+  const status = parseJson(statusStdout)
+  assert(status.user_id === connectResult.agent_id, 'signup agent connect status did not use the agent id')
+  assert(
+    Array.isArray(status.mailboxes) && status.mailboxes.length > 0,
+    'signup-connected agent could not list the granted mailbox'
+  )
+
+  await writeJson(path.join(scenariosDir, 'phase-3-inbound-mail', 'agent-connect-signup-summary.json'), {
+    accountId,
+    agentId: connectResult.agent_id,
+    hostId: connectResult.host_id,
+    organizationId: session.organizationId,
+    status: connectResult.status,
+    userId: principal.userId
+  })
+
+  return 'freshly signed-up web users can approve Agent Auth connect and return to an active CLI agent credential'
+}
+
+async function checkAtEmailAgentTrialSendsWithinLimitsThenClaimAuthorizesPostClaimSend() {
+  assert(runtime.cookieHeader, 'authenticated cookie is required for Agent Mail trial claim')
+  assert(runtime.organizationId, 'active organization is required for Agent Mail trial claim')
+  const agentName = `Full Stack E2E Trial Agent ${runId}`
+  const cliConfigDir = path.join(runDir, 'at-email-agent-trial-cli-config')
+  const cliWorkdir = path.join(repoRoot, 'apps', 'at-email-cli')
+  await mkdir(cliConfigDir, { recursive: true })
+
+  const trial = await runAtEmailAgentTrial({
+    agentName,
+    cliConfigDir,
+    cliWorkdir,
+    logName: 'at-email-agent-trial',
+    stdoutFile: path.join(scenariosDir, 'phase-3-inbound-mail', 'at-email-agent-trial.json')
+  })
+  const trialResult = parseJson(trial.stdout)
+  const accountId = trialResult.mailbox?.address
+  assert(accountId, 'at-email agent trial did not return a trial mailbox address')
+  assert(trialResult.agent_id, 'at-email agent trial did not return an agent id')
+  assert(trialResult.status === 'active', `at-email agent trial status = ${trialResult.status}`)
+  assert(trial.claimToken, 'at-email agent trial did not return a claim token')
+
+  const preClaimSubject = `Trial Pre-Claim Send ${runId}`
+  const preClaimSend = await runCommand(
+    'bash',
+    [
+      '-lc',
+      'go run ./cmd/at-email send --json --to recipient@example.net --subject "$AT_EMAIL_AGENT_SEND_SUBJECT" --body "Trial delivery fixture."'
+    ],
+    {
+      cwd: cliWorkdir,
+      env: {
+        AT_EMAIL_AGENT_SEND_SUBJECT: preClaimSubject,
+        AT_EMAIL_MAILBOX_ADDRESS: accountId,
+        XDG_CONFIG_HOME: cliConfigDir
+      },
+      logName: 'at-email-agent-trial-send-pre-claim',
+      returnStdout: true,
+      stdoutFile: path.join(
+        scenariosDir,
+        'phase-3-inbound-mail',
+        'at-email-agent-trial-send-pre-claim.json'
+      )
+    }
+  )
+  assertNoInternalCredentialMaterial(preClaimSend, 'at-email trial pre-claim send output')
+  const preClaimResult = parseJson(preClaimSend)
+  assert(preClaimResult.subject === preClaimSubject, 'trial pre-claim send subject did not match')
+
+  const preview = await fetch(
+    `${runtime.webBaseUrl}/rpc/agent-access/trials/claim/${encodeURIComponent(trial.claimToken)}`,
+    {
+      headers: {
+        accept: 'application/json',
+        cookie: runtime.cookieHeader
+      }
+    }
+  )
+  const previewBodyText = await preview.text()
+  assert(preview.status === 200, `trial claim preview returned ${preview.status}: ${bodySnippet(previewBodyText)}`)
+  const previewBody = parseJson(previewBodyText)
+  assert(previewBody.trial_id === trialResult.trial_id, 'trial claim preview did not match started trial')
+  assert(previewBody.mailbox?.address === accountId, 'trial claim preview did not show the trial mailbox')
+
+  const claim = await postJson(
+    `/rpc/agent-access/trials/claim/${encodeURIComponent(trial.claimToken)}/decision`,
+    {
+      action: 'approve',
+      target_organization_id: runtime.organizationId
+    },
+    {
+      cookie: runtime.cookieHeader
+    }
+  )
+  assert(claim.status === 200, `trial claim decision returned ${claim.status}: ${bodySnippet(claim.bodyText)}`)
+  const claimBody = parseJson(claim.bodyText)
+  assert(claimBody.success === true, 'trial claim decision did not return success')
+  assert(claimBody.claim?.status === 'approved', `trial claim status = ${claimBody.claim?.status}`)
+  assert(
+    claimBody.view?.organization_id === runtime.organizationId,
+    'trial claim did not target the active organization'
+  )
+
+  const postClaimSubject = `Trial Post-Claim Send ${runId}`
+  const postClaimSend = await runCommand(
+    'bash',
+    [
+      '-lc',
+      'go run ./cmd/at-email send --json --to recipient@example.net --subject "$AT_EMAIL_AGENT_SEND_SUBJECT" --body "Post-claim trial delivery fixture."'
+    ],
+    {
+      cwd: cliWorkdir,
+      env: {
+        AT_EMAIL_AGENT_SEND_SUBJECT: postClaimSubject,
+        AT_EMAIL_MAILBOX_ADDRESS: accountId,
+        XDG_CONFIG_HOME: cliConfigDir
+      },
+      logName: 'at-email-agent-trial-send-post-claim',
+      returnStdout: true,
+      stdoutFile: path.join(
+        scenariosDir,
+        'phase-3-inbound-mail',
+        'at-email-agent-trial-send-post-claim.json'
+      )
+    }
+  )
+  assertNoInternalCredentialMaterial(postClaimSend, 'at-email trial post-claim send output')
+  const postClaimResult = parseJson(postClaimSend)
+  assert(postClaimResult.subject === postClaimSubject, 'trial post-claim send subject did not match')
+
+  await writeJson(path.join(scenariosDir, 'phase-3-inbound-mail', 'agent-trial-claim-summary.json'), {
+    agentId: trialResult.agent_id,
+    mailbox: accountId,
+    organizationId: runtime.organizationId,
+    postClaimSubject,
+    preClaimSubject,
+    trialId: trialResult.trial_id
+  })
+
+  return 'autonomous at-email trial agents can send within limits, then be claimed and continue sending under post-claim grants'
+}
+
 async function checkInboundIdempotencyAndSweepContract() {
   const before = await s3GetObject(`${runtime.archivePrefix}/result.json`)
   await checkInboundNotificationThroughWebServer()
@@ -1354,6 +1927,22 @@ async function checkZoneMtaFeederReachableInternally() {
 }
 
 async function checkOutboundProviderOrLocalRouteResult() {
+  const providerRequests = await fetchOutboundProviderRequests()
+  assert(
+    providerRequests.length > 0,
+    `fake outbound provider did not observe provider-bound outbound mail; saw ${providerRequests.map((request) => `${request.provider} ${request.method} ${request.path}`).join(', ')}`
+  )
+  for (const request of providerRequests) {
+    const leakedHeaders = request.bodySummary?.forbiddenInternalHeaders || []
+    assert(
+      leakedHeaders.length === 0,
+      `provider payload leaked internal headers: ${leakedHeaders.join(', ')}`
+    )
+  }
+  return 'provider-bound outbound mail reached a fake provider with sanitized payload'
+}
+
+async function fetchOutboundProviderRequests() {
   const [fakeProvider, fakeCloudflare] = await Promise.all([
     fetchClusterJson('http://fake-provider:8080/__requests'),
     fetchClusterJson('http://fake-cloudflare:8080/__requests')
@@ -1362,28 +1951,32 @@ async function checkOutboundProviderOrLocalRouteResult() {
     ...(fakeProvider.requests || []).map((request) => ({ ...request, provider: 'fake-provider' })),
     ...(fakeCloudflare.requests || []).map((request) => ({ ...request, provider: 'fake-cloudflare' }))
   ]
-  const providerRequests = observedRequests.filter(
+  return observedRequests.filter(
     (request) =>
       request.path.includes('/email/sending/send') ||
       request.path.includes('/email/sending/send_raw') ||
       request.path.includes('/send')
   )
-  assert(
-    providerRequests.length > 0,
-    `fake outbound provider did not observe provider-bound outbound mail; saw ${observedRequests.map((request) => `${request.provider} ${request.method} ${request.path}`).join(', ')}`
-  )
-  for (const request of providerRequests) {
-    const bodyText = String(request.bodyText || '')
-    for (const forbidden of [
-      'X-ATM-Ingest-ID',
-      'X-ATMCF-Edge-Status',
-      'X-Zone-Loop',
-      'X-Agent-Mail-ZoneMTA-Queue-ID'
-    ]) {
-      assert(!bodyText.includes(forbidden), `provider payload leaked internal header ${forbidden}`)
+}
+
+async function waitForOutboundProviderRequestsToSettle() {
+  let previousCount = null
+  let stableSamples = 0
+  let latest = []
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    latest = await fetchOutboundProviderRequests()
+    if (latest.length === previousCount) {
+      stableSamples += 1
+      if (stableSamples >= 3) {
+        return latest
+      }
+    } else {
+      previousCount = latest.length
+      stableSamples = 0
     }
+    await delay(1000)
   }
-  return 'provider-bound outbound mail reached a fake provider with sanitized payload'
+  return latest
 }
 
 async function checkOutboundInvalidProvenanceRejected() {
@@ -1466,7 +2059,7 @@ async function checkUppercaseSignatureRejectedByWebIngest() {
   const notification = testNotification('example.test', `${runtime.ingestId}-uppercase-signature`)
   const bodyText = JSON.stringify(notification)
   const worker = requireWorker('example.test')
-  const signed = signWorkerNotification(worker, bodyText, new Date().toISOString())
+  const signed = await signWorkerNotification(worker, bodyText, new Date().toISOString())
   const response = await postIngestNotification(notification, signed.signature.toUpperCase(), {
     timestamp: signed.timestamp,
     worker
@@ -1579,7 +2172,10 @@ async function checkRestartRecoveryContract() {
       })
       const text = await response.text()
       await writeFile(path.join(scenariosDir, 'phase-5-restart-status.txt'), text)
-      assert(response.status === 200, `mail status after restart returned ${response.status}: ${bodySnippet(text)}`)
+      assert(
+        response.status === 200,
+        `mail status after restart returned ${response.status}: ${bodySnippet(text)}`
+      )
       return parseJson(text)
     },
     {
@@ -1589,7 +2185,7 @@ async function checkRestartRecoveryContract() {
     }
   )
   assert(
-    body.control_state?.configured === true && body.modules?.poller?.configured === true,
+    body.controlState?.configured === true && body.modules?.poller?.configured === true,
     'restart recovery did not expose durable control state and poller configuration'
   )
   return 'queued mail work survives mail-control restart'
@@ -1757,7 +2353,6 @@ async function loadProvisionedWorkerBindings() {
       connectionId: bindings.AGENTTEAM_CONNECTION_ID,
       domain,
       domainId: bindings.AGENTTEAM_DOMAIN_ID,
-      hmacSecret: bindings.AGENTTEAM_WORKER_HMAC_SECRET,
       organizationPublicId: bindings.AGENTTEAM_ORG_PUBLIC_ID,
       scriptFiles: Array.isArray(script.files) ? script.files : []
     })
@@ -1797,16 +2392,25 @@ function testNotification(domain, ingestId, options = {}) {
   }
 }
 
-function signWorkerNotification(worker, bodyText, timestamp) {
+async function signWorkerNotification(worker, bodyText, timestamp) {
+  const signed = await fetchClusterJson('http://fake-cloudflare:8080/__sign-worker-notification', {
+    body: JSON.stringify({
+      bodyText,
+      domain: worker.domain,
+      timestamp
+    }),
+    headers: {
+      'content-type': 'application/json'
+    },
+    method: 'POST'
+  })
+  assert(
+    signed.connectionId === worker.connectionId,
+    `fake Cloudflare signer returned connection ${signed.connectionId} for ${worker.domain}, expected ${worker.connectionId}`
+  )
   return {
-    signature: createHmac('sha256', worker.hmacSecret)
-      .update(timestamp)
-      .update('\n')
-      .update(worker.connectionId)
-      .update('\n')
-      .update(bodyText)
-      .digest('hex'),
-    timestamp
+    signature: signed.signature,
+    timestamp: signed.timestamp
   }
 }
 
@@ -1843,6 +2447,54 @@ async function webMailJson(method, pathname, body) {
     `${method} ${pathname} returned ${raw.status}: ${bodySnippet(bodyText)}`
   )
   return bodyText ? parseJson(bodyText) : {}
+}
+
+async function wildDuckMessageCountBySubject(address, subject) {
+  const probe = await execNodeInWebServer(`
+    const token = 'full-stack-e2e-wildduck-admin-token';
+    const baseUrl = 'http://wildduck-api:8080';
+    const address = ${JSON.stringify(address)};
+    const subject = ${JSON.stringify(subject)};
+
+    async function request(path) {
+      const response = await fetch(baseUrl + path, {
+        headers: {
+          accept: 'application/json',
+          'x-access-token': token
+        }
+      });
+      const bodyText = await response.text();
+      let body = {};
+      if (bodyText) {
+        try {
+          body = JSON.parse(bodyText);
+        } catch {
+          body = { bodyText };
+        }
+      }
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(path + ' returned ' + response.status + ': ' + JSON.stringify(body).slice(0, 500));
+      }
+      return body;
+    }
+
+    const resolved = await request('/addresses/resolve/' + encodeURIComponent(address));
+    const userId = resolved.user || resolved.id;
+    if (!userId) {
+      throw new Error('WildDuck address resolution for ' + address + ' did not return a user id');
+    }
+    const search = await request(
+      '/users/' + encodeURIComponent(String(userId)) + '/search?query=' + encodeURIComponent(subject) + '&limit=50'
+    );
+    const matches = (search.results || []).filter((message) => String(message.subject || '') === subject);
+    console.log(JSON.stringify({ count: matches.length }));
+  `)
+  const result = parseJson(probe.stdout)
+  assert(
+    typeof result.count === 'number',
+    `WildDuck subject count probe returned ${bodySnippet(probe.stdout)}`
+  )
+  return result.count
 }
 
 async function seedWildDuckWebmailScenario() {
@@ -2054,7 +2706,7 @@ async function seedWildDuckWebmailScenario() {
 async function postSignedIngestNotification(notification, options = {}) {
   const bodyText = JSON.stringify(notification)
   const worker = options.worker ?? requireWorker(notification.recipient_domain)
-  const signed = signWorkerNotification(worker, bodyText, new Date().toISOString())
+  const signed = await signWorkerNotification(worker, bodyText, new Date().toISOString())
   return postIngestNotification(notification, signed.signature, { timestamp: signed.timestamp, worker })
 }
 
@@ -2227,8 +2879,8 @@ async function runCommand(command, args, options = {}) {
   await appendFile(harnessLogPath, redactText(`+ ${[command, ...args].join(' ')}\n`))
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
-      cwd: repoRoot,
-      env: process.env,
+      cwd: options.cwd || repoRoot,
+      env: options.env ? { ...process.env, ...options.env } : process.env,
       stdio: ['ignore', 'pipe', 'pipe']
     })
     child.stdout.on('data', (chunk) => {
@@ -2248,13 +2900,278 @@ async function runCommand(command, args, options = {}) {
       if (options.stdoutFile) {
         await writeFile(options.stdoutFile, stdout)
       }
+      if (options.stderrFile) {
+        await writeFile(options.stderrFile, stderr)
+      }
       if (code !== 0 && !options.allowFailure) {
         reject(new Error(redactText(`${command} ${args.join(' ')} exited ${code}: ${stderr || stdout}`)))
+        return
+      }
+      if (options.returnResult) {
+        resolve({ code: code ?? 0, stderr, stdout })
         return
       }
       resolve(options.returnStdout ? stdout : undefined)
     })
   })
+}
+
+async function runAtEmailAgentConnectWithWebApproval({
+  accountId,
+  agentName,
+  cliConfigDir,
+  cliWorkdir,
+  cookieHeader = runtime.cookieHeader,
+  logName,
+  organizationId = runtime.organizationId,
+  stderrFile,
+  stdoutFile
+}) {
+  const command = 'bash'
+  const args = [
+    '-lc',
+    'go run ./cmd/at-email agent connect --json --api-base-url "$AT_EMAIL_API_BASE_URL" --name "$AT_EMAIL_AGENT_NAME" --organization-id "$AT_EMAIL_ORGANIZATION_ID" --mailbox-address "$AT_EMAIL_MAILBOX_ADDRESS"'
+  ]
+  const stdoutChunks = []
+  const stderrChunks = []
+  const commandLogPath = path.join(logsDir, `${sanitizeFileName(logName)}.log`)
+
+  await appendFile(harnessLogPath, redactText(`+ ${[command, ...args].join(' ')}\n`))
+
+  const child = spawn(command, args, {
+    cwd: cliWorkdir,
+    env: {
+      ...process.env,
+      AT_EMAIL_AGENT_NAME: agentName,
+      AT_EMAIL_API_BASE_URL: runtime.webBaseUrl,
+      AT_EMAIL_MAILBOX_ADDRESS: accountId,
+      AT_EMAIL_ORGANIZATION_ID: organizationId,
+      XDG_CONFIG_HOME: cliConfigDir
+    },
+    stdio: ['ignore', 'pipe', 'pipe']
+  })
+  child.stdout.on('data', (chunk) => {
+    stdoutChunks.push(Buffer.from(chunk))
+  })
+  child.stderr.on('data', (chunk) => {
+    stderrChunks.push(Buffer.from(chunk))
+  })
+
+  const closed = new Promise((resolve, reject) => {
+    child.on('error', reject)
+    child.on('close', (code) => {
+      resolve(code ?? 0)
+    })
+  })
+  let wroteArtifacts = false
+
+  try {
+    const pending = await waitForAgentConnectPendingApproval(child, stderrChunks)
+    registerRedaction(pending.user_code, '<redacted-agent-connect-user-code>')
+    registerRedaction(pending.formatted_user_code, '<redacted-agent-connect-formatted-code>')
+    registerRedaction(pending.verification_uri_complete, '<redacted-agent-connect-verification-url>')
+
+    const decisionResponse = await postJson(
+      '/rpc/agent-access/approvals/decision',
+      {
+        action: 'approve',
+        userCode: pending.user_code
+      },
+      {
+        cookie: cookieHeader
+      }
+    )
+    assert(
+      decisionResponse.status === 200,
+      `agent connect approval returned ${decisionResponse.status}: ${bodySnippet(decisionResponse.bodyText)}`
+    )
+    const decision = parseJson(decisionResponse.bodyText)
+    const code = await closed
+    const stdout = Buffer.concat(stdoutChunks).toString('utf8')
+    const stderr = Buffer.concat(stderrChunks).toString('utf8')
+    await writeCommandOutputArtifacts({
+      commandLogPath,
+      stderr,
+      stderrFile,
+      stdout,
+      stdoutFile
+    })
+    wroteArtifacts = true
+
+    if (code !== 0) {
+      throw new Error(redactText(`at-email agent connect exited ${code}: ${stderr || stdout}`))
+    }
+
+    return { decision, pending, stderr, stdout }
+  } catch (error) {
+    if (!child.killed) {
+      child.kill('SIGTERM')
+    }
+    const stdout = Buffer.concat(stdoutChunks).toString('utf8')
+    const stderr = Buffer.concat(stderrChunks).toString('utf8')
+    if (!wroteArtifacts) {
+      await writeCommandOutputArtifacts({
+        commandLogPath,
+        stderr,
+        stderrFile,
+        stdout,
+        stdoutFile
+      })
+    }
+    throw error
+  }
+}
+
+async function runAtEmailAgentTrial({
+  agentName,
+  cliConfigDir,
+  cliWorkdir,
+  logName,
+  stdoutFile
+}) {
+  const command = 'bash'
+  const args = [
+    '-lc',
+    'go run ./cmd/at-email agent trial --json --force --api-base-url "$AT_EMAIL_API_BASE_URL" --name "$AT_EMAIL_AGENT_NAME" --capability email.message.send --post-claim-capability email.message.send'
+  ]
+  const stdoutChunks = []
+  const stderrChunks = []
+  const commandLogPath = path.join(logsDir, `${sanitizeFileName(logName)}.log`)
+
+  await appendFile(harnessLogPath, redactText(`+ ${[command, ...args].join(' ')}\n`))
+
+  const child = spawn(command, args, {
+    cwd: cliWorkdir,
+    env: {
+      ...process.env,
+      AT_EMAIL_AGENT_NAME: agentName,
+      AT_EMAIL_API_BASE_URL: runtime.webBaseUrl,
+      AT_EMAIL_TRIAL_ADMISSION_TOKEN: trialAdmissionToken,
+      XDG_CONFIG_HOME: cliConfigDir
+    },
+    stdio: ['ignore', 'pipe', 'pipe']
+  })
+  child.stdout.on('data', (chunk) => {
+    stdoutChunks.push(Buffer.from(chunk))
+  })
+  child.stderr.on('data', (chunk) => {
+    stderrChunks.push(Buffer.from(chunk))
+  })
+
+  const code = await new Promise((resolve, reject) => {
+    child.on('error', reject)
+    child.on('close', (closedCode) => {
+      resolve(closedCode ?? 0)
+    })
+  })
+  const stdout = Buffer.concat(stdoutChunks).toString('utf8')
+  const stderr = Buffer.concat(stderrChunks).toString('utf8')
+  let claimToken = ''
+  if (code === 0) {
+    const trial = parseJson(stdout)
+    const claimUrl = typeof trial.claim?.url === 'string' ? trial.claim.url : ''
+    if (claimUrl) {
+      registerRedaction(claimUrl, '<redacted-agent-trial-claim-url>')
+      claimToken = claimTokenFromUrl(claimUrl)
+      registerRedaction(claimToken, '<redacted-agent-trial-claim-token>')
+    }
+  }
+  await writeCommandOutputArtifacts({
+    commandLogPath,
+    stderr,
+    stdout,
+    stdoutFile
+  })
+
+  if (code !== 0) {
+    throw new Error(redactText(`at-email agent trial exited ${code}: ${stderr || stdout}`))
+  }
+
+  return { claimToken, stderr, stdout }
+}
+
+function claimTokenFromUrl(value) {
+  try {
+    const url = new URL(value)
+    const token = url.pathname.split('/').filter(Boolean).pop() ?? ''
+    assert(token, 'agent trial claim URL did not contain a token')
+    return token
+  } catch (error) {
+    throw new Error(`invalid agent trial claim URL: ${stringifyError(error)}`)
+  }
+}
+
+function waitForAgentConnectPendingApproval(child, stderrChunks) {
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const finish = (error, value) => {
+      if (settled) {
+        return
+      }
+      settled = true
+      clearTimeout(timeout)
+      child.stderr.off('data', onData)
+      child.off('close', onClose)
+      if (error) {
+        reject(error)
+      } else {
+        resolve(value)
+      }
+    }
+    const onData = () => {
+      const raw = Buffer.concat(stderrChunks).toString('utf8').trim()
+      if (!raw) {
+        return
+      }
+      const payload = parseJsonObjectFromNoisyOutput(raw)
+      if (!payload) {
+        return
+      }
+      if (payload?.operation === 'agent_connect' && typeof payload.user_code === 'string') {
+        finish(null, payload)
+      }
+    }
+    const onClose = (code) => {
+      finish(new Error(`at-email agent connect exited ${code ?? 0} before emitting approval`))
+    }
+    const timeout = setTimeout(() => {
+      finish(new Error('at-email agent connect did not emit an approval event before timeout'))
+    }, 60_000)
+
+    child.stderr.on('data', onData)
+    child.on('close', onClose)
+    onData()
+  })
+}
+
+function parseJsonObjectFromNoisyOutput(raw) {
+  try {
+    return JSON.parse(raw)
+  } catch {
+    const start = raw.indexOf('{')
+    const end = raw.lastIndexOf('}')
+    if (start === -1 || end <= start) {
+      return null
+    }
+    try {
+      return JSON.parse(raw.slice(start, end + 1))
+    } catch {
+      return null
+    }
+  }
+}
+
+async function writeCommandOutputArtifacts({ commandLogPath, stderr, stderrFile, stdout, stdoutFile }) {
+  const redactedStdout = redactText(stdout)
+  const redactedStderr = redactText(stderr)
+  await appendFile(commandLogPath, redactedStdout)
+  await appendFile(commandLogPath, redactedStderr)
+  if (stdoutFile) {
+    await writeFile(stdoutFile, redactedStdout)
+  }
+  if (stderrFile) {
+    await writeFile(stderrFile, redactedStderr)
+  }
 }
 
 async function submitArtifacts() {
@@ -2516,8 +3433,34 @@ function bodySnippet(value, limit = 1000) {
   return `${text.slice(0, limit)}... [truncated ${text.length - limit} chars]`
 }
 
+function registerRedaction(value, replacement) {
+  if (typeof value === 'string' && value.length > 0) {
+    dynamicRedactions.set(value, replacement)
+  }
+}
+
+function assertNoInternalCredentialMaterial(value, target) {
+  const text = String(value)
+  for (const forbidden of [
+    'wildduck-api',
+    'x-access-token',
+    'full-stack-e2e-wildduck-admin-token',
+    'full-stack-e2e-control-api-token'
+  ]) {
+    assert(!text.includes(forbidden), `${target} leaked internal credential material: ${forbidden}`)
+  }
+}
+
 function sanitizeFileName(value) {
   return value.replaceAll(/[^a-zA-Z0-9_.-]/g, '-').slice(0, 120)
+}
+
+function sanitizeIdentifier(value) {
+  const sanitized = value
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/gu, '-')
+    .replace(/^-+|-+$/gu, '')
+  return sanitized || 'run'
 }
 
 function kindLocalRepository(repository) {
@@ -2541,6 +3484,7 @@ function redactText(value) {
     [suiteRoot, '<suite-root>'],
     [repoRoot, '<repo-root>'],
     [supportToken, '<redacted-support-token>'],
+    [trialAdmissionToken, '<redacted-trial-admission-token>'],
     ['full-stack-e2e-control-api-token', '<redacted-control-api-token>'],
     ['ZnVsbC1zdGFjay1lMmUtZW5jcnlwdGlvbi1rZXktMzI', '<redacted-encryption-key>'],
     [minioAccessKey, '<redacted-minio-access-key>'],
@@ -2555,6 +3499,9 @@ function redactText(value) {
     ['full-stack-e2e-feedback-mailbox-password', '<redacted-feedback-mailbox-password>'],
     ['full-stack-e2e-cloudflare-client-secret', '<redacted-cloudflare-client-secret>']
   ])
+  for (const [needle, replacement] of dynamicRedactions) {
+    replacements.set(needle, replacement)
+  }
   let redacted = String(value)
   for (const [needle, replacement] of replacements) {
     redacted = redacted.replaceAll(needle, replacement)
@@ -2708,6 +3655,10 @@ spec:
           env:
             - name: PORT
               value: "8788"
+            - name: FAKE_CLOUDFLARE_OAUTH_EMAIL
+              value: ${JSON.stringify(fakeCloudflareOAuthEmail)}
+            - name: FAKE_CLOUDFLARE_OAUTH_SUB
+              value: ${JSON.stringify(fakeCloudflareOAuthSubject)}
           ports:
             - name: http
               containerPort: 8788
@@ -2787,10 +3738,17 @@ spec:
 }
 
 function fakeProviderServerSource() {
-  return `import http from 'node:http'
+  return `import { createHash } from 'node:crypto'
+import http from 'node:http'
 
 const port = Number(process.env.PORT || '8789')
 const requests = []
+const internalProviderHeaders = [
+  'X-ATM-Ingest-ID',
+  'X-ATMCF-Edge-Status',
+  'X-Zone-Loop',
+  'X-Agent-Mail-ZoneMTA-Queue-ID'
+]
 
 const server = http.createServer(async (request, response) => {
   const url = new URL(request.url || '/', 'http://fake-provider')
@@ -2798,8 +3756,9 @@ const server = http.createServer(async (request, response) => {
   requests.push({
     method: request.method,
     path: url.pathname,
+    bodySha256: hashBody(body),
     bodyLength: body.length,
-    bodyText: body.slice(0, 16384),
+    bodySummary: safeBodySummary(body),
     at: new Date().toISOString()
   })
   if (url.pathname === '/health') {
@@ -2826,6 +3785,16 @@ async function readBody(request) {
   const chunks = []
   for await (const chunk of request) chunks.push(chunk)
   return Buffer.concat(chunks).toString('utf8')
+}
+
+function safeBodySummary(body) {
+  return {
+    forbiddenInternalHeaders: internalProviderHeaders.filter((header) => body.includes(header))
+  }
+}
+
+function hashBody(body) {
+  return createHash('sha256').update(body).digest('hex')
 }
 `
 }

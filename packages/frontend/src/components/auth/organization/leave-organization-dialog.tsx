@@ -1,12 +1,11 @@
 "use client"
 
 import {
-  type OrganizationAuthClient,
+
   useAuth,
   useAuthPlugin,
   useLeaveOrganization
 } from "@better-auth-ui/react"
-import type { Organization } from "better-auth/client"
 import { SignOutIcon as LogOut } from "@phosphor-icons/react"
 import { toast } from "sonner"
 
@@ -25,6 +24,8 @@ import { Card, CardContent } from "src/components/ui/card"
 import { Spinner } from "src/components/ui/spinner"
 import { organizationPlugin } from "src/lib/auth/organization-plugin"
 import { OrganizationView } from "./organization-view"
+import type { OrganizationAuthClient } from "@better-auth-ui/react";
+import type { Organization } from "better-auth/client"
 
 export type LeaveOrganizationDialogProps = {
   open: boolean
@@ -90,7 +91,7 @@ export function LeaveOrganizationDialog({
             variant="destructive"
             disabled={isPending}
             onClick={() =>
-              leaveOrganization({ organizationId: organization.id })
+              { leaveOrganization({ organizationId: organization.id }); }
             }
           >
             {isPending && <Spinner />}

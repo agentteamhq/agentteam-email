@@ -26,16 +26,16 @@ export function SignOut({ className }: SignOutProps) {
       })
     },
     onSuccess: () =>
-      navigate({
+      { navigate({
         to: `${basePaths.auth}/${viewPaths.auth.signIn}`,
         replace: true
-      })
+      }); }
   })
 
   const hasSignedOut = useRef(false)
 
   useEffect(() => {
-    if (hasSignedOut.current) return
+    if (hasSignedOut.current) {return}
     hasSignedOut.current = true
 
     signOut()

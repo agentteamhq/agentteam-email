@@ -63,6 +63,11 @@ images:
 webServer:
   authSecret: {}
   encryptionKey: {}
+  databaseMaxPoolSize: 8
+
+mongodb:
+  maxIncomingConnections: 128
+  replicaSetName: rs0
 
 controlApi:
   token: {}

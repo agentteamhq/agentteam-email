@@ -1,12 +1,14 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 
 import { readAuthenticatedRouteState } from '../../lib/authenticated-app-route'
+import { validateDashboardSearch } from '../../lib/dashboard-search'
 import { getSettingsSectionHref } from '../../partials/authenticated/settings-dialog-sections'
-import { DashboardScreen } from '../../screens/dashboard-screen'
+import { DashboardMailController } from '../../screens/dashboard-mail-client-controller'
 import { SITE_STRINGS, formatSiteTitle } from '../../strings'
 import type { SettingsSectionId } from '../../partials/authenticated/settings-dialog-sections'
 
 export const Route = createFileRoute('/_authenticated/organization/$section')({
+  validateSearch: validateDashboardSearch,
   loader: ({ context }) => readAuthenticatedRouteState(context),
   head: () => ({
     meta: [
@@ -25,11 +27,12 @@ export const Route = createFileRoute('/_authenticated/organization/$section')({
 function OrganizationSettingsRouteScreen() {
   const routeState = Route.useLoaderData()
   const { section } = Route.useParams()
+  const search = Route.useSearch()
   const router = useRouter()
   const settingsSection = section === 'people' ? 'organizationPeople' : 'organizationSettings'
 
   return (
-    <DashboardScreen
+    <DashboardMailController
       onSettingsOpenChange={(open) => {
         if (!open) {
           void router.navigate({ href: '/dashboard/' })
@@ -40,6 +43,7 @@ function OrganizationSettingsRouteScreen() {
       }}
       publicEnv={router.options.context.publicEnv}
       routeState={routeState}
+      routeSearch={search}
       settingsOpen
       settingsSection={settingsSection}
     />

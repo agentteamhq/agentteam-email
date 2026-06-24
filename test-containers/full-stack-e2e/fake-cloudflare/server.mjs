@@ -1,7 +1,9 @@
-import { createHash } from 'node:crypto'
+import { createHash, createHmac } from 'node:crypto'
 import http from 'node:http'
 
 const port = Number(process.env.PORT || '8788')
+const oauthEmail = process.env.FAKE_CLOUDFLARE_OAUTH_EMAIL || 'cloudflare-user@example.test'
+const oauthSubject = process.env.FAKE_CLOUDFLARE_OAUTH_SUB || 'cloudflare-user-1'
 const account = {
   id: 'cf-account-1',
   name: 'Full Stack E2E Account',
@@ -34,8 +36,15 @@ const state = {
   operations: [],
   requests: [],
   scripts: new Map(),
-  secrets: []
+  secrets: [],
+  workerRuntimeBindings: new Map()
 }
+const internalProviderHeaders = [
+  'X-ATM-Ingest-ID',
+  'X-ATMCF-Edge-Status',
+  'X-Zone-Loop',
+  'X-Agent-Mail-ZoneMTA-Queue-ID'
+]
 
 const server = http.createServer(async (request, response) => {
   const url = new URL(request.url || '/', `http://${request.headers.host || 'fake-cloudflare'}`)
@@ -64,6 +73,11 @@ const server = http.createServer(async (request, response) => {
     if (url.pathname === '/__reset' && request.method === 'POST') {
       resetState()
       sendJson(response, 200, { ok: true })
+      return
+    }
+
+    if (url.pathname === '/__sign-worker-notification' && request.method === 'POST') {
+      handleWorkerNotificationSigning(response, body)
       return
     }
 
@@ -191,9 +205,10 @@ async function handleCloudflareApi(request, response, url, body) {
       bodySha256: hashBody(body),
       bytes: body.byteLength,
       files: upload.files,
-      metadata: upload.metadata,
+      metadata: publicWorkerMetadata(upload.metadata),
       updatedAt: new Date().toISOString()
     })
+    state.workerRuntimeBindings.set(scriptName, workerRuntimeBindings(upload.metadata))
     recordOperation({ scriptName, type: 'worker.script.upsert' })
     sendJson(response, 200, cloudflareResponse({ id: scriptName, script_name: scriptName }))
     return
@@ -309,9 +324,9 @@ function handleOAuth(request, response, url) {
   }
   if (request.method === 'GET' && url.pathname === '/oauth2/userinfo') {
     sendJson(response, 200, {
-      email: 'cloudflare-user@example.test',
+      email: oauthEmail,
       email_verified: true,
-      sub: 'cloudflare-user-1'
+      sub: oauthSubject
     })
     return
   }
@@ -322,6 +337,30 @@ function handleOAuth(request, response, url) {
   sendJson(response, 404, {
     error: 'not_found',
     error_description: `Unhandled fake Cloudflare OAuth route: ${request.method} ${url.pathname}`
+  })
+}
+
+function handleWorkerNotificationSigning(response, body) {
+  const input = parseJsonBody(body)
+  const domain = readString(input, 'domain')
+  const bodyText = readString(input, 'bodyText')
+  const timestamp = readString(input, 'timestamp') || new Date().toISOString()
+  const worker = [...state.workerRuntimeBindings.values()].find((candidate) => candidate.domain === domain)
+  if (!worker || !bodyText || !worker.hmacSecret || !worker.connectionId) {
+    sendJson(response, 404, { error: 'worker_not_found' })
+    return
+  }
+  const signature = createHmac('sha256', worker.hmacSecret)
+    .update(timestamp)
+    .update('\n')
+    .update(worker.connectionId)
+    .update('\n')
+    .update(bodyText)
+    .digest('hex')
+  sendJson(response, 200, {
+    connectionId: worker.connectionId,
+    signature,
+    timestamp
   })
 }
 
@@ -448,7 +487,7 @@ function readString(value, key) {
 function recordRequest(request, url, body) {
   state.requests.push({
     bodySha256: hashBody(body),
-    bodyText: safeBodyText(body),
+    bodySummary: safeBodySummary(request, body),
     bytes: body.byteLength,
     hasAuthorization: typeof request.headers.authorization === 'string',
     method: request.method,
@@ -458,8 +497,47 @@ function recordRequest(request, url, body) {
   })
 }
 
-function safeBodyText(body) {
-  return body.toString('utf8').slice(0, 16384)
+function safeBodySummary(request, body) {
+  const contentType =
+    typeof request.headers['content-type'] === 'string' ? request.headers['content-type'].toLowerCase() : ''
+  const text = body.toString('utf8')
+  return {
+    contentType,
+    forbiddenInternalHeaders: internalProviderHeaders.filter((header) => text.includes(header)),
+    jsonKeys: contentType.includes('application/json') ? topLevelJsonKeys(body) : []
+  }
+}
+
+function topLevelJsonKeys(body) {
+  const json = parseJsonBody(body)
+  return json && typeof json === 'object' && !Array.isArray(json) ? Object.keys(json).sort() : []
+}
+
+function publicWorkerMetadata(metadata) {
+  if (!metadata || typeof metadata !== 'object') {
+    return metadata
+  }
+  return {
+    ...metadata,
+    bindings: Array.isArray(metadata.bindings)
+      ? metadata.bindings.map((binding) =>
+          binding?.type === 'secret_text' ? { ...binding, text: '<redacted-secret-text>' } : binding
+        )
+      : metadata.bindings
+  }
+}
+
+function workerRuntimeBindings(metadata) {
+  const bindings = Object.fromEntries(
+    (Array.isArray(metadata?.bindings) ? metadata.bindings : [])
+      .filter((binding) => typeof binding?.name === 'string' && typeof binding?.text === 'string')
+      .map((binding) => [binding.name, binding.text])
+  )
+  return {
+    connectionId: bindings.AGENTTEAM_CONNECTION_ID || '',
+    domain: bindings.AGENTTEAM_DOMAIN || '',
+    hmacSecret: bindings.AGENTTEAM_WORKER_HMAC_SECRET || ''
+  }
 }
 
 function recordOperation(operation) {
@@ -477,6 +555,7 @@ function resetState() {
   state.requests.length = 0
   state.scripts.clear()
   state.secrets.length = 0
+  state.workerRuntimeBindings.clear()
 }
 
 function hashBody(body) {

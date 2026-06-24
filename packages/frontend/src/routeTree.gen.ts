@@ -24,9 +24,11 @@ import { Route as CallbackRouteImport } from './routes/callback'
 import { Route as AcceptInviteRouteImport } from './routes/accept-invite'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DeviceCapabilitiesRouteImport } from './routes/device/capabilities'
 import { Route as DeviceApproveRouteImport } from './routes/device/approve'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AgentClaimTokenRouteImport } from './routes/agent/claim.$token'
 import { Route as AuthenticatedSettingsSectionRouteImport } from './routes/_authenticated/settings.$section'
 import { Route as AuthenticatedOrganizationSectionRouteImport } from './routes/_authenticated/organization.$section'
 
@@ -104,6 +106,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DeviceCapabilitiesRoute = DeviceCapabilitiesRouteImport.update({
+  id: '/capabilities',
+  path: '/capabilities',
+  getParentRoute: () => DeviceRoute,
+} as any)
 const DeviceApproveRoute = DeviceApproveRouteImport.update({
   id: '/approve',
   path: '/approve',
@@ -118,6 +125,11 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AgentClaimTokenRoute = AgentClaimTokenRouteImport.update({
+  id: '/agent/claim/$token',
+  path: '/agent/claim/$token',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedSettingsSectionRoute =
   AuthenticatedSettingsSectionRouteImport.update({
@@ -150,8 +162,10 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/settings': typeof AuthenticatedSettingsRouteWithChildren
   '/device/approve': typeof DeviceApproveRoute
+  '/device/capabilities': typeof DeviceCapabilitiesRoute
   '/organization/$section': typeof AuthenticatedOrganizationSectionRoute
   '/settings/$section': typeof AuthenticatedSettingsSectionRoute
+  '/agent/claim/$token': typeof AgentClaimTokenRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -171,8 +185,10 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/settings': typeof AuthenticatedSettingsRouteWithChildren
   '/device/approve': typeof DeviceApproveRoute
+  '/device/capabilities': typeof DeviceCapabilitiesRoute
   '/organization/$section': typeof AuthenticatedOrganizationSectionRoute
   '/settings/$section': typeof AuthenticatedSettingsSectionRoute
+  '/agent/claim/$token': typeof AgentClaimTokenRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -194,8 +210,10 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRouteWithChildren
   '/device/approve': typeof DeviceApproveRoute
+  '/device/capabilities': typeof DeviceCapabilitiesRoute
   '/_authenticated/organization/$section': typeof AuthenticatedOrganizationSectionRoute
   '/_authenticated/settings/$section': typeof AuthenticatedSettingsSectionRoute
+  '/agent/claim/$token': typeof AgentClaimTokenRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -217,8 +235,10 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/settings'
     | '/device/approve'
+    | '/device/capabilities'
     | '/organization/$section'
     | '/settings/$section'
+    | '/agent/claim/$token'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -238,8 +258,10 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/settings'
     | '/device/approve'
+    | '/device/capabilities'
     | '/organization/$section'
     | '/settings/$section'
+    | '/agent/claim/$token'
   id:
     | '__root__'
     | '/'
@@ -260,8 +282,10 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_authenticated/settings'
     | '/device/approve'
+    | '/device/capabilities'
     | '/_authenticated/organization/$section'
     | '/_authenticated/settings/$section'
+    | '/agent/claim/$token'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -280,6 +304,7 @@ export interface RootRouteChildren {
   SignoutRoute: typeof SignoutRoute
   SignupRoute: typeof SignupRoute
   VerificationEmailSentRoute: typeof VerificationEmailSentRoute
+  AgentClaimTokenRoute: typeof AgentClaimTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -389,6 +414,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/device/capabilities': {
+      id: '/device/capabilities'
+      path: '/capabilities'
+      fullPath: '/device/capabilities'
+      preLoaderRoute: typeof DeviceCapabilitiesRouteImport
+      parentRoute: typeof DeviceRoute
+    }
     '/device/approve': {
       id: '/device/approve'
       path: '/approve'
@@ -409,6 +441,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/dashboard'
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/agent/claim/$token': {
+      id: '/agent/claim/$token'
+      path: '/agent/claim/$token'
+      fullPath: '/agent/claim/$token'
+      preLoaderRoute: typeof AgentClaimTokenRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_authenticated/settings/$section': {
       id: '/_authenticated/settings/$section'
@@ -457,10 +496,12 @@ const AuthenticatedRouteRouteWithChildren =
 
 interface DeviceRouteChildren {
   DeviceApproveRoute: typeof DeviceApproveRoute
+  DeviceCapabilitiesRoute: typeof DeviceCapabilitiesRoute
 }
 
 const DeviceRouteChildren: DeviceRouteChildren = {
   DeviceApproveRoute: DeviceApproveRoute,
+  DeviceCapabilitiesRoute: DeviceCapabilitiesRoute,
 }
 
 const DeviceRouteWithChildren =
@@ -482,6 +523,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignoutRoute: SignoutRoute,
   SignupRoute: SignupRoute,
   VerificationEmailSentRoute: VerificationEmailSentRoute,
+  AgentClaimTokenRoute: AgentClaimTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -1,49 +1,52 @@
-export type MailboxAdminSectionId = 'accounts' | 'agents' | 'groups'
-export type MailboxAdminViewState = 'ready' | 'loading' | 'empty'
-export type MailboxAdminStatus = 'active' | 'disabled' | 'limited' | 'pending'
-export type MailboxAdminStatusFilter = 'all' | MailboxAdminStatus
-export type MailboxAdminMailboxCapability = 'createDrafts' | 'manageMessages' | 'readMailbox' | 'sendAs'
-export type MailboxAdminSystemPermission = 'createAccounts' | 'manageForwardingGroups' | 'readAllMailboxes'
+import type {
+  AgentMailAdminAccount,
+  AgentMailAdminAccountInput,
+  AgentMailAdminAgent,
+  AgentMailAdminAgentEnrollment,
+  AgentMailAdminAgentInput,
+  AgentMailAdminAgentMailboxGrantsInput,
+  AgentMailAdminAgentSystemPermissionsInput,
+  AgentMailAdminExternalPrincipal,
+  AgentMailAdminForwardingGroupInput,
+  AgentMailAdminGroup,
+  AgentMailAdminMailboxGrant,
+  AgentMailAdminPendingAgentEnrollment,
+  AgentMailAdminSectionId,
+  AgentMailAdminStatus,
+  AgentMailAdminStatusFilter,
+  AgentMailAdminUpdateAccountInput,
+  AgentMailAdminUpdateForwardingGroupInput,
+  AgentMailAdminView,
+  AgentMailAdminViewState
+} from '@main/backend'
+import type { AgentMailMailboxGrant, AgentMailSystemPermission } from '@main/db/agent-mail-permission-schema'
 
-export interface MailboxAdminMailboxGrant {
-  accountAddress: string
-  accountId: string
-  capabilities: ReadonlyArray<MailboxAdminMailboxCapability>
-}
+export type MailboxAdminSectionId = AgentMailAdminSectionId
+export type MailboxAdminViewState = AgentMailAdminViewState | 'error'
+export type MailboxAdminStatus = AgentMailAdminStatus
+export type MailboxAdminStatusFilter = AgentMailAdminStatusFilter
+export type MailboxAdminMailboxCapability = AgentMailMailboxGrant
+export type MailboxAdminSystemPermission = AgentMailSystemPermission
 
-export interface MailboxAdminAccount {
-  accessCount: number
-  address: string
-  agentName?: string
-  domain: string
-  groups: ReadonlyArray<string>
-  id: string
-  lastActivity: string
-  status: MailboxAdminStatus
-  type: 'alias' | 'mailbox'
-}
+export type MailboxAdminMailboxGrant = AgentMailAdminMailboxGrant
 
-export interface MailboxAdminGroup {
-  address: string
-  description: string
-  domain: string
-  id: string
-  lastDelivered: string
-  lastUpdated: string
-  recipients: ReadonlyArray<string>
-  status: MailboxAdminStatus
-}
+export type MailboxAdminAccount = AgentMailAdminAccount
 
-export interface MailboxAdminAgent {
-  grants: ReadonlyArray<MailboxAdminMailboxGrant>
-  groups: ReadonlyArray<string>
-  handle: string
-  id: string
-  lastSeen: string
-  name: string
-  permissions: ReadonlyArray<MailboxAdminSystemPermission>
-  primaryAccount?: string
-  status: MailboxAdminStatus
+export type MailboxAdminGroup = AgentMailAdminGroup
+
+export type MailboxAdminAgent = AgentMailAdminAgent
+
+export type MailboxAdminExternalPrincipal = AgentMailAdminExternalPrincipal
+
+export type MailboxAdminAgentEnrollment = AgentMailAdminAgentEnrollment
+
+export type MailboxAdminPendingAgentEnrollment = AgentMailAdminPendingAgentEnrollment
+
+export interface MailboxAdminPagination {
+  filteredRecords?: number
+  page: number
+  pageSize: number
+  totalRecords?: number
 }
 
 export type MailboxAdminDialogState =
@@ -53,17 +56,65 @@ export type MailboxAdminDialogState =
   | { agentId?: string; type: 'agentEditor' }
   | { agentId: string; type: 'agentAccounts' }
   | { agentId: string; type: 'agentPermissions' }
+  | { principalId: string; principalType: MailboxAdminExternalPrincipal['kind']; type: 'principalAccounts' }
+  | { principalId: string; principalType: MailboxAdminExternalPrincipal['kind']; type: 'principalPermissions' }
 
-export interface MailboxAdminView {
-  accounts: ReadonlyArray<MailboxAdminAccount>
+export type MailboxAdminAccountInput = AgentMailAdminAccountInput & AgentMailAdminUpdateAccountInput
+
+export type MailboxAdminAgentSystemPermissionsInput = AgentMailAdminAgentSystemPermissionsInput
+
+export type MailboxAdminAgentInput = AgentMailAdminAgentInput
+
+export type MailboxAdminAgentMailboxGrantsInput = AgentMailAdminAgentMailboxGrantsInput
+
+export type MailboxAdminGroupInput = AgentMailAdminForwardingGroupInput &
+  AgentMailAdminUpdateForwardingGroupInput
+
+export interface MailboxAdminView extends Omit<AgentMailAdminView, 'pagination' | 'state'> {
   activeDialog?: MailboxAdminDialogState | null
-  agents: ReadonlyArray<MailboxAdminAgent>
-  domain: string
-  groups: ReadonlyArray<MailboxAdminGroup>
+  errorDescription?: string
+  errorTitle?: string
+  onRetry?: () => void
+  onDialogChange?: (dialog: MailboxAdminDialogState | null) => void
+  onOpenMailbox?: (accountId: string) => void
+  onCopyAgentEnrollmentCommand?: (command: string) => void
+  onPageChange?: (page: number) => void
+  onDisableAccount?: (accountId: string) => void
+  onDisableGroup?: (groupId: string) => void
+  onRevokeAgent?: (agentId: string) => void
+  onRevokeAgentEnrollment?: (enrollmentId: string) => void
+  onCreateAgent?: (input: MailboxAdminAgentInput) => void
+  onSaveAccount?: (accountId: string | undefined, input: MailboxAdminAccountInput) => void
+  onSaveAgent?: (agentId: string, input: MailboxAdminAgentInput) => void
+  onSaveAgentMailboxGrants?: (agentId: string, input: MailboxAdminAgentMailboxGrantsInput) => void
+  onSaveAgentSystemPermissions?: (agentId: string, input: MailboxAdminAgentSystemPermissionsInput) => void
+  onSavePrincipalMailboxGrants?: (
+    principal: Pick<MailboxAdminExternalPrincipal, 'id' | 'kind'>,
+    input: MailboxAdminAgentMailboxGrantsInput
+  ) => void
+  onSavePrincipalSystemPermissions?: (
+    principal: Pick<MailboxAdminExternalPrincipal, 'id' | 'kind'>,
+    input: MailboxAdminAgentSystemPermissionsInput
+  ) => void
+  onSaveGroup?: (groupId: string | undefined, input: MailboxAdminGroupInput) => void
   onSearchQueryChange?: (query: string) => void
   onStatusFilterChange?: (statusFilter: MailboxAdminStatusFilter) => void
+  createdAgentEnrollment?: MailboxAdminAgentEnrollment | null
+  pendingAgentRevokeId?: string | null
+  pendingAgentEnrollmentRevokeId?: string | null
+  pendingAccountDisableId?: string | null
+  pendingAccountSave?: boolean
+  pendingAgentCreate?: boolean
+  pendingAgentSaveId?: string | null
+  pendingAgentMailboxGrantsSaveId?: string | null
+  pendingAgentSystemPermissionsSaveId?: string | null
+  pendingPrincipalMailboxGrantsSaveId?: string | null
+  pendingPrincipalSystemPermissionsSaveId?: string | null
+  pendingGroupDisableId?: string | null
+  pendingGroupSave?: boolean
+  pagination?: MailboxAdminPagination
+  retryLabel?: string
   searchQuery?: string
-  section: MailboxAdminSectionId
   state: MailboxAdminViewState
   statusFilter?: MailboxAdminStatusFilter
 }

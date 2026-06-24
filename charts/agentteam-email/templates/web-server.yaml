@@ -65,6 +65,8 @@ spec:
 {{- include "agentteam-email.envFor" (dict "root" . "name" "PUBLIC_HOSTNAME") | nindent 14 }}
             - name: DATABASE_URL
 {{- include "agentteam-email.envFor" (dict "root" . "name" "DATABASE_URL") | nindent 14 }}
+            - name: DATABASE_MAX_POOL_SIZE
+{{- include "agentteam-email.envFor" (dict "root" . "name" "DATABASE_MAX_POOL_SIZE") | nindent 14 }}
             - name: MONGODB_URI
 {{- include "agentteam-email.envFor" (dict "root" . "name" "MONGODB_URI") | nindent 14 }}
             - name: MONGODB_DATABASE

@@ -1,7 +1,7 @@
 export type SettingsSectionId =
   | 'account'
   | 'security'
-  | 'cliAccess'
+  | 'agentAccess'
   | 'organizations'
   | 'organizationSettings'
   | 'organizationPeople'
@@ -10,7 +10,7 @@ export type SettingsSectionId =
 const settingsRouteSegments = {
   account: 'account',
   security: 'security',
-  cliAccess: 'cli-access',
+  agentAccess: 'agent-access',
   organizations: 'organizations',
   domains: 'domains'
 } as const
@@ -18,7 +18,7 @@ const settingsRouteSegments = {
 const settingsSectionHrefs = {
   account: '/settings/account/',
   security: '/settings/security/',
-  cliAccess: '/settings/cli-access/',
+  agentAccess: '/settings/agent-access/',
   organizations: '/settings/organizations/',
   organizationSettings: '/organization/settings/',
   organizationPeople: '/organization/people/',
@@ -28,7 +28,7 @@ const settingsSectionHrefs = {
 const settingsSectionIds = new Set<SettingsSectionId>([
   'account',
   'security',
-  'cliAccess',
+  'agentAccess',
   'organizations',
   'organizationSettings',
   'organizationPeople',
@@ -56,12 +56,12 @@ export function getSettingsSectionFromSegment(segment: string | undefined): Sett
     return 'domains'
   }
 
-  if (segment === 'developer') {
+  if (segment === 'developer' || segment === 'cli-access' || segment === 'cliAccess') {
     return 'security'
   }
 
-  if (segment === settingsRouteSegments.cliAccess || segment === 'cliAccess') {
-    return 'cliAccess'
+  if (segment === settingsRouteSegments.agentAccess || segment === 'agentAccess') {
+    return 'agentAccess'
   }
 
   return isSettingsSectionId(segment) ? segment : 'account'

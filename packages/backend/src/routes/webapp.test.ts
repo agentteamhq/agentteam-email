@@ -22,6 +22,7 @@ describe('webapp auth route state', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.stubEnv('DATABASE_URL', 'mongodb://localhost:27017/app')
+    vi.stubEnv('ENCRYPT_SECRET_KEY', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
     vi.stubEnv('PUBLIC_HOSTNAME', 'https://mail.example.com')
     webappRouteTestState.getCustomerStripeStatus.mockReset()
     webappRouteTestState.getUser.mockReset()

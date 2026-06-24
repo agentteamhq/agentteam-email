@@ -64,6 +64,32 @@ const optionalBase64Url32ByteSecret = z.preprocess(
     .optional()
 )
 
+const optionalPositiveInteger = (name: string) =>
+  z.preprocess((value) => {
+    if (value === null || value === undefined || value === '') {
+      return undefined
+    }
+
+    const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN
+    if (!Number.isInteger(parsed)) {
+      throw new Error(`${name} must be an integer`)
+    }
+    return parsed
+  }, z.number().int().positive())
+
+const optionalNonNegativeInteger = (name: string) =>
+  z.preprocess((value) => {
+    if (value === null || value === undefined || value === '') {
+      return undefined
+    }
+
+    const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN
+    if (!Number.isInteger(parsed)) {
+      throw new Error(`${name} must be an integer`)
+    }
+    return parsed
+  }, z.number().int().nonnegative())
+
 // Define your environment schema.
 const envSchema = z.object({
   BETTER_AUTH_SECRET: z.string().optional(),
@@ -90,7 +116,33 @@ const envSchema = z.object({
   AGENT_MAIL_CONTROL_API_TOKEN: optionalNonEmptyString,
   AGENT_MAIL_WILDDUCK_API_BASE_URL: optionalNonEmptyString,
   AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN: optionalNonEmptyString,
+  AGENT_MAIL_TRIAL_CAPABILITIES: z
+    .string()
+    .default(
+      'email.status,email.message.list,email.message.read,email.message.search,email.message.create_draft,email.message.send,email.message.reply'
+    ),
+  AGENT_MAIL_TRIAL_CLAIM_INTENT_TTL_SECONDS: optionalPositiveInteger(
+    'AGENT_MAIL_TRIAL_CLAIM_INTENT_TTL_SECONDS'
+  ).default(60 * 60 * 24),
+  AGENT_MAIL_TRIAL_DAILY_SEND_LIMIT: optionalNonNegativeInteger('AGENT_MAIL_TRIAL_DAILY_SEND_LIMIT').default(
+    10
+  ),
+  AGENT_MAIL_TRIAL_ENABLED: z
+    .preprocess(optionalStringToBoolean('AGENT_MAIL_TRIAL_ENABLED'), z.boolean())
+    .default(false),
+  AGENT_MAIL_TRIAL_DOMAIN: optionalNonEmptyString,
+  AGENT_MAIL_TRIAL_MAILBOX_LIFETIME_SECONDS: optionalPositiveInteger(
+    'AGENT_MAIL_TRIAL_MAILBOX_LIFETIME_SECONDS'
+  ).default(60 * 60 * 24 * 7),
+  AGENT_MAIL_TRIAL_ADMISSION_TOKEN: optionalNonEmptyString,
+  AGENT_MAIL_TRIAL_MAILBOX_LOCAL_PREFIX: z.string().min(1).default('trial'),
+  AGENT_MAIL_TRIAL_MAX_ACTIVE: optionalPositiveInteger('AGENT_MAIL_TRIAL_MAX_ACTIVE').default(25),
+  AGENT_MAIL_TRIAL_ORGANIZATION_ID: optionalNonEmptyString,
+  AGENT_MAIL_TRIAL_TOTAL_SEND_LIMIT: optionalNonNegativeInteger('AGENT_MAIL_TRIAL_TOTAL_SEND_LIMIT').default(
+    50
+  ),
 
+  DATABASE_MAX_POOL_SIZE: optionalPositiveInteger('DATABASE_MAX_POOL_SIZE').default(8),
   DATABASE_URL: z.string().min(1),
 
   DEBUG: z.string().optional(),

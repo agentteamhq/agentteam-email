@@ -34,6 +34,7 @@
     "@agendajs/mongo-backend": "catalog:",
     "@better-auth-ui/core": "catalog:",
     "@better-auth-ui/react": "catalog:",
+    "@better-auth/agent-auth": "catalog:",
     "@better-auth/api-key": "catalog:",
     "@better-auth/core": "catalog:",
     "@better-auth/mongo-adapter": "catalog:",

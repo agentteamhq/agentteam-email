@@ -2,4 +2,59 @@
 description = "Run the auth E2E harness"
 depends = ["//:db:setup", "//:mail:start"]
 dir = "{{config_root}}"
-run = "pnpm test:auth"
+run = '''
+repo_root="$(git rev-parse --show-toplevel)"
+cd "${repo_root}"
+
+export PUBLIC_HOSTNAME="${AGENTTEAM_EMAIL_AUTH_E2E_PUBLIC_HOSTNAME:-http://localhost:4321}"
+export MONGODB_URI="${AGENTTEAM_EMAIL_AUTH_E2E_MONGODB_URI:-${MONGODB_URI:-${DATABASE_URL:-mongodb://localhost:27017/agentteam_email}}}"
+export DATABASE_URL="${AGENTTEAM_EMAIL_AUTH_E2E_DATABASE_URL:-${DATABASE_URL:-${MONGODB_URI}}}"
+export MAILPIT_HTTP_URL="${AGENTTEAM_EMAIL_AUTH_E2E_MAILPIT_HTTP_URL:-${MAILPIT_HTTP_URL:-http://localhost:8025}}"
+export BETTER_AUTH_SECRET="${AGENTTEAM_EMAIL_AUTH_E2E_BETTER_AUTH_SECRET:-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA}"
+export ENCRYPT_SECRET_KEY="${AGENTTEAM_EMAIL_AUTH_E2E_ENCRYPT_SECRET_KEY:-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA}"
+
+app_pid=""
+if [[ "${AGENTTEAM_EMAIL_AUTH_E2E_START_APP:-1}" == "1" ]]; then
+  run_id="${TEST_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
+  app_log_dir="test-containers/auth-e2e/tmp/app-${run_id}/logs"
+  mkdir -p "${app_log_dir}"
+  corepack pnpm --filter @main/frontend dev >"${app_log_dir}/frontend.log" 2>&1 &
+  app_pid="$!"
+
+  cleanup() {
+    if [[ -n "${app_pid}" ]]; then
+      kill "${app_pid}" >/dev/null 2>&1 || true
+      wait "${app_pid}" >/dev/null 2>&1 || true
+    fi
+  }
+  trap cleanup EXIT
+fi
+
+health_url="${PUBLIC_HOSTNAME%/}/health"
+last_error="not checked"
+for _ in {1..120}; do
+  if curl -fsS "${health_url}" >/dev/null 2>&1; then
+    last_error=""
+    break
+  fi
+  last_error="waiting for ${health_url}"
+  if [[ -n "${app_pid}" ]] && ! kill -0 "${app_pid}" >/dev/null 2>&1; then
+    echo "auth-e2e app server exited before healthcheck passed" >&2
+    if [[ -n "${app_log_dir:-}" ]]; then
+      sed -n '1,220p' "${app_log_dir}/frontend.log" >&2 || true
+    fi
+    exit 1
+  fi
+  sleep 1
+done
+
+if [[ -n "${last_error}" ]]; then
+  echo "Timed out waiting for ${health_url}" >&2
+  if [[ -n "${app_log_dir:-}" ]]; then
+    sed -n '1,220p' "${app_log_dir}/frontend.log" >&2 || true
+  fi
+  exit 1
+fi
+
+corepack pnpm --filter @main/auth-e2e test:auth
+'''

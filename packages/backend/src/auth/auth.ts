@@ -1,5 +1,6 @@
 import { createUUIDv7, nowait } from '@main/common'
 import { createBetterAuthMongoAdapterFromMongooseConnection } from '@main/db'
+import { agentAuth } from '@better-auth/agent-auth'
 import { apiKey } from '@better-auth/api-key'
 import { oauthProvider } from '@better-auth/oauth-provider'
 import { passkey } from '@better-auth/passkey'
@@ -37,16 +38,24 @@ import { PUBLIC_VARS } from '../vars.public'
 import { sendUserVerificationEmail } from '../user/send-user-verification-email'
 
 import { WEBAPP_JWT_SIGNING_OPTIONS } from './jwt-config'
-import { memoryCache } from './memory-cache'
+import { AGENT_AUTH_PUBLIC_RATE_LIMIT_RULES, createAgentAuthOptions } from './agent-auth-config'
+import { createAuthUrlComparisonLogDetails } from './auth-url-logging'
 import {
   AGENTTEAM_API_OAUTH_AUDIENCE,
+  AGENTTEAM_API_OAUTH_SCOPES,
   AGENTTEAM_OAUTH_ACCESS_TOKEN_CLAIMS,
+  AGENTTEAM_OAUTH_CLIENT_REGISTRATION_SCOPES,
   AGENTTEAM_OAUTH_SCOPES
 } from './oauth-provider-config'
-import type { ApiKeyConfigurationOptions } from '@better-auth/api-key'
+import { apiKeyConfigurations } from './api-key-config'
+import { canManageOAuthClientsForSession } from './oauth-client-privileges'
+import { createMongoSecondaryStorage } from './secondary-storage'
+import type { AgentSession } from '@better-auth/agent-auth'
 import type { BetterAuthOptions } from 'better-auth/minimal'
 import type { OrganizationId, UserId } from '@main/db'
 import type { Database } from '../db/db'
+
+export { apiKeyConfigurationDefaults, apiKeyConfigurations } from './api-key-config'
 
 const log = debug('app:auth')
 
@@ -101,32 +110,6 @@ export const organizationRoles = {
   })
 } as const
 
-export const apiKeyConfigurationDefaults = {
-  enableMetadata: true,
-  enableSessionForAPIKeys: false,
-  defaultPrefix: '_secret_api_',
-  storage: 'secondary-storage',
-  fallbackToDatabase: true,
-  rateLimit: {
-    enabled: true,
-    timeWindow: 60_000,
-    maxRequests: 200
-  }
-} as const
-
-export const apiKeyConfigurations = [
-  {
-    ...apiKeyConfigurationDefaults,
-    configId: 'default',
-    references: 'user'
-  },
-  {
-    ...apiKeyConfigurationDefaults,
-    configId: 'organization',
-    references: 'organization'
-  }
-] satisfies ApiKeyConfigurationOptions[]
-
 const AUTH_AUDIT_LOG_PATHS = [
   '/sign-in/email',
   '/sign-in/username',
@@ -152,6 +135,24 @@ const AUTH_AUDIT_LOG_PATHS = [
   '/device/code',
   '/device/deny',
   '/device/token',
+  '/agent-configuration',
+  '/agent/register',
+  '/agent/update',
+  '/agent/revoke',
+  '/agent/rotate-key',
+  '/agent/reactivate',
+  '/agent/request-capability',
+  '/agent/approve-capability',
+  '/agent/grant-capability',
+  '/agent/revoke-capability',
+  '/agent/device/code',
+  '/host/create',
+  '/host/enroll',
+  '/host/revoke',
+  '/host/update',
+  '/host/rotate-key',
+  '/host/switch-account',
+  '/capability/execute',
   '/revoke-session',
   '/revoke-sessions',
   '/revoke-other-sessions',
@@ -258,6 +259,8 @@ export type GlobalAuthSession = {
 
 export type OAuthProviderEndpoints = ReturnType<typeof oauthProvider>['endpoints']
 export type GenericOAuthEndpoints = ReturnType<typeof genericOAuth>['endpoints']
+export type ApiKeyEndpoints = ReturnType<typeof apiKey>['endpoints']
+export type AgentAuthEndpoints = ReturnType<typeof agentAuth>['endpoints']
 
 export interface OAuthAccessTokenResult {
   accessToken: string
@@ -276,6 +279,11 @@ export type GlobalAuth = {
       }
       headers?: Headers
     }) => Promise<OAuthAccessTokenResult>
+    approveCapability: AgentAuthEndpoints['approveCapability']
+    createHost: AgentAuthEndpoints['createHost']
+    adminCreateOAuthClient: OAuthProviderEndpoints['adminCreateOAuthClient']
+    getAgentConfiguration: () => Promise<Record<string, unknown>>
+    getAgentSession: (input: { headers: Headers }) => Promise<AgentSession | null>
     getOAuthServerConfig: OAuthProviderEndpoints['getOAuthServerConfig']
     getOpenIdConfig: OAuthProviderEndpoints['getOpenIdConfig']
     getSession: (input: { headers: Headers }) => Promise<GlobalAuthSession | null>
@@ -303,46 +311,23 @@ export type GlobalAuth = {
       }
       headers?: Headers
     }) => Promise<{ status: boolean }>
+    revokeAgent: AgentAuthEndpoints['revokeAgent']
+    revokeCapability: AgentAuthEndpoints['revokeCapability']
+    verifyApiKey: ApiKeyEndpoints['verifyApiKey']
   }
   handler: (request: Request) => Promise<Response>
 }
 
 function compareAuthUrls(betterAuthUrl: string, manualUrl: string) {
-  const parsed1 = new URL(betterAuthUrl)
-  const parsed2 = new URL(manualUrl)
-
-  const path1 = parsed1.pathname.startsWith(BETTER_AUTH_BASE_PATH)
-    ? parsed1.pathname.slice(BETTER_AUTH_BASE_PATH.length)
-    : parsed1.pathname
-  const path2 = parsed2.pathname.startsWith(MANUAL_BASE_PATH)
-    ? parsed2.pathname.slice(MANUAL_BASE_PATH.length)
-    : parsed2.pathname
-
-  const params1 = Object.fromEntries(parsed1.searchParams.entries())
-  const params2 = Object.fromEntries(parsed2.searchParams.entries())
-
-  const hostnameMatch = parsed1.hostname === parsed2.hostname
-  const pathMatch = path1 === path2
-  const paramKeys1 = Object.keys(params1).sort()
-  const paramKeys2 = Object.keys(params2).sort()
-  const paramKeysMatch = paramKeys1.join(',') === paramKeys2.join(',')
-  const paramValuesMatch = paramKeys1.every((k) => params1[k] === params2[k])
-
-  log('compareAuthUrls:', {
-    betterAuthUrl,
-    manualUrl,
-    hostname1: parsed1.hostname,
-    hostname2: parsed2.hostname,
-    hostnameMatch,
-    strippedPath1: path1,
-    strippedPath2: path2,
-    pathMatch,
-    params1,
-    params2,
-    paramKeysMatch,
-    paramValuesMatch,
-    allMatch: hostnameMatch && pathMatch && paramKeysMatch && paramValuesMatch
-  })
+  log(
+    'compareAuthUrls:',
+    createAuthUrlComparisonLogDetails({
+      betterAuthBasePath: BETTER_AUTH_BASE_PATH,
+      betterAuthUrl,
+      manualBasePath: MANUAL_BASE_PATH,
+      manualUrl
+    })
+  )
 }
 
 export function createGlobalAuth(db: Database): GlobalAuth {
@@ -354,6 +339,7 @@ export function createGlobalAuth(db: Database): GlobalAuth {
     }),
     bearer(),
     createAtEmailCliDeviceAuthorizationPlugin(),
+    agentAuth(createAgentAuthOptions(db)),
     auditLog({
       nonBlocking: true,
       paths: [...AUTH_AUDIT_LOG_PATHS],
@@ -388,7 +374,12 @@ export function createGlobalAuth(db: Database): GlobalAuth {
     oauthProvider({
       loginPage: '/signin/',
       consentPage: '/oauth/consent/',
-      scopes: [...AGENTTEAM_OAUTH_SCOPES],
+      scopes: [...AGENTTEAM_OAUTH_SCOPES, ...AGENTTEAM_API_OAUTH_SCOPES],
+      advertisedMetadata: {
+        scopes_supported: [...AGENTTEAM_OAUTH_SCOPES, ...AGENTTEAM_API_OAUTH_SCOPES]
+      },
+      clientRegistrationAllowedScopes: [...AGENTTEAM_OAUTH_CLIENT_REGISTRATION_SCOPES],
+      clientRegistrationDefaultScopes: [...AGENTTEAM_OAUTH_CLIENT_REGISTRATION_SCOPES],
       validAudiences: [AGENTTEAM_API_OAUTH_AUDIENCE],
       accessTokenExpiresIn: 900,
       allowDynamicClientRegistration: false,
@@ -427,6 +418,9 @@ export function createGlobalAuth(db: Database): GlobalAuth {
             }
           : {})
       }),
+      clientPrivileges: async ({ session }) => {
+        return canManageOAuthClientsForSession({ db, session })
+      },
       prefix: {
         clientSecret: '_secret_oauth_client_',
         opaqueAccessToken: '_secret_oauth_access_',
@@ -490,14 +484,11 @@ export function createGlobalAuth(db: Database): GlobalAuth {
     // mount prefix.
     basePath: '/api',
     secret: PRIVATE_VARS.BETTER_AUTH_SECRET,
-    secondaryStorage: {
-      get: async (key) => memoryCache.get(key),
-      set: async (key, value, ttl) => {
-        memoryCache.set(key, value, ttl)
-      },
-      delete: async (key) => {
-        memoryCache.remove(key)
-      }
+    secondaryStorage: createMongoSecondaryStorage(db),
+    rateLimit: {
+      enabled: PUBLIC_VARS.PROD,
+      storage: 'secondary-storage',
+      customRules: AGENT_AUTH_PUBLIC_RATE_LIMIT_RULES
     },
     database: createBetterAuthMongoAdapterFromMongooseConnection(db.connection, {
       transaction: false,
@@ -754,8 +745,8 @@ export function createGlobalAuth(db: Database): GlobalAuth {
       deleteUser: {
         enabled: false,
         sendDeleteAccountVerification: async (data) => {
-          log('sending delete user verification', data.url)
           const deleteUrl = `${BETTER_AUTH_ROUTE}/delete-user/callback?token=${data.token}&callbackURL=${encodeURIComponent('/signout/')}`
+          log('sending delete user verification')
           compareAuthUrls(data.url, deleteUrl)
           nowait(
             sendEmail(data.user.email, 'Confirm account deletion', 'delete-account-confirmation', {

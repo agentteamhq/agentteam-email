@@ -53,6 +53,56 @@ declare const AuditLogPublicIdBrand: unique symbol
 export type AuditLogPublicId = Base62UUIDv7 & { readonly [AuditLogPublicIdBrand]: true }
 export { AuditLogPublicIdBrand }
 
+declare const AgentHostIdBrand: unique symbol
+export type AgentHostId = UUIDv7 & { readonly [AgentHostIdBrand]: true }
+export { AgentHostIdBrand }
+
+declare const AgentHostPublicIdBrand: unique symbol
+export type AgentHostPublicId = Base62UUIDv7 & { readonly [AgentHostPublicIdBrand]: true }
+export { AgentHostPublicIdBrand }
+
+declare const AgentIdBrand: unique symbol
+export type AgentId = UUIDv7 & { readonly [AgentIdBrand]: true }
+export { AgentIdBrand }
+
+declare const AgentPublicIdBrand: unique symbol
+export type AgentPublicId = Base62UUIDv7 & { readonly [AgentPublicIdBrand]: true }
+export { AgentPublicIdBrand }
+
+declare const AgentCapabilityGrantIdBrand: unique symbol
+export type AgentCapabilityGrantId = UUIDv7 & { readonly [AgentCapabilityGrantIdBrand]: true }
+export { AgentCapabilityGrantIdBrand }
+
+declare const AgentCapabilityGrantPublicIdBrand: unique symbol
+export type AgentCapabilityGrantPublicId = Base62UUIDv7 & {
+  readonly [AgentCapabilityGrantPublicIdBrand]: true
+}
+export { AgentCapabilityGrantPublicIdBrand }
+
+declare const AgentJwtReplayIdBrand: unique symbol
+export type AgentJwtReplayId = UUIDv7 & { readonly [AgentJwtReplayIdBrand]: true }
+export { AgentJwtReplayIdBrand }
+
+declare const AgentJwtReplayPublicIdBrand: unique symbol
+export type AgentJwtReplayPublicId = Base62UUIDv7 & { readonly [AgentJwtReplayPublicIdBrand]: true }
+export { AgentJwtReplayPublicIdBrand }
+
+declare const BetterAuthSecondaryStorageIdBrand: unique symbol
+export type BetterAuthSecondaryStorageId = UUIDv7 & {
+  readonly [BetterAuthSecondaryStorageIdBrand]: true
+}
+export { BetterAuthSecondaryStorageIdBrand }
+
+declare const ApprovalRequestIdBrand: unique symbol
+export type ApprovalRequestId = UUIDv7 & { readonly [ApprovalRequestIdBrand]: true }
+export { ApprovalRequestIdBrand }
+
+declare const ApprovalRequestPublicIdBrand: unique symbol
+export type ApprovalRequestPublicId = Base62UUIDv7 & {
+  readonly [ApprovalRequestPublicIdBrand]: true
+}
+export { ApprovalRequestPublicIdBrand }
+
 declare const OrganizationIdBrand: unique symbol
 export type OrganizationId = UUIDv7 & { readonly [OrganizationIdBrand]: true }
 export { OrganizationIdBrand }
@@ -134,6 +184,37 @@ export type AuditLogStatus = (typeof AuditLogStatusValues)[number]
 
 export const AuditLogSeverityValues = ['low', 'medium', 'high', 'critical'] as const
 export type AuditLogSeverity = (typeof AuditLogSeverityValues)[number]
+
+export const AgentAuthHostStatusValues = [
+  'active',
+  'pending',
+  'pending_enrollment',
+  'revoked',
+  'rejected'
+] as const
+export type AgentAuthHostStatus = (typeof AgentAuthHostStatusValues)[number]
+
+export const AgentAuthAgentStatusValues = [
+  'active',
+  'pending',
+  'expired',
+  'revoked',
+  'rejected',
+  'claimed'
+] as const
+export type AgentAuthAgentStatus = (typeof AgentAuthAgentStatusValues)[number]
+
+export const AgentAuthModeValues = ['autonomous', 'delegated'] as const
+export type AgentAuthMode = (typeof AgentAuthModeValues)[number]
+
+export const AgentAuthGrantStatusValues = ['active', 'pending', 'denied', 'revoked', 'consumed'] as const
+export type AgentAuthGrantStatus = (typeof AgentAuthGrantStatusValues)[number]
+
+export const AgentAuthApprovalMethodValues = ['ciba', 'device_authorization'] as const
+export type AgentAuthApprovalMethod = (typeof AgentAuthApprovalMethodValues)[number]
+
+export const AgentAuthApprovalStatusValues = ['approved', 'denied', 'expired', 'pending'] as const
+export type AgentAuthApprovalStatus = (typeof AgentAuthApprovalStatusValues)[number]
 
 export const OAuthClientSubjectTypeValues = ['public', 'pairwise'] as const
 export type OAuthClientSubjectType = (typeof OAuthClientSubjectTypeValues)[number]
@@ -233,10 +314,7 @@ export const passkeySchemaDefinition = {
 } as const
 
 export type PasskeyRawDocument = SchemaRawDocument<typeof passkeySchemaDefinition>
-export type PasskeyDocument = ReplaceDocumentFields<
-  PasskeyRawDocument,
-  { _id: PasskeyId; userId: UserId }
->
+export type PasskeyDocument = ReplaceDocumentFields<PasskeyRawDocument, { _id: PasskeyId; userId: UserId }>
 
 export const passkeySchema = new Schema<PasskeyDocument>(passkeySchemaDefinition, {
   ...mongooseCreatedAtOnlySchemaOptions,
@@ -385,6 +463,267 @@ export const auditLogSchema = new Schema<AuditLogDocument>(auditLogSchemaDefinit
   .index({ userId: 1 }, { name: 'auditLog_userId' })
   .index({ createdAt: -1 }, { name: 'auditLog_createdAt' })
   .index({ action: 1 }, { name: 'auditLog_action' })
+
+export const agentHostSchemaDefinition = {
+  _id: uuidV7IdField(),
+  name: { default: null, type: String },
+  userId: optionalUUIDv7Field(),
+  defaultCapabilities: { default: null, type: String },
+  publicKey: { default: null, type: String },
+  kid: { default: null, type: String },
+  jwksUrl: { default: null, type: String },
+  enrollmentTokenHash: { default: null, type: String },
+  enrollmentTokenExpiresAt: { default: null, type: Date },
+  status: {
+    default: 'pending',
+    enum: AgentAuthHostStatusValues,
+    required: true,
+    type: String
+  },
+  activatedAt: { default: null, type: Date },
+  expiresAt: { default: null, type: Date },
+  lastUsedAt: { default: null, type: Date },
+  createdAt: createdAtField(),
+  updatedAt: updatedAtField()
+} as const
+
+export type AgentHostRawDocument = SchemaRawDocument<typeof agentHostSchemaDefinition>
+export type AgentHostDocument = ReplaceDocumentFields<
+  AgentHostRawDocument,
+  {
+    _id: AgentHostId
+    status: AgentAuthHostStatus
+    userId?: UserId | null
+  }
+>
+export type AgentHostPublicView = MongoosePublicView<AgentHostDocument, AgentHostId, AgentHostPublicId>
+
+export const agentHostSchema = new Schema<AgentHostDocument>(agentHostSchemaDefinition, {
+  ...mongooseTimestampSchemaOptions,
+  collection: 'agentHost',
+  virtuals: { publicId: publicIdVirtual }
+})
+  .index({ userId: 1, status: 1, createdAt: -1 }, { name: 'agentHost_user_status_createdAt' })
+  .index({ kid: 1 }, { name: 'agentHost_kid' })
+  .index({ enrollmentTokenHash: 1 }, { name: 'agentHost_enrollmentTokenHash' })
+  .index({ expiresAt: 1 }, { name: 'agentHost_expiresAt' })
+
+export const agentSchemaDefinition = {
+  _id: uuidV7IdField(),
+  name: { required: true, type: String },
+  userId: optionalUUIDv7Field(),
+  hostId: requiredUUIDv7Field(),
+  status: {
+    default: 'pending',
+    enum: AgentAuthAgentStatusValues,
+    required: true,
+    type: String
+  },
+  mode: {
+    default: 'delegated',
+    enum: AgentAuthModeValues,
+    required: true,
+    type: String
+  },
+  publicKey: { required: true, type: String },
+  kid: { default: null, type: String },
+  jwksUrl: { default: null, type: String },
+  lastUsedAt: { default: null, type: Date },
+  activatedAt: { default: null, type: Date },
+  expiresAt: { default: null, type: Date },
+  metadata: { default: null, type: Schema.Types.Mixed },
+  createdAt: createdAtField(),
+  updatedAt: updatedAtField()
+} as const
+
+export type AgentRawDocument = SchemaRawDocument<typeof agentSchemaDefinition>
+export type AgentDocument = ReplaceDocumentFields<
+  AgentRawDocument,
+  {
+    _id: AgentId
+    hostId: AgentHostId
+    metadata?: Record<string, string | number | boolean | null> | string | null
+    mode: AgentAuthMode
+    status: AgentAuthAgentStatus
+    userId?: UserId | null
+  }
+>
+export type AgentPublicView = MongoosePublicView<AgentDocument, AgentId, AgentPublicId>
+
+export const agentSchema = new Schema<AgentDocument>(agentSchemaDefinition, {
+  ...mongooseTimestampSchemaOptions,
+  collection: 'agent',
+  virtuals: { publicId: publicIdVirtual }
+})
+  .index({ hostId: 1, status: 1, createdAt: -1 }, { name: 'agent_host_status_createdAt' })
+  .index({ userId: 1, status: 1, createdAt: -1 }, { name: 'agent_user_status_createdAt' })
+  .index({ kid: 1 }, { name: 'agent_kid' })
+  .index({ expiresAt: 1 }, { name: 'agent_expiresAt' })
+
+export const agentCapabilityGrantSchemaDefinition = {
+  _id: uuidV7IdField(),
+  agentId: requiredUUIDv7Field(),
+  capability: { required: true, type: String },
+  deniedBy: optionalUUIDv7Field(),
+  grantedBy: optionalUUIDv7Field(),
+  expiresAt: { default: null, type: Date },
+  status: {
+    default: 'pending',
+    enum: AgentAuthGrantStatusValues,
+    required: true,
+    type: String
+  },
+  reason: { default: null, type: String },
+  constraints: { default: null, type: Schema.Types.Mixed },
+  createdAt: createdAtField(),
+  updatedAt: updatedAtField()
+} as const
+
+export type AgentCapabilityGrantRawDocument = SchemaRawDocument<typeof agentCapabilityGrantSchemaDefinition>
+export type AgentCapabilityGrantDocument = ReplaceDocumentFields<
+  AgentCapabilityGrantRawDocument,
+  {
+    _id: AgentCapabilityGrantId
+    agentId: AgentId
+    constraints?: Record<string, unknown> | string | null
+    deniedBy?: UserId | null
+    grantedBy?: UserId | null
+    status: AgentAuthGrantStatus
+  }
+>
+export type AgentCapabilityGrantPublicView = MongoosePublicView<
+  AgentCapabilityGrantDocument,
+  AgentCapabilityGrantId,
+  AgentCapabilityGrantPublicId
+>
+
+export const agentCapabilityGrantSchema = new Schema<AgentCapabilityGrantDocument>(
+  agentCapabilityGrantSchemaDefinition,
+  {
+    ...mongooseTimestampSchemaOptions,
+    collection: 'agentCapabilityGrant',
+    virtuals: { publicId: publicIdVirtual }
+  }
+)
+  .index({ agentId: 1, capability: 1, status: 1 }, { name: 'agentCapabilityGrant_agent_capability_status' })
+  .index({ grantedBy: 1, status: 1, createdAt: -1 }, { name: 'agentCapabilityGrant_grantedBy' })
+  .index({ expiresAt: 1 }, { name: 'agentCapabilityGrant_expiresAt' })
+
+export const agentJwtReplaySchemaDefinition = {
+  _id: uuidV7IdField(),
+  agentId: requiredUUIDv7Field(),
+  expiresAt: { required: true, type: Date },
+  jtiHash: { required: true, type: String },
+  replayKey: { required: true, type: String },
+  createdAt: createdAtField()
+} as const
+
+export type AgentJwtReplayRawDocument = SchemaRawDocument<typeof agentJwtReplaySchemaDefinition>
+export type AgentJwtReplayDocument = ReplaceDocumentFields<
+  AgentJwtReplayRawDocument,
+  {
+    _id: AgentJwtReplayId
+    agentId: AgentId
+  }
+>
+export type AgentJwtReplayPublicView = MongoosePublicView<
+  AgentJwtReplayDocument,
+  AgentJwtReplayId,
+  AgentJwtReplayPublicId
+>
+
+export const agentJwtReplaySchema = new Schema<AgentJwtReplayDocument>(agentJwtReplaySchemaDefinition, {
+  ...mongooseCreatedAtOnlySchemaOptions,
+  collection: 'agentJwtReplay',
+  virtuals: { publicId: publicIdVirtual }
+})
+  .index({ replayKey: 1 }, { name: 'agentJwtReplay_replayKey_unique', unique: true })
+  .index({ expiresAt: 1 }, { expireAfterSeconds: 0, name: 'agentJwtReplay_expiresAt_ttl' })
+
+export const betterAuthSecondaryStorageSchemaDefinition = {
+  _id: uuidV7IdField(),
+  counter: { default: null, type: Number },
+  expiresAt: { default: null, type: Date },
+  key: { required: true, type: String },
+  value: { required: true, type: String },
+  createdAt: createdAtField(),
+  updatedAt: updatedAtField()
+} as const
+
+export type BetterAuthSecondaryStorageRawDocument = SchemaRawDocument<
+  typeof betterAuthSecondaryStorageSchemaDefinition
+>
+export type BetterAuthSecondaryStorageDocument = ReplaceDocumentFields<
+  BetterAuthSecondaryStorageRawDocument,
+  {
+    _id: BetterAuthSecondaryStorageId
+  }
+>
+
+export const betterAuthSecondaryStorageSchema = new Schema<BetterAuthSecondaryStorageDocument>(
+  betterAuthSecondaryStorageSchemaDefinition,
+  {
+    ...mongooseTimestampSchemaOptions,
+    collection: 'betterAuthSecondaryStorage',
+    virtuals: { publicId: publicIdVirtual }
+  }
+)
+  .index({ key: 1 }, { name: 'betterAuthSecondaryStorage_key_unique', unique: true })
+  .index({ expiresAt: 1 }, { expireAfterSeconds: 0, name: 'betterAuthSecondaryStorage_expiresAt_ttl' })
+
+export const approvalRequestSchemaDefinition = {
+  _id: uuidV7IdField(),
+  method: { enum: AgentAuthApprovalMethodValues, required: true, type: String },
+  agentId: optionalUUIDv7Field(),
+  hostId: optionalUUIDv7Field(),
+  userId: optionalUUIDv7Field(),
+  capabilities: { default: null, type: String },
+  status: {
+    default: 'pending',
+    enum: AgentAuthApprovalStatusValues,
+    required: true,
+    type: String
+  },
+  userCodeHash: { default: null, type: String },
+  loginHint: { default: null, type: String },
+  bindingMessage: { default: null, type: String },
+  clientNotificationToken: { default: null, type: String },
+  clientNotificationEndpoint: { default: null, type: String },
+  deliveryMode: { default: null, type: String },
+  interval: { default: 5, required: true, type: Number },
+  lastPolledAt: { default: null, type: Date },
+  expiresAt: { required: true, type: Date },
+  createdAt: createdAtField(),
+  updatedAt: updatedAtField()
+} as const
+
+export type ApprovalRequestRawDocument = SchemaRawDocument<typeof approvalRequestSchemaDefinition>
+export type ApprovalRequestDocument = ReplaceDocumentFields<
+  ApprovalRequestRawDocument,
+  {
+    _id: ApprovalRequestId
+    agentId?: AgentId | null
+    hostId?: AgentHostId | null
+    method: AgentAuthApprovalMethod
+    status: AgentAuthApprovalStatus
+    userId?: UserId | null
+  }
+>
+export type ApprovalRequestPublicView = MongoosePublicView<
+  ApprovalRequestDocument,
+  ApprovalRequestId,
+  ApprovalRequestPublicId
+>
+
+export const approvalRequestSchema = new Schema<ApprovalRequestDocument>(approvalRequestSchemaDefinition, {
+  ...mongooseTimestampSchemaOptions,
+  collection: 'approvalRequest',
+  virtuals: { publicId: publicIdVirtual }
+})
+  .index({ agentId: 1, status: 1, createdAt: -1 }, { name: 'approvalRequest_agent_status' })
+  .index({ hostId: 1, status: 1, createdAt: -1 }, { name: 'approvalRequest_host_status' })
+  .index({ userId: 1, status: 1, createdAt: -1 }, { name: 'approvalRequest_user_status' })
+  .index({ expiresAt: 1 }, { expireAfterSeconds: 0, name: 'approvalRequest_expiresAt_ttl' })
 
 export const organizationSchemaDefinition = {
   _id: uuidV7IdField(),
@@ -746,7 +1085,13 @@ export const subscriptionSchema = new Schema<SubscriptionDocument>(subscriptionS
 
 export const betterAuthSchemas = {
   account: accountSchema,
+  agent: agentSchema,
+  agentCapabilityGrant: agentCapabilityGrantSchema,
+  agentHost: agentHostSchema,
+  agentJwtReplay: agentJwtReplaySchema,
+  betterAuthSecondaryStorage: betterAuthSecondaryStorageSchema,
   apikey: apikeySchema,
+  approvalRequest: approvalRequestSchema,
   auditLog: auditLogSchema,
   deviceCode: deviceCodeSchema,
   invitation: invitationSchema,

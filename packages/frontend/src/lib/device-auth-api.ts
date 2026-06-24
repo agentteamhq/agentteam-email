@@ -1,3 +1,5 @@
+import { authReactClient } from './auth-react-client'
+
 export type DeviceVerificationStatus = 'pending' | 'approved' | 'denied'
 
 export interface DeviceVerifyResult {
@@ -10,25 +12,27 @@ export interface DeviceActionResult {
 }
 
 export async function verifyDeviceUserCode(userCode: string): Promise<DeviceVerifyResult> {
-  const params = new URLSearchParams()
-  params.set('user_code', userCode)
-  return requestBetterAuthDeviceJSON<DeviceVerifyResult>(`/device?${params.toString()}`, {
-    method: 'GET'
-  })
+  const response = await authReactClient.device({ query: { user_code: userCode } })
+  const data = readAuthClientResponse(response, 'Device authorization returned an invalid response.')
+
+  return {
+    status: readDeviceVerificationStatus(data.status),
+    user_code: data.user_code
+  }
 }
 
 export async function approveDeviceUserCode(userCode: string): Promise<DeviceActionResult> {
-  return requestBetterAuthDeviceJSON<DeviceActionResult>('/device/approve', {
-    body: JSON.stringify({ userCode }),
-    method: 'POST'
-  })
+  return readAuthClientResponse(
+    await authReactClient.device.approve({ userCode }),
+    'Device authorization failed.'
+  )
 }
 
 export async function denyDeviceUserCode(userCode: string): Promise<DeviceActionResult> {
-  return requestBetterAuthDeviceJSON<DeviceActionResult>('/device/deny', {
-    body: JSON.stringify({ userCode }),
-    method: 'POST'
-  })
+  return readAuthClientResponse(
+    await authReactClient.device.deny({ userCode }),
+    'Device authorization failed.'
+  )
 }
 
 export function normalizeDeviceUserCode(value: string): string {
@@ -43,59 +47,54 @@ export function formatDeviceUserCode(value: string): string {
   return `${normalized.slice(0, 4)}-${normalized.slice(4)}`
 }
 
-async function requestBetterAuthDeviceJSON<T>(
-  path: string,
-  init: Omit<RequestInit, 'credentials' | 'headers'> & { headers?: HeadersInit }
-): Promise<T> {
-  const { headers: initHeaders, ...requestInit } = init
-  const headers = new Headers(initHeaders)
-  headers.set('Accept', 'application/json')
-  if (init.body) {
-    headers.set('Content-Type', 'application/json')
-  }
+type AuthClientResponse<TData> =
+  | {
+      data: TData
+      error: null
+    }
+  | {
+      data: null
+      error: AuthClientError
+    }
 
-  const response = await fetch(`/rpc/auth/api${path}`, {
-    ...requestInit,
-    credentials: 'include',
-    headers
-  })
-  const text = await response.text()
-  const data = parseJSONValue(text)
-
-  if (!response.ok) {
-    throw new Error(readBetterAuthErrorMessage(data, response.status))
-  }
-
-  if (!data || typeof data !== 'object') {
-    throw new Error('Device authorization returned an invalid response.')
-  }
-
-  return data as T
+interface AuthClientError {
+  error?: string
+  error_description?: string
+  message?: string
+  status: number
 }
 
-function parseJSONValue(text: string): unknown {
-  if (text.trim() === '') {
-    return null
+function readAuthClientResponse<TData>(
+  response: AuthClientResponse<TData>,
+  invalidResponseMessage: string
+): NonNullable<TData> {
+  if (response.error) {
+    throw new Error(readBetterAuthErrorMessage(response.error))
   }
-  try {
-    return JSON.parse(text) as unknown
-  } catch {
-    return null
+
+  if (response.data == null) {
+    throw new Error(invalidResponseMessage)
   }
+
+  return response.data
 }
 
-function readBetterAuthErrorMessage(data: unknown, status: number): string {
-  if (data && typeof data === 'object') {
-    const record = data as Record<string, unknown>
-    for (const key of ['error_description', 'message', 'error']) {
-      const value = record[key]
-      if (typeof value === 'string' && value.trim() !== '') {
-        return value
-      }
+function readDeviceVerificationStatus(value: string): DeviceVerificationStatus {
+  if (value === 'pending' || value === 'approved' || value === 'denied') {
+    return value
+  }
+
+  throw new Error('Device authorization returned an invalid response.')
+}
+
+function readBetterAuthErrorMessage(error: AuthClientError): string {
+  for (const value of [error.error_description, error.message, error.error]) {
+    if (typeof value === 'string' && value.trim() !== '') {
+      return value
     }
   }
 
-  if (status === 401) {
+  if (error.status === 401) {
     return 'Sign in again to authorize this device.'
   }
 

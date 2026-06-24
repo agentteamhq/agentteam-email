@@ -1,11 +1,10 @@
 import {
-  type PasskeyAuthClient,
+
   useAddPasskey,
   useAuth,
   useAuthPlugin
 } from "@better-auth-ui/react"
 import { FingerprintIcon as Fingerprint } from "@phosphor-icons/react"
-import type { SyntheticEvent } from "react"
 
 import {
   AlertDialog,
@@ -23,6 +22,8 @@ import { Input } from "src/components/ui/input"
 import { Label } from "src/components/ui/label"
 import { Spinner } from "src/components/ui/spinner"
 import { passkeyPlugin } from "src/lib/auth/passkey-plugin"
+import type { PasskeyAuthClient } from "@better-auth-ui/react";
+import type { SyntheticEvent } from "react"
 
 export type AddPasskeyDialogProps = {
   open: boolean
@@ -47,7 +48,7 @@ export function AddPasskeyDialog({
     const name = (formData.get("name") as string)?.trim()
 
     addPasskey(name ? { name } : undefined, {
-      onSuccess: () => onOpenChange(false)
+      onSuccess: () => { onOpenChange(false); }
     })
   }
 

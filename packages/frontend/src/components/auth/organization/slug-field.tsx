@@ -1,5 +1,5 @@
 import {
-  type OrganizationAuthClient,
+
   useAuth,
   useAuthPlugin,
   useCheckSlug
@@ -17,6 +17,8 @@ import {
 import { Label } from "src/components/ui/label"
 import { Spinner } from "src/components/ui/spinner"
 import { organizationPlugin } from "src/lib/auth/organization-plugin"
+import { sanitizeSlug } from "./slug-utils"
+import type { OrganizationAuthClient } from "@better-auth-ui/react";
 
 /** Props for the `SlugField` component. */
 export type SlugFieldProps = {
@@ -25,15 +27,6 @@ export type SlugFieldProps = {
   currentSlug?: string
   disabled?: boolean
   id?: string
-}
-
-/**
- * Sanitize a slug value so it only contains lowercase alphanumeric characters
- * and dashes. Runs of disallowed characters are collapsed to a single dash, but
- * leading/trailing dashes are preserved while the user is still typing.
- */
-export function sanitizeSlug(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-")
 }
 
 /**
@@ -64,8 +57,9 @@ export function SlugField({
 
   const debouncer = useDebouncer(
     (next: string) => {
-      if (!checkSlugEnabled || !next.trim() || next.trim() === currentSlug)
+      if (!checkSlugEnabled || !next.trim() || next.trim() === currentSlug) {
         return
+      }
 
       checkSlug({ slug: next.trim() })
     },
@@ -73,16 +67,13 @@ export function SlugField({
   )
 
   useEffect(() => {
-    // Clear stale validation errors when the controlled value changes
-    // externally (e.g. the parent resets the form), not just via this
-    // input's onChange.
-    setSlugError(undefined)
-
-    if (!checkSlugEnabled) return
+    if (!checkSlugEnabled) {
+      return
+    }
 
     resetCheckSlug()
     debouncer.maybeExecute(value)
-  }, [checkSlugEnabled, value, debouncer.maybeExecute, resetCheckSlug])
+  }, [checkSlugEnabled, value, debouncer, resetCheckSlug])
 
   return (
     <Field data-invalid={!!slugError}>

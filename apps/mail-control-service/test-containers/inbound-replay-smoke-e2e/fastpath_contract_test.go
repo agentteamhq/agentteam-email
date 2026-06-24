@@ -115,15 +115,20 @@ func TestFastpathContractRejectsInvalidNotificationsBeforeQueueMutation(t *testi
 		{
 			name: "unknown JSON field",
 			body: fastpathContractJSONBody(t, map[string]any{
-				"schema":           baseNotification.Schema,
-				"ingest_id":        baseNotification.IngestID,
-				"recipient_domain": baseNotification.RecipientDomain,
-				"raw_key":          baseNotification.RawKey,
-				"edge_key":         baseNotification.EdgeKey,
-				"result_key":       baseNotification.ResultKey,
-				"received_at":      baseNotification.ReceivedAt,
-				"raw_sha256":       baseNotification.RawSHA256,
-				"unexpected":       "metadata-not-in-contract",
+				"schema":                      baseNotification.Schema,
+				"organization_id":             baseNotification.OrganizationID,
+				"organization_public_id":      baseNotification.OrganizationPublicID,
+				"archive_prefix":              baseNotification.ArchivePrefix,
+				"worker_connection_id":        baseNotification.WorkerConnectionID,
+				"worker_domain_deployment_id": baseNotification.WorkerDomainDeploymentID,
+				"ingest_id":                   baseNotification.IngestID,
+				"recipient_domain":            baseNotification.RecipientDomain,
+				"raw_key":                     baseNotification.RawKey,
+				"edge_key":                    baseNotification.EdgeKey,
+				"result_key":                  baseNotification.ResultKey,
+				"received_at":                 baseNotification.ReceivedAt,
+				"raw_sha256":                  baseNotification.RawSHA256,
+				"unexpected":                  "metadata-not-in-contract",
 			}),
 			contentType:   "application/json",
 			timestamp:     now.Format(time.RFC3339Nano),
@@ -133,15 +138,20 @@ func TestFastpathContractRejectsInvalidNotificationsBeforeQueueMutation(t *testi
 		{
 			name: "raw mail payload field",
 			body: fastpathContractJSONBody(t, map[string]any{
-				"schema":           baseNotification.Schema,
-				"ingest_id":        baseNotification.IngestID,
-				"recipient_domain": baseNotification.RecipientDomain,
-				"raw_key":          baseNotification.RawKey,
-				"edge_key":         baseNotification.EdgeKey,
-				"result_key":       baseNotification.ResultKey,
-				"received_at":      baseNotification.ReceivedAt,
-				"raw_sha256":       baseNotification.RawSHA256,
-				"raw_eml":          "From: attacker@example.net\r\nTo: agent@example.test\r\n\r\nmust not be trusted",
+				"schema":                      baseNotification.Schema,
+				"organization_id":             baseNotification.OrganizationID,
+				"organization_public_id":      baseNotification.OrganizationPublicID,
+				"archive_prefix":              baseNotification.ArchivePrefix,
+				"worker_connection_id":        baseNotification.WorkerConnectionID,
+				"worker_domain_deployment_id": baseNotification.WorkerDomainDeploymentID,
+				"ingest_id":                   baseNotification.IngestID,
+				"recipient_domain":            baseNotification.RecipientDomain,
+				"raw_key":                     baseNotification.RawKey,
+				"edge_key":                    baseNotification.EdgeKey,
+				"result_key":                  baseNotification.ResultKey,
+				"received_at":                 baseNotification.ReceivedAt,
+				"raw_sha256":                  baseNotification.RawSHA256,
+				"raw_eml":                     "From: attacker@example.net\r\nTo: agent@example.test\r\n\r\nmust not be trusted",
 			}),
 			contentType:   "application/json",
 			timestamp:     now.Format(time.RFC3339Nano),
@@ -186,7 +196,7 @@ func TestFastpathContractRejectsInvalidNotificationsBeforeQueueMutation(t *testi
 		},
 		{
 			name:          "invalid UUIDv7 ingest id",
-			body:          fastpathContractJSONBody(t, fastpathContractInvalidUUIDNotification(baseNotification.ReceivedAt, baseNotification.RawSHA256)),
+			body:          fastpathContractJSONBody(t, fastpathContractInvalidUUIDNotification(t, baseNotification.ReceivedAt, baseNotification.RawSHA256)),
 			contentType:   "application/json",
 			timestamp:     now.Format(time.RFC3339Nano),
 			signingSecret: harness.notifyHMACSecret,
@@ -423,35 +433,30 @@ func fastpathContractNotification(t *testing.T, domain string) (poller.Notificat
 	if err != nil {
 		t.Fatalf("decode fastpath contract ingest id time: %v", err)
 	}
-	bundle, err := r2archive.InboundBundleKeys(domain, receivedAt, ingestID)
-	if err != nil {
-		t.Fatalf("build fastpath contract inbound bundle keys: %v", err)
-	}
+	bundle := smokeInboundBundleKeys(t, domain, receivedAt, ingestID)
 	rawSHA := sha256.Sum256([]byte("fastpath contract raw placeholder"))
-	return poller.Notification{
-		Schema:          poller.FastPathSchema,
-		IngestID:        ingestID,
-		RecipientDomain: domain,
-		RawKey:          bundle.RawKey,
-		EdgeKey:         bundle.EdgeKey,
-		ResultKey:       bundle.ResultKey,
-		ReceivedAt:      receivedAt,
-		RawSHA256:       hex.EncodeToString(rawSHA[:]),
-	}, bundle
+	return smokeNotificationForBundle(bundle, receivedAt, hex.EncodeToString(rawSHA[:])), bundle
 }
 
-func fastpathContractInvalidUUIDNotification(receivedAt time.Time, rawSHA256 string) poller.Notification {
+func fastpathContractInvalidUUIDNotification(t *testing.T, receivedAt time.Time, rawSHA256 string) poller.Notification {
+	t.Helper()
+
 	invalidID := "018f0000-0000-6000-8000-000000000000"
-	prefix := "mail/inbound/" + smokeDomain + "/" + receivedAt.UTC().Format("2006/01/02") + "/" + invalidID
+	prefix := smokeArchivePrefix(t, smokeDomain) + "/" + receivedAt.UTC().Format("2006/01/02") + "/" + invalidID
 	return poller.Notification{
-		Schema:          poller.FastPathSchema,
-		IngestID:        invalidID,
-		RecipientDomain: smokeDomain,
-		RawKey:          prefix + "/raw.eml",
-		EdgeKey:         prefix + "/edge.json",
-		ResultKey:       prefix + "/result.json",
-		ReceivedAt:      receivedAt,
-		RawSHA256:       rawSHA256,
+		Schema:                   poller.FastPathSchema,
+		OrganizationID:           smokeOrganizationID,
+		OrganizationPublicID:     smokeOrganizationPublicID,
+		ArchivePrefix:            smokeArchivePrefix(t, smokeDomain),
+		WorkerConnectionID:       smokeWorkerConnectionID,
+		WorkerDomainDeploymentID: smokeWorkerDomainDeploymentID,
+		IngestID:                 invalidID,
+		RecipientDomain:          smokeDomain,
+		RawKey:                   prefix + "/raw.eml",
+		EdgeKey:                  prefix + "/edge.json",
+		ResultKey:                prefix + "/result.json",
+		ReceivedAt:               receivedAt,
+		RawSHA256:                rawSHA256,
 	}
 }
 
@@ -468,6 +473,11 @@ func fastpathContractWriteCommittedBundle(t *testing.T, harness fastpathContract
 	manifest := poller.Manifest{
 		Schema:             r2archive.InboundEdgeSchema,
 		IngestID:           notification.IngestID,
+		OrganizationID:     notification.OrganizationID,
+		OrgPublicID:        notification.OrganizationPublicID,
+		ArchivePrefix:      notification.ArchivePrefix,
+		ConnectionID:       notification.WorkerConnectionID,
+		DomainID:           notification.WorkerDomainDeploymentID,
 		RawKey:             bundle.RawKey,
 		EdgeKey:            bundle.EdgeKey,
 		Mailbox:            "agent@example.test",

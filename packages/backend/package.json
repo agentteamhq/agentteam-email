@@ -53,11 +53,12 @@
     "dist"
   ],
   "scripts": {
-    "build": "vite build && tsc --emitDeclarationOnly --declaration --declarationMap --noEmit false --noCheck --outDir dist && api-extractor run --local --verbose",
+    "build": "vite build && tsc --emitDeclarationOnly --declaration --declarationMap --noEmit false --noCheck --outDir dist && api-extractor run --local --verbose && pnpm run check:rpc-openapi",
+    "check:rpc-openapi": "node ../../scripts/generate-rpc-openapi.mjs --check",
     "clean": "rimraf --glob dist .turbo node_modules/.cache node_modules/.vite* .eslintcache *.tsbuildinfo",
     "dev": "vite build --watch",
-    "format": "pnpm run lint --fix && pnpm exec prettier --write ./src",
-    "lint": "eslint --quiet ${ESLINT_CACHE_FLAG:---cache} --concurrency ${ESLINT_CONCURRENCY:-auto} --config ./eslint.config.mjs ./src",
+    "format": "pnpm run lint --fix && pnpm exec prettier --write ./src ./vitest.config.ts",
+    "lint": "eslint --quiet ${ESLINT_CACHE_FLAG:---cache} --concurrency ${ESLINT_CONCURRENCY:-auto} --config ./eslint.config.mjs ./src ./vitest.config.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "typecheck:debug": "tsc --noEmit --listFiles"
@@ -67,6 +68,7 @@
     "@agendajs/mongo-backend": "catalog:",
     "@better-auth-ui/core": "catalog:",
     "@better-auth-ui/react": "catalog:",
+    "@better-auth/agent-auth": "catalog:",
     "@better-auth/api-key": "catalog:",
     "@better-auth/core": "catalog:",
     "@better-auth/mongo-adapter": "catalog:",
@@ -135,6 +137,7 @@
     "@agendajs/mongo-backend": "*",
     "@better-auth-ui/core": "*",
     "@better-auth-ui/react": "*",
+    "@better-auth/agent-auth": "*",
     "@better-auth/api-key": "*",
     "@better-auth/core": "*",
     "@better-auth/mongo-adapter": "*",

@@ -185,6 +185,7 @@ export function buildFastPathNotification(archived) {
   return {
     schema: INBOUND_FAST_PATH_SCHEMA,
     ingest_id: requireString(archived.ingestId, 'ingest id'),
+    organization_id: requireString(manifest.organization_id, 'organization id'),
     organization_public_id: requireString(manifest.org_public_id, 'org public id'),
     archive_prefix: requireString(manifest.archive_prefix, 'archive prefix'),
     worker_connection_id: requireString(manifest.connection_id, 'connection id'),
@@ -307,6 +308,7 @@ export function buildCloudflareEdgeEvidence({
 
 export function buildManifest({
   ingestId,
+  organizationId,
   orgPublicId,
   archivePrefix,
   connectionId,
@@ -328,6 +330,7 @@ export function buildManifest({
   const manifest = {
     schema: INBOUND_EDGE_SCHEMA,
     ingest_id: requireString(ingestId, 'ingest id'),
+    organization_id: requireString(organizationId, 'organization id'),
     org_public_id: requireString(orgPublicId, 'org public id'),
     archive_prefix: requireString(archivePrefix, 'archive prefix'),
     connection_id: requireString(connectionId, 'connection id'),
@@ -423,6 +426,7 @@ export async function archiveInboundMessage(message, env, now = new Date(), fetc
   }
 
   const orgPublicId = requireString(env.AGENTTEAM_ORG_PUBLIC_ID, 'org public id')
+  const organizationId = requireString(env.AGENTTEAM_ORGANIZATION_ID, 'organization id')
   const connectionId = requireString(env.AGENTTEAM_CONNECTION_ID, 'connection id')
   const domainId = requireString(env.AGENTTEAM_DOMAIN_ID, 'domain id')
   const domain = normalizeDomain(env.AGENTTEAM_DOMAIN)
@@ -457,6 +461,7 @@ export async function archiveInboundMessage(message, env, now = new Date(), fetc
 
   const manifest = buildManifest({
     ingestId,
+    organizationId,
     orgPublicId,
     archivePrefix,
     connectionId,

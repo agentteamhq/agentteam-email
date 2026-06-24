@@ -20,6 +20,12 @@ func TestCommandHelpIsScopedForEveryCommand(t *testing.T) {
 		commandAuthLogin,
 		commandAuthStatus,
 		commandAuthLogout,
+		commandAgent,
+		commandAgentConnect,
+		commandAgentTrial,
+		commandAgentEnroll,
+		commandAgentStatus,
+		commandAgentDisconnect,
 		commandVersion,
 		commandUpdate,
 		commandSkill,
@@ -69,6 +75,7 @@ func TestParseCommandHelpFlags(t *testing.T) {
 		commandSend,
 		commandReply,
 		commandAuth,
+		commandAgent,
 		commandVersion,
 		commandUpdate,
 		commandSkill,
@@ -112,6 +119,32 @@ func TestParseNestedAuthHelpFlags(t *testing.T) {
 	}
 }
 
+func TestParseNestedAgentHelpFlags(t *testing.T) {
+	cases := []struct {
+		argv    []string
+		command commandName
+	}{
+		{argv: []string{"agent", "status", "--help"}, command: commandAgentStatus},
+		{argv: []string{"agent", "status", "-h"}, command: commandAgentStatus},
+		{argv: []string{"agent", "connect", "--help"}, command: commandAgentConnect},
+		{argv: []string{"agent", "trial", "-h"}, command: commandAgentTrial},
+		{argv: []string{"agent", "enroll", "--help"}, command: commandAgentEnroll},
+		{argv: []string{"agent", "disconnect", "-h"}, command: commandAgentDisconnect},
+	}
+	for _, tc := range cases {
+		t.Run(strings.Join(tc.argv, " "), func(t *testing.T) {
+			_, err := parseArgs(tc.argv)
+			var help helpRequest
+			if !errors.As(err, &help) {
+				t.Fatalf("err = %T %v, want helpRequest", err, err)
+			}
+			if !strings.Contains(help.text, commandUsage(tc.command)) {
+				t.Fatalf("help missing usage %q:\n%s", commandUsage(tc.command), help.text)
+			}
+		})
+	}
+}
+
 func TestParseGlobalVersionFlag(t *testing.T) {
 	args, err := parseArgs([]string{"--version", "--json"})
 	if err != nil {
@@ -123,11 +156,144 @@ func TestParseGlobalVersionFlag(t *testing.T) {
 }
 
 func TestParseAuthLoginFlags(t *testing.T) {
-	args, err := parseArgs([]string{"auth", "login", "--api-base-url", "http://localhost:4321", "--open", "--json"})
+	args, err := parseArgs([]string{
+		"auth",
+		"login",
+		"--api-base-url",
+		"http://localhost:4321",
+		"--open",
+		"--device",
+		"--no-open",
+		"--json",
+	})
 	if err != nil {
 		t.Fatalf("parseArgs returned error: %v", err)
 	}
-	if args.Command != commandAuth || args.AuthAction != "login" || args.APIBaseURL != "http://localhost:4321" || !args.Open || !args.JSON {
+	if args.Command != commandAuth ||
+		args.AuthAction != "login" ||
+		args.APIBaseURL != "http://localhost:4321" ||
+		!args.Open ||
+		!args.Device ||
+		!args.NoOpen ||
+		!args.JSON {
+		t.Fatalf("args = %#v", args)
+	}
+}
+
+func TestParseAgentConnectFlags(t *testing.T) {
+	args, err := parseArgs([]string{
+		"agent",
+		"connect",
+		"--api-base-url",
+		"http://localhost:4321",
+		"--name",
+		"Research Agent",
+		"--capability",
+		"email.message.read",
+		"--capability=email.message.send",
+		"--mailbox-address",
+		"support@example.com",
+		"--organization-id",
+		"org-1",
+		"--reason",
+		"Help with support replies",
+		"--device",
+		"--no-open",
+		"--force",
+		"--json",
+	})
+	if err != nil {
+		t.Fatalf("parseArgs returned error: %v", err)
+	}
+	if args.Command != commandAgent ||
+		args.AgentAction != "connect" ||
+		args.APIBaseURL != "http://localhost:4321" ||
+		args.AgentName != "Research Agent" ||
+		strings.Join(args.AgentCapabilities, ",") != "email.message.read,email.message.send" ||
+		args.MailboxAddress != "support@example.com" ||
+		args.OrganizationID != "org-1" ||
+		args.AgentReason != "Help with support replies" ||
+		!args.Device ||
+		!args.NoOpen ||
+		!args.Force ||
+		!args.JSON {
+		t.Fatalf("args = %#v", args)
+	}
+}
+
+func TestParseAgentTrialFlags(t *testing.T) {
+	args, err := parseArgs([]string{
+		"agent",
+		"trial",
+		"--api-base-url",
+		"http://localhost:4321",
+		"--name",
+		"Research Agent",
+		"--capability",
+		"email.status",
+		"--capability=email.message.read",
+		"--post-claim-capability",
+		"email.message.send",
+		"--force",
+		"--json",
+	})
+	if err != nil {
+		t.Fatalf("parseArgs returned error: %v", err)
+	}
+	if args.Command != commandAgent ||
+		args.AgentAction != "trial" ||
+		args.APIBaseURL != "http://localhost:4321" ||
+		args.AgentName != "Research Agent" ||
+		strings.Join(args.AgentCapabilities, ",") != "email.status,email.message.read" ||
+		strings.Join(args.AgentPostClaimCapabilities, ",") != "email.message.send" ||
+		!args.Force ||
+		!args.JSON {
+		t.Fatalf("args = %#v", args)
+	}
+}
+
+func TestParseAgentStatusFlags(t *testing.T) {
+	args, err := parseArgs([]string{"agent", "status", "--json"})
+	if err != nil {
+		t.Fatalf("parseArgs returned error: %v", err)
+	}
+	if args.Command != commandAgent || args.AgentAction != "status" || !args.JSON {
+		t.Fatalf("args = %#v", args)
+	}
+}
+
+func TestParseAgentEnrollFlags(t *testing.T) {
+	args, err := parseArgs([]string{
+		"agent",
+		"enroll",
+		"TOKEN",
+		"--api-base-url",
+		"http://localhost:4321",
+		"--name",
+		"Research Agent",
+		"--force",
+		"--json",
+	})
+	if err != nil {
+		t.Fatalf("parseArgs returned error: %v", err)
+	}
+	if args.Command != commandAgent ||
+		args.AgentAction != "enroll" ||
+		args.AgentToken != "TOKEN" ||
+		args.APIBaseURL != "http://localhost:4321" ||
+		args.AgentName != "Research Agent" ||
+		!args.Force ||
+		!args.JSON {
+		t.Fatalf("args = %#v", args)
+	}
+}
+
+func TestParseAgentDisconnectFlags(t *testing.T) {
+	args, err := parseArgs([]string{"agent", "disconnect", "--json"})
+	if err != nil {
+		t.Fatalf("parseArgs returned error: %v", err)
+	}
+	if args.Command != commandAgent || args.AgentAction != "disconnect" || !args.JSON {
 		t.Fatalf("args = %#v", args)
 	}
 }
@@ -138,6 +304,17 @@ func TestParseAuthRequiresSubcommand(t *testing.T) {
 		t.Fatal("expected parse error")
 	}
 	want := "the following arguments are required: auth_command"
+	if err.Error() != want {
+		t.Fatalf("error = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestParseAgentRequiresSubcommand(t *testing.T) {
+	_, err := parseArgs([]string{"agent"})
+	if err == nil {
+		t.Fatal("expected parse error")
+	}
+	want := "the following arguments are required: agent_command"
 	if err.Error() != want {
 		t.Fatalf("error = %q, want %q", err.Error(), want)
 	}

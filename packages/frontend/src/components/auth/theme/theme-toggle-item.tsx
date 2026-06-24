@@ -34,16 +34,16 @@ export function ThemeToggleItem() {
   // Up/Down on a TabsTrigger escapes back to the previous/next sibling
   // menu item so users can keep navigating the menu with the arrow keys.
   const handleTabsKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {return}
 
     const target = event.target as HTMLElement
-    if (target.getAttribute("role") !== "tab") return
+    if (target.getAttribute("role") !== "tab") {return}
 
     const wrapper = target.closest<HTMLElement>('[role="menuitem"]')
     const content = wrapper?.closest<HTMLElement>(
       '[data-slot="dropdown-menu-content"]'
     )
-    if (!wrapper || !content) return
+    if (!wrapper || !content) {return}
 
     const items = Array.from(
       content.querySelectorAll<HTMLElement>(
@@ -54,7 +54,7 @@ export function ThemeToggleItem() {
     const nextIndex =
       event.key === "ArrowDown" ? currentIndex + 1 : currentIndex - 1
     const next = items[nextIndex]
-    if (!next) return
+    if (!next) {return}
 
     event.preventDefault()
     next.focus()
@@ -62,11 +62,11 @@ export function ThemeToggleItem() {
 
   return (
     <DropdownMenuItem
-      onSelect={(e) => e.preventDefault()}
+      onSelect={(e) => { e.preventDefault(); }}
       onFocus={(e) => {
         // onFocus bubbles in React, so guard against re-entry from focus
         // events fired by the inner TabsTrigger.
-        if (e.target === e.currentTarget) focusActiveTab()
+        if (e.target === e.currentTarget) {focusActiveTab()}
       }}
     >
       <PaletteIcon className="text-muted-foreground" />

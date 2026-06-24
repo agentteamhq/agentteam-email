@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"agent-mail/internal/archive/r2archive"
@@ -145,7 +146,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.register(mux)
 	server := &http.Server{
 		Addr:              s.cfg.ListenAddress,
-		Handler:           mux,
+		Handler:           s.withControlAPIAuthentication(mux),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -178,7 +179,23 @@ func (s *Server) Run(ctx context.Context) error {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	s.register(mux)
-	return mux
+	return s.withControlAPIAuthentication(mux)
+}
+
+func (s *Server) withControlAPIAuthentication(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.requiresControlAPIToken(r) && !s.adminTokenMatches(r.Header.Get(TokenHeader)) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte("{\"error\":\"Unauthorized\"}\n"))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) requiresControlAPIToken(r *http.Request) bool {
+	return strings.HasPrefix(r.URL.Path, "/rpc/")
 }
 
 func (s *Server) register(mux *http.ServeMux) huma.API {

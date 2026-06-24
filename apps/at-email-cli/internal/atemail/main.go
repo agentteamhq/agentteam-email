@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 )
 
 func Main(ctx context.Context, argv []string, env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
@@ -56,6 +57,20 @@ func Main(ctx context.Context, argv []string, env []string, stdin io.Reader, std
 			return exitCodeForError(err)
 		}
 		return 0
+	case commandAgent:
+		err = handleAgent(ctx, args, env, stdout, stderr)
+		if err != nil {
+			writeInterpretedError(failureWriter(args.JSON, stdout, stderr), err)
+			return exitCodeForError(err)
+		}
+		return 0
+	case commandPaperclipTool:
+		err = handlePaperclipTool(ctx, env, stdin, stdout)
+		if err != nil {
+			writeInterpretedError(failureWriter(args.JSON, stdout, stderr), err)
+			return exitCodeForError(err)
+		}
+		return 0
 	}
 
 	args, err = prepareBodyInput(args, stdin)
@@ -70,39 +85,75 @@ func Main(ctx context.Context, argv []string, env []string, stdin io.Reader, std
 		}
 	}
 
-	cfg, err := loadConfig(env)
-	if err != nil {
-		writeInterpretedError(failureWriter(args.JSON, stdout, stderr), err)
-		return exitCodeForError(err)
+	if handled, err := handleAgentMailCommand(ctx, args, env, stdout); handled {
+		if err != nil {
+			writeInterpretedError(failureWriter(args.JSON, stdout, stderr), err)
+			return exitCodeForError(err)
+		}
+		if !args.JSON {
+			writeUpdateNotice(ctx, stderr)
+		}
+		return 0
 	}
-	client := newWildDuckClient(cfg)
+
+	err = newAgentCredentialRequiredError()
+	writeInterpretedError(failureWriter(args.JSON, stdout, stderr), err)
+	return exitCodeForError(err)
+}
+
+func handleAgentMailCommand(ctx context.Context, args parsedArgs, env []string, stdout io.Writer) (bool, error) {
+	credential, found, err := loadAgentCredential(defaultAgentProfileName)
+	if err != nil {
+		return true, err
+	}
+	if !found {
+		return false, nil
+	}
+	values := envMap(env)
+	preferredAccountID := lookupEnv(values, "AT_EMAIL_MAILBOX_ADDRESS")
+	client := newWebMailClient(credential, preferredAccountID, buildInternalIdentityTerms(values))
+	cfg := config{
+		APIBaseURL:            credential.APIBaseURL,
+		MailboxAddress:        preferredAccountID,
+		UserID:                credential.AgentID,
+		InternalIdentityTerms: buildInternalIdentityTerms(values),
+	}
+	if args.Command == commandReply && cfg.MailboxAddress == "" {
+		accountID, err := client.accountID(ctx)
+		if err != nil {
+			return true, err
+		}
+		cfg.MailboxAddress = accountID
+		client.preferredAccountID = accountID
+	}
 
 	switch args.Command {
 	case commandStatus:
-		err = handleStatus(ctx, args, client, cfg, stdout)
+		return true, handleStatus(ctx, args, client, cfg, stdout)
 	case commandInbox:
-		err = handleInbox(ctx, args, client, stdout)
+		return true, handleInbox(ctx, args, client, stdout)
 	case commandRead:
-		err = handleRead(ctx, args, client, cfg, stdout)
+		return true, handleRead(ctx, args, client, stdout)
 	case commandSearch:
-		err = handleSearch(ctx, args, client, stdout)
+		return true, handleSearch(ctx, args, client, stdout)
 	case commandMarkRead:
-		err = handleMarkRead(ctx, args, client, stdout)
+		return true, handleMarkRead(ctx, args, client, stdout)
 	case commandArchive:
-		err = handleArchive(ctx, args, client, stdout)
+		return true, handleArchive(ctx, args, client, stdout)
 	case commandSend:
-		err = handleSend(ctx, args, client, stdin, stdout)
+		return true, handleSend(ctx, args, client, stdinReader(args), stdout)
 	case commandReply:
-		err = handleReply(ctx, args, client, cfg, stdin, stdout)
+		return true, handleReply(ctx, args, client, cfg, stdinReader(args), stdout)
+	default:
+		return false, nil
 	}
-	if err != nil {
-		writeInterpretedError(failureWriter(args.JSON, stdout, stderr), err)
-		return exitCodeForError(err)
+}
+
+func stdinReader(args parsedArgs) io.Reader {
+	if args.Body == nil {
+		return strings.NewReader("")
 	}
-	if !args.JSON {
-		writeUpdateNotice(ctx, stderr)
-	}
-	return 0
+	return strings.NewReader(*args.Body)
 }
 
 func prepareBodyInput(args parsedArgs, stdin io.Reader) (parsedArgs, error) {
@@ -141,6 +192,10 @@ func writeInterpretedError(writer io.Writer, err error) {
 	if errors.As(err, &cfgErr) {
 		fmt.Fprint(writer, "hint: this is a managed-runtime setup issue; report the command and context instead of creating local credentials\n")
 	}
+	var credentialErr agentCredentialRequiredError
+	if errors.As(err, &credentialErr) {
+		fmt.Fprint(writer, "hint: mailbox commands use the webserver Agent Auth boundary; personal auth sessions and WildDuck environment variables are not accepted.\n")
+	}
 }
 
 func writeUpdateNotice(ctx context.Context, stderr io.Writer) {
@@ -152,6 +207,10 @@ func writeUpdateNotice(ctx context.Context, stderr io.Writer) {
 }
 
 func exitCodeForError(err error) int {
+	var credentialErr agentCredentialRequiredError
+	if errors.As(err, &credentialErr) {
+		return 78
+	}
 	var cfgErr configError
 	if errors.As(err, &cfgErr) {
 		return 78

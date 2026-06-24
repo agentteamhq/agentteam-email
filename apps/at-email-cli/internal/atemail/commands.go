@@ -9,7 +9,16 @@ import (
 	atemailskill "at-email-cli"
 )
 
-func handleStatus(ctx context.Context, args parsedArgs, client *wildDuckClient, cfg config, stdout io.Writer) error {
+type mailCommandClient interface {
+	listMailboxes(ctx context.Context, counters bool, specialUseOnly bool) ([]map[string]any, error)
+	listMessages(ctx context.Context, mailboxID string, limit int, unseen bool, includeHeaders []string) ([]map[string]any, error)
+	getMessage(ctx context.Context, mailboxID string, messageID int, markAsSeen bool) (map[string]any, error)
+	searchMessages(ctx context.Context, queryText string, limit int) ([]map[string]any, error)
+	updateMessage(ctx context.Context, mailboxID string, messageID int, seen *bool, moveTo string) (map[string]any, error)
+	submitMessage(ctx context.Context, message outboundMessage) (map[string]any, error)
+}
+
+func handleStatus(ctx context.Context, args parsedArgs, client mailCommandClient, cfg config, stdout io.Writer) error {
 	mailboxes, err := client.listMailboxes(ctx, true, false)
 	if err != nil {
 		return err
@@ -46,7 +55,7 @@ func handleStatus(ctx context.Context, args parsedArgs, client *wildDuckClient, 
 	return nil
 }
 
-func handleInbox(ctx context.Context, args parsedArgs, client *wildDuckClient, stdout io.Writer) error {
+func handleInbox(ctx context.Context, args parsedArgs, client mailCommandClient, stdout io.Writer) error {
 	mailboxes, err := client.listMailboxes(ctx, false, false)
 	if err != nil {
 		return err
@@ -67,7 +76,7 @@ func handleInbox(ctx context.Context, args parsedArgs, client *wildDuckClient, s
 	return nil
 }
 
-func handleRead(ctx context.Context, args parsedArgs, client *wildDuckClient, cfg config, stdout io.Writer) error {
+func handleRead(ctx context.Context, args parsedArgs, client mailCommandClient, stdout io.Writer) error {
 	mailboxes, err := client.listMailboxes(ctx, false, false)
 	if err != nil {
 		return err
@@ -80,30 +89,17 @@ func handleRead(ctx context.Context, args parsedArgs, client *wildDuckClient, cf
 	if err != nil {
 		return err
 	}
-	control, err := newControlAPIClient(cfg)
-	if err != nil {
-		return err
-	}
-	params := safeMessageParams(cfg, mailbox, message, args.MessageID)
-	viewParams := map[string]any{}
-	for key, value := range params {
-		viewParams[key] = value
-	}
-	viewParams["remoteImages"] = "block"
-	view, err := control.messageView(ctx, viewParams)
-	if err != nil {
-		return err
-	}
-	security, err := control.messageSecurity(ctx, params)
-	if err != nil {
-		return err
-	}
+	return handleMessageRead(args, mailbox, message, stdout)
+}
+
+func handleMessageRead(args parsedArgs, mailbox map[string]any, message map[string]any, stdout io.Writer) error {
 	if args.JSON {
 		return printJSON(stdout, map[string]any{
-			"mailbox":  mailboxSummary(mailbox),
-			"message":  safeMessageMetadata(message),
-			"view":     view,
-			"security": security,
+			"mailbox": mailboxSummary(mailbox),
+			"message": safeMessageMetadata(message),
+			"view": map[string]any{
+				"plainText": stringValue(message["plainText"]),
+			},
 		})
 	}
 
@@ -135,18 +131,17 @@ func handleRead(ctx context.Context, args parsedArgs, client *wildDuckClient, cf
 		}
 		fmt.Fprintf(stdout, "  - %s\n", label)
 	}
-	renderSecuritySummary(stdout, view, security)
 	fmt.Fprintln(stdout)
-	body := strings.TrimRight(stringValue(view["plainText"]), "\r\n\t ")
+	body := strings.TrimRight(stringValue(message["plainText"]), "\r\n\t ")
 	if body != "" {
 		fmt.Fprintln(stdout, body)
 	} else {
-		fmt.Fprintln(stdout, "[message has no safe text body]")
+		fmt.Fprintln(stdout, "[message has no text body]")
 	}
 	return nil
 }
 
-func handleSearch(ctx context.Context, args parsedArgs, client *wildDuckClient, stdout io.Writer) error {
+func handleSearch(ctx context.Context, args parsedArgs, client mailCommandClient, stdout io.Writer) error {
 	messages, err := client.searchMessages(ctx, args.Query, args.Limit)
 	if err != nil {
 		return err
@@ -167,7 +162,7 @@ func handleSearch(ctx context.Context, args parsedArgs, client *wildDuckClient, 
 	return nil
 }
 
-func handleMarkRead(ctx context.Context, args parsedArgs, client *wildDuckClient, stdout io.Writer) error {
+func handleMarkRead(ctx context.Context, args parsedArgs, client mailCommandClient, stdout io.Writer) error {
 	mailboxes, err := client.listMailboxes(ctx, false, false)
 	if err != nil {
 		return err
@@ -189,7 +184,7 @@ func handleMarkRead(ctx context.Context, args parsedArgs, client *wildDuckClient
 	return nil
 }
 
-func handleArchive(ctx context.Context, args parsedArgs, client *wildDuckClient, stdout io.Writer) error {
+func handleArchive(ctx context.Context, args parsedArgs, client mailCommandClient, stdout io.Writer) error {
 	mailboxes, err := client.listMailboxes(ctx, false, false)
 	if err != nil {
 		return err
@@ -219,7 +214,7 @@ func handleArchive(ctx context.Context, args parsedArgs, client *wildDuckClient,
 	return nil
 }
 
-func handleSend(ctx context.Context, args parsedArgs, client *wildDuckClient, stdin io.Reader, stdout io.Writer) error {
+func handleSend(ctx context.Context, args parsedArgs, client mailCommandClient, stdin io.Reader, stdout io.Writer) error {
 	body, err := readBody(args, stdin)
 	if err != nil {
 		return err
@@ -251,7 +246,7 @@ func handleSend(ctx context.Context, args parsedArgs, client *wildDuckClient, st
 	return nil
 }
 
-func handleReply(ctx context.Context, args parsedArgs, client *wildDuckClient, cfg config, stdin io.Reader, stdout io.Writer) error {
+func handleReply(ctx context.Context, args parsedArgs, client mailCommandClient, cfg config, stdin io.Reader, stdout io.Writer) error {
 	mailboxes, err := client.listMailboxes(ctx, false, false)
 	if err != nil {
 		return err

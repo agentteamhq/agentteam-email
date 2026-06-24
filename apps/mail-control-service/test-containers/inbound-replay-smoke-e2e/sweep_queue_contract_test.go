@@ -552,10 +552,7 @@ func (s *sweepContractScenario) newBundle(t *testing.T, subject string, messageI
 	if err != nil {
 		t.Fatalf("decode ingest id time: %v", err)
 	}
-	bundle, err := r2archive.InboundBundleKeys(s.domain, receivedAt, ingestID)
-	if err != nil {
-		t.Fatalf("build inbound bundle keys: %v", err)
-	}
+	bundle := smokeInboundBundleKeys(t, s.domain, receivedAt, ingestID)
 	raw := sweepContractRawMessage(s.mailbox, subject, messageID)
 	return sweepContractBundle{
 		IngestID:   ingestID,
@@ -571,6 +568,11 @@ func (s *sweepContractScenario) workerManifest(bundle sweepContractBundle, rawSH
 	return poller.Manifest{
 		Schema:             r2archive.InboundEdgeSchema,
 		IngestID:           bundle.IngestID,
+		OrganizationID:     smokeOrganizationID,
+		OrgPublicID:        smokeOrganizationPublicID,
+		ArchivePrefix:      bundle.Bundle.ArchivePrefix,
+		ConnectionID:       smokeWorkerConnectionID,
+		DomainID:           smokeWorkerDomainDeploymentID,
 		RawKey:             bundle.Bundle.RawKey,
 		EdgeKey:            bundle.Bundle.EdgeKey,
 		Mailbox:            s.mailbox,
@@ -593,16 +595,7 @@ func (s *sweepContractScenario) workerManifest(bundle sweepContractBundle, rawSH
 }
 
 func (s *sweepContractScenario) notification(bundle sweepContractBundle) poller.Notification {
-	return poller.Notification{
-		Schema:          poller.FastPathSchema,
-		IngestID:        bundle.IngestID,
-		RecipientDomain: s.domain,
-		RawKey:          bundle.Bundle.RawKey,
-		EdgeKey:         bundle.Bundle.EdgeKey,
-		ResultKey:       bundle.Bundle.ResultKey,
-		ReceivedAt:      bundle.ReceivedAt,
-		RawSHA256:       bundle.RawSHA256,
-	}
+	return smokeNotificationForBundle(bundle.Bundle, bundle.ReceivedAt, bundle.RawSHA256)
 }
 
 func (s *sweepContractScenario) waitForSweep(t *testing.T, p *poller.Poller) {
@@ -779,7 +772,11 @@ type sweepContractDomainSource struct {
 }
 
 func (s sweepContractDomainSource) ActivePollerDomains(context.Context) ([]poller.Domain, error) {
-	return []poller.Domain{{Name: s.domain, FeedbackAddress: "bounces@" + s.domain}}, nil
+	pollerDomain, err := smokePollerDomainForDomain(s.domain)
+	if err != nil {
+		return nil, err
+	}
+	return []poller.Domain{pollerDomain}, nil
 }
 
 func sweepContractWildDuckServer(t *testing.T, expectedAccessToken string, userID string, mailbox string) *httptest.Server {

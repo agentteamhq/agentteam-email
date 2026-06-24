@@ -2,13 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { usePluginAction, usePluginData } from '@paperclipai/plugin-sdk/ui'
 import { ArrowSquareOutIcon, CaretDownIcon } from '@phosphor-icons/react'
 import { DEFAULT_SERVICE_BASE_URL, normalizeAgentTeamEmailConfig } from '../config'
+import { PLUGIN_ID } from '../constants'
 import agentTeamLogoUrl from './agentteam-logo.svg'
 import type { CSSProperties, SyntheticEvent } from 'react'
 import type { PluginSettingsPageProps, PluginWidgetProps } from '@paperclipai/plugin-sdk/ui'
 import type { AgentTeamEmailPluginConfig } from '../config'
 import type { EmailConnectionStatus } from '../worker'
-
-const PLUGIN_ID = 'agentteam.paperclip-email-plugin'
 
 const resourceLinks = [
   { label: 'Docs', href: 'https://agentteamemail.mintlify.com' },
@@ -26,6 +25,7 @@ interface ConfigResponse {
 }
 
 interface OAuthConnectResult {
+  connectUrl?: string
   ok: boolean
   message?: string
 }
@@ -314,12 +314,16 @@ function SkeletonSettings() {
   )
 }
 
-export function SettingsPage(_props: PluginSettingsPageProps) {
+export function SettingsPage(props: PluginSettingsPageProps) {
   const { config, setConfig, loading, saving, error, save } = useSettingsConfig()
   const connection = usePluginData<EmailConnectionStatus>('email-connection-status')
   const startOAuthConnect = usePluginAction('start-oauth-connect')
   const [advancedOpen, setAdvancedOpen] = useState(false)
-  const [message, setMessage] = useState<{ tone: 'success' | 'error' | 'info'; text: string } | null>(null)
+  const [message, setMessage] = useState<{
+    connectUrl?: string
+    tone: 'success' | 'error' | 'info'
+    text: string
+  } | null>(null)
   const [connecting, setConnecting] = useState(false)
 
   const serviceUrlValid = useMemo(() => isHttpsUrl(config.serviceBaseUrl), [config.serviceBaseUrl])
@@ -330,9 +334,11 @@ export function SettingsPage(_props: PluginSettingsPageProps) {
     setMessage(null)
     try {
       const result = (await startOAuthConnect({
+        companyId: props.context.companyId ?? undefined,
         serviceBaseUrl: compactConfig(config).serviceBaseUrl
       })) as OAuthConnectResult
       setMessage({
+        connectUrl: result.connectUrl,
         tone: result.ok ? 'success' : 'info',
         text: result.message ?? 'Account linking is not available yet.'
       })
@@ -479,7 +485,19 @@ export function SettingsPage(_props: PluginSettingsPageProps) {
         ) : null}
         {message ? (
           <div style={styles.messageStack}>
-            <div style={message.tone === 'error' ? styles.errorBox : styles.infoBox}>{message.text}</div>
+            <div style={message.tone === 'error' ? styles.errorBox : styles.infoBox}>
+              <span>{message.text}</span>
+              {message.connectUrl ? (
+                <a
+                  href={message.connectUrl}
+                  target='_blank'
+                  rel='noreferrer'
+                  style={styles.messageLink}
+                >
+                  Open AgentTeam Email
+                </a>
+              ) : null}
+            </div>
           </div>
         ) : null}
 
@@ -885,6 +903,14 @@ const styles = {
     padding: '10px 12px',
     fontSize: 13,
     lineHeight: 1.45
+  },
+  messageLink: {
+    display: 'inline-flex',
+    marginLeft: 8,
+    color: '#2563eb',
+    fontWeight: 600,
+    textDecoration: 'underline',
+    textUnderlineOffset: 3
   },
   widgetShell: {
     display: 'grid',

@@ -1,11 +1,11 @@
 import {
-  type OrganizationAuthClient,
+
   useAuth,
   useAuthPlugin,
   useCreateOrganization
 } from "@better-auth-ui/react"
 import { BriefcaseIcon as Briefcase } from "@phosphor-icons/react"
-import { type SyntheticEvent, useEffect, useState } from "react"
+import {  useState } from "react"
 
 import {
   AlertDialog,
@@ -23,7 +23,10 @@ import { Input } from "src/components/ui/input"
 import { Label } from "src/components/ui/label"
 import { Spinner } from "src/components/ui/spinner"
 import { organizationPlugin } from "src/lib/auth/organization-plugin"
-import { SlugField, sanitizeSlug } from "./slug-field"
+import { SlugField } from "./slug-field"
+import { sanitizeSlug } from "./slug-utils"
+import type { SyntheticEvent } from "react";
+import type { OrganizationAuthClient } from "@better-auth-ui/react";
 
 /** Props for the `CreateOrganizationDialog` component. */
 export type CreateOrganizationDialogProps = {
@@ -46,7 +49,7 @@ export function CreateOrganizationDialog({
 
   const { mutate: createOrganization, isPending: isCreating } =
     useCreateOrganization(authClient as OrganizationAuthClient, {
-      onSuccess: () => onOpenChange(false)
+      onSuccess: () => { onOpenChange(false); }
     })
 
   const handleSubmit = (e: SyntheticEvent<HTMLFormElement>) => {
@@ -54,22 +57,26 @@ export function CreateOrganizationDialog({
     createOrganization({ name, slug })
   }
 
-  useEffect(() => {
-    if (!open) {
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
       setSlug("")
       setName("")
       setSlugEdited(false)
       setNameError(undefined)
     }
-  }, [open])
+    onOpenChange(nextOpen)
+  }
 
-  useEffect(() => {
-    if (slugEdited) return
-    setSlug(sanitizeSlug(name))
-  }, [name, slugEdited])
+  const handleNameChange = (value: string) => {
+    setName(value)
+    setNameError(undefined)
+    if (!slugEdited) {
+      setSlug(sanitizeSlug(value))
+    }
+  }
 
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog open={open} onOpenChange={handleOpenChange}>
       <AlertDialogContent>
         <form onSubmit={handleSubmit} className="flex flex-col gap-6">
           <AlertDialogHeader>
@@ -97,12 +104,11 @@ export function CreateOrganizationDialog({
                 name="name"
                 autoFocus
                 required
-                placeholder={organizationLocalization.namePlaceholder}
-                value={name}
-                onChange={(e) => {
-                  setName(e.target.value)
-                  setNameError(undefined)
-                }}
+	                placeholder={organizationLocalization.namePlaceholder}
+	                value={name}
+	                onChange={(e) => {
+	                  handleNameChange(e.target.value)
+	                }}
                 onInvalid={(e) => {
                   e.preventDefault()
                   setNameError(localization.auth.fieldRequired)

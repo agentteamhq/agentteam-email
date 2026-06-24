@@ -123,6 +123,13 @@
       },
       "type": "object"
     },
+    "mongodb": {
+      "properties": {
+        "maxIncomingConnections": { "minimum": 1, "type": "integer" },
+        "replicaSetName": { "minLength": 1, "type": "string" }
+      },
+      "type": "object"
+    },
     "nodeSelector": { "type": "object" },
     "objectStorage": {
       "properties": {
@@ -167,6 +174,7 @@
     "webServer": {
       "properties": {
         "authSecret": { "$ref": "#/$defs/valueSource" },
+        "databaseMaxPoolSize": { "minimum": 1, "type": "integer" },
         "encryptionKey": { "$ref": "#/$defs/valueSource" }
       },
       "type": "object"

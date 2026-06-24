@@ -1,7 +1,6 @@
 package atemail
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
 )
@@ -13,11 +12,8 @@ type identityTerm struct {
 
 type config struct {
 	APIBaseURL            string
-	AccessToken           string
 	UserID                string
 	MailboxAddress        string
-	ControlAPIBaseURL     string
-	MessageReadToken      string
 	InternalIdentityTerms []identityTerm
 }
 
@@ -46,43 +42,6 @@ var genericIdentityTerms = map[string]struct{}{
 var hexIdentityPattern = regexp.MustCompile(`^[0-9a-f]{12,}$`)
 var slugSplitPattern = regexp.MustCompile(`[^A-Za-z0-9]+`)
 var disclosureNormalizePattern = regexp.MustCompile(`[^a-z0-9]+`)
-
-func loadConfig(env []string) (config, error) {
-	values := envMap(env)
-	apiBaseURL := lookupEnv(values, "AT_EMAIL_WILDDUCK_API_BASE_URL")
-	accessToken := lookupEnv(values, "AT_EMAIL_WILDDUCK_ACCESS_TOKEN")
-	userID := lookupEnv(values, "AT_EMAIL_WILDDUCK_USER_ID")
-	mailboxAddress := lookupEnv(values, "AT_EMAIL_MAILBOX_ADDRESS")
-	controlAPIBaseURL := lookupEnv(values, "AT_EMAIL_CONTROL_API_BASE_URL")
-	messageReadToken := lookupEnv(values, "AT_EMAIL_MESSAGE_READ_TOKEN")
-
-	missing := make([]string, 0, 3)
-	for _, item := range []struct {
-		name  string
-		value string
-	}{
-		{"AT_EMAIL_WILDDUCK_API_BASE_URL", apiBaseURL},
-		{"AT_EMAIL_WILDDUCK_ACCESS_TOKEN", accessToken},
-		{"AT_EMAIL_WILDDUCK_USER_ID", userID},
-	} {
-		if item.value == "" {
-			missing = append(missing, item.name)
-		}
-	}
-	if len(missing) > 0 {
-		return config{}, newConfigError(fmt.Sprintf("missing required runtime environment: %s", strings.Join(missing, ", ")))
-	}
-
-	return config{
-		APIBaseURL:            apiBaseURL,
-		AccessToken:           accessToken,
-		UserID:                userID,
-		MailboxAddress:        mailboxAddress,
-		ControlAPIBaseURL:     controlAPIBaseURL,
-		MessageReadToken:      messageReadToken,
-		InternalIdentityTerms: buildInternalIdentityTerms(values),
-	}, nil
-}
 
 func envMap(env []string) map[string]string {
 	values := make(map[string]string, len(env))

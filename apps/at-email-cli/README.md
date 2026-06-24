@@ -1,22 +1,36 @@
 # at-email CLI
 
 Portable Go CLI for working with an AgentTeam Email mailbox through the
-WildDuck API and the safe message-read Control API.
+AgentTeam Email webserver.
 
 ## Configuration
 
-The CLI reads `AT_EMAIL_*` environment variables:
+Mailbox commands require a local Agent Auth credential:
 
-- `AT_EMAIL_WILDDUCK_API_BASE_URL` (required)
-- `AT_EMAIL_WILDDUCK_ACCESS_TOKEN` (required)
-- `AT_EMAIL_WILDDUCK_USER_ID` (required)
-- `AT_EMAIL_MAILBOX_ADDRESS` (optional; used for status output and reply-all
-  self-recipient filtering)
-- `AT_EMAIL_CONTROL_API_BASE_URL` (required for `read`)
-- `AT_EMAIL_MESSAGE_READ_TOKEN` (required for `read`)
+```bash
+at-email agent connect
+at-email agent trial
+at-email agent enroll TOKEN
+```
 
-The message-read Control API calls intentionally keep the existing upstream
-JSON-RPC methods and `X-Agent-Mail-Message-Read-Token` header.
+`agent connect` creates or reuses a local host key, requests delegated Agent
+Auth access, and stores a separate agent credential after browser approval. The
+approving user selects the organization in the web app. `agent trial` starts an
+autonomous trial agent with a server-provisioned trial mailbox and prints a
+claim URL. Use `agent trial --post-claim-capability CAPABILITY` to request
+capabilities the human reviews when claiming the trial agent. `agent enroll TOKEN`
+uses a human-created enrollment token from the web app. Mailbox commands
+sign requests to the webserver and do not read or send WildDuck or mail-control
+credentials.
+
+`auth login` opens the complete Better Auth verification URL in a browser by
+default. Use `auth login --device` for code-entry login, or
+`auth login --no-open` to copy the complete URL without opening a browser.
+
+The CLI also reads:
+
+- `AT_EMAIL_API_BASE_URL` (optional app origin for auth and agent enrollment)
+- `AT_EMAIL_MAILBOX_ADDRESS` (optional authorized mailbox selector)
 
 ## Commands
 
@@ -31,6 +45,8 @@ at-email status
 at-email inbox --unseen
 at-email read 7
 at-email search invoice --json
+at-email agent connect --mailbox-address support@example.com
+at-email agent trial
 at-email send --to alice@example.net --subject Hello --body 'Hi there'
 at-email reply 7 --body 'Thanks, received.'
 at-email version

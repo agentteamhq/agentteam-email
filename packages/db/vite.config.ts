@@ -20,7 +20,10 @@ export default defineConfig({
     minify: buildMinify,
     ssr: true,
     lib: {
-      entry: 'src/index.ts',
+      entry: {
+        'agent-mail-permission-schema': 'src/agent-mail-permission-schema.ts',
+        index: 'src/index.ts'
+      },
       formats: ['es']
     },
     rollupOptions: {

@@ -12,11 +12,7 @@ import welcomeEmailHtml from './fixtures/emails/welcome-email.fixture?raw'
 import { storyAuthClient } from './auth-client-fixtures'
 import { authenticatedSettingsRouteState, storyPublicEnv } from './screen-fixtures'
 import type { DashboardScreenProps } from '../screens/dashboard-screen'
-import type {
-  CLIAccessSettingsState,
-  DomainSettingsState,
-  DomainSettingsStatus
-} from '../partials/authenticated/settings-dialog'
+import type { DomainSettingsState, DomainSettingsStatus } from '../partials/authenticated/settings-dialog'
 import type {
   AuthenticatedDashboardView,
   AuthenticatedEmailPreview,
@@ -75,7 +71,6 @@ const pendingCloudflareConnection = {
   cloudflareZoneId: '0f8b5f1816a946f28d263671a8f5e4aa',
   cloudflareZoneName: 'agentteam.example',
   domain: 'agentteam.example',
-  r2BucketName: null,
   workerScriptName: null,
   status: 'provisioning',
   provisioningStatus: 'pending',
@@ -86,7 +81,6 @@ const pendingCloudflareConnection = {
 
 const liveCloudflareConnection = {
   ...pendingCloudflareConnection,
-  r2BucketName: 'agent-mail-archive-production',
   workerScriptName: 'agent-mail-ingest-agentteam-example',
   status: 'active',
   provisioningStatus: 'succeeded',
@@ -139,6 +133,78 @@ const denseCloudflareConnections = [
   }
 ] satisfies CloudflareConnectionFixture[]
 
+const mailRuntimeStatus = {
+  controlState: {
+    configured: true,
+    domainsActive: 1,
+    domainsDisabled: 0,
+    domainsTotal: 1,
+    exists: true,
+    issues: [],
+    ok: true,
+    schema: 'agent-mail.control-state.v1',
+    updatedAt: '2026-06-21T16:25:00.000Z'
+  },
+  dependencies: {
+    cloudflare_api: {
+      configured: true,
+      issues: [],
+      ok: true
+    },
+    wildduck_api: {
+      configured: true,
+      issues: [],
+      ok: true
+    }
+  },
+  domains: [
+    {
+      domain: 'agentteam.example',
+      issues: [],
+      status: 'active'
+    }
+  ],
+  generatedAt: '2026-06-21T16:26:00.000Z',
+  issues: [],
+  modules: {
+    poller: {
+      activeDomains: 1,
+      configured: true,
+      issues: [],
+      ok: true,
+      queue: {
+        blocked: 0,
+        completed: 128,
+        delivered: 124,
+        leased: 1,
+        pending: 2,
+        retryWait: 0
+      }
+    },
+    smtp_relay: {
+      configured: true,
+      issues: [],
+      ok: true,
+      provider: 'cloudflare'
+    }
+  },
+  ok: true,
+  provisioning: {
+    domainsApplied: 1,
+    domainsFailed: 0,
+    domainsPending: 0,
+    issues: [],
+    status: 'succeeded'
+  },
+  selectedProvider: 'cloudflare',
+  status: 'ready',
+  tunnel: {
+    configured: true,
+    issues: [],
+    ok: true
+  }
+} satisfies NonNullable<DomainSettingsState['mailStatus']>
+
 export const domainSettingsEmptyFirstUseState = {
   mode: 'addDomain',
   status: {
@@ -174,6 +240,18 @@ export const domainSettingsDomainConnectedState = {
 
 export const domainSettingsDomainProvisioningState = {
   ...domainSettingsAddDomainSelectZoneState,
+  mailStatus: {
+    ...mailRuntimeStatus,
+    ok: false,
+    provisioning: {
+      domainsApplied: 0,
+      domainsFailed: 0,
+      domainsPending: 1,
+      issues: [],
+      status: 'pending'
+    },
+    status: 'provisioning'
+  },
   message: 'Domain provisioning is queued for Cloudflare.',
   mode: 'domain',
   selectedDomainPublicId: pendingCloudflareConnection.publicId,
@@ -185,6 +263,7 @@ export const domainSettingsDomainProvisioningState = {
 
 export const domainSettingsDomainLiveState = {
   ...domainSettingsAddDomainSelectZoneState,
+  mailStatus: mailRuntimeStatus,
   mode: 'domain',
   selectedDomainPublicId: liveCloudflareConnection.publicId,
   status: {
@@ -195,6 +274,19 @@ export const domainSettingsDomainLiveState = {
 
 export const domainSettingsDomainNeedsAttentionState = {
   ...domainSettingsAddDomainSelectZoneState,
+  mailStatus: {
+    ...mailRuntimeStatus,
+    issues: ['Cloudflare route requires attention'],
+    ok: false,
+    provisioning: {
+      domainsApplied: 0,
+      domainsFailed: 1,
+      domainsPending: 0,
+      issues: ['Route apply failed'],
+      status: 'failed'
+    },
+    status: 'degraded'
+  },
   mode: 'domain',
   selectedDomainPublicId: degradedCloudflareConnection.publicId,
   status: {
@@ -205,6 +297,14 @@ export const domainSettingsDomainNeedsAttentionState = {
 
 export const domainSettingsDenseDomainListState = {
   ...domainSettingsAddDomainSelectZoneState,
+  mailStatus: {
+    ...mailRuntimeStatus,
+    controlState: {
+      ...mailRuntimeStatus.controlState,
+      domainsActive: 2,
+      domainsTotal: 5
+    }
+  },
   mode: 'domain',
   selectedDomainPublicId: denseCloudflareConnections[0]?.publicId,
   status: {
@@ -212,52 +312,6 @@ export const domainSettingsDenseDomainListState = {
     grants: [activeCloudflareGrant]
   }
 } satisfies DomainSettingsState
-
-const cliAccessSessions = [
-  {
-    createdAt: '2026-06-22T12:00:00Z',
-    current: false,
-    expiresAt: '2026-12-19T12:00:00Z',
-    id: 'session-cli-current',
-    label: 'at-email 0.4.0',
-    metadata: 'linux/amd64 - created Jun 22, 2026 - expires Dec 19, 2026'
-  },
-  {
-    createdAt: '2026-06-20T09:30:00Z',
-    current: false,
-    expiresAt: '2026-12-17T09:30:00Z',
-    id: 'session-cli-remote',
-    label: 'at-email 0.4.0',
-    metadata: 'darwin/arm64 - created Jun 20, 2026 - expires Dec 17, 2026'
-  }
-] satisfies CLIAccessSettingsState['sessions']
-
-export const cliAccessReadyState = {
-  sessions: cliAccessSessions,
-  state: 'ready'
-} satisfies CLIAccessSettingsState
-
-export const cliAccessEmptyState = {
-  sessions: [],
-  state: 'ready'
-} satisfies CLIAccessSettingsState
-
-export const cliAccessLoadingState = {
-  sessions: [],
-  state: 'loading'
-} satisfies CLIAccessSettingsState
-
-export const cliAccessRevokingState = {
-  revokingSessionId: 'session-cli-remote',
-  sessions: cliAccessSessions,
-  state: 'ready'
-} satisfies CLIAccessSettingsState
-
-export const cliAccessErrorState = {
-  error: 'Session list failed.',
-  sessions: [],
-  state: 'error'
-} satisfies CLIAccessSettingsState
 
 export const authenticatedSectionBaseArgs = {
   authClient: storyAuthClient,

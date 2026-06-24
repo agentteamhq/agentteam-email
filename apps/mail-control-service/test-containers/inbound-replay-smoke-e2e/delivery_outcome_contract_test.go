@@ -321,6 +321,11 @@ func (s *inboundOutcomeScenario) writeBundle(t *testing.T, subject string, envel
 	manifest := poller.Manifest{
 		Schema:             r2archive.InboundEdgeSchema,
 		IngestID:           bundle.IngestID,
+		OrganizationID:     smokeOrganizationID,
+		OrgPublicID:        smokeOrganizationPublicID,
+		ArchivePrefix:      bundle.Bundle.ArchivePrefix,
+		ConnectionID:       smokeWorkerConnectionID,
+		DomainID:           smokeWorkerDomainDeploymentID,
 		RawKey:             bundle.Bundle.RawKey,
 		EdgeKey:            bundle.Bundle.EdgeKey,
 		Mailbox:            s.mailbox,
@@ -357,10 +362,7 @@ func (s *inboundOutcomeScenario) newBundle(t *testing.T, subject string) sweepCo
 	if err != nil {
 		t.Fatalf("decode inbound outcome ingest id time: %v", err)
 	}
-	bundle, err := r2archive.InboundBundleKeys(s.domain, receivedAt, ingestID)
-	if err != nil {
-		t.Fatalf("build inbound outcome bundle keys: %v", err)
-	}
+	bundle := smokeInboundBundleKeys(t, s.domain, receivedAt, ingestID)
 	messageID := "<" + sweepContractSlug(subject) + "@" + s.domain + ">"
 	raw := sweepContractRawMessage(s.mailbox, subject, messageID)
 	return sweepContractBundle{
@@ -375,16 +377,7 @@ func (s *inboundOutcomeScenario) newBundle(t *testing.T, subject string) sweepCo
 
 func (s *inboundOutcomeScenario) postNotification(t *testing.T, bundle sweepContractBundle) {
 	t.Helper()
-	if err := postSmokeNotification(s.suite.ctx, s.notifyEndpoint, poller.Notification{
-		Schema:          poller.FastPathSchema,
-		IngestID:        bundle.IngestID,
-		RecipientDomain: s.domain,
-		RawKey:          bundle.Bundle.RawKey,
-		EdgeKey:         bundle.Bundle.EdgeKey,
-		ResultKey:       bundle.Bundle.ResultKey,
-		ReceivedAt:      bundle.ReceivedAt,
-		RawSHA256:       bundle.RawSHA256,
-	}, s.notifyHMACSecret); err != nil {
+	if err := postSmokeNotification(s.suite.ctx, s.notifyEndpoint, smokeNotificationForBundle(bundle.Bundle, bundle.ReceivedAt, bundle.RawSHA256), s.notifyHMACSecret); err != nil {
 		t.Fatalf("post inbound outcome notification: %v", err)
 	}
 }

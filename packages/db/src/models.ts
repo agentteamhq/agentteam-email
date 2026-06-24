@@ -1,7 +1,13 @@
 import {
   accountSchema,
+  agentCapabilityGrantSchema,
+  agentHostSchema,
+  agentJwtReplaySchema,
+  agentSchema,
   apikeySchema,
+  approvalRequestSchema,
   auditLogSchema,
+  betterAuthSecondaryStorageSchema,
   deviceCodeSchema,
   invitationSchema,
   jwkSchema,
@@ -19,6 +25,10 @@ import {
   userSchema,
   verificationSchema
 } from './schema/better-auth'
+import { agentMailAgentEnrollmentGrantRequestSchema } from './schema/agent-mail-agent-enrollments'
+import { agentMailForwardingGroupSchema } from './schema/agent-mail-forwarding'
+import { agentMailMailboxGrantSchema, agentMailSystemGrantSchema } from './schema/agent-mail-permissions'
+import { agentMailTrialClaimIntentSchema, agentMailTrialSchema } from './schema/agent-mail-trials'
 import {
   agentMailDomainSchema,
   agentMailWorkerCredentialRefreshSchema,
@@ -30,8 +40,14 @@ import {
 import { actorSchema, policyAuditEntrySchema, subjectPolicySchema } from './schema/permissions'
 import type {
   AccountDocument,
+  AgentCapabilityGrantDocument,
+  AgentDocument,
+  AgentHostDocument,
+  AgentJwtReplayDocument,
   ApiKeyDocument,
+  ApprovalRequestDocument,
   AuditLogDocument,
+  BetterAuthSecondaryStorageDocument,
   DeviceCodeDocument,
   InvitationDocument,
   JwkDocument,
@@ -49,6 +65,13 @@ import type {
   UserDocument,
   VerificationDocument
 } from './schema/better-auth'
+import type { AgentMailAgentEnrollmentGrantRequestDocument } from './schema/agent-mail-agent-enrollments'
+import type { AgentMailForwardingGroupDocument } from './schema/agent-mail-forwarding'
+import type {
+  AgentMailMailboxGrantDocument,
+  AgentMailSystemGrantDocument
+} from './schema/agent-mail-permissions'
+import type { AgentMailTrialClaimIntentDocument, AgentMailTrialDocument } from './schema/agent-mail-trials'
 import type {
   AgentMailDomainDocument,
   AgentMailWorkerCredentialRefreshDocument,
@@ -64,11 +87,23 @@ export type AppModel<TDocument extends object> = Model<TDocument, object, object
 
 export type AppModels = {
   account: AppModel<AccountDocument>
+  agent: AppModel<AgentDocument>
+  agentCapabilityGrant: AppModel<AgentCapabilityGrantDocument>
+  agentHost: AppModel<AgentHostDocument>
+  agentJwtReplay: AppModel<AgentJwtReplayDocument>
+  betterAuthSecondaryStorage: AppModel<BetterAuthSecondaryStorageDocument>
   agentMailDomain: AppModel<AgentMailDomainDocument>
+  agentMailAgentEnrollmentGrantRequest: AppModel<AgentMailAgentEnrollmentGrantRequestDocument>
+  agentMailForwardingGroup: AppModel<AgentMailForwardingGroupDocument>
+  agentMailMailboxGrant: AppModel<AgentMailMailboxGrantDocument>
+  agentMailSystemGrant: AppModel<AgentMailSystemGrantDocument>
+  agentMailTrial: AppModel<AgentMailTrialDocument>
+  agentMailTrialClaimIntent: AppModel<AgentMailTrialClaimIntentDocument>
   agentMailWorkerCredentialRefresh: AppModel<AgentMailWorkerCredentialRefreshDocument>
   agentMailWorkerDeployment: AppModel<AgentMailWorkerDeploymentDocument>
   actor: AppModel<ActorDocument>
   apikey: AppModel<ApiKeyDocument>
+  approvalRequest: AppModel<ApprovalRequestDocument>
   auditLog: AppModel<AuditLogDocument>
   cloudflareConnection: AppModel<CloudflareConnectionDocument>
   cloudflareOAuthConnectionIntent: AppModel<CloudflareOAuthConnectionIntentDocument>
@@ -96,7 +131,34 @@ export type AppModels = {
 export function createAppModels(connection: Connection): AppModels {
   return {
     account: connectionModel(connection, 'account', accountSchema),
+    agent: connectionModel(connection, 'agent', agentSchema),
+    agentCapabilityGrant: connectionModel(connection, 'agentCapabilityGrant', agentCapabilityGrantSchema),
+    agentHost: connectionModel(connection, 'agentHost', agentHostSchema),
+    agentJwtReplay: connectionModel(connection, 'agentJwtReplay', agentJwtReplaySchema),
+    betterAuthSecondaryStorage: connectionModel(
+      connection,
+      'betterAuthSecondaryStorage',
+      betterAuthSecondaryStorageSchema
+    ),
+    agentMailAgentEnrollmentGrantRequest: connectionModel(
+      connection,
+      'agentMailAgentEnrollmentGrantRequest',
+      agentMailAgentEnrollmentGrantRequestSchema
+    ),
     agentMailDomain: connectionModel(connection, 'agentMailDomain', agentMailDomainSchema),
+    agentMailForwardingGroup: connectionModel(
+      connection,
+      'agentMailForwardingGroup',
+      agentMailForwardingGroupSchema
+    ),
+    agentMailMailboxGrant: connectionModel(connection, 'agentMailMailboxGrant', agentMailMailboxGrantSchema),
+    agentMailSystemGrant: connectionModel(connection, 'agentMailSystemGrant', agentMailSystemGrantSchema),
+    agentMailTrial: connectionModel(connection, 'agentMailTrial', agentMailTrialSchema),
+    agentMailTrialClaimIntent: connectionModel(
+      connection,
+      'agentMailTrialClaimIntent',
+      agentMailTrialClaimIntentSchema
+    ),
     agentMailWorkerCredentialRefresh: connectionModel(
       connection,
       'agentMailWorkerCredentialRefresh',
@@ -109,6 +171,7 @@ export function createAppModels(connection: Connection): AppModels {
     ),
     actor: connectionModel(connection, 'actor', actorSchema),
     apikey: connectionModel(connection, 'apikey', apikeySchema),
+    approvalRequest: connectionModel(connection, 'approvalRequest', approvalRequestSchema),
     auditLog: connectionModel(connection, 'auditLog', auditLogSchema),
     cloudflareConnection: connectionModel(connection, 'cloudflareConnection', cloudflareConnectionSchema),
     cloudflareOAuthConnectionIntent: connectionModel(

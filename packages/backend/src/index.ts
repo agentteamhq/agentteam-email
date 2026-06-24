@@ -14,12 +14,83 @@ export {
 export { isAuthed } from './auth/is-authed'
 export { getUser } from './auth/get-user'
 export * from './auth/auth'
+export {
+  handleAgentAuthConfigurationRequest,
+  isAgentAuthConfigurationRequestPath
+} from './auth/agent-auth-metadata'
 export { handleAtEmailMetadataRequest, isAtEmailMetadataRequestPath } from './auth/at-email-metadata'
 export {
   handleCloudflareOAuthCallbackRequest,
   isCloudflareOAuthCallbackRequestPath
 } from './auth/cloudflare-oauth-callback'
 export { handleAgentMailIngestRequest, isAgentMailIngestRequestPath } from './agent-mail/ingest'
+export type {
+  AgentAccessAgent,
+  AgentAccessAllowedActions,
+  AgentAccessApproval,
+  AgentAccessApprovalCapability,
+  AgentAccessApprovalPreview,
+  AgentAccessGrant,
+  AgentAccessHost,
+  AgentAccessMutationResult,
+  AgentAccessPaperclipConnectResult,
+  AgentAccessPaperclipConnection,
+  AgentAccessUserActor,
+  AgentAccessView
+} from './agent-access/service'
+export type {
+  AgentMailTrialClaimDecisionResult,
+  AgentMailTrialClaimTargetOrganization,
+  AgentMailTrialClaimView,
+  AgentMailTrialGrantView,
+  AgentMailTrialStartResult
+} from './agent-access/trial-service'
+export type {
+  AgentMailAdminAccount,
+  AgentMailAdminAllowedActions,
+  AgentMailAdminAgent,
+  AgentMailAdminAgentEnrollment,
+  AgentMailAdminAccountInput,
+  AgentMailAdminAgentMailboxGrantsInput,
+  AgentMailAdminAgentInput,
+  AgentMailAdminAgentSystemPermissionsInput,
+  AgentMailAdminCreateAgentResult,
+  AgentMailAdminForwardingGroupInput,
+  AgentMailAdminExternalPrincipal,
+  AgentMailAdminGroup,
+  AgentMailAdminGrantPrincipalTargetInput,
+  AgentMailAdminGrantPrincipalType,
+  AgentMailAdminMailboxGrant,
+  AgentMailAdminNavigation,
+  AgentMailAdminPagination,
+  AgentMailAdminPendingAgentEnrollment,
+  AgentMailAdminRevokeAgentEnrollmentResult,
+  AgentMailAdminRevokeAgentResult,
+  AgentMailAdminSectionId,
+  AgentMailAdminSaveAccountResult,
+  AgentMailAdminSaveAgentResult,
+  AgentMailAdminSaveAgentMailboxGrantsResult,
+  AgentMailAdminSaveAgentPermissionsResult,
+  AgentMailAdminSaveForwardingGroupResult,
+  AgentMailAdminSavePrincipalMailboxGrantsResult,
+  AgentMailAdminSavePrincipalSystemPermissionsResult,
+  AgentMailAdminStatus,
+  AgentMailAdminStatusFilter,
+  AgentMailAdminUpdateAccountInput,
+  AgentMailAdminUpdateForwardingGroupInput,
+  AgentMailAdminView,
+  AgentMailAdminViewState
+} from './agent-mail/admin-service'
+export {
+  agentMailCapabilityCatalog,
+  agentMailAdminPermissionCatalog,
+  type AgentMailAdminPermissionCatalog,
+  type AgentMailAdminPermissionMetadata,
+  type AgentMailAdminPermissionOption,
+  type AgentMailCapabilityCatalog
+} from '@main/db'
+export type { AgentMailPublicStatus } from './agent-mail/service'
+export type { AgentMailSendSubmitResult } from './agent-mail/control-client'
 export type {
   AgentMailComposeInput,
   AgentMailMessageActionInput,

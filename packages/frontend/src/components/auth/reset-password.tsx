@@ -1,6 +1,7 @@
 import { useAuth, useResetPassword } from "@better-auth-ui/react"
 import { EyeIcon as Eye, EyeSlashIcon as EyeOff } from "@phosphor-icons/react"
-import { type SyntheticEvent, useEffect, useState } from "react"
+import { useLocation } from "@tanstack/react-router"
+import {  useEffect, useState } from "react"
 import { toast } from "sonner"
 
 import { Button } from "src/components/ui/button"
@@ -20,6 +21,7 @@ import {
 import { Label } from "src/components/ui/label"
 import { Spinner } from "src/components/ui/spinner"
 import { cn } from "src/lib/utils"
+import type { SyntheticEvent } from "react";
 
 export type ResetPasswordProps = {
   className?: string
@@ -53,6 +55,7 @@ export function ResetPassword({ className }: ResetPasswordProps) {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false)
   const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] =
     useState(false)
+  const locationHref = useLocation({ select: (location) => location.href })
 
   const [fieldErrors, setFieldErrors] = useState<{
     password?: string
@@ -60,8 +63,7 @@ export function ResetPassword({ className }: ResetPasswordProps) {
   }>({})
 
   useEffect(() => {
-    const searchParams = new URLSearchParams(window.location.search)
-    const token = searchParams.get("token") as string
+    const token = getResetToken(locationHref)
 
     if (!token) {
       toast.error(localization.auth.invalidResetPasswordToken)
@@ -71,14 +73,14 @@ export function ResetPassword({ className }: ResetPasswordProps) {
     basePaths.auth,
     localization.auth.invalidResetPasswordToken,
     viewPaths.auth.signIn,
-    navigate
+    navigate,
+    locationHref
   ])
 
   function handleSubmit(e: SyntheticEvent<HTMLFormElement>) {
     e.preventDefault()
 
-    const searchParams = new URLSearchParams(window.location.search)
-    const token = searchParams.get("token") as string
+    const token = getResetToken(locationHref)
 
     if (!token) {
       toast.error(localization.auth.invalidResetPasswordToken)
@@ -275,4 +277,8 @@ export function ResetPassword({ className }: ResetPasswordProps) {
       </CardContent>
     </Card>
   )
+}
+
+function getResetToken(locationHref: string) {
+  return new URL(locationHref, "http://localhost").searchParams.get("token")
 }

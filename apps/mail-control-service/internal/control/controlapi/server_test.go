@@ -92,15 +92,32 @@ func (f *fakeWorkerArchiveCredentialIssuer) IssueWorkerArchiveCredentials(ctx co
 
 func TestStatusRPCRequiresToken(t *testing.T) {
 	server := newTestServer(t)
-	body := bytes.NewBufferString(`{"jsonrpc":"2.0","id":"request-1","method":"agentMail.status.get","params":{}}`)
-	request := httptest.NewRequest(http.MethodPost, "/rpc/agentMail.status.get", body)
-	request.Header.Set("Content-Type", "application/json")
-	response := httptest.NewRecorder()
+	tests := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "valid body",
+			body: `{"jsonrpc":"2.0","id":"request-1","method":"agentMail.status.get","params":{}}`,
+		},
+		{
+			name: "malformed body",
+			body: `{`,
+		},
+	}
 
-	server.Handler().ServeHTTP(response, request)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, "/rpc/agentMail.status.get", bytes.NewBufferString(tt.body))
+			request.Header.Set("Content-Type", "application/json")
+			response := httptest.NewRecorder()
 
-	if response.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("response.Code = %d, want %d", response.Code, http.StatusUnprocessableEntity)
+			server.Handler().ServeHTTP(response, request)
+
+			if response.Code != http.StatusUnauthorized {
+				t.Fatalf("response.Code = %d, want %d; body=%s", response.Code, http.StatusUnauthorized, response.Body.String())
+			}
+		})
 	}
 }
 
@@ -141,10 +158,25 @@ func TestControlAPITokenIsHeaderOnlyAndHealthIsUnauthenticated(t *testing.T) {
 
 			server.Handler().ServeHTTP(response, request)
 
-			if response.Code != http.StatusUnprocessableEntity {
-				t.Fatalf("response.Code = %d, want %d; body=%s", response.Code, http.StatusUnprocessableEntity, response.Body.String())
+			if response.Code != http.StatusUnauthorized {
+				t.Fatalf("response.Code = %d, want %d; body=%s", response.Code, http.StatusUnauthorized, response.Body.String())
 			}
 		})
+	}
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/rpc/agentMail.status.get",
+		bytes.NewBufferString(`{"jsonrpc":"2.0","id":"bad-token","method":"agentMail.status.get","params":{}}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set(TokenHeader, "wrong-token")
+	response := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("wrong token response.Code = %d, want %d; body=%s", response.Code, http.StatusUnauthorized, response.Body.String())
 	}
 }
 
@@ -257,8 +289,8 @@ func TestIngestEnqueueRPCRequiresControlToken(t *testing.T) {
 
 	server.Handler().ServeHTTP(response, request)
 
-	if response.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("response.Code = %d, want %d", response.Code, http.StatusUnprocessableEntity)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("response.Code = %d, want %d", response.Code, http.StatusUnauthorized)
 	}
 }
 

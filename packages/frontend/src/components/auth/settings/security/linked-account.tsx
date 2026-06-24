@@ -6,12 +6,12 @@ import {
   useLinkSocial,
   useUnlinkAccount
 } from "@better-auth-ui/react"
-import type { Account, SocialProvider } from "better-auth"
 import {
   LinkIcon as Link2,
   LinkBreakIcon as Link2Off,
   PlugIcon as Plug
 } from "@phosphor-icons/react"
+import { useLocation } from "@tanstack/react-router"
 import { toast } from "sonner"
 
 import { Button } from "src/components/ui/button"
@@ -19,6 +19,7 @@ import { Card, CardContent } from "src/components/ui/card"
 import { Skeleton } from "src/components/ui/skeleton"
 import { Spinner } from "src/components/ui/spinner"
 import { cn } from "src/lib/utils"
+import type { Account, SocialProvider } from "better-auth"
 
 export type LinkedAccountProps = {
   account?: Account
@@ -37,6 +38,7 @@ export type LinkedAccountProps = {
  */
 export function LinkedAccount({ account, provider }: LinkedAccountProps) {
   const { authClient, baseURL, localization } = useAuth()
+  const location = useLocation()
 
   const { data: accountInfo, isPending: isLoadingInfo } = useAccountInfo(
     authClient,
@@ -99,7 +101,7 @@ export function LinkedAccount({ account, provider }: LinkedAccountProps) {
             className="ml-auto shrink-0"
             variant="outline"
             size="sm"
-            onClick={() => unlinkAccount({ providerId: account.providerId })}
+            onClick={() => { unlinkAccount({ providerId: account.providerId }); }}
             disabled={isUnlinking}
             aria-label={localization.settings.unlinkProvider.replace(
               "{{provider}}",
@@ -116,12 +118,12 @@ export function LinkedAccount({ account, provider }: LinkedAccountProps) {
             className="ml-auto shrink-0"
             variant="outline"
             size="sm"
-            onClick={() =>
+            onClick={() => {
               linkSocial({
                 provider,
-                callbackURL: `${baseURL}${window.location.pathname}`
+                callbackURL: `${baseURL}${location.pathname}`
               })
-            }
+            }}
             disabled={isLinking}
             aria-label={localization.settings.linkProvider.replace(
               "{{provider}}",

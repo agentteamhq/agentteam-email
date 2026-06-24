@@ -7,6 +7,7 @@ metadata:
 {{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.mongodb "component" "database") | nindent 4 }}
 spec:
   type: ClusterIP
+  publishNotReadyAddresses: true
   selector:
 {{ include "agentteam-email.selectorLabels" (dict "root" . "name" .Values.names.mongodb) | nindent 4 }}
   ports:
@@ -30,6 +31,8 @@ spec:
 {{ include "agentteam-email.selectorLabels" (dict "root" . "name" .Values.names.mongodb) | nindent 6 }}
   template:
     metadata:
+      annotations:
+        checksum/mongodb-config: {{ include "agentteam-email.configDataFromGlob" (dict "root" . "glob" "files/config/mongodb/*") | sha256sum }}
       labels:
 {{ include "agentteam-email.componentLabels" (dict "root" . "name" .Values.names.mongodb "component" "database") | nindent 8 }}
     spec:
@@ -48,23 +51,66 @@ spec:
             - mongod
             - --config
             - /etc/mongod.conf
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - /bin/sh
+                  - -ec
+                  - |
+                    for _ in $(seq 1 60); do
+                      if mongosh --host 127.0.0.1:27017 --quiet --eval 'db.adminCommand({ ping: 1 }).ok' >/dev/null 2>&1; then
+                        break
+                      fi
+                      sleep 1
+                    done
+                    mongosh --host 127.0.0.1:27017 --quiet --eval '
+                      const config = {
+                        _id: {{ .Values.mongodb.replicaSetName | quote }},
+                        members: [{ _id: 0, host: {{ printf "%s:27017" .Values.names.mongodb | quote }} }]
+                      };
+                      try {
+                        const status = rs.status();
+                        if (status.ok === 1) {
+                          quit(0);
+                        }
+                      } catch (error) {
+                        if (error.codeName === "NotYetInitialized" || /no replset config/i.test(String(error))) {
+                          rs.initiate(config);
+                          quit(0);
+                        }
+                        throw error;
+                      }
+                    '
           ports:
             - name: mongo
               containerPort: 27017
           startupProbe:
-            tcpSocket:
-              port: mongo
+            exec:
+              command:
+                - /bin/sh
+                - -ec
+                - |
+                  mongosh --host 127.0.0.1:27017 --quiet --eval 'try { const status = rs.status(); quit(status.ok === 1 ? 0 : 1); } catch (error) { quit(1); }'
             failureThreshold: 30
             periodSeconds: 10
             timeoutSeconds: 5
           readinessProbe:
-            tcpSocket:
-              port: mongo
+            exec:
+              command:
+                - /bin/sh
+                - -ec
+                - |
+                  mongosh --host 127.0.0.1:27017 --quiet --eval 'try { const status = rs.status(); quit(status.ok === 1 ? 0 : 1); } catch (error) { quit(1); }'
             periodSeconds: 10
             timeoutSeconds: 5
           livenessProbe:
-            tcpSocket:
-              port: mongo
+            exec:
+              command:
+                - /bin/sh
+                - -ec
+                - |
+                  mongosh --host 127.0.0.1:27017 --quiet --eval 'try { const status = rs.status(); quit(status.ok === 1 ? 0 : 1); } catch (error) { quit(1); }'
             periodSeconds: 20
             timeoutSeconds: 5
           volumeMounts:

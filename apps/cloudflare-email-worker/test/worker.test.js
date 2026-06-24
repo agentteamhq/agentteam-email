@@ -18,6 +18,7 @@ import {
   normalizeFastPathURL,
   sha256Hex
 } from '../src/lib.js'
+import worker from '../src/index.js'
 
 class MockR2Fetch {
   constructor() {
@@ -73,6 +74,7 @@ async function buildMessage(rawBytes) {
 
 function workerEnv(overrides = {}) {
   return {
+    AGENTTEAM_ORGANIZATION_ID: '01960000-0000-7000-8000-000000000001',
     AGENTTEAM_ORG_PUBLIC_ID: 'org_public_test',
     AGENTTEAM_CONNECTION_ID: 'conn-public-id',
     AGENTTEAM_DOMAIN_ID: 'domain-public-id',
@@ -83,8 +85,37 @@ function workerEnv(overrides = {}) {
     AGENTTEAM_R2_ACCESS_KEY_ID: 'test-access-key',
     AGENTTEAM_R2_SECRET_ACCESS_KEY: 'test-secret-key',
     AGENTTEAM_R2_SESSION_TOKEN: 'test-session-token',
-    AGENTTEAM_R2_CREDENTIAL_EXPIRES_AT: '2026-04-25T12:34:56.000Z',
+    AGENTTEAM_R2_CREDENTIAL_EXPIRES_AT: '2030-04-25T12:34:56.000Z',
     ...overrides
+  }
+}
+
+function installFetch(fetchImpl) {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = fetchImpl
+  return () => {
+    globalThis.fetch = originalFetch
+  }
+}
+
+function captureConsole() {
+  const originalLog = console.log
+  const originalError = console.error
+  const entries = []
+
+  console.log = (...args) => {
+    entries.push({ level: 'log', text: args.map(String).join(' ') })
+  }
+  console.error = (...args) => {
+    entries.push({ level: 'error', text: args.map(String).join(' ') })
+  }
+
+  return {
+    entries,
+    restore() {
+      console.log = originalLog
+      console.error = originalError
+    }
   }
 }
 
@@ -153,6 +184,7 @@ test('archiveInboundMessage writes raw archive and edge metadata with temporary 
   const manifest = JSON.parse(manifestObject.bytes.toString('utf8'))
   assert.equal(manifest.schema, 'agent-mail.inbound.edge.v1')
   assert.equal(manifest.ingest_id, result.ingestId)
+  assert.equal(manifest.organization_id, '01960000-0000-7000-8000-000000000001')
   assert.equal(manifest.org_public_id, 'org_public_test')
   assert.equal(manifest.archive_prefix, 'orgs/org_public_test/domains/example.com/mail/inbound')
   assert.equal(manifest.connection_id, 'conn-public-id')
@@ -291,6 +323,7 @@ test('buildFastPathRequest posts the archived bundle through the fast-path endpo
   const payload = JSON.parse(request.init.body)
   assert.equal(payload.schema, 'agent-mail.inbound.fastpath.v1')
   assert.equal(payload.ingest_id, archived.ingestId)
+  assert.equal(payload.organization_id, '01960000-0000-7000-8000-000000000001')
   assert.equal(payload.organization_public_id, 'org_public_test')
   assert.equal(payload.archive_prefix, 'orgs/org_public_test/domains/example.com/mail/inbound')
   assert.equal(payload.worker_connection_id, 'conn-public-id')
@@ -310,6 +343,79 @@ test('buildFastPathRequest posts the archived bundle through the fast-path endpo
     )
     .digest('hex')
   assert.equal(request.init.headers['X-Agent-Mail-Signature'], expectedSignature)
+})
+
+test('worker email logs only safe receive and archive fields', async () => {
+  const rawBytes = await fixtureBytes('inbound.eml')
+  const restoreFetch = installFetch(async () => new Response('', { status: 200 }))
+  const consoleCapture = captureConsole()
+
+  try {
+    await worker.email(
+      await buildMessage(rawBytes),
+      workerEnv({
+        AGENTTEAM_INGEST_URL: 'https://mail-ingress.example.com/rpc/agent-mail/ingest/v1',
+        AGENTTEAM_WORKER_HMAC_SECRET: 'test-worker-hmac-secret'
+      })
+    )
+  } finally {
+    restoreFetch()
+    consoleCapture.restore()
+  }
+
+  const logs = consoleCapture.entries.map((entry) => entry.text).join('\n')
+  assert.match(logs, /agent-mail-ingress receive raw_size=\d+/)
+  assert.match(
+    logs,
+    /agent-mail-ingress archived ingest_id=[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/
+  )
+  assert.doesNotMatch(logs, /sender@example\.net/i)
+  assert.doesNotMatch(logs, /Agent@Example\.com/i)
+  assert.doesNotMatch(logs, /raw\.eml|edge\.json|result\.json/)
+  assert.doesNotMatch(logs, /orgs\/org_public_test/)
+  assert.doesNotMatch(logs, /test-worker-hmac-secret/)
+  assert.doesNotMatch(logs, /test-secret-key|test-session-token|test-access-key/)
+})
+
+test('worker email failure logs only safe error metadata', async () => {
+  const rawBytes = await fixtureBytes('inbound.eml')
+  const restoreFetch = installFetch(async () => new Response('', { status: 200 }))
+  const consoleCapture = captureConsole()
+
+  try {
+    await assert.rejects(
+      worker.email(
+        await buildMessage(rawBytes),
+        workerEnv({
+          AGENTTEAM_DOMAIN: 'other.example',
+          AGENTTEAM_ARCHIVE_PREFIX: 'orgs/org_public_test/domains/other.example/mail/inbound',
+          AGENTTEAM_WORKER_HMAC_SECRET: 'test-worker-hmac-secret'
+        })
+      ),
+      (error) => {
+        const text = String(error?.stack ?? error)
+        assert.match(text, /AgentMailIngressError: agent mail ingress failed/)
+        assert.doesNotMatch(text, /message recipient domain/i)
+        assert.doesNotMatch(text, /example\.com|other\.example/i)
+        assert.doesNotMatch(text, /sender@example\.net/i)
+        return true
+      }
+    )
+  } finally {
+    restoreFetch()
+    consoleCapture.restore()
+  }
+
+  const logs = consoleCapture.entries.map((entry) => entry.text).join('\n')
+  assert.match(logs, /agent-mail-ingress receive raw_size=\d+/)
+  assert.match(logs, /agent-mail-ingress failure raw_size=\d+ error_type=Error/)
+  assert.doesNotMatch(logs, /sender@example\.net/i)
+  assert.doesNotMatch(logs, /Agent@Example\.com/i)
+  assert.doesNotMatch(logs, /message recipient domain/i)
+  assert.doesNotMatch(logs, /example\.com|other\.example/i)
+  assert.doesNotMatch(logs, /\n\s*at\s/)
+  assert.doesNotMatch(logs, /test-worker-hmac-secret/)
+  assert.doesNotMatch(logs, /test-secret-key|test-session-token|test-access-key/)
 })
 
 test('normalizeFastPathURL defaults to the RPC ingest path and allows legacy path compatibility', () => {

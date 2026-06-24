@@ -1,13 +1,13 @@
 "use client"
 
 import {
-  type OrganizationAuthClient,
+
   useAuth,
   useAuthPlugin,
   useInviteMember
 } from "@better-auth-ui/react"
 import { UserPlusIcon as UserPlus } from "@phosphor-icons/react"
-import { type SyntheticEvent, useEffect, useState } from "react"
+import {  useEffect, useState } from "react"
 import { toast } from "sonner"
 
 import {
@@ -33,6 +33,8 @@ import {
 } from "src/components/ui/select"
 import { Spinner } from "src/components/ui/spinner"
 import { organizationPlugin } from "src/lib/auth/organization-plugin"
+import type { SyntheticEvent } from "react";
+import type { OrganizationAuthClient } from "@better-auth-ui/react";
 
 /** Props for the `InviteMemberDialog` component. */
 export type InviteMemberDialogProps = {
@@ -57,16 +59,14 @@ export function InviteMemberDialog({
   const [role, setRole] = useState(() => pickDefaultRole(Object.keys(roles)))
   const [emailError, setEmailError] = useState<string>()
 
-  useEffect(() => {
-    setRole((current) => {
-      const keys = Object.keys(roles)
-      return keys.includes(current) ? current : pickDefaultRole(keys)
-    })
-  }, [roles])
-
-  useEffect(() => {
-    if (!open) setEmailError(undefined)
-  }, [open])
+  const roleKeys = Object.keys(roles)
+  const selectedRole = roleKeys.includes(role) ? role : pickDefaultRole(roleKeys)
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      setEmailError(undefined)
+    }
+    onOpenChange(nextOpen)
+  }
 
   const { mutate: inviteMember, isPending: isInviting } = useInviteMember(
     authClient as OrganizationAuthClient,
@@ -78,24 +78,26 @@ export function InviteMemberDialog({
     }
   )
 
-  const isRoleValid = Object.keys(roles).includes(role)
+  const isRoleValid = roleKeys.includes(selectedRole)
 
   const handleSubmit = (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault()
 
-    if (!isRoleValid) return
+    if (!isRoleValid) {
+      return
+    }
 
     const formData = new FormData(e.target as HTMLFormElement)
     const email = formData.get("email") as string
 
     inviteMember({
       email: email.trim(),
-      role: role as Parameters<typeof inviteMember>[0]["role"]
+      role: selectedRole as Parameters<typeof inviteMember>[0]["role"]
     })
   }
 
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog open={open} onOpenChange={handleOpenChange}>
       <AlertDialogContent>
         <form onSubmit={handleSubmit} className="flex flex-col gap-6">
           <AlertDialogHeader>
@@ -126,7 +128,9 @@ export function InviteMemberDialog({
                 required
                 placeholder={localization.auth.email}
                 disabled={isInviting}
-                onChange={() => setEmailError(undefined)}
+	                onChange={() => {
+	                  setEmailError(undefined)
+	                }}
                 onInvalid={(e) => {
                   e.preventDefault()
                   const el = e.target as HTMLInputElement
@@ -147,8 +151,10 @@ export function InviteMemberDialog({
               </Label>
 
               <Select
-                value={role}
-                onValueChange={(value) => setRole(value ?? "")}
+	                value={selectedRole}
+	                onValueChange={(value) => {
+	                  setRole(value ?? "")
+	                }}
                 disabled={isInviting}
               >
                 <SelectTrigger id="invite-member-role" className="w-full">

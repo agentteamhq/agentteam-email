@@ -1,5 +1,5 @@
 import {
-  type ApiKeyAuthClient,
+
   useAuth,
   useAuthPlugin,
   useListApiKeys
@@ -15,6 +15,7 @@ import { ApiKey } from "./api-key"
 import { ApiKeySkeleton } from "./api-key-skeleton"
 import { ApiKeysEmpty } from "./api-keys-empty"
 import { CreateApiKeyDialog } from "./create-api-key-dialog"
+import type { ApiKeyAuthClient } from "@better-auth-ui/react";
 
 export type ApiKeysProps = {
   className?: string
@@ -64,7 +65,7 @@ export function ApiKeys({
             className="shrink-0"
             size="sm"
             disabled={isPending}
-            onClick={() => setCreateOpen(true)}
+            onClick={() => { setCreateOpen(true); }}
           >
             {apiKeyLocalization.createApiKey}
           </Button>
@@ -77,7 +78,7 @@ export function ApiKeys({
             <ApiKeySkeleton />
           ) : !listData?.apiKeys.length ? (
             <ApiKeysEmpty
-              onCreatePress={() => setCreateOpen(true)}
+              onCreatePress={() => { setCreateOpen(true); }}
               hideCreate={hideCreate}
             />
           ) : (

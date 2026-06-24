@@ -136,8 +136,7 @@ import type {
   AuthenticatedSidebarView
 } from './authenticated-shell-models'
 import type {
-  CLIAccessSettingsState,
-  CloudflareOAuthCallbackState,
+  AgentAccessSettingsState,
   DomainSettingsState,
   SettingsDialogContentState
 } from './settings-dialog'
@@ -145,8 +144,7 @@ import type { SettingsSectionId } from './settings-dialog-sections'
 
 export interface AuthenticatedShellProps {
   children: React.ReactNode
-  cliAccessState?: CLIAccessSettingsState
-  cloudflareOAuthCallback?: CloudflareOAuthCallbackState | null
+  agentAccessState?: AgentAccessSettingsState
   composeView?: AuthenticatedComposeView
   domainSettingsState?: DomainSettingsState
   mailActionView?: AuthenticatedMailActionView
@@ -180,7 +178,6 @@ export interface AuthenticatedShellProps {
   onMailboxRefresh?: () => void
   onMailboxRetry?: () => void
   onMailSelect?: (mailId: string) => void
-  onCliAccessSessionRevoke?: (session: CLIAccessSettingsState['sessions'][number]) => void
   onSettingsOpenChange: (open: boolean) => void
   onSettingsSectionChange: (section: SettingsSectionId) => void
   onSidebarItemSelect?: (itemId: string) => void
@@ -195,8 +192,7 @@ export interface AuthenticatedShellProps {
 
 export function AuthenticatedShell({
   children,
-  cliAccessState,
-  cloudflareOAuthCallback,
+  agentAccessState,
   composeView,
   domainSettingsState,
   mailActionView,
@@ -227,7 +223,6 @@ export function AuthenticatedShell({
   onMailboxRefresh,
   onMailboxRetry,
   onMailSelect,
-  onCliAccessSessionRevoke,
   onSettingsOpenChange,
   onSettingsSectionChange,
   onSidebarItemSelect,
@@ -284,11 +279,9 @@ export function AuthenticatedShell({
       </SidebarInset>
       <SettingsDialog
         activeSection={settingsSection}
-        cliAccessState={cliAccessState}
-        cloudflareOAuthCallback={cloudflareOAuthCallback}
+        agentAccessState={agentAccessState}
         contentState={settingsContentState}
         domainSettingsState={domainSettingsState}
-        onCliAccessSessionRevoke={onCliAccessSessionRevoke}
         onActiveSectionChange={onSettingsSectionChange}
         onOpenChange={onSettingsOpenChange}
         open={settingsOpen}
@@ -1251,97 +1244,97 @@ export function AuthenticatedSidebar({
           </SidebarFooter>
         </Sidebar>
 
-      {!activeManagementItem ? (
-        <Sidebar
-          collapsible='none'
-          className='hidden min-w-0 flex-1 md:flex'
-        >
-          <SidebarHeader className='gap-3 border-b p-3'>
-            <OrganizationSwitcher
-              align='start'
-              className='w-full justify-between border px-2'
-              hideSlug={false}
-            />
-            <MailAccountSelect
-              onAccountSelect={onAccountSelect}
-              view={view}
-            />
-            <div className='flex w-full items-center justify-between gap-2'>
-              <div className='flex min-w-0 items-center gap-1.5'>
-                <div className='text-foreground truncate text-base font-medium'>
-                  {activeItem?.title ?? 'Inbox'}
+        {!activeManagementItem ? (
+          <Sidebar
+            collapsible='none'
+            className='hidden min-w-0 flex-1 md:flex'
+          >
+            <SidebarHeader className='gap-3 border-b p-3'>
+              <OrganizationSwitcher
+                align='start'
+                className='w-full justify-between border px-2'
+                hideSlug={false}
+              />
+              <MailAccountSelect
+                onAccountSelect={onAccountSelect}
+                view={view}
+              />
+              <div className='flex w-full items-center justify-between gap-2'>
+                <div className='flex min-w-0 items-center gap-1.5'>
+                  <div className='text-foreground truncate text-base font-medium'>
+                    {activeItem?.title ?? 'Inbox'}
+                  </div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        aria-label={
+                          view.refreshLabel ?? (view.isRefreshing ? 'Refreshing mailbox' : 'Refresh mailbox')
+                        }
+                        className='size-7'
+                        disabled={!onRefresh || view.isRefreshing || view.state === 'loading'}
+                        onClick={onRefresh}
+                        size='icon'
+                        type='button'
+                        variant='ghost'
+                      >
+                        {view.isRefreshing ? (
+                          <Spinner data-icon='icon-only' />
+                        ) : (
+                          <ArrowsClockwiseIcon data-icon='icon-only' />
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{view.refreshLabel ?? 'Refresh mailbox'}</TooltipContent>
+                  </Tooltip>
                 </div>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      aria-label={
-                        view.refreshLabel ?? (view.isRefreshing ? 'Refreshing mailbox' : 'Refresh mailbox')
-                      }
-                      className='size-7'
-                      disabled={!onRefresh || view.isRefreshing || view.state === 'loading'}
-                      onClick={onRefresh}
-                      size='icon'
-                      type='button'
-                      variant='ghost'
-                    >
-                      {view.isRefreshing ? (
-                        <Spinner data-icon='icon-only' />
-                      ) : (
-                        <ArrowsClockwiseIcon data-icon='icon-only' />
-                      )}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>{view.refreshLabel ?? 'Refresh mailbox'}</TooltipContent>
-                </Tooltip>
+                <Label className='flex items-center gap-2 text-sm'>
+                  <span>Unreads</span>
+                  <Switch
+                    aria-label='Show unread messages only'
+                    checked={view.unreadOnly ?? false}
+                    className='shadow-none'
+                    onCheckedChange={onUnreadOnlyChange}
+                  />
+                </Label>
               </div>
-              <Label className='flex items-center gap-2 text-sm'>
-                <span>Unreads</span>
-                <Switch
-                  aria-label='Show unread messages only'
-                  checked={view.unreadOnly ?? false}
-                  className='shadow-none'
-                  onCheckedChange={onUnreadOnlyChange}
-                />
-              </Label>
-            </div>
-            <Button
-              className='w-full justify-start'
-              disabled={!onComposeOpen}
-              onClick={onComposeOpen}
-              size='sm'
-              type='button'
-              variant='outline'
-            >
-              <PencilSimpleIcon data-icon='inline-start' />
-              Compose
-            </Button>
-            <SidebarInput
-              onChange={(event) => {
-                onSearchChange?.(event.currentTarget.value)
-              }}
-              placeholder='Type to search...'
-              readOnly={!onSearchChange}
-              value={view.searchQuery ?? ''}
-            />
-          </SidebarHeader>
-          <SidebarContent>
-            <SidebarGroup className='px-0'>
-              <SidebarGroupContent>
-                <MailboxList
-                  onMailAction={onMailAction}
-                  onSelectMail={onMailSelect}
-                  onRetry={onRetry}
-                  view={view}
-                />
-                <MailboxPagination
-                  onPageChange={onPageChange}
-                  pagination={view.pagination}
-                />
-              </SidebarGroupContent>
-            </SidebarGroup>
-          </SidebarContent>
-        </Sidebar>
-      ) : null}
+              <Button
+                className='w-full justify-start'
+                disabled={!onComposeOpen}
+                onClick={onComposeOpen}
+                size='sm'
+                type='button'
+                variant='outline'
+              >
+                <PencilSimpleIcon data-icon='inline-start' />
+                Compose
+              </Button>
+              <SidebarInput
+                onChange={(event) => {
+                  onSearchChange?.(event.currentTarget.value)
+                }}
+                placeholder='Type to search...'
+                readOnly={!onSearchChange}
+                value={view.searchQuery ?? ''}
+              />
+            </SidebarHeader>
+            <SidebarContent>
+              <SidebarGroup className='px-0'>
+                <SidebarGroupContent>
+                  <MailboxList
+                    onMailAction={onMailAction}
+                    onSelectMail={onMailSelect}
+                    onRetry={onRetry}
+                    view={view}
+                  />
+                  <MailboxPagination
+                    onPageChange={onPageChange}
+                    pagination={view.pagination}
+                  />
+                </SidebarGroupContent>
+              </SidebarGroup>
+            </SidebarContent>
+          </Sidebar>
+        ) : null}
       </Sidebar>
       <CreateMailFolderDialog
         onNameChange={onFolderCreateNameChange}

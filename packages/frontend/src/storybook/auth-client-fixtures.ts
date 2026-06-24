@@ -149,6 +149,7 @@ const storyAuthClientOverrides = {
   updateUser: async () => ({ status: true }),
   changeEmail: async () => ({ status: true }),
   changePassword: async () => ({ status: true }),
+  signOut: async () => ({ success: true }),
   requestPasswordReset: async () => ({ status: true }),
   deleteUser: async () => ({ status: true }),
   listAccounts: async () => storyAccounts,
@@ -176,6 +177,12 @@ const storyAuthClientOverrides = {
       token: 'story-session-secondary-value',
       userAgent:
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+    },
+    {
+      ...storySession,
+      id: 'story-session-at-email-cli',
+      token: 'story-session-at-email-cli-value',
+      userAgent: 'at-email/0.4.0 (linux; amd64)'
     }
   ],
   revokeSession: async () => ({ status: true }),

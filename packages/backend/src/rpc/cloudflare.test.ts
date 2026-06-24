@@ -1,0 +1,225 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+type CloudflareHeadersMock = (headers: Headers) => Promise<unknown>
+type CloudflareConnectionMock = (input: { headers: Headers; input: unknown }) => Promise<unknown>
+type CloudflareProvisionMock = (input: { connectionPublicId: string; headers: Headers }) => Promise<unknown>
+type CloudflareDisconnectMock = (input: { grantPublicId?: string; headers: Headers }) => Promise<unknown>
+type CloudflareFinalizeMock = (input: { headers: Headers; intentPublicId: string }) => Promise<unknown>
+type CloudflareZonesMock = (input: { cloudflareAccountId?: string; headers: Headers }) => Promise<unknown>
+type IsCloudflareAccessErrorMock = (error: unknown) => error is Error & { status: 401 | 403 }
+
+const cloudflareRpcTestState = vi.hoisted(() => ({
+  applyCloudflareConnectionProvisioning: vi.fn<CloudflareProvisionMock>(),
+  connectCloudflareDomain: vi.fn<CloudflareConnectionMock>(),
+  disconnectCloudflare: vi.fn<CloudflareDisconnectMock>(),
+  finalizeCloudflareOAuth: vi.fn<CloudflareFinalizeMock>(),
+  getCloudflareStatus: vi.fn<CloudflareHeadersMock>(),
+  isCloudflareAccessError: vi.fn<IsCloudflareAccessErrorMock>(),
+  listConnectedCloudflareAccounts: vi.fn<CloudflareHeadersMock>(),
+  listConnectedCloudflareZones: vi.fn<CloudflareZonesMock>(),
+  startCloudflareOAuth: vi.fn<CloudflareHeadersMock>()
+}))
+
+vi.mock('../cloudflare/service', () => ({
+  applyCloudflareConnectionProvisioning: cloudflareRpcTestState.applyCloudflareConnectionProvisioning,
+  connectCloudflareDomain: cloudflareRpcTestState.connectCloudflareDomain,
+  disconnectCloudflare: cloudflareRpcTestState.disconnectCloudflare,
+  finalizeCloudflareOAuth: cloudflareRpcTestState.finalizeCloudflareOAuth,
+  getCloudflareStatus: cloudflareRpcTestState.getCloudflareStatus,
+  isCloudflareAccessError: cloudflareRpcTestState.isCloudflareAccessError,
+  listConnectedCloudflareAccounts: cloudflareRpcTestState.listConnectedCloudflareAccounts,
+  listConnectedCloudflareZones: cloudflareRpcTestState.listConnectedCloudflareZones,
+  startCloudflareOAuth: cloudflareRpcTestState.startCloudflareOAuth
+}))
+
+describe('Cloudflare RPC routes', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    cloudflareRpcTestState.applyCloudflareConnectionProvisioning.mockReset()
+    cloudflareRpcTestState.connectCloudflareDomain.mockReset()
+    cloudflareRpcTestState.disconnectCloudflare.mockReset()
+    cloudflareRpcTestState.finalizeCloudflareOAuth.mockReset()
+    cloudflareRpcTestState.getCloudflareStatus.mockReset()
+    cloudflareRpcTestState.isCloudflareAccessError.mockReset()
+    cloudflareRpcTestState.listConnectedCloudflareAccounts.mockReset()
+    cloudflareRpcTestState.listConnectedCloudflareZones.mockReset()
+    cloudflareRpcTestState.startCloudflareOAuth.mockReset()
+    cloudflareRpcTestState.isCloudflareAccessError.mockImplementation(
+      (error: unknown): error is Error & { status: 401 | 403 } =>
+        error instanceof Error && error.name === 'CloudflareAccessError'
+    )
+  })
+
+  it('starts Cloudflare OAuth through the webserver and preserves Better Auth cookies', async () => {
+    expect.hasAssertions()
+
+    const responseHeaders = new Headers()
+    responseHeaders.append('set-cookie', 'cf-oauth-state=one; Path=/; HttpOnly')
+    responseHeaders.append('set-cookie', 'cf-oauth-verifier=two; Path=/; Secure')
+    cloudflareRpcTestState.startCloudflareOAuth.mockResolvedValue({
+      intent: {
+        publicId: 'intent-public-1',
+        status: 'pending'
+      },
+      redirectUrl: 'https://dash.cloudflare.com/oauth2/auth?state=state-1',
+      responseHeaders
+    })
+
+    const { default: cloudflare } = await import('./cloudflare')
+    const response = await cloudflare.handle(
+      new Request('https://mail.example.com/cloudflare/oauth/start', {
+        headers: {
+          cookie: 'session=abc'
+        },
+        method: 'POST'
+      })
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('set-cookie')).toContain('cf-oauth-state=one')
+    expect(response.headers.get('set-cookie')).toContain('cf-oauth-verifier=two')
+    await expect(response.json()).resolves.toStrictEqual({
+      intent: {
+        publicId: 'intent-public-1',
+        status: 'pending'
+      },
+      redirectUrl: 'https://dash.cloudflare.com/oauth2/auth?state=state-1'
+    })
+    expect(cloudflareRpcTestState.startCloudflareOAuth).toHaveBeenCalledOnce()
+    expect(cloudflareRpcTestState.startCloudflareOAuth.mock.calls[0][0].get('cookie')).toBe('session=abc')
+  })
+
+  it('connects a domain with validated route input through the service boundary', async () => {
+    expect.hasAssertions()
+
+    cloudflareRpcTestState.connectCloudflareDomain.mockResolvedValue({
+      cloudflareAccountId: 'cf-account-1',
+      cloudflareZoneId: 'cf-zone-1',
+      domain: 'example.com',
+      provisioningStatus: 'pending',
+      publicId: 'connection-public-1',
+      status: 'connected'
+    })
+
+    const { default: cloudflare } = await import('./cloudflare')
+    const response = await cloudflare.handle(
+      new Request('https://mail.example.com/cloudflare/connections', {
+        body: JSON.stringify({
+          cloudflareAccountId: 'cf-account-1',
+          cloudflareAccountName: 'Example Account',
+          cloudflareZoneId: 'cf-zone-1',
+          cloudflareZoneName: null,
+          domain: 'Example.COM'
+        }),
+        headers: {
+          authorization: 'Bearer user-token',
+          'content-type': 'application/json'
+        },
+        method: 'POST'
+      })
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toStrictEqual({
+      connection: {
+        cloudflareAccountId: 'cf-account-1',
+        cloudflareZoneId: 'cf-zone-1',
+        domain: 'example.com',
+        provisioningStatus: 'pending',
+        publicId: 'connection-public-1',
+        status: 'connected'
+      }
+    })
+    expect(cloudflareRpcTestState.connectCloudflareDomain).toHaveBeenCalledWith({
+      headers: expect.any(Headers),
+      input: {
+        cloudflareAccountId: 'cf-account-1',
+        cloudflareAccountName: 'Example Account',
+        cloudflareZoneId: 'cf-zone-1',
+        cloudflareZoneName: null,
+        domain: 'Example.COM'
+      }
+    })
+    expect(cloudflareRpcTestState.connectCloudflareDomain.mock.calls[0][0].headers.get('authorization')).toBe(
+      'Bearer user-token'
+    )
+  })
+
+  it('rejects invalid connection input before reaching the Cloudflare service', async () => {
+    expect.hasAssertions()
+
+    const { default: cloudflare } = await import('./cloudflare')
+    const response = await cloudflare.handle(
+      new Request('https://mail.example.com/cloudflare/connections', {
+        body: JSON.stringify({
+          cloudflareAccountId: 'cf-account-1',
+          cloudflareZoneId: '',
+          domain: 'example.com'
+        }),
+        headers: {
+          'content-type': 'application/json'
+        },
+        method: 'POST'
+      })
+    )
+
+    expect(response.status).toBe(422)
+    expect(cloudflareRpcTestState.connectCloudflareDomain).not.toHaveBeenCalled()
+  })
+
+  it('maps Cloudflare access errors without exposing a Bearer challenge for UI routes', async () => {
+    expect.hasAssertions()
+
+    const error = new Error('Organization administrator access is required') as Error & {
+      status: 401 | 403
+    }
+    error.name = 'CloudflareAccessError'
+    error.status = 403
+    cloudflareRpcTestState.getCloudflareStatus.mockRejectedValue(error)
+
+    const { default: cloudflare } = await import('./cloudflare')
+    const response = await cloudflare.handle(new Request('https://mail.example.com/cloudflare/status'))
+
+    expect(response.status).toBe(403)
+    expect(response.headers.get('www-authenticate')).toBeNull()
+    await expect(response.json()).resolves.toStrictEqual({
+      error: 'Organization administrator access is required'
+    })
+  })
+
+  it('provisions a connected domain by public connection id', async () => {
+    expect.hasAssertions()
+
+    cloudflareRpcTestState.applyCloudflareConnectionProvisioning.mockResolvedValue({
+      cloudflareAccountId: 'cf-account-1',
+      cloudflareZoneId: 'cf-zone-1',
+      domain: 'example.com',
+      publicId: 'connection-public-1',
+      provisioningStatus: 'succeeded',
+      status: 'active'
+    })
+
+    const { default: cloudflare } = await import('./cloudflare')
+    const response = await cloudflare.handle(
+      new Request('https://mail.example.com/cloudflare/connections/connection-public-1/provision', {
+        method: 'POST'
+      })
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toStrictEqual({
+      connection: {
+        cloudflareAccountId: 'cf-account-1',
+        cloudflareZoneId: 'cf-zone-1',
+        domain: 'example.com',
+        provisioningStatus: 'succeeded',
+        publicId: 'connection-public-1',
+        status: 'active'
+      }
+    })
+    expect(cloudflareRpcTestState.applyCloudflareConnectionProvisioning).toHaveBeenCalledWith({
+      connectionPublicId: 'connection-public-1',
+      headers: expect.any(Headers)
+    })
+  })
+})
