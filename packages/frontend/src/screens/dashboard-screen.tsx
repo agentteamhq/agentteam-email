@@ -67,6 +67,7 @@ export interface DashboardScreenProps {
   ) => void
   onCliAccessSessionRevoke?: (session: CLIAccessSettingsState['sessions'][number]) => void
   onEmailAction?: (action: AuthenticatedEmailAction, email: AuthenticatedEmailPreview) => void
+  onDashboardOnboardingConnect?: () => void
   onMailActionDialogOpenChange?: (dialog: AuthenticatedMailActionDialogKind, open: boolean) => void
   onMailDeleteConfirm?: () => void
   onMailMoveSubmit?: () => void
@@ -127,6 +128,7 @@ export function DashboardScreen({
   onEmailAttachmentPreview,
   onCliAccessSessionRevoke,
   onEmailAction,
+  onDashboardOnboardingConnect,
   onMailActionDialogOpenChange,
   onMailDeleteConfirm,
   onMailMoveSubmit,
@@ -429,6 +431,7 @@ export function DashboardScreen({
           <AuthenticatedDashboardContent
             onAttachmentPreview={onEmailAttachmentPreview}
             onEmailAction={handleEmailAction}
+            onOnboardingConnect={onDashboardOnboardingConnect}
             onRetry={onMessageRetry}
             view={resolvedDashboardView}
           />

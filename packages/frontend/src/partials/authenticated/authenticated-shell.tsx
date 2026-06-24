@@ -47,6 +47,14 @@ import {
 import { Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle
+} from '../../components/ui/card'
+import {
   Dialog,
   DialogClose,
   DialogContent,
@@ -104,6 +112,7 @@ import {
   rewriteEmailHTMLForIframe
 } from '../../lib/email-safety'
 import { cn } from '../../lib/utils'
+import { CloudflareConnectButton, CloudflareLogo } from './cloudflare-brand'
 import { SettingsDialog } from './settings-dialog'
 import {
   defaultAuthenticatedDashboardView,
@@ -1154,6 +1163,7 @@ export function AuthenticatedSidebar({
   const activeMailItem = view.navMain.find((item) => item.id === view.activeItemId)
   const activeManagementItem = view.managementNav?.find((item) => item.id === view.activeItemId)
   const activeItem = activeMailItem ?? activeManagementItem ?? view.navMain[0]
+  const hasExplicitlyNoAccounts = Boolean(view.accounts && view.accounts.length === 0)
 
   return (
     <>
@@ -1251,97 +1261,97 @@ export function AuthenticatedSidebar({
           </SidebarFooter>
         </Sidebar>
 
-      {!activeManagementItem ? (
-        <Sidebar
-          collapsible='none'
-          className='hidden min-w-0 flex-1 md:flex'
-        >
-          <SidebarHeader className='gap-3 border-b p-3'>
-            <OrganizationSwitcher
-              align='start'
-              className='w-full justify-between border px-2'
-              hideSlug={false}
-            />
-            <MailAccountSelect
-              onAccountSelect={onAccountSelect}
-              view={view}
-            />
-            <div className='flex w-full items-center justify-between gap-2'>
-              <div className='flex min-w-0 items-center gap-1.5'>
-                <div className='text-foreground truncate text-base font-medium'>
-                  {activeItem?.title ?? 'Inbox'}
+        {!activeManagementItem ? (
+          <Sidebar
+            collapsible='none'
+            className='hidden min-w-0 flex-1 md:flex'
+          >
+            <SidebarHeader className='gap-3 border-b p-3'>
+              <OrganizationSwitcher
+                align='start'
+                className='w-full justify-between border px-2'
+                hideSlug={false}
+              />
+              <MailAccountSelect
+                onAccountSelect={onAccountSelect}
+                view={view}
+              />
+              <div className='flex w-full items-center justify-between gap-2'>
+                <div className='flex min-w-0 items-center gap-1.5'>
+                  <div className='text-foreground truncate text-base font-medium'>
+                    {activeItem?.title ?? 'Inbox'}
+                  </div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        aria-label={
+                          view.refreshLabel ?? (view.isRefreshing ? 'Refreshing mailbox' : 'Refresh mailbox')
+                        }
+                        className='size-7'
+                        disabled={!onRefresh || view.isRefreshing || view.state === 'loading'}
+                        onClick={onRefresh}
+                        size='icon'
+                        type='button'
+                        variant='ghost'
+                      >
+                        {view.isRefreshing ? (
+                          <Spinner data-icon='icon-only' />
+                        ) : (
+                          <ArrowsClockwiseIcon data-icon='icon-only' />
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{view.refreshLabel ?? 'Refresh mailbox'}</TooltipContent>
+                  </Tooltip>
                 </div>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      aria-label={
-                        view.refreshLabel ?? (view.isRefreshing ? 'Refreshing mailbox' : 'Refresh mailbox')
-                      }
-                      className='size-7'
-                      disabled={!onRefresh || view.isRefreshing || view.state === 'loading'}
-                      onClick={onRefresh}
-                      size='icon'
-                      type='button'
-                      variant='ghost'
-                    >
-                      {view.isRefreshing ? (
-                        <Spinner data-icon='icon-only' />
-                      ) : (
-                        <ArrowsClockwiseIcon data-icon='icon-only' />
-                      )}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>{view.refreshLabel ?? 'Refresh mailbox'}</TooltipContent>
-                </Tooltip>
+                <Label className='flex items-center gap-2 text-sm'>
+                  <span>Unreads</span>
+                  <Switch
+                    aria-label='Show unread messages only'
+                    checked={view.unreadOnly ?? false}
+                    className='shadow-none'
+                    onCheckedChange={onUnreadOnlyChange}
+                  />
+                </Label>
               </div>
-              <Label className='flex items-center gap-2 text-sm'>
-                <span>Unreads</span>
-                <Switch
-                  aria-label='Show unread messages only'
-                  checked={view.unreadOnly ?? false}
-                  className='shadow-none'
-                  onCheckedChange={onUnreadOnlyChange}
-                />
-              </Label>
-            </div>
-            <Button
-              className='w-full justify-start'
-              disabled={!onComposeOpen}
-              onClick={onComposeOpen}
-              size='sm'
-              type='button'
-              variant='outline'
-            >
-              <PencilSimpleIcon data-icon='inline-start' />
-              Compose
-            </Button>
-            <SidebarInput
-              onChange={(event) => {
-                onSearchChange?.(event.currentTarget.value)
-              }}
-              placeholder='Type to search...'
-              readOnly={!onSearchChange}
-              value={view.searchQuery ?? ''}
-            />
-          </SidebarHeader>
-          <SidebarContent>
-            <SidebarGroup className='px-0'>
-              <SidebarGroupContent>
-                <MailboxList
-                  onMailAction={onMailAction}
-                  onSelectMail={onMailSelect}
-                  onRetry={onRetry}
-                  view={view}
-                />
-                <MailboxPagination
-                  onPageChange={onPageChange}
-                  pagination={view.pagination}
-                />
-              </SidebarGroupContent>
-            </SidebarGroup>
-          </SidebarContent>
-        </Sidebar>
-      ) : null}
+              <Button
+                className='w-full justify-start'
+                disabled={!onComposeOpen || hasExplicitlyNoAccounts}
+                onClick={onComposeOpen}
+                size='sm'
+                type='button'
+                variant='outline'
+              >
+                <PencilSimpleIcon data-icon='inline-start' />
+                Compose
+              </Button>
+              <SidebarInput
+                onChange={(event) => {
+                  onSearchChange?.(event.currentTarget.value)
+                }}
+                placeholder='Type to search...'
+                readOnly={!onSearchChange}
+                value={view.searchQuery ?? ''}
+              />
+            </SidebarHeader>
+            <SidebarContent>
+              <SidebarGroup className='px-0'>
+                <SidebarGroupContent>
+                  <MailboxList
+                    onMailAction={onMailAction}
+                    onSelectMail={onMailSelect}
+                    onRetry={onRetry}
+                    view={view}
+                  />
+                  <MailboxPagination
+                    onPageChange={onPageChange}
+                    pagination={view.pagination}
+                  />
+                </SidebarGroupContent>
+              </SidebarGroup>
+            </SidebarContent>
+          </Sidebar>
+        ) : null}
       </Sidebar>
       <CreateMailFolderDialog
         onNameChange={onFolderCreateNameChange}
@@ -1814,11 +1824,13 @@ function ManagementNavButton({
 export function AuthenticatedDashboardContent({
   onAttachmentPreview,
   onEmailAction,
+  onOnboardingConnect,
   onRetry,
   view = defaultAuthenticatedDashboardView
 }: {
   onAttachmentPreview?: (attachment: AuthenticatedEmailAttachment, email: AuthenticatedEmailPreview) => void
   onEmailAction?: (action: AuthenticatedEmailAction, email: AuthenticatedEmailPreview) => void
+  onOnboardingConnect?: () => void
   onRetry?: () => void
   view?: AuthenticatedDashboardView
 }) {
@@ -1838,6 +1850,15 @@ export function AuthenticatedDashboardContent({
   }
 
   if (view.state === 'empty') {
+    if (view.onboardingPrompt) {
+      return (
+        <DashboardOnboardingPrompt
+          onConnect={onOnboardingConnect}
+          view={view.onboardingPrompt}
+        />
+      )
+    }
+
     return (
       <EmailPreviewEmptyPane
         description={view.emptyDescription}
@@ -1861,6 +1882,48 @@ export function AuthenticatedDashboardContent({
       description='Choose a message from the mailbox to read it here.'
       title='Select a message'
     />
+  )
+}
+
+function DashboardOnboardingPrompt({
+  onConnect,
+  view
+}: {
+  onConnect?: () => void
+  view: NonNullable<AuthenticatedDashboardView['onboardingPrompt']>
+}) {
+  const isConnecting = view.state === 'connecting'
+
+  return (
+    <div className='flex min-h-[calc(100dvh-3.5rem)] items-center justify-center p-6'>
+      <Card className='w-full max-w-md shadow-none'>
+        <CardHeader>
+          <CloudflareLogo className='mb-2 h-8 w-auto' />
+          <CardTitle>{view.title}</CardTitle>
+          <CardDescription>{view.description}</CardDescription>
+        </CardHeader>
+        <CardContent className='grid gap-3'>
+          {view.state === 'error' ? (
+            <div className='text-destructive flex items-start gap-2 text-sm'>
+              <WarningIcon data-icon='inline-start' />
+              <span>{view.errorDescription ?? 'Cloudflare could not be connected.'}</span>
+            </div>
+          ) : null}
+          {view.helperText ? (
+            <p className='text-muted-foreground text-sm leading-6'>{view.helperText}</p>
+          ) : null}
+        </CardContent>
+        <CardFooter>
+          <CloudflareConnectButton
+            busy={isConnecting}
+            disabled={isConnecting || !onConnect}
+            onClick={onConnect}
+          >
+            {isConnecting ? 'Connecting Cloudflare' : view.actionLabel}
+          </CloudflareConnectButton>
+        </CardFooter>
+      </Card>
+    </div>
   )
 }
 

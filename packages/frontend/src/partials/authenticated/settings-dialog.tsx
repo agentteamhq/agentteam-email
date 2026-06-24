@@ -1,7 +1,6 @@
 import * as React from 'react'
 import { useAuth, useListSessions, useRevokeSession, useSession } from '@better-auth-ui/react'
 import {
-  CloudIcon,
   GlobeHemisphereWestIcon,
   IdentificationCardIcon,
   LockIcon,
@@ -26,7 +25,14 @@ import {
   BreadcrumbSeparator
 } from '../../components/ui/breadcrumb'
 import { Button } from '../../components/ui/button'
-import { Card, CardContent } from '../../components/ui/card'
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
+} from '../../components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -51,6 +57,7 @@ import {
 } from '../../components/ui/sidebar'
 import { rpc } from '../../lib/rpc-api-client'
 import { cn } from '../../lib/utils'
+import { CloudflareConnectButton, CloudflareLogo } from './cloudflare-brand'
 import type { SettingsSectionId } from './settings-dialog-sections'
 import type { CloudflareAccountSummary, CloudflareStatusResult, CloudflareZoneSummary } from '@main/backend'
 import type { Session } from 'better-auth'
@@ -195,7 +202,7 @@ export function SettingsDialog({
     activeSection === 'domains'
       ? domainSettings.mode === 'addDomain'
         ? 'Add domain'
-        : domainSettings.selectedDomain?.domain ?? 'Domain'
+        : (domainSettings.selectedDomain?.domain ?? 'Domain')
       : settingsNames[activeSection]
 
   return (
@@ -206,7 +213,9 @@ export function SettingsDialog({
       {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
       <DialogContent className='overflow-hidden p-0 md:max-h-[500px] md:max-w-[700px] lg:max-w-[800px]'>
         <DialogTitle className='sr-only'>Settings</DialogTitle>
-        <DialogDescription className='sr-only'>Manage account, security, organization, and domain settings.</DialogDescription>
+        <DialogDescription className='sr-only'>
+          Manage account, security, organization, and domain settings.
+        </DialogDescription>
         <SidebarProvider className='h-full min-h-0 min-w-0 items-start overflow-hidden'>
           <Sidebar
             collapsible='none'
@@ -350,19 +359,35 @@ function SettingsPanelContent({
             ? 'Domains connected to AgentTeam Email will appear here.'
             : section === 'cliAccess'
               ? 'CLI sessions will appear here after at-email authenticates.'
-            : 'This settings section has no records to show yet.'
+              : 'This settings section has no records to show yet.'
         }
-        title={section === 'domains' ? 'No domains' : section === 'cliAccess' ? 'No CLI sessions' : 'Nothing to show'}
+        title={
+          section === 'domains'
+            ? 'No domains'
+            : section === 'cliAccess'
+              ? 'No CLI sessions'
+              : 'Nothing to show'
+        }
       />
     )
   }
 
   if (section === 'account') {
-    return <Settings view='account' hideNav />
+    return (
+      <Settings
+        view='account'
+        hideNav
+      />
+    )
   }
 
   if (section === 'security') {
-    return <Settings view='security' hideNav />
+    return (
+      <Settings
+        view='security'
+        hideNav
+      />
+    )
   }
 
   if (section === 'cliAccess') {
@@ -377,15 +402,30 @@ function SettingsPanelContent({
   }
 
   if (section === 'organizations') {
-    return <Settings view='organizations' hideNav />
+    return (
+      <Settings
+        view='organizations'
+        hideNav
+      />
+    )
   }
 
   if (section === 'organizationSettings') {
-    return <Organization view='settings' hideNav />
+    return (
+      <Organization
+        view='settings'
+        hideNav
+      />
+    )
   }
 
   if (section === 'organizationPeople') {
-    return <Organization view='people' hideNav />
+    return (
+      <Organization
+        view='people'
+        hideNav
+      />
+    )
   }
 
   if (section === 'domains') {
@@ -629,9 +669,8 @@ function useDomainSettingsController({
   const [runtimeZones, setRuntimeZones] = React.useState<CloudflareZoneSummary[]>([])
   const [runtimeSelectedAccountId, setRuntimeSelectedAccountId] = React.useState('')
   const [runtimeSelectedZoneId, setRuntimeSelectedZoneId] = React.useState('')
-  const [runtimeSelectedDomainPublicId, setRuntimeSelectedDomainPublicId] = React.useState<DomainPublicId | null>(
-    null
-  )
+  const [runtimeSelectedDomainPublicId, setRuntimeSelectedDomainPublicId] =
+    React.useState<DomainPublicId | null>(null)
   const [runtimeMode, setRuntimeMode] = React.useState<'addDomain' | 'domain' | null>(null)
   const [runtimeDraftDomain, setRuntimeDraftDomain] = React.useState('')
   const [runtimeMessage, setRuntimeMessage] = React.useState<string | null>(null)
@@ -647,15 +686,13 @@ function useDomainSettingsController({
   const message = state?.message ?? runtimeMessage
   const connections = status?.connections ?? []
   const selectedDomainPublicId =
-    state?.selectedDomainPublicId ??
-    runtimeSelectedDomainPublicId ??
-    connections[0]?.publicId ??
-    null
+    state?.selectedDomainPublicId ?? runtimeSelectedDomainPublicId ?? connections[0]?.publicId ?? null
   const mode = state?.mode ?? runtimeMode ?? (connections.length > 0 ? 'domain' : 'addDomain')
-  const selectedDomain =
-    selectedDomainPublicId
-      ? connections.find((connection) => connection.publicId === selectedDomainPublicId) ?? connections[0] ?? null
-      : connections[0] ?? null
+  const selectedDomain = selectedDomainPublicId
+    ? (connections.find((connection) => connection.publicId === selectedDomainPublicId) ??
+      connections[0] ??
+      null)
+    : (connections[0] ?? null)
 
   const activeGrant = status?.grants.find((grant) => grant.status === 'active') ?? null
   const missingScopes = activeGrant ? getMissingScopes(activeGrant) : []
@@ -739,7 +776,13 @@ function useDomainSettingsController({
       .finally(() => {
         setRuntimeBusy(false)
       })
-  }, [cloudflareOAuthCallback?.intentPublicId, cloudflareOAuthCallback?.oauthError, isStoryState, refreshStatus, router])
+  }, [
+    cloudflareOAuthCallback?.intentPublicId,
+    cloudflareOAuthCallback?.oauthError,
+    isStoryState,
+    refreshStatus,
+    router
+  ])
 
   const startOAuth = async () => {
     if (isStoryState || readOnly) {
@@ -970,26 +1013,31 @@ function AddDomainPanel({ settings }: { settings: DomainSettingsController }) {
   if (!activeGrant) {
     return (
       <div className='grid max-w-3xl gap-4'>
-        <div className='grid gap-2'>
-          <div className='flex items-start justify-between gap-3'>
-            <div className='min-w-0'>
-              <p className='font-medium'>Add domain</p>
-              <p className='text-muted-foreground text-sm'>
-                Authorize Cloudflare to connect an email domain to this workspace.
-              </p>
-            </div>
-            <Badge variant='outline'>Not connected</Badge>
-          </div>
-          <Button
-            className='w-fit bg-[#f38020] text-white hover:bg-[#d96f18]'
-            disabled={settings.busy || settings.readOnly}
-            onClick={settings.onStartOAuth}
-            size='sm'
+        <Card className='gap-0 py-4 shadow-none'>
+          <CardHeader
+            className='flex flex-col gap-3 px-4 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center'
           >
-            <CloudIcon />
-            Connect Cloudflare
-          </Button>
-        </div>
+            <div className='flex min-w-0 items-start gap-3'>
+              <CloudflareLogo className='mt-0.5 h-6 w-auto shrink-0' />
+              <div className='min-w-0'>
+                <CardTitle className='text-sm'>Connect your domain</CardTitle>
+                <CardDescription className='mt-1'>Connect Cloudflare to choose your domain.</CardDescription>
+              </div>
+            </div>
+            <CardAction
+              className='w-full self-stretch justify-self-auto sm:w-56 sm:self-center sm:justify-self-end'
+            >
+              <CloudflareConnectButton
+                busy={settings.busy}
+                className='h-8 text-sm'
+                disabled={settings.busy || settings.readOnly}
+                onClick={settings.onStartOAuth}
+              >
+                Continue with Cloudflare
+              </CloudflareConnectButton>
+            </CardAction>
+          </CardHeader>
+        </Card>
         {settings.message ? <p className='text-muted-foreground text-sm'>{settings.message}</p> : null}
       </div>
     )
@@ -1198,7 +1246,9 @@ function DomainDetailPanel({ settings }: { settings: DomainSettingsController })
               settings.onProvisionDomain(domain.publicId)
             }}
             size='sm'
-            variant={domain.status === 'degraded' || domain.provisioningStatus === 'failed' ? 'default' : 'outline'}
+            variant={
+              domain.status === 'degraded' || domain.provisioningStatus === 'failed' ? 'default' : 'outline'
+            }
           >
             {provisionLabel}
           </Button>
@@ -1246,7 +1296,9 @@ function formatStatusLabel(value: string): string {
     .join(' ')
 }
 
-function getDomainStatusBadgeVariant(connection: CloudflareConnectionView): 'secondary' | 'destructive' | 'outline' {
+function getDomainStatusBadgeVariant(
+  connection: CloudflareConnectionView
+): 'secondary' | 'destructive' | 'outline' {
   if (connection.status === 'active' && connection.provisioningStatus === 'succeeded') {
     return 'secondary'
   }
