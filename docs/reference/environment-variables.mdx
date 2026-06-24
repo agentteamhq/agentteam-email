@@ -1,0 +1,249 @@
+---
+title: "Environment variables reference for AgentTeam Email"
+sidebarTitle: "Env Variables"
+description: "Complete reference for every environment variable accepted by AgentTeam Email, organized by functional area with example values."
+---
+
+This page documents every environment variable accepted by AgentTeam Email. Use these when writing a Docker Compose `.env` file, Helm values, Kubernetes Secrets, or any other configuration surface for your deployment.
+
+<Warning>
+  Never commit secrets to version control. Variables including `BETTER_AUTH_SECRET`, `ENCRYPT_SECRET_KEY`, `AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN`, `AGENT_MAIL_WILDDUCK_ACCESS_CONTROL_SECRET`, `AGENT_MAIL_LOOP_SECRET`, `AGENT_MAIL_ZONEMTA_RELAY_PASSWORD`, and `AGENT_MAIL_FEEDBACK_MAILBOX_PASSWORD` must be generated per environment and stored in a secrets manager or Kubernetes Secret — never in a committed file.
+</Warning>
+
+## Web app
+
+<ParamField path="PUBLIC_HOSTNAME" type="string" required>
+  Fully-qualified public URL of your AgentTeam Email deployment. The Cloudflare Worker sends inbound mail notifications to `PUBLIC_HOSTNAME/agent-mail/ingest/v1`.
+
+  **Example:** `https://mail.company.example`
+</ParamField>
+
+<ParamField path="BETTER_AUTH_SECRET" type="string" required>
+  Long random string used to sign and verify authentication sessions. Generate a unique value for every environment and never reuse it.
+
+  **Example:** `a-long-random-string-change-me`
+</ParamField>
+
+<ParamField path="ENCRYPT_SECRET_KEY" type="string" required>
+  32 random bytes encoded as base64url. Used to encrypt sensitive data stored at rest. Generate a fresh value per environment.
+
+  **Example:** `AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA` *(replace with real random bytes)*
+</ParamField>
+
+<ParamField path="NODE_ENV" type="string">
+  Runtime mode. Set to `production` for all deployed environments.
+
+  **Example:** `production`
+</ParamField>
+
+## Databases
+
+AgentTeam Email requires three MongoDB databases and one Redis instance. Even when sharing a single MongoDB server, each URI must point to a distinct logical database.
+
+<ParamField path="AGENTTEAM_EMAIL_APP_MONGODB_URI" type="string" required>
+  MongoDB connection URI for the main web application database.
+
+  **Example:** `mongodb://user:password@mongodb.example:27017/agentteam_email?authSource=admin&tls=true`
+</ParamField>
+
+<ParamField path="AGENTTEAM_EMAIL_WILDDUCK_MONGODB_URI" type="string" required>
+  MongoDB connection URI for the WildDuck mail server database.
+
+  **Example:** `mongodb://user:password@mongodb.example:27017/wildduck?authSource=admin&tls=true`
+</ParamField>
+
+<ParamField path="AGENTTEAM_EMAIL_CONTROL_MONGODB_URI" type="string" required>
+  MongoDB connection URI for the mail-control-service operational database. This must be a dedicated database (e.g. `agent_mail_control`) — it must not share collections with the WildDuck database.
+
+  **Example:** `mongodb://user:password@mongodb.example:27017/agent_mail_control?authSource=admin&tls=true`
+</ParamField>
+
+<ParamField path="AGENTTEAM_EMAIL_REDIS_URL" type="string" required>
+  Redis connection URL used by the mail stack for queuing and coordination.
+
+  **Example:** `rediss://:password@redis.example:6379/3`
+</ParamField>
+
+## Object storage / R2
+
+AgentTeam Email archives every message to an S3-compatible bucket. Cloudflare R2 is the reference implementation, but any S3-compatible endpoint works.
+
+<ParamField path="AGENT_MAIL_R2_ENDPOINT" type="string" required>
+  S3-compatible storage endpoint URL.
+
+  **Example:** `https://example-account-id.r2.cloudflarestorage.com`
+</ParamField>
+
+<ParamField path="AGENT_MAIL_R2_REGION" type="string" required>
+  Storage region identifier. Use `auto` for Cloudflare R2.
+
+  **Example:** `auto`
+</ParamField>
+
+<ParamField path="AGENT_MAIL_R2_BUCKET" type="string" required>
+  Bucket name for the mail archive.
+
+  **Example:** `agent-mail-archive`
+</ParamField>
+
+<ParamField path="AGENT_MAIL_R2_ACCESS_KEY_ID" type="string" required>
+  Access key ID for storage authentication.
+
+  **Example:** `example-r2-access-key-id`
+</ParamField>
+
+<ParamField path="AGENT_MAIL_R2_SECRET_ACCESS_KEY" type="string" required>
+  Secret access key for storage authentication.
+
+  **Example:** `example-r2-secret-access-key`
+</ParamField>
+
+## Mail stack
+
+These variables configure internal service authentication and the runtime secrets that keep the mail stack operating correctly.
+
+<ParamField path="AGENT_MAIL_CONTROL_API_TOKEN" type="string" required>
+  Authentication token for the internal mail-control-service API. Services that call the control API must present this token.
+
+  **Example:** `example-control-api-token-change-me`
+</ParamField>
+
+<ParamField path="AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN" type="string" required>
+  Admin access token for the WildDuck API. Used for mailbox provisioning and message delivery operations.
+
+  **Example:** `example-wildduck-admin-token-change-me`
+</ParamField>
+
+<ParamField path="AGENT_MAIL_WILDDUCK_ACCESS_CONTROL_SECRET" type="string" required>
+  Shared secret for WildDuck access-control API calls.
+
+  **Example:** `example-wildduck-access-control-secret-change-me`
+</ParamField>
+
+<ParamField path="AGENT_MAIL_OUTBOUND_PROVIDER" type="string" required>
+  Outbound mail provider. Accepted values are `cloudflare` and `ses`.
+
+  **Example:** `cloudflare`
+</ParamField>
+
+<ParamField path="AGENT_MAIL_LOOP_SECRET" type="string" required>
+  Shared secret used to detect and suppress mail loop conditions between internal services.
+
+  **Example:** `example-mail-loop-secret-change-me`
+</ParamField>
+
+<ParamField path="AGENT_MAIL_ZONEMTA_RELAY_PASSWORD" type="string" required>
+  Password used by ZoneMTA to authenticate with the internal SMTP relay.
+
+  **Example:** `example-zonemta-relay-password-change-me`
+</ParamField>
+
+<ParamField path="AGENT_MAIL_FEEDBACK_MAILBOX_PASSWORD" type="string" required>
+  Password for the service-owned feedback mailbox that receives bounce and DSN notifications from outbound providers.
+
+  **Example:** `example-feedback-mailbox-password-change-me`
+</ParamField>
+
+## Cloudflare
+
+These variables are required when using Cloudflare Email Routing for inbound mail or when `AGENT_MAIL_OUTBOUND_PROVIDER=cloudflare`.
+
+<ParamField path="AGENT_MAIL_CLOUDFLARE_API_TOKEN" type="string" required>
+  Cloudflare API token with permissions to manage Workers, DNS records, and Email Routing for your zones.
+
+  **Example:** `example-cloudflare-api-token`
+</ParamField>
+
+<ParamField path="AGENT_MAIL_CLOUDFLARE_ACCOUNT_ID" type="string" required>
+  Your Cloudflare account ID. Find it in the Cloudflare dashboard under **Account Home → Account ID**.
+
+  **Example:** `example-cloudflare-account-id`
+</ParamField>
+
+<ParamField path="AGENT_MAIL_CLOUDFLARE_WORKER_SCRIPT_NAME" type="string" required>
+  The name of the Cloudflare Worker script deployed to receive inbound mail for your domains.
+
+  **Example:** `agent-mail-ingress`
+</ParamField>
+
+<ParamField path="AGENT_MAIL_CLOUDFLARE_API_BASE_URL" type="string">
+  Base URL for the Cloudflare API. Override only in non-production or test environments.
+
+  **Default:** `https://api.cloudflare.com/client/v4`
+</ParamField>
+
+<ParamField path="AGENT_MAIL_CLOUDFLARE_WORKER_ARCHIVE_BUCKET" type="string">
+  The R2 bucket name bound to the Cloudflare Worker for direct archive writes. Usually the same value as `AGENT_MAIL_R2_BUCKET`.
+
+  **Example:** `agent-mail-archive`
+</ParamField>
+
+## Fast-path ingest
+
+The Cloudflare Worker sends a HMAC-signed HTTP notification to the web server after writing each inbound message to R2. These variables configure that notification path.
+
+<ParamField path="AGENT_MAIL_INGEST_HMAC_SECRET" type="string">
+  HMAC secret used by the Cloudflare Worker to sign fast-path ingest notifications. The web server verifies this signature before enqueuing an inbound bundle. The web server stores per-connection HMAC secrets after provisioning — you do not set this globally; it is managed per Worker connection.
+
+  **Example:** *(per-connection, provisioned automatically)*
+</ParamField>
+
+<Note>
+  The fast-path ingest URL is derived automatically from `PUBLIC_HOSTNAME` as `PUBLIC_HOSTNAME/agent-mail/ingest/v1`. You do not need to set a separate ingest URL variable.
+</Note>
+
+## Outbound provider — AWS SES
+
+Set these variables when `AGENT_MAIL_OUTBOUND_PROVIDER=ses`. They are not required when using the Cloudflare outbound provider.
+
+<ParamField path="AGENT_MAIL_AWS_REGION" type="string">
+  AWS region where your SES sending identity is configured.
+
+  **Example:** `us-east-1`
+</ParamField>
+
+<ParamField path="AGENT_MAIL_AWS_ACCESS_KEY_ID" type="string">
+  AWS access key ID with SES sending permissions.
+
+  **Example:** `AKIAIOSFODNN7EXAMPLE`
+</ParamField>
+
+<ParamField path="AGENT_MAIL_AWS_SECRET_ACCESS_KEY" type="string">
+  AWS secret access key paired with `AGENT_MAIL_AWS_ACCESS_KEY_ID`.
+
+  **Example:** `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`
+</ParamField>
+
+## Docker Compose specific
+
+These variables are used only by the Docker Compose deployment and have no effect in Kubernetes or other runtimes.
+
+<ParamField path="AGENTTEAM_EMAIL_VERSION" type="string">
+  Container image tag to pull for all AgentTeam Email services.
+
+  **Example:** `latest`
+</ParamField>
+
+<ParamField path="AGENTTEAM_EMAIL_PULL_POLICY" type="string">
+  Docker image pull policy. Corresponds to the Compose `pull_policy` option.
+
+  **Example:** `always`
+</ParamField>
+
+<ParamField path="AGENTTEAM_EMAIL_UID" type="number">
+  UID that container processes run as. Match this to the owner of any bind-mounted volumes.
+
+  **Example:** `1000`
+</ParamField>
+
+<ParamField path="AGENTTEAM_EMAIL_GID" type="number">
+  GID that container processes run as. Match this to the group of any bind-mounted volumes.
+
+  **Example:** `1000`
+</ParamField>
+
+<ParamField path="FRONTEND_PORT" type="number">
+  Host port to bind for the web application in Docker Compose. Does not affect in-container listen addresses.
+
+  **Example:** `23100`
+</ParamField>

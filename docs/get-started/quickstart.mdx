@@ -1,32 +1,93 @@
 ---
-title: 'Quickstart'
-description: 'Start with the current self-hosting documentation and validation workflow.'
+title: "Quickstart: deploy AgentTeam Email in minutes"
+sidebarTitle: "Quickstart"
+description: "Get AgentTeam Email running on your own infrastructure, configure Cloudflare ingest, and verify end-to-end delivery for your first agent mailbox."
 ---
 
-The public self-hosting interface is still being normalized. Start by reviewing
-the target runtime shape, then choose Compose for a single host or Helm for
-Kubernetes.
+This guide walks you through the fastest path to a working AgentTeam Email deployment. You will choose a runtime target, wire up Cloudflare Email Routing and a tunnel for secure inbound traffic, supply the required secrets, and bring the stack up — all from the command line. By the end you will have a live mailbox you can send a test message to and inspect in the web admin interface.
 
-## Read first
+<Note>
+  **Prerequisites**
 
-1. Review the [architecture](/concepts/architecture).
-2. Configure [Docker Compose self-hosting](/guides/self-host/docker-compose) or
-   [Helm self-hosting](/guides/self-host/helm).
-3. Configure [Cloudflare authentication and routing](/guides/self-host/cloudflare-authentication).
-4. Configure operator-owned Worker ingress. The [Tailscale](/guides/self-host/tailscale)
-   and [Cloudflare Tunnel](/guides/self-host/cloudflared) guides show two possible
-   examples.
+  Before you begin, make sure you have the following ready:
 
-## Local docs preview
+  - A [Cloudflare](https://cloudflare.com) account with your domain's DNS managed by Cloudflare.
+  - [Docker Compose v2+](https://docs.docker.com/compose/) installed on your host, **or** a running Kubernetes cluster with [Helm 3](https://helm.sh/) installed.
+  - Sufficient permissions on your Cloudflare account to create Email Routing rules and deploy Workers.
+</Note>
 
-From the repository root:
+<Steps>
+  <Step title="Choose your deployment method">
+    AgentTeam Email supports two first-class deployment targets. **Docker Compose** is the simplest option — every service runs as a container on one host and the entire stack comes up with a single command. **Helm** deploys to any Kubernetes cluster and is the right choice when you need horizontal scaling or want to integrate with an existing cluster.
 
-```bash
-mise run //docs:dev
-```
+    <CardGroup cols={2}>
+      <Card title="Docker Compose" icon="docker" href="/guides/self-host/docker-compose">
+        Single-host deployment. Ideal for getting started quickly or for small self-hosted setups.
+      </Card>
+      <Card title="Helm (Kubernetes)" icon="dharmachakra" href="/guides/self-host/helm">
+        Kubernetes deployment via the AgentTeam Email Helm chart. Suitable for production clusters.
+      </Card>
+    </CardGroup>
+  </Step>
 
-Validate docs changes before publishing:
+  <Step title="Configure Cloudflare Email Routing and deploy the ingest Worker">
+    AgentTeam Email receives inbound messages through [Cloudflare Email Routing](https://developers.cloudflare.com/email-routing/). You need to enable Email Routing on your domain, create a catch-all routing rule that forwards to the AgentTeam ingest Worker, and deploy the Worker to your Cloudflare account.
 
-```bash
-mise run //docs:check
-```
+    Follow the complete setup instructions, including how to scope routing rules per-agent, in the Cloudflare authentication guide.
+
+    <Card title="Cloudflare Authentication Setup" icon="cloud" href="/guides/self-host/cloudflare-authentication">
+      Enable Email Routing, deploy the ingest Worker, and bind your Cloudflare R2 bucket.
+    </Card>
+  </Step>
+
+  <Step title="Configure a fast-path tunnel">
+    The ingest Worker needs a path back to your AgentTeam Email stack to deliver captured messages. You can expose this endpoint through either **Tailscale** (a WireGuard-based overlay network) or a **Cloudflare Tunnel** (`cloudflared`). Both options keep your server off the public internet while still accepting inbound Worker callbacks.
+
+    <CardGroup cols={2}>
+      <Card title="Tailscale Tunnel" icon="shield-halved" href="/guides/self-host/tailscale">
+        Use Tailscale to create a private network path between your Cloudflare Worker and your server.
+      </Card>
+      <Card title="Cloudflare Tunnel" icon="cloud" href="/guides/self-host/cloudflared">
+        Use `cloudflared` to create a secure outbound-only tunnel from your server to Cloudflare's network.
+      </Card>
+    </CardGroup>
+  </Step>
+
+  <Step title="Set required secrets and environment variables">
+    AgentTeam Email is configured through environment variables. At minimum you need to supply credentials for your database, R2 bucket, outbound mail relay, and authentication secrets for the web application. Copy the example environment file included in the repository and fill in the required values.
+
+    <CardGroup cols={2}>
+      <Card title="Configuration Reference" icon="sliders" href="/reference/configuration">
+        Browse every configuration key, its type, default value, and whether it is required.
+      </Card>
+      <Card title="Environment Variables" icon="terminal" href="/reference/environment-variables">
+        Full list of environment variables accepted by each service in the stack.
+      </Card>
+    </CardGroup>
+  </Step>
+
+  <Step title="Start the stack and verify delivery">
+    Once your environment file is populated, bring the stack up and confirm every service is healthy.
+
+    ```bash
+    docker compose up -d && docker compose ps
+    ```
+
+    All services should report a status of `running`. Open the web admin interface at the hostname you configured as `PUBLIC_HOSTNAME` in your environment file, sign in with your admin credentials, and send a test message to any agent mailbox address. The message should appear in the mailbox within a few seconds. You can also inspect the corresponding `raw.eml`, `edge.json`, and `result.json` objects in your R2 bucket to confirm archival is working.
+
+    <Note>
+      If you are using Helm, run `kubectl get pods -n agentteam` to verify pod health, then access the web interface through the Ingress hostname you configured in `values.yaml`.
+    </Note>
+  </Step>
+</Steps>
+
+<Note>
+  The public API boundary for AgentTeam Email is under active development. Interfaces, environment variable names, and configuration keys may change between releases. Always refer to the [repository](https://github.com/agentteamhq/agentteam-email) and its release notes for the most current information before upgrading.
+</Note>
+
+## Next steps
+
+Now that your stack is running, explore these resources to go deeper.
+
+- [Architecture overview](/concepts/architecture) — learn how every component fits together, from Cloudflare Email Routing through WildDuck to your outbound relay.
+- [Configuration reference](/reference/configuration) — a complete reference for every knob you can turn to customise your deployment.
