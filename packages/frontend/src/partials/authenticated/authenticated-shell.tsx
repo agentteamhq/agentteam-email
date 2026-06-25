@@ -47,6 +47,14 @@ import {
 import { Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle
+} from '../../components/ui/card'
+import {
   Dialog,
   DialogClose,
   DialogContent,
@@ -104,6 +112,7 @@ import {
   rewriteEmailHTMLForIframe
 } from '../../lib/email-safety'
 import { cn } from '../../lib/utils'
+import { CloudflareConnectButton, CloudflareLogo } from './cloudflare-brand'
 import { SettingsDialog } from './settings-dialog'
 import {
   defaultAuthenticatedDashboardView,
@@ -1147,6 +1156,7 @@ export function AuthenticatedSidebar({
   const activeMailItem = view.navMain.find((item) => item.id === view.activeItemId)
   const activeManagementItem = view.managementNav?.find((item) => item.id === view.activeItemId)
   const activeItem = activeMailItem ?? activeManagementItem ?? view.navMain[0]
+  const hasExplicitlyNoAccounts = Boolean(view.accounts && view.accounts.length === 0)
 
   return (
     <>
@@ -1299,7 +1309,7 @@ export function AuthenticatedSidebar({
               </div>
               <Button
                 className='w-full justify-start'
-                disabled={!onComposeOpen}
+                disabled={!onComposeOpen || hasExplicitlyNoAccounts}
                 onClick={onComposeOpen}
                 size='sm'
                 type='button'
@@ -1807,11 +1817,13 @@ function ManagementNavButton({
 export function AuthenticatedDashboardContent({
   onAttachmentPreview,
   onEmailAction,
+  onOnboardingConnect,
   onRetry,
   view = defaultAuthenticatedDashboardView
 }: {
   onAttachmentPreview?: (attachment: AuthenticatedEmailAttachment, email: AuthenticatedEmailPreview) => void
   onEmailAction?: (action: AuthenticatedEmailAction, email: AuthenticatedEmailPreview) => void
+  onOnboardingConnect?: () => void
   onRetry?: () => void
   view?: AuthenticatedDashboardView
 }) {
@@ -1831,6 +1843,15 @@ export function AuthenticatedDashboardContent({
   }
 
   if (view.state === 'empty') {
+    if (view.onboardingPrompt) {
+      return (
+        <DashboardOnboardingPrompt
+          onConnect={onOnboardingConnect}
+          view={view.onboardingPrompt}
+        />
+      )
+    }
+
     return (
       <EmailPreviewEmptyPane
         description={view.emptyDescription}
@@ -1854,6 +1875,48 @@ export function AuthenticatedDashboardContent({
       description='Choose a message from the mailbox to read it here.'
       title='Select a message'
     />
+  )
+}
+
+function DashboardOnboardingPrompt({
+  onConnect,
+  view
+}: {
+  onConnect?: () => void
+  view: NonNullable<AuthenticatedDashboardView['onboardingPrompt']>
+}) {
+  const isConnecting = view.state === 'connecting'
+
+  return (
+    <div className='flex min-h-[calc(100dvh-3.5rem)] items-center justify-center p-6'>
+      <Card className='w-full max-w-md shadow-none'>
+        <CardHeader>
+          <CloudflareLogo className='mb-2 h-8 w-auto' />
+          <CardTitle>{view.title}</CardTitle>
+          <CardDescription>{view.description}</CardDescription>
+        </CardHeader>
+        <CardContent className='grid gap-3'>
+          {view.state === 'error' ? (
+            <div className='text-destructive flex items-start gap-2 text-sm'>
+              <WarningIcon data-icon='inline-start' />
+              <span>{view.errorDescription ?? 'Cloudflare could not be connected.'}</span>
+            </div>
+          ) : null}
+          {view.helperText ? (
+            <p className='text-muted-foreground text-sm leading-6'>{view.helperText}</p>
+          ) : null}
+        </CardContent>
+        <CardFooter>
+          <CloudflareConnectButton
+            busy={isConnecting}
+            disabled={isConnecting || !onConnect}
+            onClick={onConnect}
+          >
+            {isConnecting ? 'Connecting Cloudflare' : view.actionLabel}
+          </CloudflareConnectButton>
+        </CardFooter>
+      </Card>
+    </div>
   )
 }
 

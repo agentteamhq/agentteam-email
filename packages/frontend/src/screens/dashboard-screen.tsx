@@ -62,6 +62,7 @@ export interface DashboardScreenProps {
     email: AuthenticatedEmailPreview
   ) => void
   onEmailAction?: (action: AuthenticatedEmailAction, email: AuthenticatedEmailPreview) => void
+  onDashboardOnboardingConnect?: () => void
   onMailActionDialogOpenChange?: (dialog: AuthenticatedMailActionDialogKind, open: boolean) => void
   onMailDeleteConfirm?: () => void
   onMailMoveSubmit?: () => void
@@ -121,6 +122,7 @@ export function DashboardScreen({
   onComposeAttachmentAdd,
   onEmailAttachmentPreview,
   onEmailAction,
+  onDashboardOnboardingConnect,
   onMailActionDialogOpenChange,
   onMailDeleteConfirm,
   onMailMoveSubmit,
@@ -369,6 +371,7 @@ export function DashboardScreen({
           <AuthenticatedDashboardContent
             onAttachmentPreview={onEmailAttachmentPreview}
             onEmailAction={handleEmailAction}
+            onOnboardingConnect={onDashboardOnboardingConnect}
             onRetry={onMessageRetry}
             view={resolvedDashboardView}
           />

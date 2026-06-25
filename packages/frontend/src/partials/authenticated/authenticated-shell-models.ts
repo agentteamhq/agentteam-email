@@ -264,9 +264,19 @@ export interface AuthenticatedDashboardView {
   emptyTitle: string
   errorDescription?: string
   errorTitle?: string
+  onboardingPrompt?: AuthenticatedDashboardOnboardingView
   retryLabel?: string
   selectedEmail?: AuthenticatedEmailPreview
   state: AuthenticatedViewState
+}
+
+export interface AuthenticatedDashboardOnboardingView {
+  actionLabel: string
+  description: string
+  errorDescription?: string
+  helperText?: string
+  state: 'ready' | 'connecting' | 'error'
+  title: string
 }
 
 export interface AuthenticatedComposeView {

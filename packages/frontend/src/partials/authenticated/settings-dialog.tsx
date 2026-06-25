@@ -2,7 +2,6 @@ import * as React from 'react'
 import {
   ArrowClockwiseIcon,
   CheckCircleIcon,
-  CloudIcon,
   GlobeHemisphereWestIcon,
   IdentificationCardIcon,
   LockIcon,
@@ -27,7 +26,14 @@ import {
   BreadcrumbSeparator
 } from '../../components/ui/breadcrumb'
 import { Button } from '../../components/ui/button'
-import { Card, CardContent } from '../../components/ui/card'
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
+} from '../../components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -53,6 +59,7 @@ import {
 } from '../../components/ui/sidebar'
 import { cn } from '../../lib/utils'
 import { AgentEnrollmentCommandSummary } from './agent-enrollment-command'
+import { CloudflareConnectButton, CloudflareLogo } from './cloudflare-brand'
 import type { SettingsSectionId } from './settings-dialog-sections'
 import type {
   AgentAccessAgent,
@@ -528,8 +535,7 @@ function agentAccessControllerFromState(state: AgentAccessSettingsState | undefi
     canDenyApproval: state?.canDenyApproval ?? Boolean(state?.onDenyApproval),
     canRefresh: state?.canRefresh ?? hasRefresh,
     canRevokeAgent: state?.canRevokeAgent ?? Boolean(state?.onRevokeAgent),
-    canRevokeCapabilityGrant:
-      state?.canRevokeCapabilityGrant ?? Boolean(state?.onRevokeCapabilityGrant),
+    canRevokeCapabilityGrant: state?.canRevokeCapabilityGrant ?? Boolean(state?.onRevokeCapabilityGrant),
     connectionHandoff: state?.connectionHandoff ?? null,
     createdAgentEnrollment: state?.createdAgentEnrollment ?? null,
     message: state?.message ?? null,
@@ -757,11 +763,7 @@ function AgentAccessPaperclipConnectionsSection({
   )
 }
 
-function AgentAccessPaperclipConnectionRow({
-  connection
-}: {
-  connection: AgentAccessPaperclipConnection
-}) {
+function AgentAccessPaperclipConnectionRow({ connection }: { connection: AgentAccessPaperclipConnection }) {
   return (
     <div className='grid gap-2 border-b p-3 text-sm last:border-b-0'>
       <div className='flex items-start justify-between gap-3'>
@@ -1074,8 +1076,8 @@ function AgentAccessApprovalRow({
       ))}
       <p className='text-muted-foreground text-xs'>
         Agent {agent?.name ?? formatReferenceId(approval.agentId) ?? 'Pending'} · Host{' '}
-        {host?.name ?? formatReferenceId(approval.hostId) ?? 'Pending'} ·{' '}
-        {formatStatusLabel(approval.method)} · Expires {formatDateTime(approval.expiresAt)}
+        {host?.name ?? formatReferenceId(approval.hostId) ?? 'Pending'} · {formatStatusLabel(approval.method)}{' '}
+        · Expires {formatDateTime(approval.expiresAt)}
       </p>
       <div className='flex flex-wrap gap-2'>
         <Button
@@ -1271,7 +1273,9 @@ function MailRuntimeStatusPanel({ settings }: { settings: DomainSettingsControll
           </div>
           <div className='flex items-center gap-2'>
             {status ? (
-              <Badge variant={status.ok ? 'secondary' : 'destructive'}>{formatStatusLabel(status.status)}</Badge>
+              <Badge variant={status.ok ? 'secondary' : 'destructive'}>
+                {formatStatusLabel(status.status)}
+              </Badge>
             ) : null}
             <Button
               disabled={settings.busy || settings.readOnly}
@@ -1294,9 +1298,7 @@ function MailRuntimeStatusPanel({ settings }: { settings: DomainSettingsControll
             <DomainDetailRow
               label='Modules'
               value={
-                moduleSummary
-                  ? `${moduleSummary.ok}/${moduleSummary.total} healthy`
-                  : 'No module status'
+                moduleSummary ? `${moduleSummary.ok}/${moduleSummary.total} healthy` : 'No module status'
               }
             />
             <DomainDetailRow
@@ -1335,26 +1337,31 @@ function AddDomainPanel({ settings }: { settings: DomainSettingsController }) {
   if (!activeGrant) {
     return (
       <div className='grid max-w-3xl gap-4'>
-        <div className='grid gap-2'>
-          <div className='flex items-start justify-between gap-3'>
-            <div className='min-w-0'>
-              <p className='font-medium'>Add domain</p>
-              <p className='text-muted-foreground text-sm'>
-                Authorize Cloudflare to connect an email domain to this workspace.
-              </p>
-            </div>
-            <Badge variant='outline'>Not connected</Badge>
-          </div>
-          <Button
-            className='w-fit bg-[#f38020] text-white hover:bg-[#d96f18]'
-            disabled={settings.busy || settings.readOnly}
-            onClick={settings.onStartOAuth}
-            size='sm'
+        <Card className='gap-0 py-4 shadow-none'>
+          <CardHeader
+            className='flex flex-col gap-3 px-4 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center'
           >
-            <CloudIcon />
-            Connect Cloudflare
-          </Button>
-        </div>
+            <div className='flex min-w-0 items-start gap-3'>
+              <CloudflareLogo className='mt-0.5 h-6 w-auto shrink-0' />
+              <div className='min-w-0'>
+                <CardTitle className='text-sm'>Connect your domain</CardTitle>
+                <CardDescription className='mt-1'>Connect Cloudflare to choose your domain.</CardDescription>
+              </div>
+            </div>
+            <CardAction
+              className='w-full self-stretch justify-self-auto sm:w-56 sm:self-center sm:justify-self-end'
+            >
+              <CloudflareConnectButton
+                busy={settings.busy}
+                className='h-8 text-sm'
+                disabled={settings.busy || settings.readOnly}
+                onClick={settings.onStartOAuth}
+              >
+                Continue with Cloudflare
+              </CloudflareConnectButton>
+            </CardAction>
+          </CardHeader>
+        </Card>
         {settings.message ? <p className='text-muted-foreground text-sm'>{settings.message}</p> : null}
       </div>
     )
@@ -1713,7 +1720,9 @@ function constraintSummary(constraints: Record<string, unknown> | null): string 
   const organizationId = typeof constraints.organizationId === 'string' ? constraints.organizationId : null
   const details = constraintDetailItems(constraints)
   if (mailboxAddress) {
-    return details.length > 0 ? `${mailboxAddress} · ${formatConstraintSummaryDetails(details)}` : mailboxAddress
+    return details.length > 0
+      ? `${mailboxAddress} · ${formatConstraintSummaryDetails(details)}`
+      : mailboxAddress
   }
   if (organizationId) {
     const organization = `Workspace ${formatReferenceId(organizationId)}`
@@ -1723,7 +1732,9 @@ function constraintSummary(constraints: Record<string, unknown> | null): string 
 }
 
 function formatConstraintSummaryDetails(details: ReadonlyArray<string>): string {
-  return details.length > 2 ? `${details.slice(0, 2).join(' · ')} · ${details.length - 2} more` : details.join(' · ')
+  return details.length > 2
+    ? `${details.slice(0, 2).join(' · ')} · ${details.length - 2} more`
+    : details.join(' · ')
 }
 
 function formatReferenceId(value: string | null | undefined): string | null {
