@@ -42,7 +42,16 @@ Stable release `vX.Y.Z` publishes:
 - Helm chart OCI artifact `oci://ghcr.io/agentteamhq/agentteam-email --version X.Y.Z`
 
 Prerelease `vX.Y.Z-rc.N` publishes image and Helm chart versions as
-`X.Y.Z-rc.N` without the leading `v`.
+`X.Y.Z-rc.N` without the leading `v`. It also moves these first-party image tags
+to the same image digests:
+
+- `ghcr.io/agentteamhq/agentteam-email/atemail-mail-control-service:next`
+- `ghcr.io/agentteamhq/agentteam-email/atemail-web-server:next`
+- `ghcr.io/agentteamhq/agentteam-email/atemail-cli:next`
+
+Prerelease workflows must not update `latest`. The `next` image tag tracks the
+most recently published RC candidate only; stable releases move `latest` and
+leave `next` untouched.
 
 ## Source Tree Versions
 
@@ -84,6 +93,15 @@ Pin a release with:
 AGENTTEAM_EMAIL_VERSION=X.Y.Z docker compose up -d
 ```
 
+Track the latest RC image set with:
+
+```bash
+AGENTTEAM_EMAIL_VERSION=next docker compose up -d
+```
+
+Use `next` only for RC validation. Production installs should pin an exact
+release version or use the default stable `latest` tag.
+
 ## Helm
 
 Public docs may omit `--version` to install the latest stable chart:
@@ -105,6 +123,18 @@ helm upgrade --install atemail \
   --namespace agentteam-email \
   --create-namespace \
   -f values.yaml
+```
+
+There is no moving `next` Helm chart tag. RC charts are installed by exact chart
+version. To run the latest RC images with Helm, set the first-party image tags to
+`next` in values:
+
+```yaml
+images:
+  mailControlService:
+    tag: next
+  webServer:
+    tag: next
 ```
 
 The chart defaults first-party images to `latest` with `imagePullPolicy:
@@ -178,6 +208,7 @@ The tag workflow publishes:
 
 - exact first-party image tags without the leading `v`
 - `latest` image tags for stable releases only
+- `next` image tags for RC prereleases only
 - the Helm chart OCI artifact with the same version
 - at-email CLI binaries and `checksums.txt` attached to the GitHub Release
 - at-email CLI Claude Code and Codex plugin bundles attached to the GitHub
@@ -186,9 +217,9 @@ The tag workflow publishes:
 - npm package tarball provenance through npm trusted publishing and GitHub
   artifact attestations for the generated tarballs
 
-Prerelease workflows publish exact prerelease versions only and must not update
-`latest` image tags. Prerelease npm packages use the `next` dist-tag; stable npm
-packages use the `latest` dist-tag.
+Prerelease workflows publish exact prerelease versions, move first-party image
+`next` tags, and must not update `latest` image tags. Prerelease npm packages
+use the `next` dist-tag; stable npm packages use the `latest` dist-tag.
 
 Release packaging stamps the Helm chart version and app version from the Git
 tag. The workflow must not require npm package version bumps.

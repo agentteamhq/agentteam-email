@@ -21,6 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       is_release: ${{ steps.release.outputs.is_release }}
+      is_prerelease: ${{ steps.release.outputs.is_prerelease }}
       is_stable: ${{ steps.release.outputs.is_stable }}
       version: ${{ steps.release.outputs.version }}
     steps:
@@ -31,17 +32,20 @@ jobs:
         id: release
         run: |
           is_release=false
+          is_prerelease=false
           is_stable=false
           version=not-a-release
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             tag="${GITHUB_REF_NAME}"
-            if [[ ! "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
-              echo "release tags must be vX.Y.Z or vX.Y.Z-prerelease" >&2
+            if [[ ! "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]]; then
+              echo "release tags must be vX.Y.Z or vX.Y.Z-rc.N" >&2
               exit 1
             fi
             version="${tag#v}"
             is_release=true
-            if [[ "${version}" != *-* ]]; then
+            if [[ "${version}" == *-* ]]; then
+              is_prerelease=true
+            else
               is_stable=true
             fi
           elif [[ "${GITHUB_REF_NAME}" != "main" ]]; then
@@ -50,6 +54,7 @@ jobs:
           fi
           {
             echo "is_release=${is_release}"
+            echo "is_prerelease=${is_prerelease}"
             echo "is_stable=${is_stable}"
             echo "version=${version}"
           } >> "${GITHUB_OUTPUT}"
@@ -247,6 +252,7 @@ jobs:
             type=edge,branch=main
             type=sha,enable=${{ github.ref == 'refs/heads/main' }}
             type=raw,value=${{ needs.build_test.outputs.version }},enable=${{ needs.build_test.outputs.is_release == 'true' }}
+            type=raw,value=next,enable=${{ needs.build_test.outputs.is_prerelease == 'true' }}
             type=raw,value=latest,enable=${{ needs.build_test.outputs.is_stable == 'true' }}
           flavor: |
             latest=false
@@ -261,6 +267,7 @@ jobs:
             type=edge,branch=main
             type=sha,enable=${{ github.ref == 'refs/heads/main' }}
             type=raw,value=${{ needs.build_test.outputs.version }},enable=${{ needs.build_test.outputs.is_release == 'true' }}
+            type=raw,value=next,enable=${{ needs.build_test.outputs.is_prerelease == 'true' }}
             type=raw,value=latest,enable=${{ needs.build_test.outputs.is_stable == 'true' }}
           flavor: |
             latest=false
@@ -275,6 +282,7 @@ jobs:
             type=edge,branch=main
             type=sha,enable=${{ github.ref == 'refs/heads/main' }}
             type=raw,value=${{ needs.build_test.outputs.version }},enable=${{ needs.build_test.outputs.is_release == 'true' }}
+            type=raw,value=next,enable=${{ needs.build_test.outputs.is_prerelease == 'true' }}
             type=raw,value=latest,enable=${{ needs.build_test.outputs.is_stable == 'true' }}
           flavor: |
             latest=false
