@@ -1,0 +1,112 @@
+---
+title: "Agent mailboxes: dedicated email addresses for AI agents"
+sidebarTitle: "Agent Mailboxes"
+description: "Understand how agent-owned mailboxes work, how messages are reviewed safely, and what authentication evidence is available for every inbound message."
+---
+
+Every AI agent in AgentTeam Email gets its own email address backed by a dedicated mailbox. Mailboxes are first-class IMAP mailboxes powered by WildDuck, which means agents can receive mail, send replies, organize messages into folders, and be granted or revoked access independently of one another.
+
+## How mailboxes work
+
+Each agent mailbox has a unique email address on your domain — for example, `research-agent@yourdomain.example`. The mailbox is provisioned in WildDuck and appears like any other IMAP mailbox. Inbound messages flow through the full AgentTeam Email pipeline before arriving: Cloudflare captures the message at the edge, archives the raw bytes in R2 storage, and the mail control service replays the verified message into the mailbox.
+
+```
+Cloudflare Worker → R2 archive → mail control service → agent mailbox
+```
+
+Agents can send mail from their mailbox through the authenticated web server. The web server verifies the agent's identity and mailbox permission before initiating submission through WildDuck.
+
+## Administering mailboxes
+
+<Tabs>
+  <Tab title="Hosted (app.agentteam.email)">
+    If you use the hosted AgentTeam Email service, log in at
+    [app.agentteam.email](https://app.agentteam.email) to create mailboxes,
+    manage credentials, set up Cloudflare integration, and review messages for
+    any agent in your organization.
+  </Tab>
+  <Tab title="Self-hosted">
+    On a self-hosted install, the web app is available at your configured
+    `PUBLIC_HOSTNAME`. Use it to create and administer mailboxes, manage API
+    keys and IMAP credentials, connect your Cloudflare account, and review
+    inbound messages.
+  </Tab>
+</Tabs>
+
+<Note>
+  IMAP access to agent mailboxes is handled by WildDuck internally. To connect
+  an email client or agent runtime tool directly over IMAP, generate IMAP
+  credentials through the web app's credential management section. Public
+  clients must use web-server-issued credentials — WildDuck admin credentials
+  are never exposed to external callers.
+</Note>
+
+## Reviewing messages
+
+The web app provides a multi-panel message review interface designed for safe inspection of agent mail. Because agents may receive messages from untrusted senders, the interface applies several protections before rendering any content.
+
+<CardGroup cols={2}>
+  <Card title="Safe HTML view" icon="shield">
+    The HTML body is sanitized and rendered with all external links rewritten to
+    inert link IDs. Remote images are blocked by default. The original link
+    destinations are available in the external links panel, not inline.
+  </Card>
+  <Card title="Plain text view" icon="align-left">
+    The plain text alternative is shown as-is without HTML rendering, giving you
+    a clean, unambiguous view of the message content.
+  </Card>
+  <Card title="Attachments panel" icon="paperclip">
+    All message attachments are listed separately. Inline images may render only
+    when they are backed by message-owned attachments, never from remote URLs.
+  </Card>
+  <Card title="External links panel" icon="arrow-up-right-from-square">
+    Every link extracted from the message is listed with its scheme, host, and
+    anchor text. Clicking a link shows the normalized destination and requires
+    an explicit continue action before any navigation occurs.
+  </Card>
+</CardGroup>
+
+### Security evidence panel
+
+Each inbound message carries a full set of email authentication verdicts collected at the Cloudflare edge. The security evidence panel shows:
+
+- **SPF** — whether the sending server was authorized to send for the envelope domain.
+- **DKIM** — which domains signed the message and whether the signatures verified.
+- **ARC** — the Authenticated Received Chain, showing intermediate handling hops.
+- **DMARC** — whether the message passed or failed the domain owner's DMARC policy.
+
+These verdicts come from the `edge.json` archive object written by the Cloudflare Email Worker at the moment of receipt. They reflect conditions at the Cloudflare edge and are preserved verbatim in the archive for forensic review.
+
+## Security features
+
+AgentTeam Email applies a layered set of protections to inbound content so that reviewing agent mail does not inadvertently expose you to malicious links or tracking.
+
+<Accordion title="Link rewriting in HTML view">
+  Every link in the sanitized HTML view is replaced with an inert marker before
+  the page is rendered. No link in the HTML view navigates directly to an
+  external destination. When you want to follow a link, open the external links
+  panel, review the full normalized URL and host, and explicitly choose to
+  continue.
+</Accordion>
+
+<Accordion title="Remote image blocking">
+  Remote images referenced in the HTML body are not loaded by default. This
+  prevents pixel-tracking and avoids making outbound requests to third-party
+  servers when you open a message. Only images backed by message-owned
+  attachments may render inline.
+</Accordion>
+
+<Accordion title="Raw message preservation">
+  The exact RFC822 bytes received from Cloudflare are stored in `raw.eml` in
+  the archive bucket, unmodified and without any injected headers. You can
+  retrieve the raw archive object at any time for forensic analysis, header
+  inspection, or independent DKIM verification.
+</Accordion>
+
+<Accordion title="Full authentication evidence per message">
+  Every inbound message carries the SPF, DKIM, ARC, and DMARC verdicts observed
+  at the Cloudflare edge. The evidence is written to `edge.json` in the archive
+  and bound to the exact `raw.eml` object by a SHA-256 integrity hash. The
+  security evidence panel in the web app surfaces these verdicts directly from
+  the archive without relying on mail headers that could be modified in transit.
+</Accordion>

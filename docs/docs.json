@@ -1,41 +1,64 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "AgentTeam Email",
+  "name": "Agentteam",
+  "theme": "luma",
+  "favicon": "https://media.brand.dev/432b1c4c-9d2d-4272-b2e9-dfca480495fd.png",
   "colors": {
-    "primary": "#111827"
+    "primary": "#04449c"
   },
-  "metadata": {
-    "timestamp": true
+  "fonts": {
+    "heading": { "family": "Times New Roman" },
+    "body": { "family": "Times New Roman" }
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/agentteamhq/agentteam-email"
+    }
   },
   "navigation": {
-    "groups": [
+    "tabs": [
       {
-        "group": "Get started",
-        "pages": ["index", "get-started/quickstart"]
-      },
-      {
-        "group": "Concepts",
-        "pages": ["concepts/architecture"]
-      },
-      {
-        "group": "Guides",
-        "pages": [
-          "guides/self-hosting",
-          "guides/self-host/docker-compose",
-          "guides/self-host/helm",
-          "guides/self-host/cloudflare-authentication",
-          "guides/self-host/tailscale",
-          "guides/self-host/cloudflared"
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": ["index", "get-started/quickstart"]
+          },
+          {
+            "group": "Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/mail-flow",
+              "concepts/agent-mailboxes"
+            ]
+          },
+          {
+            "group": "Deploy",
+            "pages": [
+              "guides/self-hosting",
+              "guides/self-host/docker-compose",
+              "guides/self-host/helm"
+            ]
+          },
+          {
+            "group": "Cloudflare Setup",
+            "pages": [
+              "guides/self-host/cloudflare-authentication",
+              "guides/self-host/tailscale",
+              "guides/self-host/cloudflared"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/configuration",
+              "reference/environment-variables",
+              "reference/archive-layout",
+              "operations/validation"
+            ]
+          }
         ]
-      },
-      {
-        "group": "Reference",
-        "pages": ["reference/configuration", "reference/example-files", "reference/api"]
-      },
-      {
-        "group": "Operations",
-        "pages": ["operations/validation"]
       }
     ]
   }

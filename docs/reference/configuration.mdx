@@ -1,28 +1,98 @@
 ---
-title: 'Configuration'
-description: 'Required configuration surfaces for self-hosted installs.'
+title: "AgentTeam Email self-hosted configuration reference"
+sidebarTitle: "Configuration"
+description: "All configuration for AgentTeam Email flows through environment variables or Helm values — nothing is hardcoded in the container images."
 ---
 
-Self-hosted installs must provide configuration explicitly through Helm values,
-referenced Secrets or ConfigMaps, and Cloudflare resource configuration.
+Every AgentTeam Email service reads its configuration from environment variables at startup. In Docker Compose deployments you supply those variables through a `.env` file; in Kubernetes you pass them as Helm values, Secrets, or ConfigMaps. No configuration is baked into the published container images, so the same image runs in every environment.
 
-Published Helm installs use the chart artifact:
+## Helm chart
+
+Published Helm releases are distributed as an OCI artifact:
 
 ```text
 oci://ghcr.io/agentteamhq/agentteam-email
 ```
 
-## Required operator inputs
+Sensitive values support both inline `value` and Kubernetes-native secret references via `valueFrom`:
 
-- public web app URL
-- public web app URL reachable at `/agent-mail/ingest/v1`
-- MongoDB connection URLs for app, WildDuck, and control databases
-- Redis URL for the mail stack
-- R2-compatible archive endpoint, bucket, access key, and secret
-- WildDuck admin access token and access-control secret
-- mail control API token
-- outbound provider selection: `cloudflare` or `ses`
-- Cloudflare account, zone, token, Worker, R2, DNS, and Email Routing settings
-- production auth and encryption secrets for the web app
+```yaml
+env:
+  - name: BETTER_AUTH_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: agentteam-email-secrets
+        key: betterAuthSecret
+  - name: NODE_ENV
+    value: production
+```
 
-See the Helm self-host guide for concrete variable names and values files.
+You can use `secretKeyRef` for secrets and `configMapKeyRef` for non-sensitive values in the same `env` block.
+
+<Tip>
+  Starting from the Docker Compose example is the fastest way to understand all required variables. Copy `docs/examples/compose/.env.example` from the repository, fill in your values, then migrate those same values to Helm when you move to Kubernetes.
+</Tip>
+
+## Web app
+
+These variables configure the public-facing web application.
+
+| Variable | Description |
+|---|---|
+| `PUBLIC_HOSTNAME` | Fully-qualified public URL of your deployment, e.g. `https://mail.company.example`. The Cloudflare Worker uses this URL to deliver inbound notifications to `/agent-mail/ingest/v1`. |
+| `BETTER_AUTH_SECRET` | Long random string used to sign and verify authentication sessions. Generate a fresh value for every environment. |
+| `ENCRYPT_SECRET_KEY` | 32 random bytes encoded as base64url. Used to encrypt sensitive data at rest. Generate a fresh value per environment. |
+| `NODE_ENV` | Runtime mode. Set to `production` for all deployed environments. |
+
+## Databases
+
+AgentTeam Email uses three separate MongoDB databases and one Redis instance. Keep them on separate logical databases even when you share a single MongoDB server.
+
+| Variable | Description |
+|---|---|
+| `AGENTTEAM_EMAIL_APP_MONGODB_URI` | MongoDB connection URI for the main web application database. |
+| `AGENTTEAM_EMAIL_WILDDUCK_MONGODB_URI` | MongoDB connection URI for the WildDuck mail server database. |
+| `AGENTTEAM_EMAIL_CONTROL_MONGODB_URI` | MongoDB connection URI for the mail-control-service operational database (`agent_mail_control`). Must be a separate database — do not share WildDuck collections. |
+| `AGENTTEAM_EMAIL_REDIS_URL` | Redis connection URL used by the mail stack for queuing and coordination. |
+
+<Note>
+  The Docker Compose `compose.yaml` file provisions bundled MongoDB and Redis containers and sets these URIs automatically. Use `compose.no-db.yaml` when you supply your own managed database services and set all four variables explicitly.
+</Note>
+
+## Object storage
+
+AgentTeam Email archives every inbound and outbound message to an S3-compatible object store. Cloudflare R2 is the reference implementation, but any S3-compatible endpoint works.
+
+| Variable | Description |
+|---|---|
+| `AGENT_MAIL_R2_ENDPOINT` | S3-compatible storage endpoint URL, e.g. `https://<account-id>.r2.cloudflarestorage.com`. |
+| `AGENT_MAIL_R2_REGION` | Storage region. Use `auto` for Cloudflare R2. |
+| `AGENT_MAIL_R2_BUCKET` | Bucket name for the mail archive, e.g. `agent-mail-archive`. |
+| `AGENT_MAIL_R2_ACCESS_KEY_ID` | Access key ID for storage authentication. |
+| `AGENT_MAIL_R2_SECRET_ACCESS_KEY` | Secret access key for storage authentication. |
+
+See the [archive layout reference](/reference/archive-layout) for the full object key structure written to this bucket.
+
+## Mail stack
+
+These variables authenticate the internal services that make up the mail stack.
+
+| Variable | Description |
+|---|---|
+| `AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN` | Admin access token for the WildDuck API. Required for mailbox provisioning and message delivery. |
+| `AGENT_MAIL_WILDDUCK_ACCESS_CONTROL_SECRET` | Shared secret used for WildDuck access-control API calls. |
+| `AGENT_MAIL_OUTBOUND_PROVIDER` | Outbound mail provider. Accepted values are `cloudflare` and `ses`. |
+
+## Cloudflare
+
+When `AGENT_MAIL_OUTBOUND_PROVIDER=cloudflare` or when you use Cloudflare Email Routing for inbound, you must supply these credentials so the control service can provision and manage Cloudflare resources on your behalf.
+
+| Variable | Description |
+|---|---|
+| `AGENT_MAIL_CLOUDFLARE_API_TOKEN` | Cloudflare API token with permissions to manage Workers, DNS, and Email Routing for your zones. |
+| `AGENT_MAIL_CLOUDFLARE_ACCOUNT_ID` | Your Cloudflare account ID. |
+| `AGENT_MAIL_CLOUDFLARE_WORKER_SCRIPT_NAME` | The name of the Cloudflare Worker script deployed to receive inbound mail, e.g. `agent-mail-ingress`. |
+
+---
+
+For the complete list of every variable including optional and advanced settings, see the [environment variables reference](/reference/environment-variables).

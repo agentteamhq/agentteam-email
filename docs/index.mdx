@@ -1,30 +1,45 @@
 ---
-title: 'AgentTeam Email'
-description: 'Documentation for operating and self-hosting AgentTeam Email.'
+title: "AgentTeam Email: email infrastructure for AI agents"
+sidebarTitle: "Introduction"
+description: "AgentTeam Email gives every AI agent a dedicated mailbox with inbound capture, archive storage, outbound delivery, and a web admin interface."
+slug: index
 ---
 
-AgentTeam Email is an email control plane for agent-owned mailboxes, inbound
-message capture, and operator-managed mail infrastructure.
+AgentTeam Email is an open-source email service designed so every AI agent in your system gets its own fully functional mailbox. You self-host the entire stack — there are no third-party mailbox providers and no shared inboxes. Mail flows in through Cloudflare Email Routing, gets archived to R2-compatible object storage, and is delivered outbound through ZoneMTA. A web application lets you administer mailboxes, review messages, and manage your Cloudflare integration, all from one place.
 
-The current documentation focuses on the self-hosted deployment shape: the web
-app, mail control service, Cloudflare Email Worker, archive storage, mail
-services, and the operator-owned Worker ingress route.
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/get-started/quickstart">
+    Deploy AgentTeam Email in minutes with Docker Compose or Helm and send your first agent message.
+  </Card>
+  <Card title="Architecture" icon="diagram-project" href="/concepts/architecture">
+    Understand how inbound capture, archive storage, and outbound delivery fit together.
+  </Card>
+  <Card title="Self-Hosting" icon="server" href="/guides/self-hosting">
+    Choose between a single-host Docker Compose deployment or a Kubernetes Helm chart.
+  </Card>
+  <Card title="Configuration" icon="sliders" href="/reference/configuration">
+    Browse every configuration key, its type, and its default value.
+  </Card>
+</CardGroup>
 
-Public repository:
+## What AgentTeam Email provides
 
-```text
-https://github.com/agentteamhq/agentteam-email
-```
+- **Dedicated agent mailboxes** — each agent receives its own email address backed by a [WildDuck](https://wildduck.email/) IMAP server, keeping agent mail fully isolated from every other mailbox on your domain.
+- **Inbound mail capture** — Cloudflare Email Routing forwards incoming messages to a Cloudflare Worker that normalises and stores each message before forwarding it into the WildDuck mailbox.
+- **Raw message archival** — every inbound message is written to R2-compatible object storage as three files: `raw.eml` (the original RFC 5322 message), `edge.json` (Cloudflare envelope metadata), and `result.json` (processing outcome), giving you a complete, inspectable audit trail.
+- **Outbound delivery** — agents send mail through ZoneMTA, which can relay via Cloudflare Email or Amazon SES, so you retain full control over your sending reputation and delivery pipeline.
+- **Web admin interface** — an authenticated web application lets you create and manage mailboxes, inspect individual messages, and configure your Cloudflare Email Routing integration without touching the CLI.
+- **Flexible self-hosting** — run the full stack on a single host with Docker Compose, or deploy to any Kubernetes cluster using the included Helm chart.
 
-Canonical public URLs:
+## Deploy AgentTeam Email
 
-- Website: [https://www.agentteam.email](https://www.agentteam.email)
-- App: [https://app.agentteam.email](https://app.agentteam.email)
-- Docs: [https://agentteamemail.mintlify.com](https://agentteamemail.mintlify.com)
+Pick the deployment path that matches your infrastructure and follow the step-by-step guide.
 
-## Start here
-
-- [Quickstart](/get-started/quickstart)
-- [Architecture](/concepts/architecture)
-- [Self-hosting guides](/guides/self-hosting)
-- [Configuration reference](/reference/configuration)
+<CardGroup cols={2}>
+  <Card title="Docker Compose" icon="docker" href="/guides/self-host/docker-compose">
+    The fastest way to get started — everything runs on a single host with a single `docker compose up`.
+  </Card>
+  <Card title="Helm (Kubernetes)" icon="dharmachakra" href="/guides/self-host/helm">
+    Deploy to any Kubernetes cluster using the AgentTeam Email Helm chart.
+  </Card>
+</CardGroup>
