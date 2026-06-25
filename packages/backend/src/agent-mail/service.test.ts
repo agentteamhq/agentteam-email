@@ -151,15 +151,6 @@ describe('Agent Mail service status boundary', () => {
         domains_failed: 1,
         issues: ['provisioning failed', 'archive_key result_secret_005 failed']
       },
-      tunnel: {
-        external_host: 'tunnel-private.example.test',
-        public_notify_url: 'https://tunnel-private.example.test/notify',
-        listen_url: 'http://127.0.0.1:8080',
-        notify_path: '/private-notify',
-        configured: true,
-        ok: true,
-        issues: ['public_notify_url https://tunnel-private.example.test/notify']
-      },
       domains: [
         {
           domain: 'example.test',
@@ -267,12 +258,7 @@ describe('Agent Mail service status boundary', () => {
         status: 'failed'
       },
       selectedProvider: 'cloudflare',
-      status: 'degraded',
-      tunnel: {
-        configured: true,
-        issues: ['Runtime issue detected. Check server logs for details.'],
-        ok: true
-      }
+      status: 'degraded'
     })
     expect(serialized).not.toContain('source_files')
     expect(serialized).not.toContain('/private/poller.yaml')
@@ -284,7 +270,6 @@ describe('Agent Mail service status boundary', () => {
     expect(serialized).not.toContain('https://api.cloudflare.com/client/v4')
     expect(serialized).not.toContain('private-bucket')
     expect(serialized).not.toContain('raw provider error with token')
-    expect(serialized).not.toContain('tunnel-private.example.test')
     expect(serialized).not.toContain('private-zone-id')
     expect(serialized).not.toContain('private-rule-id')
     expect(serialized).not.toContain('private-wildduck-user')

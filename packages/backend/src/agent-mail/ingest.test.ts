@@ -48,7 +48,10 @@ describe('Agent Mail web-owned Worker ingest', () => {
     expect.hasAssertions()
     const { handleAgentMailIngestRequest } = await import('./ingest')
     const { encryptSecretValue } = await import('../lib/secret-box')
-    const notification = testNotification()
+    const notification = testNotification({
+      archivePrefix: 'orgs/org_public_test/domains/example.com/mail/inbound',
+      includeAuthority: true
+    })
     const body = JSON.stringify(notification)
     const timestamp = new Date().toISOString()
     const signature = sign({
@@ -63,11 +66,21 @@ describe('Agent Mail web-owned Worker ingest', () => {
         Promise.resolve({
           _id: TEST_CONNECTION_ID,
           domain: 'example.com',
-          encryptedWorkerHmacSecret: encryptSecretValue('test-secret'),
           status: 'active'
         })
     })
-    ingestTestState.findDeploymentOne.mockReturnValue({ exec: () => Promise.resolve(null) })
+    ingestTestState.findDeploymentOne.mockReturnValue({
+      exec: () =>
+        Promise.resolve({
+          archivePrefix: 'orgs/org_public_test/domains/example.com/mail/inbound',
+          domain: 'example.com',
+          encryptedWorkerHmacSecret: encryptSecretValue('test-secret'),
+          agentMailDomainId: TEST_CONNECTION_ID,
+          organizationId: parseUUID('01960000-0000-7000-8000-000000000001'),
+          organizationPublicId: 'org_public_test',
+          workerConnectionId: TEST_CONNECTION_PUBLIC_ID
+        })
+    })
     ingestTestState.enqueueAgentMailIngest.mockResolvedValue({
       status: 'enqueued',
       ingest_id: notification.ingest_id
@@ -86,7 +99,13 @@ describe('Agent Mail web-owned Worker ingest', () => {
       status: 'enqueued',
       ingest_id: notification.ingest_id
     })
-    expect(ingestTestState.enqueueAgentMailIngest).toHaveBeenCalledWith(notification)
+    expect(ingestTestState.enqueueAgentMailIngest).toHaveBeenCalledWith({
+      ...notification,
+      organization_id: '01960000-0000-7000-8000-000000000001',
+      organization_public_id: 'org_public_test',
+      archive_prefix: 'orgs/org_public_test/domains/example.com/mail/inbound',
+      worker_connection_id: TEST_CONNECTION_PUBLIC_ID
+    })
   })
 
   it('accepts an org-prefixed deployment notification and forwards authority fields', async () => {
@@ -111,7 +130,6 @@ describe('Agent Mail web-owned Worker ingest', () => {
         Promise.resolve({
           _id: TEST_CONNECTION_ID,
           domain: 'example.com',
-          encryptedWorkerHmacSecret: encryptSecretValue('legacy-secret'),
           status: 'active'
         })
     })
@@ -155,10 +173,9 @@ describe('Agent Mail web-owned Worker ingest', () => {
     })
   })
 
-  it('rejects org-prefixed notifications when deployment state is unavailable', async () => {
+  it('rejects notifications when deployment-owned HMAC state is unavailable', async () => {
     expect.hasAssertions()
     const { handleAgentMailIngestRequest } = await import('./ingest')
-    const { encryptSecretValue } = await import('../lib/secret-box')
     const notification = testNotification({
       archivePrefix: 'orgs/org_public_test/domains/example.com/mail/inbound',
       includeAuthority: true
@@ -168,7 +185,7 @@ describe('Agent Mail web-owned Worker ingest', () => {
     const signature = sign({
       body,
       connectionPublicId: TEST_CONNECTION_PUBLIC_ID,
-      secret: 'test-secret',
+      secret: 'connection-secret',
       timestamp
     })
 
@@ -178,7 +195,6 @@ describe('Agent Mail web-owned Worker ingest', () => {
           _id: { toString: () => 'document-id-object-should-not-be-used-for-deployment-lookup' },
           archivePrefix: 'orgs/org_public_test/domains/example.com/mail/inbound',
           domain: 'example.com',
-          encryptedWorkerHmacSecret: encryptSecretValue('test-secret'),
           status: 'active'
         })
     })
@@ -192,10 +208,7 @@ describe('Agent Mail web-owned Worker ingest', () => {
       })
     )
 
-    expect(response.status).toBe(400)
-    await expect(response.json()).resolves.toStrictEqual({
-      error: 'Notification archive scope does not match connection'
-    })
+    expect(response.status).toBe(401)
     expect(ingestTestState.findDeploymentOne).toHaveBeenCalledWith({
       cloudflareConnectionId: TEST_CONNECTION_ID,
       workerConnectionId: TEST_CONNECTION_PUBLIC_ID,
@@ -215,14 +228,24 @@ describe('Agent Mail web-owned Worker ingest', () => {
         Promise.resolve({
           _id: TEST_CONNECTION_ID,
           domain: 'example.com',
-          encryptedWorkerHmacSecret: encryptSecretValue('test-secret'),
           status: 'active'
         })
     })
-    ingestTestState.findDeploymentOne.mockReturnValue({ exec: () => Promise.resolve(null) })
+    ingestTestState.findDeploymentOne.mockReturnValue({
+      exec: () =>
+        Promise.resolve({
+          archivePrefix: 'orgs/org_public_test/domains/example.com/mail/inbound',
+          domain: 'example.com',
+          encryptedWorkerHmacSecret: encryptSecretValue('test-secret'),
+          agentMailDomainId: TEST_CONNECTION_ID,
+          organizationId: parseUUID('01960000-0000-7000-8000-000000000001'),
+          organizationPublicId: 'org_public_test',
+          workerConnectionId: TEST_CONNECTION_PUBLIC_ID
+        })
+    })
 
     const response = await handleAgentMailIngestRequest(
-      new Request('https://mail.example.com/agent-mail/ingest/v1', {
+      new Request('https://mail.example.com/rpc/agent-mail/ingest/v1', {
         body: JSON.stringify(testNotification()),
         headers: signedHeaders({
           connectionPublicId: TEST_CONNECTION_PUBLIC_ID,
@@ -248,14 +271,24 @@ describe('Agent Mail web-owned Worker ingest', () => {
         Promise.resolve({
           _id: TEST_CONNECTION_ID,
           domain: 'example.com',
-          encryptedWorkerHmacSecret: encryptSecretValue('test-secret'),
           status: 'active'
         })
     })
-    ingestTestState.findDeploymentOne.mockReturnValue({ exec: () => Promise.resolve(null) })
+    ingestTestState.findDeploymentOne.mockReturnValue({
+      exec: () =>
+        Promise.resolve({
+          archivePrefix: 'orgs/org_public_test/domains/example.com/mail/inbound',
+          domain: 'example.com',
+          encryptedWorkerHmacSecret: encryptSecretValue('test-secret'),
+          agentMailDomainId: TEST_CONNECTION_ID,
+          organizationId: parseUUID('01960000-0000-7000-8000-000000000001'),
+          organizationPublicId: 'org_public_test',
+          workerConnectionId: TEST_CONNECTION_PUBLIC_ID
+        })
+    })
 
     const response = await handleAgentMailIngestRequest(
-      new Request('https://mail.example.com/agent-mail/ingest/v1', {
+      new Request('https://mail.example.com/rpc/agent-mail/ingest/v1', {
         body: '{',
         headers: signedHeaders({
           connectionPublicId: TEST_CONNECTION_PUBLIC_ID,
@@ -287,7 +320,7 @@ describe('Agent Mail web-owned Worker ingest', () => {
     ingestTestState.findDeploymentOne.mockReturnValue({ exec: () => Promise.resolve(null) })
 
     const response = await handleAgentMailIngestRequest(
-      new Request('https://mail.example.com/agent-mail/ingest/v1', {
+      new Request('https://mail.example.com/rpc/agent-mail/ingest/v1', {
         body,
         headers: signedHeaders({ connectionPublicId: TEST_CONNECTION_PUBLIC_ID, signature, timestamp }),
         method: 'POST'
@@ -311,7 +344,7 @@ function testNotification({
     ? `${archivePrefix.replace(/\/+$/u, '')}/2026/06/20/${ingestId}`
     : `mail/inbound/example.com/2026/06/20/${ingestId}`
   return {
-    schema: 'agent-mail.inbound.fastpath.v1' as const,
+    schema: 'agent-mail.inbound.ingest.v1' as const,
     ingest_id: ingestId,
     ...(includeAuthority
       ? {

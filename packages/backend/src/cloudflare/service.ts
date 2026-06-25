@@ -374,9 +374,7 @@ export async function applyCloudflareConnectionProvisioning({
     .exec()
   const existingHmacSecret = existingDeployment?.encryptedWorkerHmacSecret
     ? decryptSecretValue(existingDeployment.encryptedWorkerHmacSecret)
-    : connection.encryptedWorkerHmacSecret
-      ? decryptSecretValue(connection.encryptedWorkerHmacSecret)
-      : undefined
+    : undefined
 
   try {
     const result = await applyCloudflareProvisioning({
@@ -470,8 +468,6 @@ export async function applyCloudflareConnectionProvisioning({
             agentMailDomainId: domainRecord._id,
             agentMailWorkerDeploymentId: deployment._id,
             archivePrefix: workerCredentials.archivePrefix,
-            encryptedWorkerHmacSecret: encryptedHmacSecret,
-            hmacSecretReference: result.hmacSecretReference,
             lastProvisionedAt: new Date(),
             provisioningStatus: 'succeeded',
             r2BucketName: result.r2BucketName,

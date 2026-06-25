@@ -293,7 +293,7 @@ func TestControlRuntimeAPIRejectsIngestMetadataMismatch(t *testing.T) {
 	}
 	api := &controlRuntimeAPI{stateStore: store}
 	notification := poller.Notification{
-		Schema:                   poller.FastPathSchema,
+		Schema:                   poller.IngestNotificationSchema,
 		OrganizationID:           "org-1",
 		OrganizationPublicID:     "org_pub_123",
 		ArchivePrefix:            bundle.ArchivePrefix,
@@ -358,7 +358,7 @@ func TestControlRuntimeAPISelectsIngestDomainByWorkerAuthority(t *testing.T) {
 	}
 	api := &controlRuntimeAPI{stateStore: store}
 	notification := poller.Notification{
-		Schema:                   poller.FastPathSchema,
+		Schema:                   poller.IngestNotificationSchema,
 		OrganizationID:           "org-1",
 		OrganizationPublicID:     "org_pub_123",
 		ArchivePrefix:            bundle.ArchivePrefix,

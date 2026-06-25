@@ -534,14 +534,7 @@ const mailPublicStatusResponseSchema = t.Object({
     })
   ),
   selectedProvider: optionalStringResponseSchema,
-  status: t.String(),
-  tunnel: t.Optional(
-    t.Object({
-      configured: optionalBooleanResponseSchema,
-      issues: stringArrayResponseSchema,
-      ok: optionalBooleanResponseSchema
-    })
-  )
+  status: t.String()
 })
 const mailOutboundResponseSchema = t.Object({
   idempotency_key: optionalStringResponseSchema,

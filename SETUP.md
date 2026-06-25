@@ -95,13 +95,14 @@ mise run //apps/web-server:image:build
 mise run //apps/at-email-cli:image:build
 ```
 
-Build the complete kind E2E image set with:
+Build the complete Helm/kind E2E image set with:
 
 ```bash
 mise run //test-containers/kind-e2e:images:build
 ```
 
-The kind E2E task builds those images before running the harness. It also
+The kind E2E task is for Helm chart and Kubernetes packaging coverage. It is
+not required for ordinary Compose or no-DB Compose development testing. It
 derives the default kind cluster, namespace, and Helm release from the same
 slug. Pulled runtime images such as MongoDB, Redis, Mailpit, WildDuck, Haraka,
 ZoneMTA, and Rspamd are not rebuilt by this repo and are not worktree-scoped.
@@ -292,12 +293,14 @@ mise run //test-containers/full-stack-e2e:test
 ```
 
 The kind E2E task uses `WT` to scope local image names, the kind cluster,
-namespace, and Helm release.
+namespace, and Helm release. Treat kind as a Helm packaging test harness, not
+as the default local dev stack.
 
-The full-stack E2E task is a P1 contract suite for the Helm-deployed stack,
-the web-server-only public boundary, and full inbound/outbound mail-flow
-contracts. Failures in this suite should be triaged through the failing
-runtime boundary.
+The full-stack E2E task is currently a kind-backed P1 contract suite for the
+Helm-deployed stack, the web-server-only public boundary, and full
+inbound/outbound mail-flow contracts. Treat it as Helm/Kubernetes coverage until
+a Compose/Testcontainers full-stack successor exists. Failures in this suite
+should be triaged through the failing runtime boundary.
 
 ### Shell And Diff Hygiene
 

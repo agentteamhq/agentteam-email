@@ -12205,19 +12205,6 @@ paths:
                     type: string
                   status:
                     type: string
-                  tunnel:
-                    type: object
-                    required:
-                      - issues
-                    properties:
-                      configured:
-                        type: boolean
-                      issues:
-                        type: array
-                        items:
-                          type: string
-                      ok:
-                        type: boolean
         "400":
           description: Response for status 400
           content:

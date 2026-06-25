@@ -1,7 +1,7 @@
 # Tailscale Funnel
 
 The web server receives Cloudflare Worker ingress at
-`/agent-mail/ingest/v1`. Tailscale Funnel can expose that route by forwarding
+`/rpc/agent-mail/ingest/v1`. Tailscale Funnel can expose that route by forwarding
 the full Worker request to the web server.
 
 HMAC-signed Worker notifications are valid. Unknown requests and requests with
@@ -12,15 +12,15 @@ Example values:
 - Tailscale hostname: `mail-ingress`
 - Tailnet DNS name: `example.ts.net`
 - Public ingest URL:
-  `https://mail-ingress.example.ts.net/agent-mail/ingest/v1`
+  `https://mail-ingress.example.ts.net/rpc/agent-mail/ingest/v1`
 - Compose web server listener: `http://127.0.0.1:4321`
 - Kubernetes web server service: `http://atemail-web-server:80`
 
 ## Environment
 
 Configure AgentTeam Email with the public web origin served by Funnel. Product
-Worker provisioning derives the ingest URL by appending `/agent-mail/ingest/v1`
-and stores the per-connection Worker HMAC secret in the web database.
+Worker provisioning derives the ingest URL by appending `/rpc/agent-mail/ingest/v1`
+and stores the deployment-owned Worker HMAC secret in the web database.
 
 ```dotenv
 PUBLIC_HOSTNAME=https://mail-ingress.example.ts.net

@@ -2,7 +2,6 @@ package domainregistry
 
 import (
 	"fmt"
-	"net/url"
 	"slices"
 	"time"
 
@@ -15,9 +14,6 @@ type ProjectedStatusConfig struct {
 	PollerConfig        poller.Config
 	ProviderRelayConfig smtprelay.Config
 	SelectedProvider    string
-	TunnelExternalHost  string
-	TunnelListenURL     string
-	NotifyPath          string
 }
 
 type Snapshot struct {
@@ -30,7 +26,6 @@ type Snapshot struct {
 	Modules          ModulesStatus      `json:"modules"`
 	Dependencies     DependenciesStatus `json:"dependencies"`
 	Provisioning     ProvisioningStatus `json:"provisioning"`
-	Tunnel           TunnelStatus       `json:"tunnel"`
 	Domains          []DomainStatus     `json:"domains"`
 	SourceFiles      SourceFiles        `json:"source_files"`
 }
@@ -38,16 +33,6 @@ type Snapshot struct {
 type SourceFiles struct {
 	PollerConfig        string `json:"poller_config"`
 	ProviderRelayConfig string `json:"provider_relay_config"`
-}
-
-type TunnelStatus struct {
-	ExternalHost    string   `json:"external_host"`
-	PublicNotifyURL string   `json:"public_notify_url"`
-	ListenURL       string   `json:"listen_url"`
-	NotifyPath      string   `json:"notify_path"`
-	Configured      bool     `json:"configured"`
-	OK              bool     `json:"ok"`
-	Issues          []string `json:"issues,omitempty"`
 }
 
 type ControlStateStatus struct {
@@ -72,7 +57,6 @@ type ModulesStatus struct {
 	SMTPRelay      ModuleStatus `json:"smtp_relay"`
 	Poller         ModuleStatus `json:"poller"`
 	FeedbackRouter ModuleStatus `json:"feedback_router"`
-	FastPathNotify ModuleStatus `json:"fastpath_notify"`
 }
 
 type ModuleStatus struct {
@@ -214,9 +198,6 @@ func NewProjector(cfg ProjectedStatusConfig) (*Projector, error) {
 	if cfg.SelectedProvider == "" {
 		return nil, fmt.Errorf("missing selected provider")
 	}
-	if cfg.NotifyPath == "" {
-		return nil, fmt.Errorf("missing notify path")
-	}
 	return &Projector{cfg: cfg}, nil
 }
 
@@ -268,17 +249,11 @@ func (p *Projector) Snapshot(now time.Time) (Snapshot, error) {
 		domains = append(domains, status)
 	}
 
-	tunnel, err := p.tunnelStatus()
-	if err != nil {
-		return Snapshot{}, err
-	}
-
 	return Snapshot{
 		OK:               true,
 		Status:           "ready",
 		GeneratedAt:      now.UTC(),
 		SelectedProvider: p.cfg.SelectedProvider,
-		Tunnel:           tunnel,
 		Dependencies: DependenciesStatus{
 			WildDuckAPI:   dependencyFromEndpoint(pollerCfg.WildDuck.APIBaseURL),
 			WildDuckMongo: dependencyFromEndpoint(pollerCfg.WildDuck.MongoURI),
@@ -409,10 +384,6 @@ func (s Snapshot) WithComputedStatus() Snapshot {
 		issues = append(issues, "control_state_not_ready")
 		issues = append(issues, s.ControlState.Issues...)
 	}
-	if !s.Tunnel.OK {
-		issues = append(issues, "tunnel_not_ready")
-		issues = append(issues, s.Tunnel.Issues...)
-	}
 	appendModuleIssue := func(name string, status ModuleStatus) {
 		if status.OK {
 			return
@@ -423,7 +394,6 @@ func (s Snapshot) WithComputedStatus() Snapshot {
 	appendModuleIssue("admin_api", s.Modules.AdminAPI)
 	appendModuleIssue("smtp_relay", s.Modules.SMTPRelay)
 	appendModuleIssue("poller", s.Modules.Poller)
-	appendModuleIssue("fastpath_notify", s.Modules.FastPathNotify)
 	appendDependencyIssue := func(name string, status DependencyStatus) {
 		if status.OK {
 			return
@@ -497,73 +467,4 @@ func requiredDomain(value string, field string) (string, error) {
 		return "", fmt.Errorf("%s is required", field)
 	}
 	return domain, nil
-}
-
-func (p *Projector) tunnelStatus() (TunnelStatus, error) {
-	status := TunnelStatus{
-		NotifyPath: p.cfg.NotifyPath,
-	}
-	if p.cfg.TunnelExternalHost == "" || p.cfg.TunnelListenURL == "" {
-		status.OK = false
-		status.Issues = append(status.Issues, "tunnel_not_configured")
-		return status, nil
-	}
-	notifyURL, err := normalizeNotifyURL(p.cfg.TunnelExternalHost, p.cfg.NotifyPath)
-	if err != nil {
-		return TunnelStatus{}, err
-	}
-	listenURL, err := normalizeListenURL(p.cfg.TunnelListenURL)
-	if err != nil {
-		return TunnelStatus{}, err
-	}
-	status.ExternalHost = notifyURL.Host
-	status.PublicNotifyURL = notifyURL.String()
-	status.ListenURL = listenURL.String()
-	status.Configured = true
-	status.OK = true
-	return status, nil
-}
-
-func normalizeNotifyURL(value string, notifyPath string) (*url.URL, error) {
-	parsed, err := url.Parse(value)
-	if err != nil || parsed.Scheme == "" {
-		parsed, err = url.Parse("https://" + value)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("parse tunnel notify URL: %w", err)
-	}
-	if parsed.Scheme != "https" {
-		return nil, fmt.Errorf("tunnel notify URL must use https")
-	}
-	if parsed.Host == "" {
-		return nil, fmt.Errorf("tunnel notify URL is missing host")
-	}
-	if parsed.Path == "" || parsed.Path == "/" {
-		parsed.Path = notifyPath
-	} else if parsed.Path != notifyPath {
-		return nil, fmt.Errorf("tunnel notify URL path must be %s", notifyPath)
-	}
-	parsed.RawQuery = ""
-	parsed.Fragment = ""
-	return parsed, nil
-}
-
-func normalizeListenURL(value string) (*url.URL, error) {
-	parsed, err := url.Parse(value)
-	if err != nil {
-		return nil, fmt.Errorf("parse tunnel listen URL: %w", err)
-	}
-	if parsed.Scheme != "http" {
-		return nil, fmt.Errorf("tunnel listen URL must use http")
-	}
-	if parsed.Host == "" {
-		return nil, fmt.Errorf("tunnel listen URL is missing host")
-	}
-	if parsed.Path != "" && parsed.Path != "/" {
-		return nil, fmt.Errorf("tunnel listen URL must not include a path")
-	}
-	parsed.Path = ""
-	parsed.RawQuery = ""
-	parsed.Fragment = ""
-	return parsed, nil
 }

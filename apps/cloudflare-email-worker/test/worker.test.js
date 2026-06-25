@@ -10,12 +10,12 @@ import {
   archiveInboundMessage,
   buildR2ObjectURL,
   buildCloudflareEdgeEvidence,
-  buildFastPathRequest,
+  buildIngestRequest,
   generateUUIDv7,
   inboundBundleKeys,
   normalizeAddress,
   normalizeArchivePrefix,
-  normalizeFastPathURL,
+  normalizeIngestURL,
   sha256Hex
 } from '../src/lib.js'
 import worker from '../src/index.js'
@@ -297,14 +297,14 @@ test('archiveInboundMessage ignores stale Analytics bindings and does not fetch 
   }
 })
 
-test('buildFastPathRequest posts the archived bundle through the fast-path endpoint', async () => {
+test('buildIngestRequest posts the archived bundle through the worker ingest endpoint', async () => {
   const rawBytes = await fixtureBytes('inbound.eml')
   const r2 = new MockR2Fetch()
   const now = new Date('2026-04-18T12:34:56.000Z')
   const archived = await archiveInboundMessage(await buildMessage(rawBytes), workerEnv(), now, r2.fetch)
   const requestTime = new Date('2026-04-18T12:34:58.000Z')
 
-  const request = await buildFastPathRequest(
+  const request = await buildIngestRequest(
     archived,
     {
       AGENTTEAM_INGEST_URL: 'mail-ingress.example.com',
@@ -321,7 +321,7 @@ test('buildFastPathRequest posts the archived bundle through the fast-path endpo
   assert.equal(request.init.headers['X-Agent-Mail-Timestamp'], '2026-04-18T12:34:58.000Z')
 
   const payload = JSON.parse(request.init.body)
-  assert.equal(payload.schema, 'agent-mail.inbound.fastpath.v1')
+  assert.equal(payload.schema, 'agent-mail.inbound.ingest.v1')
   assert.equal(payload.ingest_id, archived.ingestId)
   assert.equal(payload.organization_id, '01960000-0000-7000-8000-000000000001')
   assert.equal(payload.organization_public_id, 'org_public_test')
@@ -418,20 +418,35 @@ test('worker email failure logs only safe error metadata', async () => {
   assert.doesNotMatch(logs, /test-secret-key|test-session-token|test-access-key/)
 })
 
-test('normalizeFastPathURL defaults to the RPC ingest path and allows legacy path compatibility', () => {
+test('normalizeIngestURL defaults to the RPC ingest path and rejects unrelated paths', () => {
   assert.equal(
-    normalizeFastPathURL('mail-ingress.example.com').href,
+    normalizeIngestURL('mail-ingress.example.com').href,
     'https://mail-ingress.example.com/rpc/agent-mail/ingest/v1'
   )
   assert.equal(
-    normalizeFastPathURL('https://mail-ingress.example.com/rpc/agent-mail/ingest/v1').href,
+    normalizeIngestURL('https://mail-ingress.example.com/rpc/agent-mail/ingest/v1').href,
     'https://mail-ingress.example.com/rpc/agent-mail/ingest/v1'
   )
-  assert.equal(
-    normalizeFastPathURL('https://mail-ingress.example.com/agent-mail/ingest/v1').href,
-    'https://mail-ingress.example.com/agent-mail/ingest/v1'
+  assert.throws(() => normalizeIngestURL('https://mail-ingress.example.com/other'), /path must be/)
+})
+
+test('buildIngestRequest requires the provisioned Worker HMAC binding', async () => {
+  const rawBytes = await fixtureBytes('inbound.eml')
+  const r2 = new MockR2Fetch()
+  const now = new Date('2026-04-18T12:34:56.000Z')
+  const archived = await archiveInboundMessage(await buildMessage(rawBytes), workerEnv(), now, r2.fetch)
+
+  await assert.rejects(
+    buildIngestRequest(
+      archived,
+      {
+        AGENTTEAM_INGEST_URL: 'mail-ingress.example.com',
+        AGENTTEAM_CONNECTION_ID: 'conn-public-id'
+      },
+      new Date('2026-04-18T12:34:58.000Z')
+    ),
+    /missing Worker HMAC secret/
   )
-  assert.throws(() => normalizeFastPathURL('https://mail-ingress.example.com/other'), /path must be/)
 })
 
 test('archiveInboundMessage fails when temporary R2 credentials are expired', async () => {

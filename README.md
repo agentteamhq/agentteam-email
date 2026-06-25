@@ -48,7 +48,7 @@ All other services are internal:
 - `apps/mail-control-service` coordinates domain provisioning, inbound replay,
   outbound relay handling, feedback processing, and status.
 - `apps/cloudflare-email-worker` receives Cloudflare Email Routing events and
-  writes archive bundles before sending signed fast-path notifications.
+  writes archive bundles before sending signed worker notifications.
 - WildDuck, Haraka, ZoneMTA, Rspamd, MongoDB, Redis, and archive storage provide
   the mail runtime.
 

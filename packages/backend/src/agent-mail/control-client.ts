@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { PRIVATE_VARS } from '../vars.private'
 
 export interface AgentMailIngestNotification {
-  schema: 'agent-mail.inbound.fastpath.v1'
+  schema: 'agent-mail.inbound.ingest.v1'
   ingest_id: string
   organization_id?: string
   organization_public_id?: string

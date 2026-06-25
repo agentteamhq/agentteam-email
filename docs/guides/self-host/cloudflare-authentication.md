@@ -16,20 +16,19 @@ Cloudflare owns four separate concerns:
 
 - DNS for the mail domain
 - Email Routing for inbound mail delivery to the Worker
-- Worker deployment for archiving inbound mail and sending fast-path
-  notifications
+- Worker deployment for archiving inbound mail and sending worker notifications
 - R2 bucket storage for raw inbound message archives
 
 The Worker must archive each inbound message to R2 and then call:
 
 ```text
-https://mail.company.example/agent-mail/ingest/v1
+https://mail.company.example/rpc/agent-mail/ingest/v1
 ```
 
-The call is signed with a per-connection `AGENTTEAM_HMAC_SECRET` and includes
-`X-Agent-Mail-Connection-Id`. Public Worker traffic must enter through
-operator-owned ingress that forwards the request to the web server. The control
-API remains internal.
+The call is signed with a per-connection `AGENTTEAM_WORKER_HMAC_SECRET` and
+includes `X-Agent-Mail-Connection-Id`. Public Worker traffic must enter through
+operator-owned ingress that forwards the request to the web server. The control API
+remains internal.
 
 ## Token Model
 
@@ -63,17 +62,28 @@ Create or select:
 Product provisioning creates the Worker with these bindings:
 
 ```text
-ARCHIVE_BUCKET=company-agent-mail-archive
+AGENTTEAM_ORGANIZATION_ID=<web-owned-organization-id>
+AGENTTEAM_ORG_PUBLIC_ID=<web-owned-organization-public-id>
 AGENTTEAM_CONNECTION_ID=<web-owned-connection-id>
-AGENTTEAM_INGEST_URL=https://mail.company.example/agent-mail/ingest/v1
-AGENTTEAM_HMAC_SECRET=<per-connection-worker-secret>
+AGENTTEAM_DOMAIN_ID=<web-owned-domain-id>
+AGENTTEAM_DOMAIN=company.example
+AGENTTEAM_ARCHIVE_PREFIX=orgs/<org-public-id>/domains/company.example/mail/inbound
+AGENTTEAM_R2_ENDPOINT=<r2-endpoint>
+AGENTTEAM_R2_BUCKET=company-agent-mail-archive
+AGENTTEAM_R2_REGION=auto
+AGENTTEAM_R2_ACCESS_KEY_ID=<temporary-r2-access-key>
+AGENTTEAM_R2_SECRET_ACCESS_KEY=<temporary-r2-secret-key>
+AGENTTEAM_R2_SESSION_TOKEN=<temporary-r2-session-token>
+AGENTTEAM_R2_CREDENTIAL_EXPIRES_AT=<iso-timestamp>
+AGENTTEAM_INGEST_URL=https://mail.company.example/rpc/agent-mail/ingest/v1
+AGENTTEAM_WORKER_HMAC_SECRET=<per-connection-worker-secret>
 EMAIL=<Cloudflare send_email binding>
 ```
 
-The Worker posts to the configured fast-path URL:
+The Worker posts to the configured ingest URL:
 
 ```text
-https://mail.company.example/agent-mail/ingest/v1
+https://mail.company.example/rpc/agent-mail/ingest/v1
 ```
 
 ## Routing Shape
@@ -131,7 +141,7 @@ ENCRYPT_SECRET_KEY=
 1. Create the R2 bucket.
 2. Create the Cloudflare API token with the scopes above.
 3. Configure operator-owned ingress so
-   `https://mail.company.example/agent-mail/ingest/v1` reaches the web server.
+   `https://mail.company.example/rpc/agent-mail/ingest/v1` reaches the web server.
 4. Set `PUBLIC_HOSTNAME` to the public web server origin.
 5. Set `AGENT_MAIL_CONTROL_API_TOKEN` for the internal web-to-control API
    boundary and `ENCRYPT_SECRET_KEY` so web can store Worker secrets.

@@ -19,7 +19,7 @@ Example install shape:
 
 - namespace: `agentteam-email`
 - frontend URL: `https://mail.company.example`
-- Worker ingest URL: `https://mail.company.example/agent-mail/ingest/v1`
+- Worker ingest URL: `https://mail.company.example/rpc/agent-mail/ingest/v1`
 - inbound mail domain: `company.example`
 
 ## Chart Layout
@@ -256,14 +256,14 @@ The web server owns Worker ingest verification. Product Cloudflare provisioning
 binds each generated Worker to:
 
 ```text
-<publicHostname>/agent-mail/ingest/v1
+<publicHostname>/rpc/agent-mail/ingest/v1
 ```
 
 Configure operator-owned ingress to forward that full request to the web server
 service:
 
 ```text
-https://mail.company.example/agent-mail/ingest/v1 -> http://atemail-web-server:80
+https://mail.company.example/rpc/agent-mail/ingest/v1 -> http://atemail-web-server:80
 ```
 
 The generated Worker signs notifications with a per-connection secret stored by
@@ -289,7 +289,8 @@ before applying changes:
 mise run //charts:check
 ```
 
-The Helm/kind e2e scaffold is available as:
+The kind e2e harness is available for Helm packaging coverage only. It is not
+required for Compose or no-DB Compose development testing:
 
 ```bash
 mise run //test-containers/kind-e2e:test

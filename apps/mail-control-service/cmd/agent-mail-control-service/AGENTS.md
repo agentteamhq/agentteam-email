@@ -5,7 +5,7 @@ These rules apply to `cmd/agent-mail-control-service/`.
 ## Command Boundary
 
 - The command package must stay a thin dispatcher for Mail Control Service startup
-  and the `fastpath-gate` subcommand.
+  only.
 - The command package must not contain business logic for polling, SMTP relay,
   feedback routing, provisioning, Cloudflare, WildDuck, R2, persistence, or
   Control API behavior.
@@ -32,14 +32,15 @@ These rules apply to `cmd/agent-mail-control-service/`.
 ## Runtime Requirements
 
 - The Mail Control Service command is the runtime entrypoint for inbound
-  replay, the fast-path ingest listener, the internal SMTP relay listener,
-  outbound provider handling, and feedback processing.
+  replay, the internal SMTP relay listener, outbound provider handling, and
+  feedback processing.
 - Inbound replay/queue processing, SMTP relay listener, and feedback processing
   must be wired as internal modules through `internal/control/controlservice`.
 - Each runtime concern must keep an explicit listener and port boundary. The
-  fast-path/health HTTP listener, internal SMTP relay listener, and
-  admin/provisioning HTTP API listener are separate surfaces with separate
-  ports, routes, auth policy, readiness semantics, and tests.
+  internal SMTP relay listener and admin/provisioning HTTP API listener are
+  separate surfaces with separate ports, routes, auth policy, readiness
+  semantics, and tests. Worker notification ingress is web-owned and reaches
+  Mail Control Service only through the internal control API enqueue operation.
 - The inbound replay queue/state store belongs in the `agent_mail_control`
   MongoDB database. That database is the only replay queue, lease, retry, and
   cursor store.

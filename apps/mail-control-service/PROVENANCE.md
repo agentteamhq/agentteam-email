@@ -36,7 +36,7 @@ Inbound surfaces:
   `orgs/<org_public_id>/domains/<recipient_domain>/mail/inbound/YYYY/MM/DD/<ingest_id>/raw.eml`.
 - Inbound edge metadata R2 key:
   `orgs/<org_public_id>/domains/<recipient_domain>/mail/inbound/YYYY/MM/DD/<ingest_id>/edge.json`.
-- Web-owned fast-path notification: a signed metadata-only hint that carries
+- Web-owned worker notification: a signed metadata-only hint that carries
   the existing org, Worker deployment, archive prefix, `ingest_id`, `raw_key`,
   `edge_key`, `result_key`, `recipient_domain`, `received_at`, and
   `raw_sha256`. It creates no additional durable message ID, does not carry raw

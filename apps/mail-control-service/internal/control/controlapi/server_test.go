@@ -314,7 +314,7 @@ func TestIngestEnqueueRPCEnqueuesVerifiedNotification(t *testing.T) {
 		"id":"ingest-1",
 		"method":"agentMail.ingest.enqueue",
 		"params":{
-			"schema":"agent-mail.inbound.fastpath.v1",
+			"schema":"agent-mail.inbound.ingest.v1",
 			"organization_id":"org-1",
 			"organization_public_id":"org_pub_123",
 			"archive_prefix":"` + bundle.ArchivePrefix + `",
@@ -366,7 +366,7 @@ func TestIngestEnqueueRPCReportsValidationReasonWithoutSecrets(t *testing.T) {
 		"id":"ingest-1",
 		"method":"agentMail.ingest.enqueue",
 		"params":{
-			"schema":"agent-mail.inbound.fastpath.v1",
+			"schema":"agent-mail.inbound.ingest.v1",
 			"organization_id":"org-1",
 			"organization_public_id":"org_pub_123",
 			"archive_prefix":"` + bundle.ArchivePrefix + `",
@@ -1119,7 +1119,6 @@ func newTestServerWithProvisionerProvenanceAndOptions(t *testing.T, provisioner 
 			SMTPRelay:      domainregistry.ModuleStatus{OK: true, Configured: true, ListenAddress: ":2587", Provider: "ses"},
 			Poller:         domainregistry.ModuleStatus{OK: true, Configured: true, DomainsSource: "control-state", ActiveDomains: 1},
 			FeedbackRouter: domainregistry.ModuleStatus{OK: true, Configured: true, DomainsSource: "control-state", ActiveDomains: 1, Endpoint: "wildduck-imap:143", Mailbox: "INBOX"},
-			FastPathNotify: domainregistry.ModuleStatus{OK: true, Configured: true, ListenAddress: "http://127.0.0.1:8080"},
 		},
 		Dependencies: domainregistry.DependenciesStatus{
 			R2:               domainregistry.DependencyStatus{OK: true, Configured: true, Bucket: "agent-mail-archive"},
@@ -1132,14 +1131,6 @@ func newTestServerWithProvisionerProvenanceAndOptions(t *testing.T, provisioner 
 			OutboundProvider: domainregistry.DependencyStatus{OK: true, Configured: true, Provider: "ses"},
 		},
 		Provisioning: domainregistry.ProvisioningStatus{Status: "applied", DomainsApplied: 1},
-		Tunnel: domainregistry.TunnelStatus{
-			ExternalHost:    "mail-ingress.example.com",
-			PublicNotifyURL: "https://mail-ingress.example.com/agent-mail/ingest/v1",
-			ListenURL:       "http://127.0.0.1:8080",
-			NotifyPath:      "/agent-mail/ingest/v1",
-			Configured:      true,
-			OK:              true,
-		},
 		Domains: []domainregistry.DomainStatus{
 			{
 				Domain: "example.com",

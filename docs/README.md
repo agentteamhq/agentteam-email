@@ -35,7 +35,7 @@ The self-hosted stack has these runtime parts:
 - Rspamd
 - ZoneMTA
 - R2-compatible archive storage
-- public web route `/agent-mail/ingest/v1` for Cloudflare Email Worker
+- public web route `/rpc/agent-mail/ingest/v1` for Cloudflare Email Worker
   notifications
 
 The public self-host target does not expose a separate operator UI or control
@@ -48,8 +48,8 @@ network. The browser talks only to the web server.
 Every self-host install must provide:
 
 - public web app URL, for example `https://mail.company.example`
-- public web app URL reachable at `/agent-mail/ingest/v1` for Worker
-  notifications, for example `https://mail.company.example/agent-mail/ingest/v1`
+- public web app URL reachable at `/rpc/agent-mail/ingest/v1` for Worker
+  notifications, for example `https://mail.company.example/rpc/agent-mail/ingest/v1`
 - MongoDB connection URLs for the web app, WildDuck, and control databases
 - Redis URL for the mail stack
 - R2-compatible archive endpoint, bucket, access key, and secret

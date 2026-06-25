@@ -14,9 +14,6 @@ func TestProjectorReadsRuntimeConfigSchemas(t *testing.T) {
 		PollerConfig:        testPollerConfig(),
 		ProviderRelayConfig: testRelayConfig(),
 		SelectedProvider:    "ses",
-		TunnelExternalHost:  "mail-ingress.example.com",
-		TunnelListenURL:     "http://127.0.0.1:8080",
-		NotifyPath:          poller.NotifyPath,
 	})
 	if err != nil {
 		t.Fatalf("NewProjector: %v", err)
@@ -28,37 +25,6 @@ func TestProjectorReadsRuntimeConfigSchemas(t *testing.T) {
 	}
 	if len(snapshot.Domains) != 0 {
 		t.Fatalf("len(snapshot.Domains) = %d, want 0 for generic checked-in runtime config", len(snapshot.Domains))
-	}
-	if snapshot.Tunnel.PublicNotifyURL != "https://mail-ingress.example.com/agent-mail/ingest/v1" {
-		t.Fatalf("snapshot.Tunnel.PublicNotifyURL = %q", snapshot.Tunnel.PublicNotifyURL)
-	}
-}
-
-func TestProjectorNormalizesFullTunnelURL(t *testing.T) {
-	projector, err := NewProjector(ProjectedStatusConfig{
-		PollerConfig:        testPollerConfig(),
-		ProviderRelayConfig: testRelayConfig(),
-		SelectedProvider:    "ses",
-		TunnelExternalHost:  "https://mail-ingress.example.com/agent-mail/ingest/v1?ignored=true",
-		TunnelListenURL:     "http://127.0.0.1:8080/",
-		NotifyPath:          poller.NotifyPath,
-	})
-	if err != nil {
-		t.Fatalf("NewProjector: %v", err)
-	}
-
-	snapshot, err := projector.Snapshot(time.Date(2026, 5, 21, 0, 0, 0, 0, time.UTC))
-	if err != nil {
-		t.Fatalf("Snapshot: %v", err)
-	}
-	if snapshot.Tunnel.ExternalHost != "mail-ingress.example.com" {
-		t.Fatalf("snapshot.Tunnel.ExternalHost = %q", snapshot.Tunnel.ExternalHost)
-	}
-	if snapshot.Tunnel.PublicNotifyURL != "https://mail-ingress.example.com/agent-mail/ingest/v1" {
-		t.Fatalf("snapshot.Tunnel.PublicNotifyURL = %q", snapshot.Tunnel.PublicNotifyURL)
-	}
-	if snapshot.Tunnel.ListenURL != "http://127.0.0.1:8080" {
-		t.Fatalf("snapshot.Tunnel.ListenURL = %q", snapshot.Tunnel.ListenURL)
 	}
 }
 

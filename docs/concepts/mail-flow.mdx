@@ -1,6 +1,6 @@
 ---
-title: "Inbound and outbound mail flow in AgentTeam Email system"
-sidebarTitle: "Mail Flow"
+title: 'Inbound and outbound mail flow in AgentTeam Email system'
+sidebarTitle: 'Mail Flow'
 description: "Trace how a message travels from the Cloudflare edge to an agent's mailbox, and how outbound mail is archived and relayed to a provider."
 ---
 
@@ -11,51 +11,42 @@ Every message that touches AgentTeam Email — whether arriving from the interne
 When someone sends an email to an address on your domain, Cloudflare intercepts it before it reaches your deployment. The message is committed to archive storage at the edge before any notification is sent to your servers.
 
 <Steps>
-  <Step title="Email arrives at your domain">
-    A sender addresses a message to an agent mailbox on your domain — for
-    example, `agent@yourdomain.example`. The message reaches the Cloudflare
-    edge through normal DNS MX routing.
+  <Step title='Email arrives at your domain'>
+    A sender addresses a message to an agent mailbox on your domain — for example, `agent@yourdomain.example`.
+    The message reaches the Cloudflare edge through normal DNS MX routing.
   </Step>
-  <Step title="Cloudflare Email Routing forwards to your Worker">
-    Cloudflare Email Routing matches the catch-all rule you configured for your
-    domain and delivers the message to your Cloudflare Email Worker. Every
-    message for every address on the domain — including addresses that do not
-    yet have a mailbox — is accepted at this stage.
+  <Step title='Cloudflare Email Routing forwards to your Worker'>
+    Cloudflare Email Routing matches the catch-all rule you configured for your domain and delivers the
+    message to your Cloudflare Email Worker. Every message for every address on the domain — including
+    addresses that do not yet have a mailbox — is accepted at this stage.
   </Step>
-  <Step title="Worker archives the message to R2">
-    The Worker writes the exact RFC822 bytes as `raw.eml` to your R2-compatible
-    archive bucket, then writes `edge.json` containing the envelope, a SHA-256
-    integrity hash, and Cloudflare edge metadata. Writing `edge.json` is the
-    durable inbound commit. The archive is the source of truth from this point
-    forward.
+  <Step title='Worker archives the message to R2'>
+    The Worker writes the exact RFC822 bytes as `raw.eml` to your R2-compatible archive bucket, then writes
+    `edge.json` containing the envelope, a SHA-256 integrity hash, and Cloudflare edge metadata. Writing
+    `edge.json` is the durable inbound commit. The archive is the source of truth from this point forward.
   </Step>
-  <Step title="Worker sends a signed notification">
-    After committing the archive, the Worker sends a single HMAC-signed `POST`
-    to `/agent-mail/ingest/v1` on your deployment. The notification carries
-    only bundle metadata — no raw mail bytes. If the notification fails, the
-    archive is unchanged and the periodic reconciler sweep recovers the bundle.
+  <Step title='Worker sends a signed notification'>
+    After committing the archive, the Worker sends a single HMAC-signed `POST` to `/rpc/agent-mail/ingest/v1`
+    on your deployment. The notification carries only bundle metadata — no raw mail bytes. If the notification
+    fails, the archive is unchanged and the periodic reconciler sweep recovers the bundle.
   </Step>
-  <Step title="Mail control service validates and queues delivery">
-    The web server verifies the HMAC signature and passes the bundle metadata
-    to the mail control service. The service validates the organization, archive
-    prefix, recipient domain, and Worker metadata against active configuration,
-    then inserts the bundle into its MongoDB-backed delivery queue.
+  <Step title='Mail control service validates and queues delivery'>
+    The web server verifies the HMAC signature and passes the bundle metadata to the mail control service. The
+    service validates the organization, archive prefix, recipient domain, and Worker metadata against active
+    configuration, then inserts the bundle into its MongoDB-backed delivery queue.
   </Step>
   <Step title="Message is replayed into the agent's mailbox">
-    The mail control service reads `raw.eml` from the archive, verifies the
-    SHA-256 integrity hash, and replays the exact bytes through Haraka into
-    WildDuck. The message appears in the agent's mailbox. A `result.json`
-    completion marker is written to the archive once WildDuck delivery is
-    confirmed.
+    The mail control service reads `raw.eml` from the archive, verifies the SHA-256 integrity hash, and
+    replays the exact bytes through Haraka into WildDuck. The message appears in the agent's mailbox. A
+    `result.json` completion marker is written to the archive once WildDuck delivery is confirmed.
   </Step>
 </Steps>
 
 <Note>
-  If the addressed mailbox does not exist, the mail control service generates a
-  Delivery Status Notification (DSN) and sends it back to the original sender.
-  If the original sender used a null or invalid envelope address, the DSN is
-  suppressed to prevent backscatter. See the archive objects table below for the
-  resulting files in each case.
+  If the addressed mailbox does not exist, the mail control service generates a Delivery Status Notification
+  (DSN) and sends it back to the original sender. If the original sender used a null or invalid envelope
+  address, the DSN is suppressed to prevent backscatter. See the archive objects table below for the resulting
+  files in each case.
 </Note>
 
 ## Outbound flow
@@ -63,35 +54,29 @@ When someone sends an email to an address on your domain, Cloudflare intercepts 
 When an agent sends a message, submission is authenticated at the web server before passing through WildDuck and ZoneMTA to the mail control service relay.
 
 <Steps>
-  <Step title="Agent sends from its mailbox">
-    An agent submits a message through the authenticated web server. The web
-    server verifies the agent's identity and the mailbox permission, then
-    initiates submission through WildDuck on the agent's behalf.
+  <Step title='Agent sends from its mailbox'>
+    An agent submits a message through the authenticated web server. The web server verifies the agent's
+    identity and the mailbox permission, then initiates submission through WildDuck on the agent's behalf.
   </Step>
-  <Step title="Message is queued for outbound delivery">
-    WildDuck writes the user-visible Sent copy to the mailbox and hands the
-    message to ZoneMTA. ZoneMTA owns the outbound queue, delivery retries, and
-    bounce generation for the message.
+  <Step title='Message is queued for outbound delivery'>
+    WildDuck writes the user-visible Sent copy to the mailbox and hands the message to ZoneMTA. ZoneMTA owns
+    the outbound queue, delivery retries, and bounce generation for the message.
   </Step>
-  <Step title="Mail control service routes through the configured provider">
-    ZoneMTA submits the message to the mail control service internal relay. The
-    relay verifies the sender domain is active, archives the exact relay bytes
-    as `relay.eml`, and sends the message through your configured outbound
-    provider — either Cloudflare Email or SES. Messages addressed to active
-    local AgentTeam Email domains are routed directly back through
-    Haraka/WildDuck without calling the provider.
+  <Step title='Mail control service routes through the configured provider'>
+    ZoneMTA submits the message to the mail control service internal relay. The relay verifies the sender
+    domain is active, archives the exact relay bytes as `relay.eml`, and sends the message through your
+    configured outbound provider — either Cloudflare Email or SES. Messages addressed to active local
+    AgentTeam Email domains are routed directly back through Haraka/WildDuck without calling the provider.
   </Step>
-  <Step title="Relay is archived">
-    The relay writes `relay.eml` (exact bytes received from ZoneMTA) and
-    `relay.json` (relay boundary metadata including sender domain, provider
-    selection, and envelope details). For provider-bound messages, the sanitized
-    provider payload is also written as `provider.eml` or `provider.json`.
+  <Step title='Relay is archived'>
+    The relay writes `relay.eml` (exact bytes received from ZoneMTA) and `relay.json` (relay boundary metadata
+    including sender domain, provider selection, and envelope details). For provider-bound messages, the
+    sanitized provider payload is also written as `provider.eml` or `provider.json`.
   </Step>
-  <Step title="Delivery result is recorded">
-    After the provider accepts or rejects the message, the relay writes
-    `result.json` with the provider outcome. ZoneMTA handles retries for
-    transient provider failures; each retry creates a new archive bundle linked
-    by the shared ZoneMTA queue ID.
+  <Step title='Delivery result is recorded'>
+    After the provider accepts or rejects the message, the relay writes `result.json` with the provider
+    outcome. ZoneMTA handles retries for transient provider failures; each retry creates a new archive bundle
+    linked by the shared ZoneMTA queue ID.
   </Step>
 </Steps>
 
@@ -99,14 +84,14 @@ When an agent sends a message, submission is authenticated at the web server bef
 
 Each message bundle in R2 storage contains a set of files that depend on the message direction and delivery outcome. All timestamps and date path segments are UTC.
 
-| File | Description | Present for |
-|---|---|---|
-| `raw.eml` | Exact RFC822 bytes as received from Cloudflare — unmodified, no injected headers | All inbound |
-| `edge.json` | Cloudflare Worker envelope, SHA-256 integrity hash, SPF/DKIM/ARC/DMARC authentication verdicts, and Worker edge evidence | All inbound |
-| `result.json` | Final delivery status, attempt count, timestamps, and WildDuck or provider identifiers | All messages (written on completion) |
-| `dsn.eml` | Agent Mail-generated Delivery Status Notification with human-readable text/HTML, delivery-status part, and original message | Failed inbound with a valid return address only |
-| `relay.eml` | Exact bytes received from ZoneMTA at the internal relay boundary | All outbound |
-| `relay.json` | Relay metadata: sender domain, provider, ZoneMTA queue ID, envelope, and timestamps | All outbound |
+| File          | Description                                                                                                                 | Present for                                     |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| `raw.eml`     | Exact RFC822 bytes as received from Cloudflare — unmodified, no injected headers                                            | All inbound                                     |
+| `edge.json`   | Cloudflare Worker envelope, SHA-256 integrity hash, SPF/DKIM/ARC/DMARC authentication verdicts, and Worker edge evidence    | All inbound                                     |
+| `result.json` | Final delivery status, attempt count, timestamps, and WildDuck or provider identifiers                                      | All messages (written on completion)            |
+| `dsn.eml`     | Agent Mail-generated Delivery Status Notification with human-readable text/HTML, delivery-status part, and original message | Failed inbound with a valid return address only |
+| `relay.eml`   | Exact bytes received from ZoneMTA at the internal relay boundary                                                            | All outbound                                    |
+| `relay.json`  | Relay metadata: sender domain, provider, ZoneMTA queue ID, envelope, and timestamps                                         | All outbound                                    |
 
 ## Delivery status values
 
@@ -114,18 +99,18 @@ The `status` field in `result.json` reflects the terminal outcome for each messa
 
 **Inbound statuses**
 
-| Status | Meaning |
-|---|---|
-| `delivered` | Message was replayed through Haraka and confirmed delivered to the WildDuck mailbox |
-| `delivery_failed_dsn_submitted` | No matching local mailbox; DSN was generated and submitted to the original sender |
+| Status                           | Meaning                                                                                                |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `delivered`                      | Message was replayed through Haraka and confirmed delivered to the WildDuck mailbox                    |
+| `delivery_failed_dsn_submitted`  | No matching local mailbox; DSN was generated and submitted to the original sender                      |
 | `delivery_failed_dsn_suppressed` | No matching local mailbox; DSN was suppressed because the original envelope sender was null or invalid |
 
 **Outbound statuses**
 
-| Status | Meaning |
-|---|---|
-| `provider_accepted` | The outbound provider accepted the message for delivery |
-| `provider_rejected` | The provider returned a permanent rejection |
-| `provider_failed` | The provider returned a transient or unexpected failure |
-| `local_routed` | All recipients are on active local domains; message was delivered directly through Haraka/WildDuck |
-| `local_route_failed` | Local routing attempted but the target mailbox delivery failed |
+| Status               | Meaning                                                                                            |
+| -------------------- | -------------------------------------------------------------------------------------------------- |
+| `provider_accepted`  | The outbound provider accepted the message for delivery                                            |
+| `provider_rejected`  | The provider returned a permanent rejection                                                        |
+| `provider_failed`    | The provider returned a transient or unexpected failure                                            |
+| `local_routed`       | All recipients are on active local domains; message was delivered directly through Haraka/WildDuck |
+| `local_route_failed` | Local routing attempted but the target mailbox delivery failed                                     |

@@ -63,7 +63,7 @@ service-owned archive prefix for objects ending in `/edge.json`, then
 classifies them by schema.
 
 After `edge.json` is committed, the Worker must attempt one HMAC-signed
-fast-path notification through the configured web-owned ingest URL. The
+worker notification through the configured web-owned ingest URL. The
 notification is not an R2 artifact, does not carry raw mail bytes, and does not
 define completion. The web server verifies the Worker request and calls
 `agentMail.ingest.enqueue`; mail-control then validates the metadata against
@@ -348,7 +348,7 @@ Inbound:
 4. Worker generates UUIDv7 `ingest_id` and computes `raw_sha256`.
 5. Worker writes `raw.eml`.
 6. Worker writes `edge.json`; this is the durable inbound commit marker.
-7. Worker sends one HMAC-signed fast-path notification to the web-owned ingest
+7. Worker sends one HMAC-signed worker notification to the web-owned ingest
    boundary containing `organization_id`, `organization_public_id`,
    `archive_prefix`, `worker_connection_id`, `worker_domain_deployment_id`,
    `ingest_id`, `recipient_domain`, `raw_key`, `edge_key`, `result_key`,

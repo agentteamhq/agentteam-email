@@ -12,7 +12,6 @@ import (
 	"net"
 	"net/smtp"
 	"net/textproto"
-	"os"
 	"path"
 	"regexp"
 	"strings"
@@ -100,10 +99,6 @@ type runtimeConfig struct {
 	MongoURI            string
 	MongoDB             string
 	R2                  r2archive.Config
-	NotifyListenURL     string
-	NotifyExternalURL   string
-	NotifyHMACSecret    string
-	NotifyClockSkew     time.Duration
 }
 
 type Manifest struct {
@@ -321,21 +316,11 @@ func newPoller(ctx context.Context, cfg Config, source DomainSource) (*Poller, e
 	if err != nil {
 		return nil, err
 	}
-	notifyListenURL := os.Getenv("AGENT_MAIL_CF_TUNNEL_LISTEN_URL")
-	notifyHMACSecret := os.Getenv("AGENT_MAIL_CF_TUNNEL_HMAC_SECRET")
-	if notifyListenURL != "" && notifyHMACSecret == "" {
-		return nil, fmt.Errorf("missing AGENT_MAIL_CF_TUNNEL_HMAC_SECRET")
-	}
-
 	runtimeCfg.R2 = r2archive.Config{
 		Endpoint: r2Endpoint,
 		Region:   r2Region,
 		Bucket:   r2Bucket,
 	}
-	runtimeCfg.NotifyListenURL = notifyListenURL
-	runtimeCfg.NotifyExternalURL = os.Getenv("AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL")
-	runtimeCfg.NotifyHMACSecret = notifyHMACSecret
-	runtimeCfg.NotifyClockSkew = defaultNotifyClockSkew
 
 	r2Client, err := r2archive.New(ctx, runtimeCfg.R2, r2KeyID, r2Secret)
 	if err != nil {
@@ -432,11 +417,7 @@ func (p *Poller) Run(ctx context.Context) error {
 	if p.domainSource != nil {
 		domainMode = "control-state"
 	}
-	log.Printf("agent-mail-reconciler starting sweep_interval=%s state_database=%s domains=%s max_retries=%d notify_listen_url=%s notify_external_url=%s", p.cfg.SweepInterval, p.cfg.StateMongoDatabase, domainMode, p.cfg.MaxRetries, p.cfg.NotifyListenURL, p.cfg.NotifyExternalURL)
-	notifyErrCh, err := p.startNotifyServer(ctx)
-	if err != nil {
-		return err
-	}
+	log.Printf("agent-mail-reconciler starting sweep_interval=%s state_database=%s domains=%s max_retries=%d", p.cfg.SweepInterval, p.cfg.StateMongoDatabase, domainMode, p.cfg.MaxRetries)
 
 	sweepTicker := time.NewTicker(p.cfg.SweepInterval)
 	defer sweepTicker.Stop()
@@ -477,11 +458,6 @@ func (p *Poller) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case err := <-notifyErrCh:
-			if err != nil {
-				return err
-			}
-			return nil
 		case <-p.wakeCh:
 			if err := p.processDue(ctx); err != nil {
 				return err
@@ -547,6 +523,13 @@ func (p *Poller) EnqueueNotification(ctx context.Context, notification Notificat
 	}
 	p.signalProcessDue()
 	return bundle, nil
+}
+
+func (p *Poller) signalProcessDue() {
+	select {
+	case p.wakeCh <- struct{}{}:
+	default:
+	}
 }
 
 func stopTimer(timer *time.Timer) {

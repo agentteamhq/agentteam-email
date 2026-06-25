@@ -1,10 +1,10 @@
 ---
-title: "Validate and verify your AgentTeam Email deployment"
-sidebarTitle: "Validation"
-description: "Step-by-step checks to confirm that your AgentTeam Email deployment is running correctly, from health endpoints to R2 archive verification."
+title: 'Validate and verify your AgentTeam Email deployment'
+sidebarTitle: 'Validation'
+description: 'Step-by-step checks to confirm that your AgentTeam Email deployment is running correctly, from health endpoints to R2 archive verification.'
 ---
 
-After you deploy AgentTeam Email, run through these checks to confirm that every layer — the web app, the fast-path ingest endpoint, and the R2 archive — is operating correctly. You can run all of these checks from any machine that has network access to your deployment.
+After you deploy AgentTeam Email, run through these checks to confirm that every layer — the web app, the worker ingest endpoint, and the R2 archive — is operating correctly. You can run all of these checks from any machine that has network access to your deployment.
 
 ## Health check
 
@@ -18,10 +18,10 @@ Expect an HTTP `200 OK` response. Any other status code or a connection error in
 
 ## Fast-path ingest verification
 
-The Cloudflare Worker sends HMAC-signed POST requests to `/agent-mail/ingest/v1` after writing each inbound message to R2. You can confirm that the endpoint is reachable without a valid HMAC signature — an unsigned or unauthenticated request will be rejected, but the rejection itself tells you the endpoint is up:
+The Cloudflare Worker sends HMAC-signed POST requests to `/rpc/agent-mail/ingest/v1` after writing each inbound message to R2. You can confirm that the endpoint is reachable without a valid HMAC signature — an unsigned or unauthenticated request will be rejected, but the rejection itself tells you the endpoint is up:
 
 ```bash
-curl -i https://mail.company.example/agent-mail/ingest/v1
+curl -i https://mail.company.example/rpc/agent-mail/ingest/v1
 ```
 
 A `405 Method Not Allowed` or `401 Unauthorized` response confirms the endpoint is reachable and the routing is correct. A connection error or `404` means the path is not being served, which indicates a misconfigured reverse proxy or a web app that has not started cleanly.
@@ -62,7 +62,8 @@ You can inspect these objects using your R2 provider's console or any S3-compati
 If `result.json` is missing, the bundle is incomplete. Check the mail-control-service logs for processing errors and review the Mongo `agent_mail_control` database for `blocked` or `retry_wait` queue items.
 
 <Tip>
-  See the [archive layout reference](/reference/archive-layout) for the full file-by-file description of what each object contains and what each status value means.
+  See the [archive layout reference](/reference/archive-layout) for the full file-by-file description of what
+  each object contains and what each status value means.
 </Tip>
 
 ## Documentation contributor commands
@@ -77,5 +78,6 @@ mise run //docs:check        # run all documentation checks
 ```
 
 <Note>
-  These `mise` commands are for contributors working on the documentation source. They are not required for deploying or operating AgentTeam Email.
+  These `mise` commands are for contributors working on the documentation source. They are not required for
+  deploying or operating AgentTeam Email.
 </Note>

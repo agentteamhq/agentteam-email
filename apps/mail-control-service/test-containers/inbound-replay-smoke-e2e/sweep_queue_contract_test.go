@@ -30,14 +30,14 @@ func TestInboundReplaySweepQueueContracts(t *testing.T) {
 
 	suite := sweepContractNewSuite(t, ctx)
 
-	t.Run("dropped fast-path notification is recovered by sweep", func(t *testing.T) {
+	t.Run("dropped worker notification is recovered by sweep", func(t *testing.T) {
 		scenario := suite.newScenario(t, "sweep-delivers", sweepContractScenarioOptions{
 			SweepInterval: "100ms",
 			RetryDelay:    "30s",
 			MaxRetries:    2,
 			StartSMTP:     true,
 		})
-		bundle := scenario.writeWorkerBundle(t, "Dropped fast path", "<sweep-delivers@example.net>", "")
+		bundle := scenario.writeWorkerBundle(t, "Dropped worker notification", "<sweep-delivers@example.net>", "")
 
 		p := scenario.startPoller(t)
 		_ = p
@@ -270,36 +270,36 @@ func TestInboundReplaySweepQueueContracts(t *testing.T) {
 		scenario.assertOneWorkItem(t, bundle.IngestID)
 	})
 
-	t.Run("fast-path and sweep race remains idempotent", func(t *testing.T) {
-		scenario := suite.newScenario(t, "fastpath-sweep-race", sweepContractScenarioOptions{
+	t.Run("worker notification and sweep race remains idempotent", func(t *testing.T) {
+		scenario := suite.newScenario(t, "worker-notification-sweep-race", sweepContractScenarioOptions{
 			SweepInterval: "100ms",
 			RetryDelay:    "30s",
 			MaxRetries:    2,
 			StartSMTP:     true,
 		})
-		bundle := scenario.writeWorkerBundle(t, "Fast path sweep race", "<fastpath-sweep-race@example.net>", "")
+		bundle := scenario.writeWorkerBundle(t, "Worker notification sweep race", "<worker-notification-sweep-race@example.net>", "")
 
 		p := scenario.startPoller(t)
 		_ = p
-		if err := postSmokeNotification(suite.ctx, scenario.notifyEndpoint, scenario.notification(bundle), scenario.notifyHMACSecret); err != nil {
-			t.Fatalf("post racing fast-path notification: %v", err)
+		if err := enqueueSmokeNotification(suite.ctx, p, scenario.notification(bundle)); err != nil {
+			t.Fatalf("enqueue racing ingest notification: %v", err)
 		}
 
 		waitForSmokeReceipt(t, ctx, suite.archive, bundle.Bundle.ResultKey)
 		resultBefore, err := suite.archive.GetBytes(ctx, bundle.Bundle.ResultKey)
 		if err != nil {
-			t.Fatalf("read fast-path sweep race result: %v", err)
+			t.Fatalf("read worker notification sweep race result: %v", err)
 		}
 		time.Sleep(350 * time.Millisecond)
 		resultAfter, err := suite.archive.GetBytes(ctx, bundle.Bundle.ResultKey)
 		if err != nil {
-			t.Fatalf("read fast-path sweep race result after rediscovery: %v", err)
+			t.Fatalf("read worker notification sweep race result after rediscovery: %v", err)
 		}
 		if !bytes.Equal(resultAfter, resultBefore) {
-			t.Fatalf("result was rewritten by fast-path/sweep race\nbefore:\n%s\nafter:\n%s", resultBefore, resultAfter)
+			t.Fatalf("result was rewritten by worker notification/sweep race\nbefore:\n%s\nafter:\n%s", resultBefore, resultAfter)
 		}
 		if deliveries := scenario.smtp.Deliveries(); len(deliveries) != 1 {
-			t.Fatalf("smtp deliveries = %d, want 1 after fast-path/sweep race", len(deliveries))
+			t.Fatalf("smtp deliveries = %d, want 1 after worker notification/sweep race", len(deliveries))
 		}
 		scenario.assertOneWorkItem(t, bundle.IngestID)
 	})
@@ -366,17 +366,16 @@ type sweepContractScenarioOptions struct {
 }
 
 type sweepContractScenario struct {
-	suite            *sweepContractSuite
-	domain           string
-	mailbox          string
-	controlDB        string
-	wildduckDB       string
-	wdServer         *httptest.Server
-	smtp             *smokeSMTPServer
-	smtpAddr         string
-	notifyEndpoint   string
-	notifyHMACSecret string
-	options          sweepContractScenarioOptions
+	suite      *sweepContractSuite
+	domain     string
+	mailbox    string
+	controlDB  string
+	wildduckDB string
+	wdServer   *httptest.Server
+	smtp       *smokeSMTPServer
+	smtpAddr   string
+	poller     *poller.Poller
+	options    sweepContractScenarioOptions
 }
 
 func (s *sweepContractSuite) newScenario(t *testing.T, name string, opts sweepContractScenarioOptions) *sweepContractScenario {
@@ -417,14 +416,6 @@ func (s *sweepContractSuite) newScenario(t *testing.T, name string, opts sweepCo
 func (s *sweepContractScenario) startPoller(t *testing.T) *poller.Poller {
 	t.Helper()
 
-	notifyListenURL := "http://" + freeSmokeAddress(t)
-	notifyHMACSecret := randomSmokeToken(t, "notify")
-	t.Setenv("AGENT_MAIL_CF_TUNNEL_LISTEN_URL", notifyListenURL)
-	t.Setenv("AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL", "https://mail-ingress."+s.domain+"/agent-mail/ingest/v1")
-	t.Setenv("AGENT_MAIL_CF_TUNNEL_HMAC_SECRET", notifyHMACSecret)
-	s.notifyEndpoint = notifyListenURL + poller.NotifyPath
-	s.notifyHMACSecret = notifyHMACSecret
-
 	cfg := smokePollerConfig(s.suite.mongoURI, s.controlDB, s.wildduckDB, s.wdServer.URL, s.smtpAddr)
 	cfg.SweepInterval = s.options.SweepInterval
 	cfg.RetryDelay = s.options.RetryDelay
@@ -442,7 +433,7 @@ func (s *sweepContractScenario) startPoller(t *testing.T) *poller.Poller {
 	go func() {
 		errCh <- p.Run(pollerCtx)
 	}()
-	waitForSmokeHealth(t, notifyListenURL+poller.HealthPath)
+	s.poller = p
 	t.Cleanup(func() {
 		stopPoller()
 		err := <-errCh

@@ -15,16 +15,15 @@ import { enqueueAgentMailIngest } from './control-client'
 import type { AgentMailIngestNotification } from './control-client'
 import type { CloudflareConnectionId } from '@main/db'
 
-const LEGACY_INGEST_PATH = '/agent-mail/ingest/v1'
 const HEADER_CONNECTION_ID = 'x-agent-mail-connection-id'
 const HEADER_TIMESTAMP = 'x-agent-mail-timestamp'
 const HEADER_SIGNATURE = 'x-agent-mail-signature'
-const FASTPATH_SCHEMA = 'agent-mail.inbound.fastpath.v1'
+const INGEST_NOTIFICATION_SCHEMA = 'agent-mail.inbound.ingest.v1'
 const MAX_BODY_BYTES = 32 * 1024
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000
 
 export function isAgentMailIngestRequestPath(pathname: string): boolean {
-  return pathname === LEGACY_INGEST_PATH || pathname === `${LEGACY_INGEST_PATH}/`
+  return pathname === '/rpc/agent-mail/ingest/v1' || pathname === '/rpc/agent-mail/ingest/v1/'
 }
 
 export async function handleAgentMailIngestRequest(request: Request): Promise<Response> {
@@ -81,13 +80,11 @@ export async function handleAgentMailIngestRequest(request: Request): Promise<Re
         })
         .exec()
     : null
-  const encryptedHmacSecret = deployment?.encryptedWorkerHmacSecret ?? connection?.encryptedWorkerHmacSecret
-
-  if (!connection || !encryptedHmacSecret) {
+  if (!connection || !deployment?.encryptedWorkerHmacSecret) {
     return unauthorized()
   }
 
-  const secret = decryptSecretValue(encryptedHmacSecret)
+  const secret = decryptSecretValue(deployment.encryptedWorkerHmacSecret)
   if (!verifySignature({ bodyBytes, connectionPublicId, secret, signature, timestamp })) {
     return unauthorized()
   }
@@ -103,7 +100,6 @@ export async function handleAgentMailIngestRequest(request: Request): Promise<Re
   }
 
   const validatedNotification = validateNotificationAuthority({
-    connection,
     connectionPublicId,
     deployment,
     notification
@@ -144,7 +140,7 @@ function parseNotification(body: string): AgentMailIngestNotification | null {
   const notification = value as Record<string, unknown>
   const rawSha256 = readOptionalString(notification.raw_sha256)
   if (
-    notification.schema !== FASTPATH_SCHEMA ||
+    notification.schema !== INGEST_NOTIFICATION_SCHEMA ||
     !isNonEmptyString(notification.ingest_id) ||
     !isNonEmptyString(notification.recipient_domain) ||
     !isNonEmptyString(notification.raw_key) ||
@@ -158,7 +154,7 @@ function parseNotification(body: string): AgentMailIngestNotification | null {
   }
 
   return {
-    schema: FASTPATH_SCHEMA,
+    schema: INGEST_NOTIFICATION_SCHEMA,
     ingest_id: notification.ingest_id,
     organization_id: readOptionalString(notification.organization_id),
     organization_public_id: readOptionalString(notification.organization_public_id),
@@ -175,15 +171,10 @@ function parseNotification(body: string): AgentMailIngestNotification | null {
 }
 
 function validateNotificationAuthority({
-  connection,
   connectionPublicId,
   deployment,
   notification
 }: {
-  connection: {
-    archivePrefix?: string | null
-    domain: string
-  }
   connectionPublicId: string
   deployment: {
     archivePrefix: string
@@ -192,21 +183,9 @@ function validateNotificationAuthority({
     organizationPublicId: string
     agentMailDomainId: string | { toString: () => string }
     workerConnectionId: string
-  } | null
+  }
   notification: AgentMailIngestNotification
 }): AgentMailIngestNotification | null {
-  if (!deployment) {
-    const legacyArchivePrefix = connection.archivePrefix
-    if (legacyArchivePrefix?.startsWith('orgs/')) {
-      return null
-    }
-    if (legacyArchivePrefix && !archiveKeysMatch(notification, legacyArchivePrefix)) {
-      return null
-    }
-
-    return notification
-  }
-
   if (
     notification.worker_connection_id !== connectionPublicId ||
     notification.organization_public_id !== deployment.organizationPublicId ||

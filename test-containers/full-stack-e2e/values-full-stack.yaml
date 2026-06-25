@@ -61,13 +61,6 @@ cloudflare:
     archiveBucket:
       value: full-stack-e2e-archive
 
-tunnel:
-  provider: none
-  externalUrl:
-    value: http://atemail-web-server/agent-mail/ingest/v1
-  hmacSecret:
-    value: full-stack-e2e-fastpath-hmac-secret
-
 ingress:
   enabled: false
 

@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const backendPackageHandlersTestState = vi.hoisted(() => ({
   backendRpcHandle: vi.fn(),
   handleAgentAuthConfigurationRequest: vi.fn(),
-  handleAgentMailIngestRequest: vi.fn(),
   handleAtEmailMetadataRequest: vi.fn(),
   handleCloudflareOAuthCallbackRequest: vi.fn(),
   handleEmailVerifiedRedirect: vi.fn(),
@@ -18,14 +17,12 @@ vi.mock('@main/backend', () => ({
     handle: backendPackageHandlersTestState.backendRpcHandle
   },
   handleAgentAuthConfigurationRequest: backendPackageHandlersTestState.handleAgentAuthConfigurationRequest,
-  handleAgentMailIngestRequest: backendPackageHandlersTestState.handleAgentMailIngestRequest,
   handleAtEmailMetadataRequest: backendPackageHandlersTestState.handleAtEmailMetadataRequest,
   handleCloudflareOAuthCallbackRequest:
     backendPackageHandlersTestState.handleCloudflareOAuthCallbackRequest,
   handleOAuthMetadataRequest: backendPackageHandlersTestState.handleOAuthMetadataRequest,
   isAgentAuthConfigurationRequestPath: (pathname: string) =>
     pathname === '/.well-known/agent-configuration',
-  isAgentMailIngestRequestPath: (pathname: string) => pathname === '/agent-mail/ingest/v1',
   isAtEmailMetadataRequestPath: (pathname: string) => pathname === '/.well-known/at-email',
   isCloudflareOAuthCallbackRequestPath: (pathname: string) =>
     pathname === '/cloudflare/oauth/callback',
@@ -45,7 +42,6 @@ describe('backend package request handler', () => {
   beforeEach(() => {
     backendPackageHandlersTestState.backendRpcHandle.mockReset()
     backendPackageHandlersTestState.handleAgentAuthConfigurationRequest.mockReset()
-    backendPackageHandlersTestState.handleAgentMailIngestRequest.mockReset()
     backendPackageHandlersTestState.handleAtEmailMetadataRequest.mockReset()
     backendPackageHandlersTestState.handleCloudflareOAuthCallbackRequest.mockReset()
     backendPackageHandlersTestState.handleEmailVerifiedRedirect.mockReset()
@@ -156,6 +152,31 @@ describe('backend package request handler', () => {
       error: 'Not found',
       path: '/rpc/auth/api/agent/grant-capability'
     })
+  })
+
+  it('routes canonical Agent Mail ingest requests through the backend RPC app', async () => {
+    expect.hasAssertions()
+    backendPackageHandlersTestState.backendRpcHandle.mockImplementation(async (request: Request) =>
+      Response.json({
+        method: request.method,
+        path: new URL(request.url).pathname
+      })
+    )
+    const { handleBackendPackageRequest } = await import('./backend-package-handlers')
+
+    const response = await handleBackendPackageRequest(
+      new Request('https://mail.example.com/rpc/agent-mail/ingest/v1', {
+        body: '{}',
+        headers: { 'content-type': 'application/json' },
+        method: 'POST'
+      })
+    )
+
+    await expect(response?.json()).resolves.toStrictEqual({
+      method: 'POST',
+      path: '/rpc/agent-mail/ingest/v1'
+    })
+    expect(backendPackageHandlersTestState.backendRpcHandle).toHaveBeenCalledTimes(1)
   })
 
   it('returns null for non-backend paths', async () => {

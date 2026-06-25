@@ -12,7 +12,7 @@ Core service scope:
 - `haraka` for canonical inbound SMTP ingest into WildDuck
 - `zonemta` for canonical outbound queueing, retries, and bounce generation
 - `mail-control-service` for service coordination, inbound replay, internal
-  fast-path enqueue handling, the internal SMTP relay listener, outbound
+  ingest enqueue handling, the internal SMTP relay listener, outbound
   provider handling, and feedback processing
 - `atemail-web-server` from `apps/web-server` for the authenticated
   product surface
@@ -40,9 +40,8 @@ app surfaces: the internal control service and the authenticated web server.
 The control service exposes internal runtime surfaces inside one deployment:
 the internal ZoneMTA-only SMTP relay listener on `2587`, provider feedback
 mailbox processing for addresses such as `bounces@<sender-domain>`, and the
-Huma-backed control API on `8081`. The legacy fast-path ingest listener on
-`8080` is optional transition support; production Worker ingest terminates at
-the authenticated web server.
+Huma-backed control API on `8081`. Production Worker ingest terminates at the
+authenticated web server.
 Control API requests use `AGENT_MAIL_CONTROL_API_TOKEN` as an internal service
 credential and expose OpenAPI at `/openapi.json` and `/openapi.yaml`.
 
@@ -68,15 +67,16 @@ Repo-tracked domain files are test fixtures, not the production domain
 management surface. Production routing is catch-all per enabled domain zone to
 the configured Worker.
 
-After `edge.json` is committed, the Worker sends a metadata-only fast-path
-notification to the web server at `/agent-mail/ingest/v1`. The web server
-verifies the per-connection HMAC, resolves the active Cloudflare connection, and
-calls `agentMail.ingest.enqueue` over the internal control API. Accepted
-notifications enqueue the committed bundle into the Mongo-backed control queue,
-wake the normal due-work loop, and the R2 sweep remains the authoritative
-backstop. The same Mail Control Service binary owns inbound replay, outbound
-provider handling, and feedback processing; production domain data is provided
-through service-owned control state and the runtime projection synced by web.
+After `edge.json` is committed, the Worker sends a metadata-only notification
+to the web server at `/rpc/agent-mail/ingest/v1`. The web server
+verifies the deployment-owned Worker HMAC, resolves the active Cloudflare
+connection, and calls `agentMail.ingest.enqueue` over the internal control API.
+Accepted notifications enqueue the committed bundle into the Mongo-backed
+control queue, wake the normal due-work loop, and the R2 sweep remains the
+authoritative backstop. The same Mail Control Service binary owns inbound
+replay, outbound provider handling, and feedback processing; production domain
+data is provided through service-owned control state and the runtime projection
+synced by web.
 
 For the service architecture and required mail archive contracts, see
 `ARCHITECTURE.md`, `R2-BUCKET-LAYOUT.md`, and `PROVENANCE.md`.

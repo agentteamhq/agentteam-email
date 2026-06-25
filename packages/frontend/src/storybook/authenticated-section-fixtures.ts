@@ -197,12 +197,7 @@ const mailRuntimeStatus = {
     status: 'succeeded'
   },
   selectedProvider: 'cloudflare',
-  status: 'ready',
-  tunnel: {
-    configured: true,
-    issues: [],
-    ok: true
-  }
+  status: 'ready'
 } satisfies NonNullable<DomainSettingsState['mailStatus']>
 
 export const domainSettingsEmptyFirstUseState = {

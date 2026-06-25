@@ -172,11 +172,6 @@ export interface AgentMailPublicStatus {
   }
   selectedProvider?: string
   status: string
-  tunnel?: {
-    configured?: boolean
-    issues: string[]
-    ok?: boolean
-  }
 }
 
 export async function getAgentMailStatusForWeb(headers: Headers): Promise<AgentMailPublicStatus> {
@@ -205,8 +200,7 @@ function toAgentMailPublicStatus(value: unknown): AgentMailPublicStatus {
     ok: booleanValue(snapshot.ok),
     provisioning: publicProvisioningStatus(snapshot.provisioning),
     selectedProvider: stringValue(snapshot.selected_provider),
-    status: stringValue(snapshot.status) ?? 'unknown',
-    tunnel: publicTunnelStatus(snapshot.tunnel)
+    status: stringValue(snapshot.status) ?? 'unknown'
   }
 }
 
@@ -300,18 +294,6 @@ function publicProvisioningStatus(value: unknown): AgentMailPublicStatus['provis
     issues: stringArrayValue(value.issues),
     lastApplyAt: dateStringValue(value.last_apply_at),
     status: stringValue(value.status)
-  })
-}
-
-function publicTunnelStatus(value: unknown): AgentMailPublicStatus['tunnel'] {
-  if (!isRecord(value)) {
-    return undefined
-  }
-
-  return compactObject({
-    configured: booleanValue(value.configured),
-    issues: stringArrayValue(value.issues),
-    ok: booleanValue(value.ok)
   })
 }
 

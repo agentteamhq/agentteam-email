@@ -9,4 +9,4 @@ Core rollout checks:
   kubectl rollout status deployment/{{ .Values.names.mailControlService }} -n {{ include "agentteam-email.namespace" . }} --timeout=180s
   kubectl rollout status deployment/{{ .Values.names.webServer }} -n {{ include "agentteam-email.namespace" . }} --timeout=180s
 Cloudflare Email Worker notifications should reach the web server at:
-  {{ trimSuffix "/" .Values.publicHostname }}/agent-mail/ingest/v1
+  {{ trimSuffix "/" .Values.publicHostname }}/rpc/agent-mail/ingest/v1

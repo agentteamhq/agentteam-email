@@ -1,6 +1,6 @@
 ---
-title: "How AgentTeam Email is structured and deployed today"
-sidebarTitle: "Architecture"
+title: 'How AgentTeam Email is structured and deployed today'
+sidebarTitle: 'Architecture'
 description: "Learn how AgentTeam Email's components fit together, where the public boundary sits, and which self-hosted deployment shapes are supported."
 ---
 
@@ -10,14 +10,12 @@ AgentTeam Email is built around a single public boundary — the authenticated w
 
 The web server is the only component that accepts external traffic. Every browser session, public API call, agent runtime request, and CLI connection enters through it. The web server handles authentication (Better Auth sessions, OAuth, API keys), authorization, credential management, Cloudflare integration setup, and the product UI.
 
-The web server also owns the inbound fast-path notification endpoint. Your Cloudflare Email Worker sends a signed `POST /agent-mail/ingest/v1` to this endpoint after it has written an inbound message to archive storage. That route accepts only HMAC-signed Worker notifications — it is not an admin, operator, or direct mail-control surface.
+The web server also owns the inbound worker notification endpoint. Your Cloudflare Email Worker sends a signed `POST /rpc/agent-mail/ingest/v1` to this endpoint after it has written an inbound message to archive storage. That route accepts only HMAC-signed Worker notifications — it is not an admin, operator, or direct mail-control surface.
 
 <Warning>
-  Internal services — WildDuck, Haraka, ZoneMTA, Rspamd, MongoDB, Redis, and
-  the mail control service — must never be reachable from the public internet.
-  Exposing any internal service bypasses AgentTeam Email's authorization layer
-  and the security boundary that protects mailbox contents and operator
-  credentials.
+  Internal services — WildDuck, Haraka, ZoneMTA, Rspamd, MongoDB, Redis, and the mail control service — must
+  never be reachable from the public internet. Exposing any internal service bypasses AgentTeam Email's
+  authorization layer and the security boundary that protects mailbox contents and operator credentials.
 </Warning>
 
 ## Cloudflare Email Routing and Worker
@@ -28,9 +26,9 @@ When a message arrives, the Worker:
 
 1. Writes the raw RFC822 bytes (`raw.eml`) to your R2-compatible archive bucket.
 2. Writes envelope and authentication metadata (`edge.json`) as the durable inbound commit marker.
-3. Sends a single HMAC-signed notification to your deployment's `/agent-mail/ingest/v1` endpoint.
+3. Sends a single HMAC-signed notification to your deployment's `/rpc/agent-mail/ingest/v1` endpoint.
 
-The Worker never sends raw mail bytes to your deployment — only a signed notification with bundle metadata. The archive is the source of truth; the notification is a fast-path optimization on top of the periodic reconciler sweep.
+The Worker never sends raw mail bytes to your deployment — only a signed notification with bundle metadata. The archive is the source of truth; the notification is the default ingest signal, and the periodic reconciler sweep is the recovery path.
 
 ## R2-compatible archive storage
 
@@ -60,13 +58,13 @@ Messages addressed to active local AgentTeam Email domains are routed back throu
 
 ## Network boundaries
 
-| Traffic | Path |
-|---|---|
-| Browsers and API clients | Web server only |
-| Cloudflare Worker notifications | `POST /agent-mail/ingest/v1` on the web server |
-| CLI and agent mailbox clients | Web server only |
-| Web server → internal services | Internal network, server-side only |
-| WildDuck, Haraka, ZoneMTA, MongoDB, Redis | Internal network, not reachable publicly |
+| Traffic                                   | Path                                               |
+| ----------------------------------------- | -------------------------------------------------- |
+| Browsers and API clients                  | Web server only                                    |
+| Cloudflare Worker notifications           | `POST /rpc/agent-mail/ingest/v1` on the web server |
+| CLI and agent mailbox clients             | Web server only                                    |
+| Web server → internal services            | Internal network, server-side only                 |
+| WildDuck, Haraka, ZoneMTA, MongoDB, Redis | Internal network, not reachable publicly           |
 
 ## Deployment shapes
 
@@ -74,22 +72,23 @@ AgentTeam Email supports two deployment shapes for self-hosted installs.
 
 <CardGroup cols={2}>
   <Card
-    title="Docker Compose"
-    icon="docker"
-    href="/guides/self-host/docker-compose"
+    title='Docker Compose'
+    icon='docker'
+    href='/guides/self-host/docker-compose'
   >
-    Deploy all services on a single host using the root `compose.yaml`. The web
-    server port is published; all other services stay on the Compose network.
+    Deploy all services on a single host using the root `compose.yaml`. The web server port is published; all
+    other services stay on the Compose network.
   </Card>
   <Card
-    title="Helm (Kubernetes)"
-    icon="dharmachakra"
-    href="/guides/self-host/helm"
+    title='Helm (Kubernetes)'
+    icon='dharmachakra'
+    href='/guides/self-host/helm'
   >
-    Deploy to Kubernetes using the `charts/agentteam-email` Helm chart. The web
-    service is exposed through optional Ingress; all internal services are
-    cluster-internal.
+    Deploy to Kubernetes using the `charts/agentteam-email` Helm chart. The web service is exposed through
+    optional Ingress; all internal services are cluster-internal.
   </Card>
 </CardGroup>
 
 Both shapes use fail-closed configuration — required values such as secrets, storage endpoints, and provider credentials must be supplied explicitly. The deployment will not start if required inputs are missing.
+
+If your deployment is not directly reachable from the public internet, run your reverse proxy, Tailscale Funnel, Cloudflare Tunnel, or equivalent connector outside the AgentTeam Email Compose or Helm stack. That infrastructure should route `PUBLIC_HOSTNAME` to the web server; the internal mail control service and data stores remain private.

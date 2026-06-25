@@ -8,7 +8,7 @@ This worker is the canonical ingress edge:
 - receives inbound mail via `email()`
 - stores exact raw RFC822 bytes into the bound R2 bucket
 - writes the `edge.json` commit marker for reconciler discovery
-- sends one signed metadata-only fast-path notification after `edge.json` is
+- sends one signed metadata-only worker notification after `edge.json` is
   durable
 - preserves Cloudflare receive-surface metadata in `X-ATMCF-*`
 - logs ingress success and failure with the canonical ingest ID
@@ -47,7 +47,7 @@ Cloudflare provisioning is owned by the web/backend orchestration path:
 - backend provisioning uploads the checked-in generated artifact as `index.js`
 - the Worker gets per-domain org, connection, archive-prefix, temporary R2
   credential, HMAC, and ingest URL bindings from the provisioning call
-- the Worker posts signed fast-path notifications to
+- the Worker posts signed worker notifications to
   `/rpc/agent-mail/ingest/v1`
 - `deploy-worker.mjs` remains a developer utility and is not the production
   provisioning path
@@ -66,7 +66,7 @@ Operational contract:
 - after `edge.json` succeeds, the Worker posts to
   `AGENTTEAM_INGEST_URL` with `X-Agent-Mail-Connection-Id`,
   `X-Agent-Mail-Timestamp`, and `X-Agent-Mail-Signature`
-- fast-path notification failures are logged and are not retried by the Worker;
+- worker notification failures are logged and are not retried by the Worker;
   the R2 reconciler sweep remains authoritative for recovery
 
 Local test surface:

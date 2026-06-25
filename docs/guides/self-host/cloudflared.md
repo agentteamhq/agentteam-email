@@ -1,7 +1,7 @@
 # Cloudflare Tunnel
 
 The web server receives Cloudflare Worker ingress at
-`/agent-mail/ingest/v1`. Cloudflare Tunnel can expose that route by forwarding
+`/rpc/agent-mail/ingest/v1`. Cloudflare Tunnel can expose that route by forwarding
 the full Worker request to the web server.
 
 HMAC-signed Worker notifications are valid. Unknown requests and requests with
@@ -11,15 +11,15 @@ Example public hostnames:
 
 - Web app: `https://mail.company.example`
 - Worker ingest:
-  `https://mail.company.example/agent-mail/ingest/v1`
+  `https://mail.company.example/rpc/agent-mail/ingest/v1`
 - Compose web server service: `http://atemail-web-server:4321`
 - Kubernetes web server service: `http://atemail-web-server:80`
 
 ## Environment
 
 Configure AgentTeam Email with the public web origin. Product Worker
-provisioning derives the ingest URL by appending `/agent-mail/ingest/v1` and
-stores the per-connection Worker HMAC secret in the web database.
+provisioning derives the ingest URL by appending `/rpc/agent-mail/ingest/v1` and
+stores the deployment-owned Worker HMAC secret in the web database.
 
 ```dotenv
 PUBLIC_HOSTNAME=https://mail.company.example
@@ -91,7 +91,7 @@ qualified Kubernetes service DNS name for `atemail-web-server`.
 
 ```bash
 curl -i https://mail.company.example/
-curl -i -X POST https://mail.company.example/agent-mail/ingest/v1
+curl -i -X POST https://mail.company.example/rpc/agent-mail/ingest/v1
 ```
 
 The web hostname should reach the web app. An unsigned ingest request should be

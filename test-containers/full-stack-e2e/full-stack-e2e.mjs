@@ -55,7 +55,7 @@ const minioAccessKey = 'full-stack-e2e-minio'
 const minioSecretKey = 'full-stack-e2e-minio-secret'
 const archiveBucket = 'full-stack-e2e-archive'
 const s3Region = 'us-east-1'
-const fastpathHmacSecret = 'full-stack-e2e-fastpath-hmac-secret'
+const workerNotificationHmacSecret = 'full-stack-e2e-worker-notification-hmac-secret'
 
 let createdCluster = false
 const portForwardProcesses = []
@@ -659,10 +659,6 @@ async function checkMailControlKubernetesServiceNames() {
     commands.includes('127.0.0.1:8081/healthz'),
     'mail-control probes must target the internal control API health endpoint'
   )
-  assert(
-    !envNames.has('AGENT_MAIL_CF_TUNNEL_LISTEN_URL'),
-    'mail-control deployment must not require the legacy public fast-path listener'
-  )
   const expectedEndpoints = {
     AGENT_MAIL_HARAKA_SMTP_ADDRESS: 'haraka:25',
     AGENT_MAIL_ZONEMTA_DSN_ADDRESS: 'zonemta-dsn:2526',
@@ -672,7 +668,7 @@ async function checkMailControlKubernetesServiceNames() {
   for (const [name, value] of Object.entries(expectedEndpoints)) {
     assert(env.get(name)?.value === value, `${name} = ${JSON.stringify(env.get(name))}, want ${value}`)
   }
-  return 'mail-control runtime uses explicit internal service endpoints and no legacy public ingest listener'
+  return 'mail-control runtime uses explicit internal service endpoints'
 }
 
 async function checkTestDependencyServices() {
@@ -793,7 +789,7 @@ async function checkSecretNonDisclosureThroughWeb() {
     'full-stack-e2e-control-api-token',
     minioSecretKey,
     'full-stack-e2e-cloudflare-api-token',
-    fastpathHmacSecret,
+    workerNotificationHmacSecret,
     'full-stack-e2e-wildduck-admin-token',
     'full-stack-e2e-zonemta-relay-password'
   ]
@@ -1007,7 +1003,7 @@ async function checkExactDomainWorkerContract() {
       `Worker script upload for ${domain} did not record a non-empty artifact hash and size`
     )
   }
-  return 'each exact domain has its own org-prefixed Worker deployment contract'
+  return 'each exact domain has its own org-prefixed Worker deployment metadata'
 }
 
 async function checkFakeCloudflareProvisioningOperations() {
@@ -2377,7 +2373,7 @@ function testNotification(domain, ingestId, options = {}) {
     options.bundlePrefix ??
     `${worker.archivePrefix}/${(runtime.receivedAt || new Date().toISOString()).slice(0, 10).replaceAll('-', '/')}/${ingestId}`
   return {
-    schema: 'agent-mail.inbound.fastpath.v1',
+    schema: 'agent-mail.inbound.ingest.v1',
     ingest_id: ingestId,
     organization_public_id: worker.organizationPublicId,
     archive_prefix: worker.archivePrefix,
@@ -3492,7 +3488,7 @@ function redactText(value) {
     ['full-stack-e2e-cloudflare-api-token', '<redacted-cloudflare-api-token>'],
     ['full-stack-e2e-cloudflare-oauth-token', '<redacted-cloudflare-oauth-token>'],
     ['full-stack-e2e-cloudflare-refresh-token', '<redacted-cloudflare-refresh-token>'],
-    [fastpathHmacSecret, '<redacted-fastpath-hmac-secret>'],
+    [workerNotificationHmacSecret, '<redacted-worker-notification-hmac-secret>'],
     ['full-stack-e2e-wildduck-admin-token', '<redacted-wildduck-admin-token>'],
     ['full-stack-e2e-wildduck-access-control-secret', '<redacted-wildduck-access-control-secret>'],
     ['full-stack-e2e-zonemta-relay-password', '<redacted-zonemta-relay-password>'],

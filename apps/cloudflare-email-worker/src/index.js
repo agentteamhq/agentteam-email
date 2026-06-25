@@ -1,4 +1,4 @@
-import { WORKER_NAME, archiveInboundMessage, sendFastPathNotification } from './lib.js'
+import { WORKER_NAME, archiveInboundMessage, sendIngestNotification } from './lib.js'
 
 export default {
   async fetch() {
@@ -23,9 +23,9 @@ export default {
     try {
       const archived = await archiveInboundMessage(message, env)
       console.log(`agent-mail-ingress archived ingest_id=${archived.ingestId}`)
-      const notification = sendFastPathNotification(archived, env).catch((error) => {
+      const notification = sendIngestNotification(archived, env).catch((error) => {
         console.error(
-          `agent-mail-ingress fast_path_notify_failed ingest_id=${archived.ingestId} error_type=${safeErrorType(error)}`
+          `agent-mail-ingress ingest_notification_failed ingest_id=${archived.ingestId} error_type=${safeErrorType(error)}`
         )
       })
       if (ctx && typeof ctx.waitUntil === 'function') {

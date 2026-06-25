@@ -1,19 +1,18 @@
 ---
-title: "Deploy AgentTeam Email on Kubernetes with Helm"
-sidebarTitle: "Helm"
-description: "Install AgentTeam Email on Kubernetes using the official Helm chart from GHCR. Covers values, secrets, tunnel modes, and persistence configuration."
+title: 'Deploy AgentTeam Email on Kubernetes with Helm'
+sidebarTitle: 'Helm'
+description: 'Install AgentTeam Email on Kubernetes using the official Helm chart from GHCR. Covers values, secrets, tunnel modes, and persistence configuration.'
 ---
 
 The Helm chart is the supported Kubernetes deployment path for AgentTeam Email. It renders the full stack — web server, mail control service, MongoDB, Redis, WildDuck, Haraka, ZoneMTA, and Rspamd — into your cluster from a single OCI chart reference. Operator-specific choices live entirely in a release-owned `values.yaml`; the chart owns stable in-cluster defaults.
 
-<Note>
-  **Before you begin, make sure you have:**
-  - A running Kubernetes cluster with a default StorageClass
-  - Helm 3 installed (`helm version`)
-  - A domain using Cloudflare DNS with Email Routing available
-  - An R2-compatible object storage bucket and access credentials
-  - A publicly routable hostname for the web app (for example, `https://mail.company.example`)
-</Note>
+Before you begin, make sure you have:
+
+- A running Kubernetes cluster with a default StorageClass
+- Helm 3 installed (`helm version`)
+- A domain using Cloudflare DNS with Email Routing available
+- An R2-compatible object storage bucket and access credentials
+- A publicly routable hostname for the web app (for example, `https://mail.company.example`)
 
 ## Chart reference
 
@@ -32,6 +31,7 @@ No Helm repository add step is required — Helm 3.8+ can pull OCI charts direct
     Create a `helm/values.yaml` file in your working directory. This file is your release configuration — keep it in version control, but keep secrets out of it using the `valueFrom` pattern described below.
 
     Start from the minimal required values (see the [Key values](#key-values) section below for a full annotated example).
+
   </Step>
 
   <Step title="Render to validate">
@@ -44,6 +44,7 @@ No Helm repository add step is required — Helm 3.8+ can pull OCI charts direct
     ```
 
     Review the rendered manifests to confirm secrets, hostnames, and ingress rules look correct.
+
   </Step>
 
   <Step title="Install or upgrade">
@@ -57,6 +58,7 @@ No Helm repository add step is required — Helm 3.8+ can pull OCI charts direct
     ```
 
     Omitting `--version` installs the latest stable chart. Pin a specific chart version for reproducible production rollouts by adding `--version 0.5.0`.
+
   </Step>
 
   <Step title="Verify pods are running">
@@ -74,6 +76,7 @@ No Helm repository add step is required — Helm 3.8+ can pull OCI charts direct
     ```
 
     Once both are ready, open `publicHostname` in your browser and sign in.
+
   </Step>
 </Steps>
 
@@ -89,7 +92,7 @@ namespace:
   name: agentteam-email
 
 # Public URL of the web app. The Cloudflare Worker derives the ingest URL
-# by appending /agent-mail/ingest/v1 to this value.
+# by appending /rpc/agent-mail/ingest/v1 to this value.
 publicHostname: https://mail.company.example
 
 webServer:
@@ -183,7 +186,9 @@ objectStorage:
 ```
 
 <Note>
-  Secrets rendered into bundled service config files (Haraka, WildDuck, ZoneMTA) must use inline `mailRuntime.*.value` entries. The `valueFrom` pattern is not supported for those values because the chart renders them into ConfigMaps at install time.
+  Secrets rendered into bundled service config files (Haraka, WildDuck, ZoneMTA) must use inline
+  `mailRuntime.*.value` entries. The `valueFrom` pattern is not supported for those values because the chart
+  renders them into ConfigMaps at install time.
 </Note>
 
 Ready-to-use example values files are available in `docs/examples/helm/` in the repository:
@@ -191,62 +196,41 @@ Ready-to-use example values files are available in `docs/examples/helm/` in the 
 - `docs/examples/helm/values-basic.yaml` — inline values, suitable for initial setup
 - `docs/examples/helm/values-existing-secret.yaml` — `valueFrom` pattern for all sensitive values
 
-## Tunnel modes
+## Public exposure
 
-The chart does not install or configure ingress tunnel software. You run tunnel infrastructure as operator-owned workloads and point it at the web server service. Choose the mode that matches your networking setup.
+The chart does not install or configure Tailscale, `cloudflared`, or any other tunnel connector. `publicHostname` must route to the web server service, and that same public origin must serve both the browser app and the Worker ingest endpoint:
 
-<Tabs>
-  <Tab title="No tunnel (Ingress)">
-    Use a standard Kubernetes Ingress when your cluster has a public load balancer or ingress controller. Enable and configure the chart's built-in ingress:
+```text
+https://mail.company.example/
+https://mail.company.example/rpc/agent-mail/ingest/v1
+```
 
-    ```yaml
-    ingress:
-      enabled: true
-      className: nginx
-      hosts:
-        - host: mail.company.example
-          paths:
-            - path: /
-              pathType: Prefix
-      tls:
-        - hosts:
-            - mail.company.example
-          secretName: mail-company-example-tls
-    ```
+Use the chart's built-in Ingress when your cluster has a public load balancer or ingress controller:
 
-    The web server service listens on port 80 inside the cluster. Your ingress controller forwards traffic to it.
-  </Tab>
-  <Tab title="Tailscale Funnel">
-    Run Tailscale as operator-owned infrastructure alongside the chart. Point Funnel at the web server service in the release namespace:
+```yaml
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: mail.company.example
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - hosts:
+        - mail.company.example
+      secretName: mail-company-example-tls
+```
 
-    ```yaml
-    # Your operator-owned Tailscale workload should forward to:
-    # http://atemail-web-server:80
-    #
-    # Set publicHostname to your Funnel hostname:
-    publicHostname: https://mail-ingress.example.ts.net
-    ```
+If your cluster is not directly public, run the tunnel or proxy as operator-owned infrastructure and point it at the web server service:
 
-    If the Tailscale workload runs outside the `agentteam-email` namespace, use the fully-qualified service DNS name: `http://atemail-web-server.agentteam-email.svc.cluster.local:80`.
+```text
+http://atemail-web-server:80
+```
 
-    See the [Tailscale guide](/guides/self-host/tailscale) for the full Funnel configuration.
-  </Tab>
-  <Tab title="Cloudflare Tunnel">
-    Run `cloudflared` as operator-owned infrastructure and configure public hostname routes to forward traffic to the web server service:
+Do not expose the internal control API, WildDuck, MongoDB, Redis, Haraka, ZoneMTA, or Rspamd. The chart has no tunnel-specific values.
 
-    ```yaml
-    # Your cloudflared tunnel should forward:
-    # mail.company.example -> http://atemail-web-server:80
-    #
-    # Set publicHostname to match your tunnel's public hostname:
-    publicHostname: https://mail.company.example
-    ```
-
-    Do not expose the internal control API, WildDuck, MongoDB, Redis, Haraka, ZoneMTA, or Rspamd through the tunnel.
-
-    See the [Cloudflare Tunnel guide](/guides/self-host/cloudflared) for the full configuration.
-  </Tab>
-</Tabs>
+See the [Tailscale example](/guides/self-host/tailscale) and [Cloudflare Tunnel example](/guides/self-host/cloudflared) for operator-owned exposure examples.
 
 ## Persistence
 
@@ -255,12 +239,12 @@ The chart renders `PersistentVolumeClaim` resources only — no `hostPath` volum
 ```yaml
 persistence:
   enabled: true
-  storageClassName: ''   # Leave empty to use the cluster default StorageClass
+  storageClassName: '' # Leave empty to use the cluster default StorageClass
 
   mongodb:
     size: 20Gi
     accessModes: ['ReadWriteOnce']
-    existingClaim: ''   # Set to use a pre-existing PVC
+    existingClaim: '' # Set to use a pre-existing PVC
   redis:
     size: 2Gi
     accessModes: ['ReadWriteOnce']
@@ -278,7 +262,9 @@ persistence:
 Set `existingClaim` to the name of a pre-existing PVC when your environment manages storage independently. The chart mounts the named claim and skips PVC creation for that service.
 
 <Warning>
-  Setting `persistence.enabled=false` switches MongoDB, Redis, Rspamd, and the Haraka queue to `emptyDir` volumes. All data is lost when pods restart. Use this only for disposable development or test installs — never for production.
+  Setting `persistence.enabled=false` switches MongoDB, Redis, Rspamd, and the Haraka queue to `emptyDir`
+  volumes. All data is lost when pods restart. Use this only for disposable development or test installs —
+  never for production.
 </Warning>
 
 ## Example values files

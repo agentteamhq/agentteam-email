@@ -58,12 +58,6 @@ cloudflare:
     archiveBucket:
       value: kind-e2e-archive
 
-workerIngress:
-  externalUrl:
-    value: https://kind-e2e-mail-ingress.invalid/agent-mail/ingest/v1
-  hmacSecret:
-    value: kind-e2e-fastpath-hmac-secret
-
 ingress:
   enabled: false
 

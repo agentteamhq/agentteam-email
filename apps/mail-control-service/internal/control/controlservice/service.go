@@ -553,15 +553,10 @@ func New(ctx context.Context, cfg Config) (*Service, error) {
 		mailprovisioner.WithCloudflare(cloudflareProvisioner),
 		mailprovisioner.WithWildDuck(wildduckProvisioner),
 	)
-	fastPathExternalHost := os.Getenv("AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL")
-	fastPathListenURL := os.Getenv("AGENT_MAIL_CF_TUNNEL_LISTEN_URL")
 	statusProjector, err := domainregistry.NewProjector(domainregistry.ProjectedStatusConfig{
 		PollerConfig:        moduleConfig.Poller,
 		ProviderRelayConfig: moduleConfig.ProviderRelay,
 		SelectedProvider:    selectedProvider,
-		TunnelExternalHost:  fastPathExternalHost,
-		TunnelListenURL:     fastPathListenURL,
-		NotifyPath:          poller.NotifyPath,
 	})
 	if err != nil {
 		_ = providerRelayModule.Close(context.Background())
@@ -843,7 +838,7 @@ func (p *controlStatusProvider) Snapshot(now time.Time) (domainregistry.Snapshot
 		snapshot.ControlState.OK = false
 		snapshot.ControlState.Issues = append(snapshot.ControlState.Issues, "active_domain_load_failed: "+err.Error())
 	}
-	snapshot.Modules = p.modulesStatus(ctx, snapshot.Tunnel)
+	snapshot.Modules = p.modulesStatus(ctx)
 	snapshot.Dependencies = p.dependenciesStatus(snapshot.Dependencies)
 	snapshot = p.mergeCloudflareStatus(ctx, snapshot)
 	snapshot = p.mergeWildDuckStatus(ctx, snapshot, active)
@@ -896,7 +891,7 @@ func (p *controlStatusProvider) controlStateStatus(ctx context.Context, state co
 	return status
 }
 
-func (p *controlStatusProvider) modulesStatus(ctx context.Context, tunnel domainregistry.TunnelStatus) domainregistry.ModulesStatus {
+func (p *controlStatusProvider) modulesStatus(ctx context.Context) domainregistry.ModulesStatus {
 	pollerStatus := p.poller.Status(ctx)
 	relayStatus := p.providerRelay.Status()
 	feedbackStatus := p.feedbackRouter.Status(ctx)
@@ -935,13 +930,6 @@ func (p *controlStatusProvider) modulesStatus(ctx context.Context, tunnel domain
 				Delivered: pollerStatus.Queue.Delivered,
 				Completed: pollerStatus.Queue.Completed,
 			},
-		},
-		FastPathNotify: domainregistry.ModuleStatus{
-			OK:            tunnel.OK,
-			Configured:    tunnel.Configured,
-			Issues:        tunnel.Issues,
-			ListenAddress: tunnel.ListenURL,
-			PublicURL:     tunnel.PublicNotifyURL,
 		},
 		FeedbackRouter: domainregistry.ModuleStatus{
 			OK:            feedbackStatus.OK,

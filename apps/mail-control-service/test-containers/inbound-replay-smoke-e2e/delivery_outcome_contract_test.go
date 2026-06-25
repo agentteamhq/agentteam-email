@@ -203,19 +203,18 @@ type inboundOutcomeAddress struct {
 }
 
 type inboundOutcomeScenario struct {
-	suite            *sweepContractSuite
-	domain           string
-	mailbox          string
-	controlDB        string
-	wildduckDB       string
-	wildduck         inboundOutcomeWildDuck
-	userID           bson.ObjectID
-	mailboxID        bson.ObjectID
-	wdServer         *httptest.Server
-	replaySMTP       *smokeSMTPServer
-	dsnSMTP          *recordingSMTPServer
-	notifyEndpoint   string
-	notifyHMACSecret string
+	suite      *sweepContractSuite
+	domain     string
+	mailbox    string
+	controlDB  string
+	wildduckDB string
+	wildduck   inboundOutcomeWildDuck
+	userID     bson.ObjectID
+	mailboxID  bson.ObjectID
+	wdServer   *httptest.Server
+	replaySMTP *smokeSMTPServer
+	dsnSMTP    *recordingSMTPServer
+	poller     *poller.Poller
 }
 
 func newInboundOutcomeScenario(t *testing.T, suite *sweepContractSuite, name string, opts inboundOutcomeOptions) *inboundOutcomeScenario {
@@ -274,14 +273,6 @@ func newInboundOutcomeScenario(t *testing.T, suite *sweepContractSuite, name str
 func (s *inboundOutcomeScenario) startPoller(t *testing.T) *poller.Poller {
 	t.Helper()
 
-	notifyListenURL := "http://" + freeSmokeAddress(t)
-	notifyHMACSecret := randomSmokeToken(t, "notify")
-	t.Setenv("AGENT_MAIL_CF_TUNNEL_LISTEN_URL", notifyListenURL)
-	t.Setenv("AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL", "https://mail-ingress."+s.domain+"/agent-mail/ingest/v1")
-	t.Setenv("AGENT_MAIL_CF_TUNNEL_HMAC_SECRET", notifyHMACSecret)
-	s.notifyEndpoint = notifyListenURL + poller.NotifyPath
-	s.notifyHMACSecret = notifyHMACSecret
-
 	cfg := smokePollerConfig(s.suite.mongoURI, s.controlDB, s.wildduckDB, s.wdServer.URL, s.replaySMTP.Addr())
 	cfg.DSN.SMTPAddress = s.dsnSMTP.Addr()
 	cfg.SweepInterval = "1h"
@@ -297,7 +288,7 @@ func (s *inboundOutcomeScenario) startPoller(t *testing.T) *poller.Poller {
 	go func() {
 		errCh <- p.Run(pollerCtx)
 	}()
-	waitForSmokeHealth(t, notifyListenURL+poller.HealthPath)
+	s.poller = p
 	t.Cleanup(func() {
 		stopPoller()
 		err := <-errCh
@@ -377,8 +368,11 @@ func (s *inboundOutcomeScenario) newBundle(t *testing.T, subject string) sweepCo
 
 func (s *inboundOutcomeScenario) postNotification(t *testing.T, bundle sweepContractBundle) {
 	t.Helper()
-	if err := postSmokeNotification(s.suite.ctx, s.notifyEndpoint, smokeNotificationForBundle(bundle.Bundle, bundle.ReceivedAt, bundle.RawSHA256), s.notifyHMACSecret); err != nil {
-		t.Fatalf("post inbound outcome notification: %v", err)
+	if s.poller == nil {
+		t.Fatal("poller is not started")
+	}
+	if err := enqueueSmokeNotification(s.suite.ctx, s.poller, smokeNotificationForBundle(bundle.Bundle, bundle.ReceivedAt, bundle.RawSHA256)); err != nil {
+		t.Fatalf("enqueue inbound outcome notification: %v", err)
 	}
 }
 

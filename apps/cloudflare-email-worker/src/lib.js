@@ -7,9 +7,8 @@ import { v7 as uuidv7 } from 'uuid'
 export const WORKER_NAME = 'agent-mail-ingress'
 export const INBOUND_EDGE_SCHEMA = 'agent-mail.inbound.edge.v1'
 export const CLOUDFLARE_EDGE_EVIDENCE_SCHEMA = 'agent-mail.cloudflare-edge-evidence.v1'
-export const INBOUND_FAST_PATH_SCHEMA = 'agent-mail.inbound.fastpath.v1'
+export const INBOUND_INGEST_NOTIFICATION_SCHEMA = 'agent-mail.inbound.ingest.v1'
 export const INBOUND_RPC_PATH = '/rpc/agent-mail/ingest/v1'
-export const LEGACY_INBOUND_FAST_PATH_PATH = '/agent-mail/ingest/v1'
 
 const OBSERVED_AUTH_PROVENANCE_HEADERS = new Set([
   'authentication-results',
@@ -167,7 +166,7 @@ export function normalizeIngestURL(value) {
   }
   if (url.pathname === '/') {
     url.pathname = INBOUND_RPC_PATH
-  } else if (url.pathname !== INBOUND_RPC_PATH && url.pathname !== LEGACY_INBOUND_FAST_PATH_PATH) {
+  } else if (url.pathname !== INBOUND_RPC_PATH) {
     throw new Error(`ingest URL path must be ${INBOUND_RPC_PATH}`)
   }
   url.search = ''
@@ -175,15 +174,13 @@ export function normalizeIngestURL(value) {
   return url
 }
 
-export const normalizeFastPathURL = normalizeIngestURL
-
-export function buildFastPathNotification(archived) {
+export function buildIngestNotification(archived) {
   const manifest = archived?.manifest
   if (!manifest || typeof manifest !== 'object') {
     throw new Error('missing archived inbound manifest')
   }
   return {
-    schema: INBOUND_FAST_PATH_SCHEMA,
+    schema: INBOUND_INGEST_NOTIFICATION_SCHEMA,
     ingest_id: requireString(archived.ingestId, 'ingest id'),
     organization_id: requireString(manifest.organization_id, 'organization id'),
     organization_public_id: requireString(manifest.org_public_id, 'org public id'),
@@ -201,15 +198,15 @@ export function buildFastPathNotification(archived) {
   }
 }
 
-export async function buildFastPathRequest(archived, env, now = new Date()) {
+export async function buildIngestRequest(archived, env, now = new Date()) {
   if (!env || typeof env !== 'object') {
     throw new Error('missing worker environment')
   }
   const url = normalizeIngestURL(env.AGENTTEAM_INGEST_URL)
   const timestamp = now.toISOString()
-  const body = JSON.stringify(buildFastPathNotification(archived))
+  const body = JSON.stringify(buildIngestNotification(archived))
   const connectionId = requireString(env.AGENTTEAM_CONNECTION_ID, 'connection id')
-  const hmacSecret = env.AGENTTEAM_WORKER_HMAC_SECRET ?? env.AGENTTEAM_HMAC_SECRET
+  const hmacSecret = requireString(env.AGENTTEAM_WORKER_HMAC_SECRET, 'Worker HMAC secret')
   const signature = await hmacSha256Hex(hmacSecret, `${timestamp}\n${connectionId}\n${body}`)
   return {
     url,
@@ -226,11 +223,11 @@ export async function buildFastPathRequest(archived, env, now = new Date()) {
   }
 }
 
-export async function sendFastPathNotification(archived, env, fetchImpl = fetch) {
-  const request = await buildFastPathRequest(archived, env)
+export async function sendIngestNotification(archived, env, fetchImpl = fetch) {
+  const request = await buildIngestRequest(archived, env)
   const response = await fetchImpl(request.url, request.init)
   if (!response.ok) {
-    throw new Error(`fast-path notification failed with HTTP ${response.status}`)
+    throw new Error(`ingest notification failed with HTTP ${response.status}`)
   }
 }
 

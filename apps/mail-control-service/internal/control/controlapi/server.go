@@ -210,7 +210,7 @@ func (s *Server) register(mux *http.ServeMux) huma.API {
 		Method:      http.MethodPost,
 		Path:        "/rpc/agentMail.status.get",
 		Summary:     "Get Agent Mail control status",
-		Description: "JSON-RPC-style status query for active domain registry projection, fast-path mapping, provider mapping, and source config state.",
+		Description: "JSON-RPC-style status query for active domain registry projection, provider mapping, and source config state.",
 		Tags:        []string{"status"},
 	}, s.handleStatus)
 

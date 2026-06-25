@@ -1,55 +1,30 @@
 ---
-title: "Expose the AgentTeam Email ingest endpoint with Tailscale"
-sidebarTitle: "Tailscale"
-description: "Use Tailscale Funnel to expose the web app and fast-path ingest endpoint so your Cloudflare Worker can notify the AgentTeam Email mail control service."
+title: 'Expose the AgentTeam Email ingest endpoint with Tailscale'
+sidebarTitle: 'Tailscale'
+description: 'Use operator-owned Tailscale Funnel to expose the web app and worker ingest endpoint so your Cloudflare Worker can notify AgentTeam Email.'
 ---
 
-Tailscale Funnel is one of two supported options for exposing AgentTeam Email to inbound Cloudflare Worker traffic. Funnel publishes two routes from your tailnet to the public internet — the web application and the fast-path ingest endpoint at `POST /agent-mail/ingest/v1` — so your deployed Cloudflare Worker can deliver signed notifications to the mail control service after archiving each inbound message to R2.
+Tailscale Funnel can expose `PUBLIC_HOSTNAME` when your server is not directly reachable from the public internet. This is an operator-owned networking layer. AgentTeam Email Compose and Helm do not install, configure, or require Tailscale.
+
+Funnel must route the public hostname to the web server. The web server owns both the browser app and the canonical Worker ingest endpoint at `POST /rpc/agent-mail/ingest/v1`.
 
 <Warning>
-  Funnel must only expose the web application and the `/agent-mail/ingest/v1` route. Do **not** expose WildDuck, MongoDB, Redis, Haraka, ZoneMTA, or the internal control API through Funnel or any other public interface. Exposing these services creates direct attack surface against your mail store and internal API boundary.
+  Funnel must expose only the web server. Do **not** expose WildDuck, MongoDB, Redis, Haraka, ZoneMTA, or the
+  internal control API through Funnel or any other public interface. Exposing these services creates direct
+  attack surface against your mail store and internal API boundary.
 </Warning>
 
 ## Environment Variables
 
-Set the following variables before starting the Tailscale container or deploying your Helm release.
+Set the following variables only in the operator-owned Tailscale runtime.
 
 ```text
-AGENT_MAIL_CF_TUNNEL_LISTEN_URL=http://0.0.0.0:8080
-AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL=https://mail-ingress.company.example/agent-mail/ingest/v1
-AGENT_MAIL_CF_TUNNEL_HMAC_SECRET=<random-secret>
 TAILSCALE_AUTHKEY=
 TAILSCALE_HOSTNAME=mail-ingress
 ```
 
-`AGENT_MAIL_CF_TUNNEL_HMAC_SECRET` must match the secret bound to the Cloudflare Worker. Requests signed with a different secret or with no signature are rejected before they reach the mail control service.
-
-## Helm Values
-
-If you are deploying to Kubernetes, configure the tunnel and Tailscale blocks in your Helm values file. Reference the HMAC secret and Tailscale auth key from a Kubernetes Secret rather than embedding them as plain values.
-
-```yaml
-tunnel:
-  provider: tailscale
-  listenUrl:
-    value: http://0.0.0.0:8080
-  externalUrl:
-    value: https://mail-ingress.company.example/agent-mail/ingest/v1
-  hmacSecret:
-    valueFrom:
-      secretKeyRef:
-        name: mail-secrets
-        key: AGENT_MAIL_CF_TUNNEL_HMAC_SECRET
-
-tailscale:
-  hostname: mail-ingress
-  certDomain: mail-ingress.company.example
-  authKey:
-    valueFrom:
-      secretKeyRef:
-        name: mail-secrets
-        key: AGENT_MAIL_TAILSCALE_AUTH_KEY
-```
+Do not add these variables to AgentTeam Email Helm values. Do not require them
+from `compose.yaml` or `compose.no-db.yaml`.
 
 ## Docker Compose
 
@@ -59,14 +34,14 @@ The Tailscale container shares the network namespace of the web server container
 services:
   tailscale:
     image: ghcr.io/tailscale/tailscale:v1.96.5
-    network_mode: "service:atemail-web-server"
+    network_mode: 'service:atemail-web-server'
     environment:
-      TS_AUTHKEY: "${TS_AUTHKEY:?missing TS_AUTHKEY}"
-      TS_HOSTNAME: "${TS_HOSTNAME:-mail-ingress}"
+      TS_AUTHKEY: '${TS_AUTHKEY:?missing TS_AUTHKEY}'
+      TS_HOSTNAME: '${TS_HOSTNAME:-mail-ingress}'
       TS_STATE_DIR: /var/lib/tailscale
       TS_SERVE_CONFIG: /etc/tailscale/serve/serve.json
-      TS_USERSPACE: "true"
-      TS_AUTH_ONCE: "true"
+      TS_USERSPACE: 'true'
+      TS_AUTH_ONCE: 'true'
     volumes:
       - tailscale-state:/var/lib/tailscale
       - ./tailscale:/etc/tailscale/serve:ro
@@ -111,43 +86,46 @@ If the Tailscale workload runs in a different namespace than the AgentTeam Email
     In the Tailscale admin console, go to **Settings → Keys** and generate a new auth key. Use a reusable key if you plan to restart the container, or an ephemeral key for a short-lived test. Store the value in `TAILSCALE_AUTHKEY` (Compose) or the `mail-secrets` Kubernetes Secret.
   </Step>
 
-  <Step title="Configure the Tailscale hostname">
-    Set `TAILSCALE_HOSTNAME` to `mail-ingress` or another hostname that is unique within your tailnet. This becomes the subdomain of your tailnet DNS name, for example `mail-ingress.example.ts.net`.
-  </Step>
+<Step title='Configure the Tailscale hostname'>
+  Set `TAILSCALE_HOSTNAME` to `mail-ingress` or another hostname that is unique within your tailnet. This
+  becomes the subdomain of your tailnet DNS name, for example `mail-ingress.example.ts.net`.
+</Step>
 
-  <Step title="Configure HTTPS serving for your tunnel hostname">
-    For Docker Compose, create `./tailscale/serve.json` with the `TCP`, `TerminateTLS`, and `AllowFunnel` blocks shown above. For Kubernetes, configure your Tailscale operator or sidecar to serve HTTPS and enable Funnel for `mail-ingress.company.example`.
-  </Step>
+<Step title='Configure HTTPS serving for your tunnel hostname'>
+  For Docker Compose, create `./tailscale/serve.json` with the `TCP`, `TerminateTLS`, and `AllowFunnel` blocks
+  shown above. For Kubernetes, configure your Tailscale operator or sidecar to serve HTTPS and enable Funnel
+  for `mail-ingress.company.example`.
+</Step>
 
-  <Step title="Set the external URL and HMAC secret">
-    Set `AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL` to the full public HTTPS ingest URL and `AGENT_MAIL_CF_TUNNEL_HMAC_SECRET` to a randomly generated secret:
+<Step title='Set the external URL and HMAC secret'>
+  Set `PUBLIC_HOSTNAME` in AgentTeam Email to the public Funnel hostname. Backend provisioning derives the
+  Worker ingest URL and HMAC secret from this deployment state.
+</Step>
 
-    ```text
-    AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL=https://mail-ingress.company.example/agent-mail/ingest/v1
-    AGENT_MAIL_CF_TUNNEL_HMAC_SECRET=<random-secret>
-    ```
-  </Step>
-
-  <Step title="Apply your Helm release or start Docker Compose">
-    Deploy with `helm upgrade --install` or `docker compose up -d`. The Tailscale container authenticates to your tailnet, acquires the configured hostname, and begins serving HTTPS traffic via Funnel.
-  </Step>
+<Step title='Apply your Helm release or start Docker Compose'>
+  Deploy with `helm upgrade --install` or `docker compose up -d`. The Tailscale container authenticates to
+  your tailnet, acquires the configured hostname, and begins serving HTTPS traffic via Funnel.
+</Step>
 
   <Step title="Confirm both routes are reachable">
     Verify the web application is accessible at your public hostname and that the ingest endpoint responds (with a rejection, as expected for an unsigned request):
 
     ```bash
-    curl -i https://mail-ingress.company.example/agent-mail/ingest/v1
+    curl -i https://mail-ingress.company.example/rpc/agent-mail/ingest/v1
     ```
 
     A `401` or `403` response confirms the route is live and the signature check is active. A connection error indicates Funnel is not yet propagated.
+
   </Step>
 
-  <Step title="Deploy or update the Cloudflare Worker">
-    Deploy the `agent-mail-ingress` Worker with `AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL` and `AGENT_MAIL_CF_TUNNEL_HMAC_SECRET` set to the same values you configured in the previous steps. See [Cloudflare Authentication](/guides/self-host/cloudflare-authentication) for the full Worker setup flow.
-  </Step>
+<Step title='Deploy or update the Cloudflare Worker'>
+  Deploy the `agent-mail-ingress` Worker through the authenticated web setup flow. Backend provisioning
+  derives `AGENTTEAM_INGEST_URL` from `PUBLIC_HOSTNAME` and generates the Worker HMAC secret. See [Cloudflare
+  Authentication](/guides/self-host/cloudflare-authentication) for the full Worker setup flow.
+</Step>
 
   <Step title="Send a test email and confirm delivery">
-    Send an email to any address at your inbound mail domain. Check your mail control service logs to confirm the Worker notification was accepted by the fast-path gate and the message was delivered to the correct mailbox.
+    Send an email to any address at your inbound mail domain. Check your web server and mail control service logs to confirm the Worker notification was accepted by the web RPC ingest route and the message was delivered to the correct mailbox.
   </Step>
 </Steps>
 
@@ -194,9 +172,10 @@ For Kubernetes, the `TCPForward` target should reference the Kubernetes service 
 To confirm the ingest endpoint is live and the signature gate is active, send an unsigned `POST` and expect a rejection:
 
 ```bash
-curl -i https://mail-ingress.company.example/agent-mail/ingest/v1
+curl -i https://mail-ingress.company.example/rpc/agent-mail/ingest/v1
 ```
 
 <Tip>
-  An unsigned request should always be rejected. If it succeeds, the HMAC middleware is not running and your ingest endpoint is unprotected.
+  An unsigned request should always be rejected. If it succeeds, the HMAC middleware is not running and your
+  ingest endpoint is unprotected.
 </Tip>

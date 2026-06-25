@@ -1,10 +1,10 @@
 ---
-title: "Configure Cloudflare Email Routing for AgentTeam Email"
-sidebarTitle: "Cloudflare Auth"
-description: "Set up Cloudflare DNS, Email Routing, Worker deployment, and R2 archive storage to process inbound mail for your self-hosted AgentTeam Email install."
+title: 'Configure Cloudflare Email Routing for AgentTeam Email'
+sidebarTitle: 'Cloudflare Auth'
+description: 'Set up Cloudflare DNS, Email Routing, Worker deployment, and R2 archive storage to process inbound mail for your self-hosted AgentTeam Email install.'
 ---
 
-Cloudflare handles four concerns for inbound mail in a self-hosted AgentTeam Email deployment: DNS for your mail domain, Email Routing to deliver inbound messages to the Worker, Worker deployment to archive messages and fire fast-path notifications, and R2 bucket storage for raw message archives. Each concern requires its own set of Cloudflare resources and a correctly scoped API token before you can deploy the Worker and enable mail flow.
+Cloudflare handles four concerns for inbound mail in a self-hosted AgentTeam Email deployment: DNS for your mail domain, Email Routing to deliver inbound messages to the Worker, Worker deployment to archive messages and fire worker notifications, and R2 bucket storage for raw message archives. Each concern requires its own set of Cloudflare resources and a correctly scoped API token before you can deploy the Worker and enable mail flow.
 
 ## API Token Requirements
 
@@ -19,33 +19,47 @@ Create a Cloudflare API token scoped to one account and the zones that receive m
 - Create or update Email Routing catch-all routes
 
 <Warning>
-  Never expose this token to browsers. Store it exclusively in server-side environment variables or a Kubernetes Secret. Any client-side exposure allows an attacker to modify your Worker, routing rules, and DNS records.
+  Never expose this token to browsers. Store it exclusively in server-side environment variables or a
+  Kubernetes Secret. Any client-side exposure allows an attacker to modify your Worker, routing rules, and DNS
+  records.
 </Warning>
 
 ## Required Cloudflare Resources
 
 Before running the setup workflow, create or identify each of the following resources in your Cloudflare account.
 
-| Resource | Example value |
-|---|---|
-| Cloudflare Account ID | Your account identifier from the Cloudflare dashboard |
-| Zone for inbound mail | `company.example` |
-| R2 bucket name | `company-agent-mail-archive` |
-| Worker script name | `agent-mail-ingress` |
-| Tunnel hostname for fast-path ingest | `mail-ingress.company.example` |
+| Resource                | Example value                                         |
+| ----------------------- | ----------------------------------------------------- |
+| Cloudflare Account ID   | Your account identifier from the Cloudflare dashboard |
+| Zone for inbound mail   | `company.example`                                     |
+| R2 bucket name          | `company-agent-mail-archive`                          |
+| Worker script name      | `agent-mail-ingress`                                  |
+| Public web app hostname | `mail.company.example`                                |
 
 ## Worker Bindings
 
 The `wrangler.toml` for the `agent-mail-ingress` Worker declares a `send_email` binding named `EMAIL`. The setup workflow provisions the remaining bindings as Worker secrets and environment variables.
 
 ```text
-ARCHIVE_BUCKET=company-agent-mail-archive
-AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL=https://mail-ingress.company.example/agent-mail/ingest/v1
-AGENT_MAIL_CF_TUNNEL_HMAC_SECRET=<shared-secret>
+AGENTTEAM_ORGANIZATION_ID=<web-owned-organization-id>
+AGENTTEAM_ORG_PUBLIC_ID=<web-owned-organization-public-id>
+AGENTTEAM_CONNECTION_ID=<web-owned-connection-id>
+AGENTTEAM_DOMAIN_ID=<web-owned-domain-id>
+AGENTTEAM_DOMAIN=company.example
+AGENTTEAM_ARCHIVE_PREFIX=orgs/<org-public-id>/domains/company.example/mail/inbound
+AGENTTEAM_R2_ENDPOINT=<r2-endpoint>
+AGENTTEAM_R2_BUCKET=company-agent-mail-archive
+AGENTTEAM_R2_REGION=auto
+AGENTTEAM_R2_ACCESS_KEY_ID=<temporary-r2-access-key>
+AGENTTEAM_R2_SECRET_ACCESS_KEY=<temporary-r2-secret-key>
+AGENTTEAM_R2_SESSION_TOKEN=<temporary-r2-session-token>
+AGENTTEAM_R2_CREDENTIAL_EXPIRES_AT=<iso-timestamp>
+AGENTTEAM_INGEST_URL=https://mail.company.example/rpc/agent-mail/ingest/v1
+AGENTTEAM_WORKER_HMAC_SECRET=<per-connection-secret>
 EMAIL=<Cloudflare send_email binding>
 ```
 
-The Worker archives each inbound message to R2 and then `POST`s a signed notification to `AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL`. The HMAC secret in the Worker binding must match the `AGENT_MAIL_CF_TUNNEL_HMAC_SECRET` you set on your mail control service.
+The web app provisions `AGENTTEAM_INGEST_URL` from `PUBLIC_HOSTNAME` and stores one encrypted HMAC secret per connected Worker connection. Operators do not set a global ingest URL or global Worker HMAC secret in Compose, Helm, or the mail control service.
 
 ## Email Routing Catch-All Route
 
@@ -85,51 +99,58 @@ AGENT_MAIL_R2_REGION=auto
 AGENT_MAIL_R2_BUCKET=company-agent-mail-archive
 AGENT_MAIL_R2_ACCESS_KEY_ID=
 AGENT_MAIL_R2_SECRET_ACCESS_KEY=
-
-AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL=https://mail-ingress.company.example/agent-mail/ingest/v1
-AGENT_MAIL_CF_TUNNEL_HMAC_SECRET=
 ```
 
 ## Setup Flow
 
-Complete the following steps in order. Steps 3 and 4 require your tunnel to be running — see [Tailscale](/guides/self-host/tailscale) or [Cloudflare Tunnel](/guides/self-host/cloudflared) before proceeding if you have not set one up yet.
+Complete the following steps in order. `PUBLIC_HOSTNAME` must reach the web server before Worker notifications can be delivered. If your server is not directly public, use operator-owned networking such as a reverse proxy, Tailscale Funnel, or Cloudflare Tunnel to route that hostname to the web server.
 
 <Steps>
   <Step title="Create the R2 bucket">
     In the Cloudflare dashboard, navigate to **R2** and create a new bucket named `company-agent-mail-archive`. Note the bucket endpoint URL — you will need it for `AGENT_MAIL_R2_ENDPOINT`.
   </Step>
 
-  <Step title="Create the Cloudflare API token">
-    Go to **My Profile → API Tokens → Create Token**. Scope the token to your account and the zones that receive inbound mail. Grant every permission listed in the [API Token Requirements](#api-token-requirements) section above. Copy the token value and store it in `AGENT_MAIL_CLOUDFLARE_API_TOKEN`.
-  </Step>
+<Step title='Create the Cloudflare API token'>
+  Go to **My Profile → API Tokens → Create Token**. Scope the token to your account and the zones that receive
+  inbound mail. Grant every permission listed in the [API Token Requirements](#api-token-requirements) section
+  above. Copy the token value and store it in `AGENT_MAIL_CLOUDFLARE_API_TOKEN`.
+</Step>
 
-  <Step title="Configure your tunnel endpoint">
-    Set up operator-owned ingress so that `https://mail-ingress.company.example` reaches your mail control service. Follow the [Tailscale](/guides/self-host/tailscale) guide to use Tailscale Funnel, or the [Cloudflare Tunnel](/guides/self-host/cloudflared) guide to use `cloudflared`.
-  </Step>
-
-  <Step title="Set AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL">
-    Set `AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL` to the full public HTTPS ingest URL, including the path:
+  <Step title="Expose PUBLIC_HOSTNAME to the web server">
+    Configure DNS, a reverse proxy, or operator-owned tunnel infrastructure so that `https://mail.company.example` reaches the AgentTeam Email web server. The same hostname must serve the web app and the Worker ingest endpoint:
 
     ```text
-    AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL=https://mail-ingress.company.example/agent-mail/ingest/v1
+    https://mail.company.example/
+    https://mail.company.example/rpc/agent-mail/ingest/v1
     ```
+
   </Step>
 
-  <Step title="Set the HMAC secret">
-    Generate a random secret and set `AGENT_MAIL_CF_TUNNEL_HMAC_SECRET` to the same value in both your service configuration and the Worker binding. Mismatched secrets cause all Worker notifications to be rejected.
+  <Step title="Set PUBLIC_HOSTNAME">
+    Set `PUBLIC_HOSTNAME` to the public web server origin. Do not include the ingest path.
+
+    ```text
+    PUBLIC_HOSTNAME=https://mail.company.example
+    ```
+
   </Step>
 
-  <Step title="Deploy the Worker">
-    Run the setup workflow to deploy the `agent-mail-ingress` Worker to your Cloudflare account. The workflow uses `AGENT_MAIL_CLOUDFLARE_API_TOKEN` and `AGENT_MAIL_CLOUDFLARE_WORKER_SCRIPT_NAME` to upload the script and attach the R2 bucket binding and Worker secrets.
-  </Step>
+<Step title='Deploy the Worker'>
+  Run the authenticated setup workflow in the web app to deploy the `agent-mail-ingress` Worker to your
+  Cloudflare account. The workflow uses the Cloudflare token to upload the script, attach the R2 bucket
+  binding, set `AGENTTEAM_INGEST_URL`, and generate the deployment-owned Worker HMAC secret.
+</Step>
 
-  <Step title="Apply the Email Routing catch-all route">
-    Run the routing configuration step for each inbound zone. The workflow reads `AGENT_MAIL_CLOUDFLARE_ROUTE_CONFIG`, applies the catch-all route, and enables Email Routing for `company.example`.
-  </Step>
+<Step title='Apply the Email Routing catch-all route'>
+  Run the routing configuration step for each inbound zone. The workflow reads
+  `AGENT_MAIL_CLOUDFLARE_ROUTE_CONFIG`, applies the catch-all route, and enables Email Routing for
+  `company.example`.
+</Step>
 
-  <Step title="Send a test email">
-    Send an email to any address at your inbound mail domain, for example `test@company.example`. The Worker receives the message via Email Routing and archives it to R2.
-  </Step>
+<Step title='Send a test email'>
+  Send an email to any address at your inbound mail domain, for example `test@company.example`. The Worker
+  receives the message via Email Routing and archives it to R2.
+</Step>
 
   <Step title="Verify the R2 archive">
     Open the `company-agent-mail-archive` bucket in the Cloudflare dashboard and confirm that the inbound message produced three objects:
@@ -137,9 +158,10 @@ Complete the following steps in order. Steps 3 and 4 require your tunnel to be r
     - `raw.eml` — the original RFC 5322 message
     - `edge.json` — envelope metadata written by the Worker
     - `result.json` — delivery outcome written by the Worker
+
   </Step>
 
-  <Step title="Verify fast-path delivery">
-    Check your mail control service logs and confirm that the signed Worker notification was accepted by the fast-path gate and that the message was delivered to the correct mailbox. A rejected notification indicates a mismatched HMAC secret or an unreachable tunnel endpoint.
+  <Step title="Verify worker notification delivery">
+    Check your web server and mail control service logs and confirm that the signed Worker notification was accepted by the web RPC ingest route and that the message was delivered to the correct mailbox. A rejected notification indicates an unreachable `PUBLIC_HOSTNAME`, a stale Worker deployment, or a mismatched Worker HMAC secret.
   </Step>
 </Steps>

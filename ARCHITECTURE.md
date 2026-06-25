@@ -113,7 +113,7 @@ The internal mail runtime consists of:
 The mail control service is one internal deployment with multiple internal
 runtime surfaces:
 
-- fast-path ingest HTTP listener;
+- internal ingest enqueue handling;
 - ZoneMTA-only SMTP relay listener;
 - provider feedback mailbox processing;
 - Huma-backed internal control API.
@@ -146,12 +146,12 @@ Inbound mail enters through Cloudflare Email Routing and the configured
 Cloudflare Email Worker.
 
 The Worker writes the raw inbound message and edge metadata to R2-compatible
-archive storage before sending a signed fast-path notification. The notification
+archive storage before sending a signed worker notification. The notification
 contains bundle metadata only. Raw mail bytes stay in archive storage.
 
 The control service validates committed archive bundles, records work in
 MongoDB, and replays inbound mail through Haraka into WildDuck. The R2 sweep is
-the recovery path for missed notifications, listener outages, or temporary
+the recovery path for missed notifications, web ingest outages, or temporary
 provider failures.
 
 For self-hosted installs, the Worker writes to the operator-provided
@@ -260,7 +260,7 @@ cluster-internal services.
 
 Self-hosted deployments must configure a public Worker ingest URL for
 Cloudflare Worker notifications. Operator-owned ingress forwards
-`POST /agent-mail/ingest/v1` to the web server. The route accepts only signed
+`POST /rpc/agent-mail/ingest/v1` to the web server. The route accepts only signed
 Worker notifications and is not an admin, operator, or mail-control API surface.
 
 ## Configuration

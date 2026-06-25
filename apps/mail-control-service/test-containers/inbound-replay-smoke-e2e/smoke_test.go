@@ -4,14 +4,12 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -98,7 +96,7 @@ func smokePollerDomainForDomain(domain string) (poller.Domain, error) {
 
 func smokeNotificationForBundle(bundle r2archive.InboundBundle, receivedAt time.Time, rawSHA256 string) poller.Notification {
 	return poller.Notification{
-		Schema:                   poller.FastPathSchema,
+		Schema:                   poller.IngestNotificationSchema,
 		OrganizationID:           smokeOrganizationID,
 		OrganizationPublicID:     smokeOrganizationPublicID,
 		ArchivePrefix:            bundle.ArchivePrefix,
@@ -138,12 +136,7 @@ func TestInboundReplaySmoke(t *testing.T) {
 	t.Setenv("AGENT_MAIL_R2_ACCESS_KEY_ID", minio.AccessKeyID)
 	t.Setenv("AGENT_MAIL_R2_SECRET_ACCESS_KEY", minio.SecretAccessKey)
 
-	notifyListenURL := "http://" + freeSmokeAddress(t)
-	notifyHMACSecret := randomSmokeToken(t, "notify")
 	wildduckAccessToken := randomSmokeToken(t, "wildduck")
-	t.Setenv("AGENT_MAIL_CF_TUNNEL_LISTEN_URL", notifyListenURL)
-	t.Setenv("AGENT_MAIL_CF_TUNNEL_EXTERNAL_URL", "https://mail-ingress.example.test/agent-mail/ingest/v1")
-	t.Setenv("AGENT_MAIL_CF_TUNNEL_HMAC_SECRET", notifyHMACSecret)
 	t.Setenv("AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN", wildduckAccessToken)
 
 	wildduckDB := "wildduck_" + smokeRunID()
@@ -182,8 +175,6 @@ func TestInboundReplaySmoke(t *testing.T) {
 			t.Errorf("poller stopped with error: %v", err)
 		}
 	}()
-
-	waitForSmokeHealth(t, notifyListenURL+poller.HealthPath)
 
 	rawMessage := []byte(strings.ReplaceAll(`From: Sender <sender@example.net>
 To: Agent <agent@example.test>
@@ -250,8 +241,8 @@ hello from smoke
 		t.Fatalf("write raw artifact: %v", err)
 	}
 
-	if err := postSmokeNotification(ctx, notifyListenURL+poller.NotifyPath, smokeNotificationForBundle(bundle, receivedAt, rawSHA256), notifyHMACSecret); err != nil {
-		t.Fatalf("post fast-path notification: %v", err)
+	if err := enqueueSmokeNotification(ctx, p, smokeNotificationForBundle(bundle, receivedAt, rawSHA256)); err != nil {
+		t.Fatalf("enqueue ingest notification: %v", err)
 	}
 
 	receipt := waitForSmokeReceipt(t, ctx, archive, bundle.ResultKey)
@@ -651,29 +642,9 @@ func messageHasHeader(raw []byte, name string, value string) bool {
 	return false
 }
 
-func postSmokeNotification(ctx context.Context, endpoint string, notification poller.Notification, secret string) error {
-	body, err := json.Marshal(notification)
-	if err != nil {
-		return err
-	}
-	timestamp := time.Now().UTC().Format(time.RFC3339Nano)
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set(poller.HeaderTimestamp, timestamp)
-	request.Header.Set(poller.HeaderSignature, hex.EncodeToString(expectedSmokeSignature([]byte(secret), timestamp, body)))
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return err
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusAccepted {
-		data, _ := io.ReadAll(response.Body)
-		return fmt.Errorf("fast-path notification returned %s: %s", response.Status, string(data))
-	}
-	return nil
+func enqueueSmokeNotification(ctx context.Context, p *poller.Poller, notification poller.Notification) error {
+	_, err := p.EnqueueNotification(ctx, notification)
+	return err
 }
 
 func waitForSmokeReceipt(t *testing.T, ctx context.Context, archive *r2archive.Client, resultKey string) poller.Receipt {
@@ -703,22 +674,6 @@ func waitForSmokeReceipt(t *testing.T, ctx context.Context, archive *r2archive.C
 	}
 	t.Fatalf("timed out waiting for result %s: last error: %v", resultKey, lastErr)
 	return poller.Receipt{}
-}
-
-func waitForSmokeHealth(t *testing.T, endpoint string) {
-	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		response, err := http.Get(endpoint)
-		if err == nil {
-			_ = response.Body.Close()
-			if response.StatusCode == http.StatusOK {
-				return
-			}
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	t.Fatalf("timed out waiting for notify health at %s", endpoint)
 }
 
 func createSmokeBucket(ctx context.Context, endpoint string, region string, bucket string, accessKeyID string, secretAccessKey string) error {
@@ -756,14 +711,6 @@ func freeSmokeAddress(t *testing.T) string {
 		t.Fatalf("close free port listener: %v", err)
 	}
 	return addr
-}
-
-func expectedSmokeSignature(secret []byte, timestamp string, body []byte) []byte {
-	mac := hmac.New(sha256.New, secret)
-	mac.Write([]byte(timestamp))
-	mac.Write([]byte("\n"))
-	mac.Write(body)
-	return mac.Sum(nil)
 }
 
 func sha256Hex(data []byte) string {
