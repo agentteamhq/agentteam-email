@@ -243,19 +243,6 @@ func appendUniqueAddress(target []string, seen map[string]struct{}, address stri
 	return append(target, cleaned)
 }
 
-func safeMessageParams(cfg config, mailbox map[string]any, message map[string]any, messageUID int) map[string]any {
-	params := map[string]any{
-		"wildDuckUserId":    cfg.UserID,
-		"wildDuckMailboxId": stringValue(mailbox["id"]),
-		"wildDuckUid":       messageUID,
-	}
-	messageID := message["id"]
-	if messageID != nil && stringValue(messageID) != "" {
-		params["wildDuckMessageId"] = stringValue(messageID)
-	}
-	return params
-}
-
 func safeMessageMetadata(message map[string]any) map[string]any {
 	allowed := []string{
 		"id",

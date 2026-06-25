@@ -7,9 +7,18 @@ suite_root="${repo_root}/test-containers/kind-e2e"
 
 run_id="${TEST_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 run_dir="${TEST_RUN_DIR:-${suite_root}/tmp/run-${run_id}}"
+kubeconfig="${run_dir}/kubeconfig"
 image_tag="${AGENTTEAM_EMAIL_KIND_IMAGE_TAG:-stage}"
-mail_control_service_image_repository="${AGENTTEAM_EMAIL_KIND_MAIL_CONTROL_SERVICE_IMAGE_REPOSITORY:-atemail.${WT}.mail-control-service}"
-web_server_image_repository="${AGENTTEAM_EMAIL_KIND_WEB_SERVER_IMAGE_REPOSITORY:-atemail.${WT}.web-server}"
+configured_mail_control_service_image_repository="${AGENTTEAM_EMAIL_KIND_MAIL_CONTROL_SERVICE_IMAGE_REPOSITORY:-atemail.${WT}.mail-control-service}"
+configured_web_server_image_repository="${AGENTTEAM_EMAIL_KIND_WEB_SERVER_IMAGE_REPOSITORY:-atemail.${WT}.web-server}"
+kind_local_repository() {
+  case "$1" in
+    */*) printf '%s\n' "$1" ;;
+    *) printf 'localhost/%s\n' "$1" ;;
+  esac
+}
+mail_control_service_image_repository="$(kind_local_repository "${configured_mail_control_service_image_repository}")"
+web_server_image_repository="$(kind_local_repository "${configured_web_server_image_repository}")"
 mail_control_service_image="${mail_control_service_image_repository}:${image_tag}"
 web_server_image="${web_server_image_repository}:${image_tag}"
 cluster_name="${AGENTTEAM_EMAIL_KIND_CLUSTER:-atemail-${WT}-e2e}"
@@ -29,6 +38,7 @@ helm_value_args=(
 
 mkdir -p "${run_dir}/logs" "${run_dir}/rendered" "${run_dir}/diagnostics" "${run_dir}/images"
 log_file="${run_dir}/logs/harness.log"
+export KUBECONFIG="${kubeconfig}"
 
 log() {
   printf '[kind-e2e] %s\n' "$*" | tee -a "${log_file}"
@@ -37,6 +47,83 @@ log() {
 run() {
   log "+ $*"
   "$@" 2>&1 | tee -a "${log_file}"
+}
+
+collect_rendered_images() {
+  node --input-type=module - "$1" <<'NODE'
+import { readFileSync } from 'node:fs'
+import { parseAllDocuments } from 'yaml'
+
+const manifestPath = process.argv[2]
+const images = new Set()
+
+function collectImageValues(value) {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectImageValues(item)
+    }
+    return
+  }
+  if (!value || typeof value !== 'object') {
+    return
+  }
+  for (const [key, child] of Object.entries(value)) {
+    if (key === 'image' && typeof child === 'string' && child.trim() !== '') {
+      images.add(child)
+    } else {
+      collectImageValues(child)
+    }
+  }
+}
+
+const documents = parseAllDocuments(readFileSync(manifestPath, 'utf8'))
+for (const document of documents) {
+  if (document.errors.length > 0) {
+    throw new Error(`failed to parse rendered Helm manifest: ${document.errors[0].message}`)
+  }
+  collectImageValues(document.toJS())
+}
+for (const image of [...images].sort()) {
+  console.log(image)
+}
+NODE
+}
+
+image_archive_name() {
+  printf '%s' "$1" | sed -E 's#[/:]#-#g; s#[^A-Za-z0-9_.-]#-#g' | cut -c1-120
+}
+
+is_local_kind_image() {
+  [[ "$1" == localhost/* ]]
+}
+
+save_and_load_image() {
+  local name="$1"
+  local image="$2"
+  local archive_path="${run_dir}/images/${name}.tar"
+  run "${CONTAINER_ENGINE}" save -o "${archive_path}" "${image}"
+  run kind load image-archive "${archive_path}" --name "${cluster_name}"
+}
+
+pull_save_and_load_image() {
+  local name="$1"
+  local image="$2"
+  run "${CONTAINER_ENGINE}" pull "${image}"
+  save_and_load_image "${name}" "${image}"
+}
+
+load_rendered_images() {
+  local rendered_manifest_path="$1"
+  local image
+  while IFS= read -r image; do
+    [[ -n "${image}" ]] || continue
+    log "loading image into kind: ${image}"
+    if is_local_kind_image "${image}"; then
+      save_and_load_image "$(image_archive_name "${image}")" "${image}"
+    else
+      pull_save_and_load_image "$(image_archive_name "${image}")" "${image}"
+    fi
+  done < <(collect_rendered_images "${rendered_manifest_path}")
 }
 
 collect_diagnostics() {
@@ -69,6 +156,7 @@ cleanup() {
 trap cleanup EXIT
 
 log "run directory: ${run_dir}"
+log "kubeconfig: ${kubeconfig}"
 log "WT: ${WT}"
 log "local images: ${mail_control_service_image}, ${web_server_image}"
 log "+ helm template ${release_name} ${repo_root}/charts/agentteam-email --namespace ${namespace} -f ${suite_root}/values-kind.yaml <worktree overrides> > ${run_dir}/rendered/agentteam-email.yaml"
@@ -85,12 +173,10 @@ else
   run kind create cluster --name "${cluster_name}" --wait 120s
   created_cluster=1
 fi
+run kind export kubeconfig --name "${cluster_name}" --kubeconfig "${kubeconfig}"
 run kubectl config use-context "kind-${cluster_name}"
 
-run "${CONTAINER_ENGINE}" save -o "${run_dir}/images/mail-control-service.tar" "${mail_control_service_image}"
-run "${CONTAINER_ENGINE}" save -o "${run_dir}/images/web-server.tar" "${web_server_image}"
-run kind load image-archive "${run_dir}/images/mail-control-service.tar" --name "${cluster_name}"
-run kind load image-archive "${run_dir}/images/web-server.tar" --name "${cluster_name}"
+load_rendered_images "${run_dir}/rendered/agentteam-email.yaml"
 
 run helm upgrade --install "${release_name}" "${repo_root}/charts/agentteam-email" \
   --namespace "${namespace}" \

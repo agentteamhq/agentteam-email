@@ -1,11 +1,11 @@
 "use client"
 
 import { useAuth } from "@better-auth-ui/react"
-import type { ComponentProps } from "react"
 
 import { cn } from "src/lib/utils"
 import { ChangeEmail } from "./change-email"
 import { UserProfile } from "./user-profile"
+import type { ComponentProps } from "react"
 
 export type AccountSettingsProps = {
   className?: string

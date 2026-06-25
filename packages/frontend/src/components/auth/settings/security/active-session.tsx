@@ -1,10 +1,10 @@
 import { useAuth, useRevokeSession, useSession } from "@better-auth-ui/react"
-import type { Session } from "better-auth"
 import Bowser from "bowser"
 import {
   SignOutIcon as LogOut,
   MonitorIcon as Monitor,
   DeviceMobileIcon as Smartphone,
+  TerminalWindowIcon as Terminal,
   XIcon as X
 } from "@phosphor-icons/react"
 import { toast } from "sonner"
@@ -12,6 +12,8 @@ import { toast } from "sonner"
 import { Button } from "src/components/ui/button"
 import { Card, CardContent } from "src/components/ui/card"
 import { Spinner } from "src/components/ui/spinner"
+import { parseAtEmailUserAgent } from "./active-session-user-agent"
+import type { Session } from "better-auth"
 
 function timeAgo(date: Date) {
   const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
@@ -62,14 +64,25 @@ export function ActiveSession({ activeSession }: ActiveSessionProps) {
 
   const isCurrentSession = activeSession.token === session?.session.token
   const ua = Bowser.parse(activeSession.userAgent || "")
+  const cliSession = parseAtEmailUserAgent(activeSession.userAgent)
   const isMobile =
     ua.platform.type === "mobile" || ua.platform.type === "tablet"
+  const sessionTitle =
+    cliSession?.label ??
+    `${ua.browser.name || "Unknown Browser"}${ua.os.name ? `, ${ua.os.name}` : ""}`
+  const sessionMetadata = cliSession?.platform
+  const sessionAge = activeSession.createdAt
+    ? timeAgo(activeSession.createdAt)
+    : null
+  const sessionDetails = [sessionMetadata, sessionAge].filter(Boolean).join(" - ")
 
   return (
     <Card className="bg-transparent border-0 ring-0 shadow-none">
       <CardContent className="flex items-center justify-between gap-3">
         <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted">
-          {isMobile ? (
+          {cliSession ? (
+            <Terminal className="size-4.5" />
+          ) : isMobile ? (
             <Smartphone className="size-4.5" />
           ) : (
             <Monitor className="size-4.5" />
@@ -77,35 +90,40 @@ export function ActiveSession({ activeSession }: ActiveSessionProps) {
         </div>
 
         <div className="flex flex-col min-w-0">
-          <span className="text-sm font-medium truncate">
-            {ua.browser.name || "Unknown Browser"}
-            {ua.os.name ? `, ${ua.os.name}` : ""}
-          </span>
+          <span className="text-sm font-medium truncate">{sessionTitle}</span>
 
           {isCurrentSession ? (
-            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary w-fit">
-              {localization.settings.currentSession}
-            </span>
-          ) : (
-            activeSession.createdAt && (
-              <span className="text-xs text-muted-foreground capitalize">
-                {timeAgo(activeSession.createdAt)}
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary w-fit">
+                {localization.settings.currentSession}
               </span>
-            )
-          )}
+              {sessionMetadata ? (
+                <span className="text-xs text-muted-foreground">
+                  {sessionMetadata}
+                </span>
+              ) : null}
+            </span>
+          ) : sessionDetails ? (
+            <span className="text-xs text-muted-foreground capitalize">
+              {sessionDetails}
+            </span>
+          ) : null}
         </div>
 
         <Button
           className="ml-auto shrink-0"
           variant="outline"
           size="sm"
-          onClick={() =>
-            isCurrentSession
-              ? navigate({
-                  to: `${basePaths.auth}/${viewPaths.auth.signOut}`
-                })
-              : revokeSession(activeSession)
-          }
+          onClick={() => {
+            if (isCurrentSession) {
+              navigate({
+                to: `${basePaths.auth}/${viewPaths.auth.signOut}`
+              })
+              return
+            }
+
+            revokeSession(activeSession)
+          }}
           disabled={isRevoking}
           aria-label={
             isCurrentSession

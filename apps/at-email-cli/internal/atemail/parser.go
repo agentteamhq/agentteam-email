@@ -9,21 +9,28 @@ import (
 type commandName string
 
 const (
-	commandStatus     commandName = "status"
-	commandInbox      commandName = "inbox"
-	commandRead       commandName = "read"
-	commandSearch     commandName = "search"
-	commandMarkRead   commandName = "mark-read"
-	commandArchive    commandName = "archive"
-	commandSend       commandName = "send"
-	commandReply      commandName = "reply"
-	commandAuth       commandName = "auth"
-	commandAuthLogin  commandName = "auth login"
-	commandAuthStatus commandName = "auth status"
-	commandAuthLogout commandName = "auth logout"
-	commandVersion    commandName = "version"
-	commandUpdate     commandName = "self-update"
-	commandSkill      commandName = "skill"
+	commandStatus          commandName = "status"
+	commandInbox           commandName = "inbox"
+	commandRead            commandName = "read"
+	commandSearch          commandName = "search"
+	commandMarkRead        commandName = "mark-read"
+	commandArchive         commandName = "archive"
+	commandSend            commandName = "send"
+	commandReply           commandName = "reply"
+	commandPaperclipTool   commandName = "paperclip-tool"
+	commandAuth            commandName = "auth"
+	commandAuthLogin       commandName = "auth login"
+	commandAuthStatus      commandName = "auth status"
+	commandAuthLogout      commandName = "auth logout"
+	commandAgent           commandName = "agent"
+	commandAgentConnect    commandName = "agent connect"
+	commandAgentTrial      commandName = "agent trial"
+	commandAgentEnroll     commandName = "agent enroll"
+	commandAgentStatus     commandName = "agent status"
+	commandAgentDisconnect commandName = "agent disconnect"
+	commandVersion         commandName = "version"
+	commandUpdate          commandName = "self-update"
+	commandSkill           commandName = "skill"
 )
 
 type parsedArgs struct {
@@ -48,9 +55,20 @@ type parsedArgs struct {
 
 	TargetVersion string
 
-	AuthAction string
-	APIBaseURL string
-	Open       bool
+	AuthAction                 string
+	AgentAction                string
+	AgentCapabilities          []string
+	AgentPostClaimCapabilities []string
+	AgentReason                string
+	AgentName                  string
+	AgentToken                 string
+	APIBaseURL                 string
+	Device                     bool
+	Force                      bool
+	MailboxAddress             string
+	NoOpen                     bool
+	Open                       bool
+	OrganizationID             string
 }
 
 type helpRequest struct {
@@ -96,8 +114,12 @@ func parseArgs(argv []string) (parsedArgs, error) {
 		return parseSend(rest)
 	case commandReply:
 		return parseReply(rest)
+	case commandPaperclipTool:
+		return parsePaperclipTool(rest)
 	case commandAuth:
 		return parseAuth(rest)
+	case commandAgent:
+		return parseAgent(rest)
 	case commandVersion:
 		return parseVersion(rest)
 	case commandUpdate:
@@ -107,6 +129,244 @@ func parseArgs(argv []string) (parsedArgs, error) {
 	default:
 		return parsedArgs{}, newUsageError(fmt.Sprintf("argument COMMAND: invalid choice: %q", command))
 	}
+}
+
+func parsePaperclipTool(argv []string) (parsedArgs, error) {
+	args := parsedArgs{Command: commandPaperclipTool, JSON: true}
+	for i := 0; i < len(argv); i++ {
+		switch argv[i] {
+		case "-h", "--help":
+			return parsedArgs{}, helpRequest{text: commandHelp(commandPaperclipTool)}
+		case "--":
+			if i+1 < len(argv) {
+				return parsedArgs{}, unrecognized(commandPaperclipTool, argv[i+1:])
+			}
+			return args, nil
+		case "--json":
+			args.JSON = true
+		default:
+			return parsedArgs{}, unrecognized(commandPaperclipTool, argv[i:])
+		}
+	}
+	return args, nil
+}
+
+func parseAgent(argv []string) (parsedArgs, error) {
+	if len(argv) == 0 {
+		return parsedArgs{}, newCommandUsageError(commandAgent, "the following arguments are required: agent_command")
+	}
+	if argv[0] == "-h" || argv[0] == "--help" {
+		return parsedArgs{}, helpRequest{text: commandHelp(commandAgent)}
+	}
+	action := argv[0]
+	rest := argv[1:]
+	switch action {
+	case "connect":
+		return parseAgentConnect(rest)
+	case "trial":
+		return parseAgentTrial(rest)
+	case "enroll":
+		return parseAgentEnroll(rest)
+	case "status":
+		return parseAgentStatus(rest)
+	case "disconnect":
+		return parseAgentDisconnect(rest)
+	default:
+		return parsedArgs{}, newCommandUsageError(commandAgent, fmt.Sprintf("argument agent_command: invalid choice: %q", action))
+	}
+}
+
+func parseAgentConnect(argv []string) (parsedArgs, error) {
+	args := parsedArgs{Command: commandAgent, AgentAction: "connect"}
+	for i := 0; i < len(argv); i++ {
+		token := argv[i]
+		switch {
+		case token == "-h" || token == "--help":
+			return parsedArgs{}, helpRequest{text: commandHelp(commandAgentConnect)}
+		case token == "--":
+			if i+1 < len(argv) {
+				return parsedArgs{}, unrecognized(commandAgentConnect, argv[i+1:])
+			}
+			return args, nil
+		case token == "--json":
+			args.JSON = true
+		case token == "--force":
+			args.Force = true
+		case token == "--device":
+			args.Device = true
+		case token == "--no-open":
+			args.NoOpen = true
+		case token == "--api-base-url" || strings.HasPrefix(token, "--api-base-url="):
+			value, err := flagValue(commandAgentConnect, argv, &i, "--api-base-url")
+			if err != nil {
+				return parsedArgs{}, err
+			}
+			args.APIBaseURL = value
+		case token == "--name" || strings.HasPrefix(token, "--name="):
+			value, err := flagValue(commandAgentConnect, argv, &i, "--name")
+			if err != nil {
+				return parsedArgs{}, err
+			}
+			args.AgentName = value
+		case token == "--reason" || strings.HasPrefix(token, "--reason="):
+			value, err := flagValue(commandAgentConnect, argv, &i, "--reason")
+			if err != nil {
+				return parsedArgs{}, err
+			}
+			args.AgentReason = value
+		case token == "--capability" || strings.HasPrefix(token, "--capability="):
+			value, err := flagValue(commandAgentConnect, argv, &i, "--capability")
+			if err != nil {
+				return parsedArgs{}, err
+			}
+			args.AgentCapabilities = append(args.AgentCapabilities, value)
+		case token == "--mailbox-address" || strings.HasPrefix(token, "--mailbox-address="):
+			value, err := flagValue(commandAgentConnect, argv, &i, "--mailbox-address")
+			if err != nil {
+				return parsedArgs{}, err
+			}
+			args.MailboxAddress = value
+		case token == "--organization-id" || strings.HasPrefix(token, "--organization-id="):
+			value, err := flagValue(commandAgentConnect, argv, &i, "--organization-id")
+			if err != nil {
+				return parsedArgs{}, err
+			}
+			args.OrganizationID = value
+		default:
+			return parsedArgs{}, unrecognized(commandAgentConnect, argv[i:])
+		}
+	}
+	return args, nil
+}
+
+func parseAgentTrial(argv []string) (parsedArgs, error) {
+	args := parsedArgs{Command: commandAgent, AgentAction: "trial"}
+	for i := 0; i < len(argv); i++ {
+		token := argv[i]
+		switch {
+		case token == "-h" || token == "--help":
+			return parsedArgs{}, helpRequest{text: commandHelp(commandAgentTrial)}
+		case token == "--":
+			if i+1 < len(argv) {
+				return parsedArgs{}, unrecognized(commandAgentTrial, argv[i+1:])
+			}
+			return args, nil
+		case token == "--json":
+			args.JSON = true
+		case token == "--force":
+			args.Force = true
+		case token == "--api-base-url" || strings.HasPrefix(token, "--api-base-url="):
+			value, err := flagValue(commandAgentTrial, argv, &i, "--api-base-url")
+			if err != nil {
+				return parsedArgs{}, err
+			}
+			args.APIBaseURL = value
+		case token == "--name" || strings.HasPrefix(token, "--name="):
+			value, err := flagValue(commandAgentTrial, argv, &i, "--name")
+			if err != nil {
+				return parsedArgs{}, err
+			}
+			args.AgentName = value
+		case token == "--capability" || strings.HasPrefix(token, "--capability="):
+			value, err := flagValue(commandAgentTrial, argv, &i, "--capability")
+			if err != nil {
+				return parsedArgs{}, err
+			}
+			args.AgentCapabilities = append(args.AgentCapabilities, value)
+		case token == "--post-claim-capability" || strings.HasPrefix(token, "--post-claim-capability="):
+			value, err := flagValue(commandAgentTrial, argv, &i, "--post-claim-capability")
+			if err != nil {
+				return parsedArgs{}, err
+			}
+			args.AgentPostClaimCapabilities = append(args.AgentPostClaimCapabilities, value)
+		default:
+			return parsedArgs{}, unrecognized(commandAgentTrial, argv[i:])
+		}
+	}
+	return args, nil
+}
+
+func parseAgentEnroll(argv []string) (parsedArgs, error) {
+	args := parsedArgs{Command: commandAgent, AgentAction: "enroll"}
+	positionals := make([]string, 0, 1)
+	parsingOptions := true
+	for i := 0; i < len(argv); i++ {
+		token := argv[i]
+		switch {
+		case parsingOptions && (token == "-h" || token == "--help"):
+			return parsedArgs{}, helpRequest{text: commandHelp(commandAgentEnroll)}
+		case parsingOptions && token == "--":
+			parsingOptions = false
+		case parsingOptions && token == "--json":
+			args.JSON = true
+		case parsingOptions && token == "--force":
+			args.Force = true
+		case parsingOptions && (token == "--api-base-url" || strings.HasPrefix(token, "--api-base-url=")):
+			value, err := flagValue(commandAgentEnroll, argv, &i, "--api-base-url")
+			if err != nil {
+				return parsedArgs{}, err
+			}
+			args.APIBaseURL = value
+		case parsingOptions && (token == "--name" || strings.HasPrefix(token, "--name=")):
+			value, err := flagValue(commandAgentEnroll, argv, &i, "--name")
+			if err != nil {
+				return parsedArgs{}, err
+			}
+			args.AgentName = value
+		case parsingOptions && strings.HasPrefix(token, "-"):
+			return parsedArgs{}, unrecognized(commandAgentEnroll, argv[i:])
+		default:
+			positionals = append(positionals, token)
+		}
+	}
+	if len(positionals) == 0 {
+		return parsedArgs{}, newCommandUsageError(commandAgentEnroll, "the following arguments are required: enrollment_token")
+	}
+	if len(positionals) > 1 {
+		return parsedArgs{}, unrecognized(commandAgentEnroll, positionals[1:])
+	}
+	args.AgentToken = positionals[0]
+	return args, nil
+}
+
+func parseAgentStatus(argv []string) (parsedArgs, error) {
+	args := parsedArgs{Command: commandAgent, AgentAction: "status"}
+	for i := 0; i < len(argv); i++ {
+		switch argv[i] {
+		case "-h", "--help":
+			return parsedArgs{}, helpRequest{text: commandHelp(commandAgentStatus)}
+		case "--":
+			if i+1 < len(argv) {
+				return parsedArgs{}, unrecognized(commandAgentStatus, argv[i+1:])
+			}
+			return args, nil
+		case "--json":
+			args.JSON = true
+		default:
+			return parsedArgs{}, unrecognized(commandAgentStatus, argv[i:])
+		}
+	}
+	return args, nil
+}
+
+func parseAgentDisconnect(argv []string) (parsedArgs, error) {
+	args := parsedArgs{Command: commandAgent, AgentAction: "disconnect"}
+	for i := 0; i < len(argv); i++ {
+		switch argv[i] {
+		case "-h", "--help":
+			return parsedArgs{}, helpRequest{text: commandHelp(commandAgentDisconnect)}
+		case "--":
+			if i+1 < len(argv) {
+				return parsedArgs{}, unrecognized(commandAgentDisconnect, argv[i+1:])
+			}
+			return args, nil
+		case "--json":
+			args.JSON = true
+		default:
+			return parsedArgs{}, unrecognized(commandAgentDisconnect, argv[i:])
+		}
+	}
+	return args, nil
 }
 
 func parseStatus(argv []string) (parsedArgs, error) {
@@ -408,6 +668,10 @@ func parseAuthLogin(argv []string) (parsedArgs, error) {
 			return args, nil
 		case token == "--json":
 			args.JSON = true
+		case token == "--device":
+			args.Device = true
+		case token == "--no-open":
+			args.NoOpen = true
 		case token == "--open":
 			args.Open = true
 		case token == "--api-base-url" || strings.HasPrefix(token, "--api-base-url="):
@@ -584,7 +848,7 @@ func rootUsage() string {
 
 func rootHelp() string {
 	return rootUsage() + `
-Work with an agent mailbox through the WildDuck API.
+Work with an agent mailbox through the AgentTeam Email webserver.
 
 positional arguments:
   COMMAND
@@ -597,6 +861,7 @@ positional arguments:
     send       Send one email
     reply      Reply to one message
     auth       Authenticate the CLI with AgentTeam Email
+    agent      Manage local Agent Auth credentials
     version    Print the at-email version
     self-update
               Update the at-email binary from GitHub Releases
@@ -608,16 +873,22 @@ options:
               show the at-email version and exit
 
 configuration:
-  Requires AT_EMAIL_WILDDUCK_API_BASE_URL, AT_EMAIL_WILDDUCK_ACCESS_TOKEN,
-  and AT_EMAIL_WILDDUCK_USER_ID. Safe message reads also require
-  AT_EMAIL_CONTROL_API_BASE_URL and AT_EMAIL_MESSAGE_READ_TOKEN. CLI auth uses
-  https://app.agentteam.email by default and discovers /.well-known/at-email.json
-  when available; set AT_EMAIL_API_BASE_URL for another app origin.
+	Mailbox commands require a local Agent Auth credential created by
+  at-email agent connect, at-email agent trial, or at-email agent enroll TOKEN.
+  They sign requests to the webserver and never use WildDuck or mail-control
+  credentials. CLI auth uses
+  https://app.agentteam.email by default and discovers
+  /.well-known/at-email.json when available; set AT_EMAIL_API_BASE_URL for
+  another app origin.
 
 Examples:
   at-email status
   at-email inbox --unseen
   at-email auth login
+  at-email agent connect
+  at-email agent trial
+  at-email agent enroll TOKEN
+  at-email agent status
   at-email send --to alice@example.net --subject Hello --body 'Hi there'
   at-email version
   at-email skill > at-email-cli/SKILL.md
@@ -642,14 +913,28 @@ func commandUsage(command commandName) string {
 		return "usage: at-email send [-h] [--json] --to TO [--cc CC] [--bcc BCC] [--reply-to REPLY_TO] --subject SUBJECT [--body BODY | --body-file PATH]\n"
 	case commandReply:
 		return "usage: at-email reply [-h] [--json] [--folder FOLDER] [--all] [--body BODY | --body-file PATH] message_id\n"
+	case commandPaperclipTool:
+		return "usage: at-email paperclip-tool [-h] [--json]\n"
 	case commandAuth:
 		return "usage: at-email auth [-h] AUTH_COMMAND ...\n"
 	case commandAuthLogin:
-		return "usage: at-email auth login [-h] [--json] [--api-base-url URL] [--open]\n"
+		return "usage: at-email auth login [-h] [--json] [--api-base-url URL] [--device] [--no-open] [--open]\n"
 	case commandAuthStatus:
 		return "usage: at-email auth status [-h] [--json]\n"
 	case commandAuthLogout:
 		return "usage: at-email auth logout [-h] [--json]\n"
+	case commandAgent:
+		return "usage: at-email agent [-h] AGENT_COMMAND ...\n"
+	case commandAgentConnect:
+		return "usage: at-email agent connect [-h] [--json] [--force] [--api-base-url URL] [--name NAME] [--capability CAPABILITY] [--mailbox-address ADDRESS] [--organization-id ORGANIZATION_ID] [--reason REASON] [--device] [--no-open]\n"
+	case commandAgentTrial:
+		return "usage: at-email agent trial [-h] [--json] [--force] [--api-base-url URL] [--name NAME] [--capability CAPABILITY] [--post-claim-capability CAPABILITY]\n"
+	case commandAgentEnroll:
+		return "usage: at-email agent enroll [-h] [--json] [--force] [--api-base-url URL] [--name NAME] enrollment_token\n"
+	case commandAgentStatus:
+		return "usage: at-email agent status [-h] [--json]\n"
+	case commandAgentDisconnect:
+		return "usage: at-email agent disconnect [-h] [--json]\n"
 	case commandVersion:
 		return "usage: at-email version [-h] [--json]\n"
 	case commandUpdate:
@@ -675,8 +960,10 @@ defaults:
   Prints a concise text status summary unless --json is set.
 
 configuration:
-  Requires AT_EMAIL_WILDDUCK_API_BASE_URL, AT_EMAIL_WILDDUCK_ACCESS_TOKEN,
-  and AT_EMAIL_WILDDUCK_USER_ID. AT_EMAIL_MAILBOX_ADDRESS is shown when set.
+  Requires a local Agent Auth credential created by at-email agent connect,
+  at-email agent trial, or at-email agent enroll.
+  AT_EMAIL_MAILBOX_ADDRESS selects and displays a specific authorized mailbox
+  when set.
 
 Examples:
   at-email status
@@ -694,8 +981,8 @@ options:
   --unseen         show only unread messages
 
 configuration:
-  Requires AT_EMAIL_WILDDUCK_API_BASE_URL, AT_EMAIL_WILDDUCK_ACCESS_TOKEN,
-  and AT_EMAIL_WILDDUCK_USER_ID.
+  Requires a local Agent Auth credential created by at-email agent connect,
+  at-email agent trial, or at-email agent enroll.
 
 Examples:
   at-email inbox
@@ -704,10 +991,10 @@ Examples:
 `
 	case commandRead:
 		return commandUsage(commandRead) + `
-Read one message through the safe message-read Control API.
+Read one message through the AgentTeam Email webserver.
 
 positional arguments:
-  message_id        positive WildDuck message UID in the selected folder
+  message_id        positive message UID in the selected folder
 
 options:
   -h, --help       show this help message and exit
@@ -715,9 +1002,8 @@ options:
   --folder FOLDER  mailbox folder to read from (default: INBOX)
 
 configuration:
-  Requires AT_EMAIL_WILDDUCK_API_BASE_URL, AT_EMAIL_WILDDUCK_ACCESS_TOKEN,
-  AT_EMAIL_WILDDUCK_USER_ID, AT_EMAIL_CONTROL_API_BASE_URL, and
-  AT_EMAIL_MESSAGE_READ_TOKEN.
+  Requires a local Agent Auth credential created by at-email agent connect,
+  at-email agent trial, or at-email agent enroll.
 
 Examples:
   at-email read 7
@@ -729,7 +1015,7 @@ Examples:
 Search messages across the mailbox.
 
 positional arguments:
-  query            search text to send to WildDuck
+  query            search text to send through the webserver
 
 options:
   -h, --help       show this help message and exit
@@ -737,8 +1023,8 @@ options:
   --limit LIMIT    maximum messages to return (default: 20)
 
 configuration:
-  Requires AT_EMAIL_WILDDUCK_API_BASE_URL, AT_EMAIL_WILDDUCK_ACCESS_TOKEN,
-  and AT_EMAIL_WILDDUCK_USER_ID.
+  Requires a local Agent Auth credential created by at-email agent connect,
+  at-email agent trial, or at-email agent enroll.
 
 Examples:
   at-email search invoice
@@ -750,7 +1036,7 @@ Examples:
 Mark one message as read.
 
 positional arguments:
-  message_id        positive WildDuck message UID in the selected folder
+  message_id        positive message UID in the selected folder
 
 options:
   -h, --help       show this help message and exit
@@ -758,8 +1044,8 @@ options:
   --folder FOLDER  mailbox folder containing the message (default: INBOX)
 
 configuration:
-  Requires AT_EMAIL_WILDDUCK_API_BASE_URL, AT_EMAIL_WILDDUCK_ACCESS_TOKEN,
-  and AT_EMAIL_WILDDUCK_USER_ID.
+  Requires a local Agent Auth credential created by at-email agent connect,
+  at-email agent trial, or at-email agent enroll.
 
 Examples:
   at-email mark-read 7
@@ -771,7 +1057,7 @@ Examples:
 Move one message to the Archive mailbox.
 
 positional arguments:
-  message_id        positive WildDuck message UID in the selected folder
+  message_id        positive message UID in the selected folder
 
 options:
   -h, --help       show this help message and exit
@@ -779,8 +1065,8 @@ options:
   --folder FOLDER  source mailbox folder (default: INBOX)
 
 configuration:
-  Requires AT_EMAIL_WILDDUCK_API_BASE_URL, AT_EMAIL_WILDDUCK_ACCESS_TOKEN,
-  and AT_EMAIL_WILDDUCK_USER_ID.
+  Requires a local Agent Auth credential created by at-email agent connect,
+  at-email agent trial, or at-email agent enroll.
 
 Examples:
   at-email archive 7
@@ -810,8 +1096,8 @@ defaults:
   Reads the body from stdin when --body and --body-file are omitted.
 
 configuration:
-  Requires AT_EMAIL_WILDDUCK_API_BASE_URL, AT_EMAIL_WILDDUCK_ACCESS_TOKEN,
-  and AT_EMAIL_WILDDUCK_USER_ID.
+  Requires a local Agent Auth credential created by at-email agent connect,
+  at-email agent trial, or at-email agent enroll.
 
 Examples:
   at-email send --to alice@example.net --subject Hello --body 'Hi there'
@@ -823,7 +1109,7 @@ Examples:
 Reply to one message.
 
 positional arguments:
-  message_id        positive WildDuck message UID in the selected folder
+  message_id        positive message UID in the selected folder
 
 options:
   -h, --help        show this help message and exit
@@ -838,8 +1124,9 @@ defaults:
   when --body and --body-file are omitted.
 
 configuration:
-  Requires AT_EMAIL_WILDDUCK_API_BASE_URL, AT_EMAIL_WILDDUCK_ACCESS_TOKEN,
-  and AT_EMAIL_WILDDUCK_USER_ID. AT_EMAIL_MAILBOX_ADDRESS is used to avoid
+  Requires a local Agent Auth credential created by at-email agent connect,
+  at-email agent trial, or at-email agent enroll.
+  AT_EMAIL_MAILBOX_ADDRESS selects an authorized mailbox and is used to avoid
   replying to the mailbox itself when set.
 
 Examples:
@@ -847,12 +1134,27 @@ Examples:
   at-email reply 7 --all --body-file reply.txt
   at-email reply --folder Archive 7 --json
 `
+	case commandPaperclipTool:
+		return commandUsage(commandPaperclipTool) + `
+Run one Paperclip email tool envelope from stdin.
+
+options:
+  -h, --help        show this help message and exit
+  --json            write the Paperclip tool result JSON to stdout
+
+configuration:
+  Requires a local Agent Auth credential created by at-email agent connect,
+  at-email agent trial, or at-email agent enroll.
+
+Examples:
+  at-email paperclip-tool --json < envelope.json
+`
 	case commandAuth:
 		return commandUsage(commandAuth) + `
 Authenticate at-email with AgentTeam Email.
 
 auth commands:
-  login   Start a Better Auth device login and store the CLI session locally
+  login   Open a Better Auth login and store the CLI session locally
   status  Show the current CLI authentication state
   logout  Revoke the current CLI session and remove the local credential
 
@@ -871,17 +1173,20 @@ Examples:
 `
 	case commandAuthLogin:
 		return commandUsage(commandAuthLogin) + `
-Start a Better Auth device login and store the at-email session locally.
+Open a browser for Better Auth login and store the at-email session locally.
 
 options:
   -h, --help          show this help message and exit
   --json              write machine-readable JSON to stdout
   --api-base-url URL  app origin to authenticate against
-  --open             open the verification URL in a browser in text mode
+  --device            print the verification URL and code without opening a browser
+  --no-open           print the complete verification URL without opening a browser
+  --open              accepted for compatibility; text mode opens by default
 
 defaults:
-  Prints the verification URL and code, then waits until the request is
-  approved or denied. Use --open to also launch the browser in text mode.
+  Opens the complete verification URL in a browser, prints the URL, then waits
+  until the request is approved or denied. Use --device for a code-entry flow
+  or --no-open to copy the complete URL manually.
 
 configuration:
   Uses https://app.agentteam.email by default and discovers
@@ -890,7 +1195,7 @@ configuration:
 
 Examples:
   at-email auth login
-  at-email auth login --open
+  at-email auth login --device
   at-email auth login --api-base-url http://localhost:4321 --json
 `
 	case commandAuthStatus:
@@ -922,6 +1227,142 @@ configuration:
 Examples:
   at-email auth logout
   at-email auth logout --json
+`
+	case commandAgent:
+		return commandUsage(commandAgent) + `
+Manage local Agent Auth credentials.
+
+agent commands:
+  connect     Request delegated Agent Auth access for this device
+  trial       Start an autonomous trial agent and mailbox
+  enroll      Enroll this device as an Agent Auth host and agent
+  status      Show the local agent credential status
+  disconnect  Revoke the local agent and remove local agent credentials
+
+options:
+  -h, --help  show this help message and exit
+
+configuration:
+  Agent credentials are stored separately from personal auth sessions. Private
+  keys, signed JWTs, and enrollment tokens are never printed by status output.
+
+Examples:
+  at-email agent connect
+  at-email agent connect --mailbox-address support@example.com
+  at-email agent trial
+  at-email agent enroll TOKEN
+  at-email agent status
+  at-email agent status --json
+`
+	case commandAgentConnect:
+		return commandUsage(commandAgentConnect) + `
+Request delegated Agent Auth access for this device.
+
+options:
+  -h, --help              show this help message and exit
+  --json                  write machine-readable JSON to stdout
+  --force                 replace an existing local agent credential
+  --api-base-url URL      AgentTeam Email app origin
+  --name NAME             local agent display name
+  --capability CAPABILITY request a specific email capability; repeat as needed
+  --mailbox-address ADDRESS
+                          mailbox constraint for email.message.* capabilities
+  --organization-id ORGANIZATION_ID
+                          accepted for approval flows that preselect an organization
+  --reason REASON         reason shown in the approval request
+  --device                show a code-entry approval flow and do not open a browser
+  --no-open               print the approval URL without opening a browser
+
+defaults:
+  Creates or reuses a local host key, registers a pending delegated agent, then
+  stores a separate Agent Auth credential after browser approval. Requests
+  email.status by default. The approving user selects the organization during
+  browser or device approval. When --mailbox-address is set, default
+  message-list/read/search capabilities are requested for that mailbox.
+
+configuration:
+  Personal auth sessions and agent credentials are separate credential classes.
+  Signed JWTs, private keys, and user session tokens are never printed.
+
+Examples:
+  at-email agent connect
+  at-email agent connect --mailbox-address support@example.com
+  at-email agent connect --capability email.message.send --mailbox-address support@example.com --json
+`
+	case commandAgentTrial:
+		return commandUsage(commandAgentTrial) + `
+Start an autonomous Agent Auth trial with a server-provisioned trial mailbox.
+
+options:
+  -h, --help              show this help message and exit
+  --json                  write machine-readable JSON to stdout
+  --force                 replace an existing local agent credential
+  --api-base-url URL      AgentTeam Email app origin (default: discovered app)
+  --name NAME             local agent display name
+  --capability CAPABILITY request a trial-safe email capability; repeat as needed
+  --post-claim-capability CAPABILITY
+                          request a capability for the claimed agent; repeat as needed
+
+configuration:
+  Does not use a personal auth session. Stores agent credentials separately
+  from personal auth sessions. Signed JWTs and private keys are never printed.
+
+Examples:
+  at-email agent trial
+  at-email agent trial --name "Research Agent" --json
+`
+	case commandAgentEnroll:
+		return commandUsage(commandAgentEnroll) + `
+Enroll this device with an Agent Auth enrollment token from the web app.
+
+positional arguments:
+  enrollment_token  one-time host enrollment token
+
+options:
+  -h, --help          show this help message and exit
+  --json              write machine-readable JSON to stdout
+  --force             replace an existing local agent credential
+  --api-base-url URL  AgentTeam Email app origin (default: discovered app)
+  --name NAME         local agent display name
+
+configuration:
+  Stores agent credentials separately from personal auth sessions. Signed JWTs
+  and enrollment tokens are not persisted.
+
+Examples:
+  at-email agent enroll TOKEN
+  at-email agent enroll TOKEN --name "Research Agent" --json
+`
+	case commandAgentStatus:
+		return commandUsage(commandAgentStatus) + `
+Show the local Agent Auth credential status.
+
+options:
+  -h, --help  show this help message and exit
+  --json      write machine-readable JSON to stdout
+
+configuration:
+  Reads the default local agent credential. Personal auth sessions are not used.
+
+Examples:
+  at-email agent status
+  at-email agent status --json
+`
+	case commandAgentDisconnect:
+		return commandUsage(commandAgentDisconnect) + `
+Revoke the local agent and remove the local Agent Auth credential.
+
+options:
+  -h, --help  show this help message and exit
+  --json      write machine-readable JSON to stdout
+
+configuration:
+  Reads and removes only the local agent credential. Personal auth sessions are
+  not used or modified.
+
+Examples:
+  at-email agent disconnect
+  at-email agent disconnect --json
 `
 	case commandVersion:
 		return commandUsage(commandVersion) + `

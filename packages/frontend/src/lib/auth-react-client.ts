@@ -22,7 +22,6 @@ function getAuthBaseUrl() {
 }
 
 type LastLoginMethodActions = ReturnType<ReturnType<typeof lastLoginMethodClient>['getActions']>
-type AuthReactClient = ReturnType<typeof createAuthClient> & LastLoginMethodActions
 
 const authReactClientOptions = {
   baseURL: getAuthBaseUrl(),
@@ -42,4 +41,6 @@ const authReactClientOptions = {
   ]
 }
 
-export const authReactClient = createAuthClient(authReactClientOptions) as AuthReactClient
+const baseAuthReactClient = createAuthClient(authReactClientOptions)
+
+export const authReactClient = baseAuthReactClient as typeof baseAuthReactClient & LastLoginMethodActions

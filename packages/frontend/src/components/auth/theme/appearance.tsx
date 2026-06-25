@@ -11,7 +11,7 @@ import {
   MoonIcon as Moon,
   SunIcon as Sun
 } from "@phosphor-icons/react"
-import { useEffect, useState } from "react"
+import { useSyncExternalStore } from "react"
 
 import { Card, CardContent } from "src/components/ui/card"
 import {
@@ -42,8 +42,7 @@ export function Appearance({ className }: AppearanceProps) {
   const { useTheme, localization } = useAuthPlugin(themePlugin)
   const { theme, setTheme, themes = [] } = useTheme()
 
-  const [isMounted, setIsMounted] = useState(false)
-  useEffect(() => setIsMounted(true), [])
+  const isMounted = useSyncExternalStore(subscribeToMount, mountedSnapshot, serverSnapshot)
 
   return (
     <div>
@@ -125,4 +124,16 @@ export function Appearance({ className }: AppearanceProps) {
       </Card>
     </div>
   )
+}
+
+function subscribeToMount() {
+  return () => {}
+}
+
+function mountedSnapshot() {
+  return true
+}
+
+function serverSnapshot() {
+  return false
 }

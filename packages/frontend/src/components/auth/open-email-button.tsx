@@ -27,7 +27,7 @@ export function OpenEmailButton({ email, className }: OpenEmailButtonProps) {
   const { localization } = useAuth()
 
   const provider = getEmailProviderLink(email)
-  if (!provider) return null
+  if (!provider) {return null}
 
   return (
     <a

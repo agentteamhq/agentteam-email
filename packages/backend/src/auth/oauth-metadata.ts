@@ -4,7 +4,7 @@ import { globals } from '../globals'
 import { PUBLIC_VARS } from '../vars.public'
 import {
   AGENTTEAM_API_OAUTH_AUDIENCE,
-  AGENTTEAM_API_OAUTH_SCOPES,
+  AGENTTEAM_API_OAUTH_SCOPE_POLICIES,
   AGENTTEAM_OAUTH_PUBLIC_ROUTE
 } from './oauth-provider-config'
 import type { Auth } from 'better-auth/types'
@@ -72,7 +72,7 @@ async function publicApiProtectedResourceMetadataResponse(request: Request): Pro
       resource: AGENTTEAM_API_OAUTH_AUDIENCE,
       resource_documentation: new URL('/openapi/', PUBLIC_VARS.PUBLIC_HOSTNAME).toString(),
       resource_name: 'AgentTeam Email API',
-      scopes_supported: [...AGENTTEAM_API_OAUTH_SCOPES]
+      scopes_supported: AGENTTEAM_API_OAUTH_SCOPE_POLICIES.map((policy) => policy.scope)
     })
 
   return jsonMetadataResponse(request, metadata as unknown as Record<string, unknown>)

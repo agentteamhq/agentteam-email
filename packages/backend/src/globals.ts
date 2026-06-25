@@ -61,7 +61,9 @@ function assertServerGlobals(
 }
 
 async function createServerGlobals(container: ServerGlobalsStorage): Promise<ServerGlobals> {
-  container.db ??= await createDatabase(PRIVATE_VARS.DATABASE_URL)
+  container.db ??= await createDatabase(PRIVATE_VARS.DATABASE_URL, {
+    maxPoolSize: PRIVATE_VARS.DATABASE_MAX_POOL_SIZE
+  })
   container.auth ??= createGlobalAuth(container.db)
   container.shutdownManager ??= new ShutdownManager(debug('app:shutdown'))
   container.shutdownManager.add('database', container.db.close)

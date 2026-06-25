@@ -1,6 +1,6 @@
 import {
-  type ApiKeyAuthClient,
-  type ListedApiKey,
+
+
   useAuth,
   useAuthPlugin,
   useDeleteApiKey
@@ -23,6 +23,7 @@ import { Input } from "src/components/ui/input"
 import { Label } from "src/components/ui/label"
 import { Spinner } from "src/components/ui/spinner"
 import { apiKeyPlugin } from "src/lib/auth/api-key-plugin"
+import type { ApiKeyAuthClient, ListedApiKey } from "@better-auth-ui/react";
 
 export type DeleteApiKeyDialogProps = {
   open: boolean
@@ -45,7 +46,7 @@ export function DeleteApiKeyDialog({
   const { mutate: deleteApiKey, isPending: isDeleting } = useDeleteApiKey(
     authClient as ApiKeyAuthClient,
     {
-      onSuccess: () => onOpenChange(false)
+      onSuccess: () => { onOpenChange(false); }
     }
   )
 
@@ -88,10 +89,10 @@ export function DeleteApiKeyDialog({
             variant="destructive"
             disabled={isDeleting}
             onClick={() =>
-              deleteApiKey({
+              { deleteApiKey({
                 keyId: apiKey.id,
                 ...(organizationId ? { configId: "organization" } : {})
-              })
+              }); }
             }
           >
             {isDeleting && <Spinner />}

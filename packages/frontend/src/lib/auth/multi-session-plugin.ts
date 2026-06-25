@@ -1,11 +1,12 @@
 import { createAuthPlugin } from "@better-auth-ui/core"
 import {
-  multiSessionPlugin as coreMultiSessionPlugin,
-  type MultiSessionPluginOptions
+
+  multiSessionPlugin as coreMultiSessionPlugin
 } from "@better-auth-ui/core/plugins"
 
 import { ManageAccounts } from "src/components/auth/multi-session/manage-accounts"
 import { SwitchAccountSubmenu } from "src/components/auth/multi-session/switch-account-submenu"
+import type { MultiSessionPluginOptions } from "@better-auth-ui/core/plugins";
 
 export const multiSessionPlugin = createAuthPlugin(
   coreMultiSessionPlugin.id,

@@ -25,6 +25,7 @@ import (
 	"agent-mail/internal/mail/structured"
 	"agent-mail/internal/stores/wildduck"
 
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -108,6 +109,7 @@ type runtimeConfig struct {
 type Manifest struct {
 	Schema                 string            `json:"schema"`
 	IngestID               string            `json:"ingest_id"`
+	OrganizationID         string            `json:"organization_id,omitempty"`
 	OrganizationPublicID   string            `json:"organization_public_id,omitempty"`
 	OrgPublicID            string            `json:"org_public_id,omitempty"`
 	ArchivePrefix          string            `json:"archive_prefix,omitempty"`
@@ -204,13 +206,21 @@ type dsnState struct {
 type Poller struct {
 	cfg          runtimeConfig
 	domainSource DomainSource
-	r2           *r2archive.Client
+	r2           r2Client
 	wd           *wildduck.Client
 	mongo        *mongo.Client
 	stateMongo   *mongo.Client
 	messages     *mongo.Collection
 	state        stateStore
 	wakeCh       chan struct{}
+}
+
+type r2Client interface {
+	List(ctx context.Context, prefix string, continuationToken *string) (*s3.ListObjectsV2Output, error)
+	Exists(ctx context.Context, key string) (bool, error)
+	GetBytes(ctx context.Context, key string) ([]byte, error)
+	PutBytes(ctx context.Context, key string, contentType string, data []byte) error
+	PutJSON(ctx context.Context, key string, value any) error
 }
 
 type Status struct {

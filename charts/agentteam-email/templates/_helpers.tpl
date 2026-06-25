@@ -117,6 +117,17 @@ emptyDir: {}
 {{- end -}}
 {{- end -}}
 
+{{- define "agentteam-email.mongodbUri" -}}
+{{- $root := .root -}}
+{{- $database := .database -}}
+{{- $options := default "" .options -}}
+{{- if $options -}}
+{{- printf "mongodb://%s:27017/%s?replicaSet=%s&%s" $root.Values.names.mongodb $database $root.Values.mongodb.replicaSetName $options -}}
+{{- else -}}
+{{- printf "mongodb://%s:27017/%s?replicaSet=%s" $root.Values.names.mongodb $database $root.Values.mongodb.replicaSetName -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "agentteam-email.envFor" -}}
 {{- $root := .root -}}
 {{- $name := .name -}}
@@ -144,15 +155,16 @@ emptyDir: {}
 {{- else if eq $name "AGENT_MAIL_AWS_REGION" -}}{{ if eq $root.Values.outbound.provider.value "ses" }}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.ses.region "name" "ses.region") }}{{ else }}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.ses.region) }}{{ end -}}
 {{- else if eq $name "AGENT_MAIL_AWS_ACCESS_KEY_ID" -}}{{ if eq $root.Values.outbound.provider.value "ses" }}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.ses.accessKeyId "name" "ses.accessKeyId") }}{{ else }}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.ses.accessKeyId) }}{{ end -}}
 {{- else if eq $name "AGENT_MAIL_AWS_SECRET_ACCESS_KEY" -}}{{ if eq $root.Values.outbound.provider.value "ses" }}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.ses.secretAccessKey "name" "ses.secretAccessKey") }}{{ else }}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.ses.secretAccessKey) }}{{ end -}}
-{{- else if eq $name "AGENTTEAM_EMAIL_WILDDUCK_MONGODB_URI" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" "mongodb://mongodb:27017/wildduck?directConnection=true&maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000")) -}}
-{{- else if eq $name "AGENTTEAM_EMAIL_CONTROL_MONGODB_URI" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" "mongodb://mongodb:27017/agent_mail_control?directConnection=true&maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000")) -}}
+{{- else if eq $name "AGENTTEAM_EMAIL_WILDDUCK_MONGODB_URI" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (include "agentteam-email.mongodbUri" (dict "root" $root "database" "wildduck" "options" "maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000")))) -}}
+{{- else if eq $name "AGENTTEAM_EMAIL_CONTROL_MONGODB_URI" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (include "agentteam-email.mongodbUri" (dict "root" $root "database" "agent_mail_control" "options" "maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000")))) -}}
 {{- else if eq $name "NODE_ENV" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" "production")) -}}
 {{- else if eq $name "PORT" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" "4321")) -}}
 {{- else if eq $name "FRONTEND_HOST" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" "0.0.0.0")) -}}
 {{- else if eq $name "PUBLIC_HOSTNAME" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (required "publicHostname is required" $root.Values.publicHostname))) -}}
-{{- else if eq $name "DATABASE_URL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" "mongodb://mongodb:27017/agentteam_email?directConnection=true")) -}}
-{{- else if eq $name "MONGODB_URI" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" "mongodb://mongodb:27017/agentteam_email?directConnection=true")) -}}
+{{- else if eq $name "DATABASE_URL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (include "agentteam-email.mongodbUri" (dict "root" $root "database" "agentteam_email")))) -}}
+{{- else if eq $name "MONGODB_URI" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (include "agentteam-email.mongodbUri" (dict "root" $root "database" "agentteam_email")))) -}}
 {{- else if eq $name "MONGODB_DATABASE" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" "agentteam_email")) -}}
+{{- else if eq $name "DATABASE_MAX_POOL_SIZE" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" $root.Values.webServer.databaseMaxPoolSize)) -}}
 {{- else if eq $name "TMP_DIR" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" "/tmp/agentteam-email")) -}}
 {{- else if eq $name "BETTER_AUTH_SECRET" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.webServer.authSecret "name" "webServer.authSecret") -}}
 {{- else if eq $name "ENCRYPT_SECRET_KEY" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.webServer.encryptionKey "name" "webServer.encryptionKey") -}}

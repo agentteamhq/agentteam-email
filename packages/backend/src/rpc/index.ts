@@ -4,10 +4,12 @@ import { Elysia } from 'elysia'
 
 import { globals } from '../globals'
 import { handleAgentMailIngestRequest } from '../agent-mail/ingest'
+import { isValidAgentMailCapabilityRequestBody } from '../auth/agent-auth-config'
 import { rewritePublicOAuthMetadataResponse } from '../auth/oauth-metadata'
 import { PUBLIC_VARS } from '../vars.public'
 
 import { PRIVATE_VARS } from '../vars.private'
+import agentAccess from './agent-access'
 import cloudflare from './cloudflare'
 import debugRoute from './debug'
 import e2eTestSupport from './e2e-test-support'
@@ -16,6 +18,25 @@ import test from './test'
 import whoami from './whoami'
 
 const apiLog = debug('api:backend')
+
+const AGENT_AUTH_CAPABILITY_REQUEST_PATHS = new Set([
+  '/api/agent/register',
+  '/api/agent/request-capability',
+  '/rpc/auth/api/agent/register',
+  '/rpc/auth/api/agent/request-capability'
+])
+const AGENT_AUTH_BEARER_CREDENTIAL_PATHS = new Set([
+  '/api/agent/register',
+  '/api/agent/request-capability',
+  '/api/agent/revoke',
+  '/api/agent/revoke-capability',
+  '/api/agent/status',
+  '/rpc/auth/api/agent/register',
+  '/rpc/auth/api/agent/request-capability',
+  '/rpc/auth/api/agent/revoke',
+  '/rpc/auth/api/agent/revoke-capability',
+  '/rpc/auth/api/agent/status'
+])
 
 const internalRpcApp = new Elysia({ name: 'rpc-internal', prefix: '/internal' })
 
@@ -51,17 +72,96 @@ export const backendRpcApp = new Elysia({ name: 'rpc', prefix: '/rpc', normalize
   })
   .all('/auth/api/admin/oauth2', ({ status }) => status(404, { error: 'Not found' }))
   .all('/auth/api/admin/oauth2/*', ({ status }) => status(404, { error: 'Not found' }))
+  .all('/auth/api/agent/approve-capability', ({ status }) => status(404, { error: 'Not found' }))
+  .all('/auth/api/agent/grant-capability', ({ status }) => status(404, { error: 'Not found' }))
+  .all('/auth/api/agent/revoke-capability', ({ status }) => status(404, { error: 'Not found' }))
   // Better Auth is mounted at /rpc/auth while keeping /api as its logical
   // Better Auth basePath. Public OAuth metadata routes above rewrite generated
   // /api URLs back to this public /rpc/auth/api mount.
   .mount('/auth', async (req) => {
+    const invalidCapabilityRequestResponse = await invalidAgentMailCapabilityRequestResponse(req)
+    if (invalidCapabilityRequestResponse) {
+      return invalidCapabilityRequestResponse
+    }
+
     const { auth } = await globals()
-    return auth.handler(req)
+    return agentAuthBearerChallengeResponse(req, await auth.handler(req))
   })
   // Mount route modules
   .use(internalRpcApp)
+  .use(agentAccess)
   .use(cloudflare)
   .use(mail)
   .use(whoami)
 
 export type BackendRpcAppType = typeof backendRpcApp
+
+async function invalidAgentMailCapabilityRequestResponse(request: Request): Promise<Response | null> {
+  if (request.method !== 'POST' || !AGENT_AUTH_CAPABILITY_REQUEST_PATHS.has(new URL(request.url).pathname)) {
+    return null
+  }
+
+  if (!hasBearerJwt(request.headers)) {
+    return null
+  }
+
+  let body: unknown
+  try {
+    body = await request.clone().json()
+  } catch {
+    return null
+  }
+
+  if (isValidAgentMailCapabilityRequestBody(body)) {
+    return null
+  }
+
+  return Response.json(
+    {
+      error: 'invalid_request'
+    },
+    {
+      status: HttpStatusCode.BadRequest
+    }
+  )
+}
+
+function hasBearerJwt(headers: Headers): boolean {
+  const authorization = headers.get('authorization')
+  const bearerToken = authorization?.replace(/^Bearer\s+/i, '')
+  return (
+    typeof bearerToken === 'string' && bearerToken !== authorization && bearerToken.split('.').length === 3
+  )
+}
+
+function hasBearerCredential(headers: Headers): boolean {
+  return /^Bearer\s+\S+/iu.test(headers.get('authorization') ?? '')
+}
+
+function agentAuthBearerChallengeResponse(request: Request, response: Response): Response {
+  if (
+    response.status !== 401 ||
+    !hasBearerCredential(request.headers) ||
+    !AGENT_AUTH_BEARER_CREDENTIAL_PATHS.has(new URL(request.url).pathname)
+  ) {
+    return response
+  }
+
+  const existingChallenge = response.headers.get('WWW-Authenticate')
+  if (existingChallenge && /\bBearer\b/iu.test(existingChallenge)) {
+    return response
+  }
+
+  const headers = new Headers(response.headers)
+  headers.set(
+    'WWW-Authenticate',
+    existingChallenge
+      ? `${existingChallenge}, Bearer realm="agentteam-agent-auth"`
+      : 'Bearer realm="agentteam-agent-auth"'
+  )
+  return new Response(response.body, {
+    headers,
+    status: response.status,
+    statusText: response.statusText
+  })
+}

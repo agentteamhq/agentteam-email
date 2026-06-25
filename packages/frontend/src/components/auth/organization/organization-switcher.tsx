@@ -1,5 +1,5 @@
 import {
-  type OrganizationAuthClient,
+
   useActiveOrganization,
   useAuth,
   useAuthPlugin,
@@ -7,13 +7,12 @@ import {
   useSession,
   useSetActiveOrganization
 } from "@better-auth-ui/react"
-import type { Organization } from "better-auth/client"
 import {
   CaretUpDownIcon as ChevronsUpDown,
   PlusCircleIcon as PlusCircle,
   GearSixIcon as SettingsIcon
 } from "@phosphor-icons/react"
-import { type ComponentProps, type ReactElement, useState } from "react"
+import {   useState } from "react"
 
 import { buttonVariants } from "src/components/ui/button"
 import {
@@ -28,6 +27,9 @@ import { cn } from "src/lib/utils"
 import { UserView } from "../user/user-view"
 import { CreateOrganizationDialog } from "./create-organization-dialog"
 import { OrganizationView } from "./organization-view"
+import type { ComponentProps, ReactElement } from "react";
+import type { OrganizationAuthClient } from "@better-auth-ui/react";
+import type { Organization } from "better-auth/client"
 
 /** Props for the `OrganizationSwitcher` component. */
 export type OrganizationSwitcherProps = {
@@ -193,7 +195,7 @@ export function OrganizationSwitcher({
           <DropdownMenuSeparator />
 
           {!!activeOrganization && !hidePersonal && (
-            <DropdownMenuItem onClick={() => handleSetActive(null)}>
+            <DropdownMenuItem onClick={() => { handleSetActive(null); }}>
               <UserView hideSubtitle={hideSlug} />
             </DropdownMenuItem>
           )}
@@ -201,7 +203,7 @@ export function OrganizationSwitcher({
           {otherOrganizations.map((organization) => (
             <DropdownMenuItem
               key={organization.id}
-              onClick={() => handleSetActive(organization)}
+              onClick={() => { handleSetActive(organization); }}
             >
               <OrganizationView
                 hideRole

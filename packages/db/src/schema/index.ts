@@ -1,3 +1,7 @@
+export * from './agent-mail-agent-enrollments'
+export * from './agent-mail-permissions'
+export * from './agent-mail-forwarding'
+export * from './agent-mail-trials'
 export * from './better-auth'
 export * from './cloudflare'
 export * from './common'

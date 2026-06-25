@@ -1,8 +1,8 @@
-import type { ComponentProps } from "react"
 
 import { cn } from "src/lib/utils"
 import { OrganizationInvitations } from "./organization-invitations"
 import { OrganizationMembers } from "./organization-members"
+import type { ComponentProps } from "react"
 
 /** Props for the `OrganizationPeople` component. */
 export type OrganizationPeopleProps = {

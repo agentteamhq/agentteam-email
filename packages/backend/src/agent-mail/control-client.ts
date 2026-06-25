@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 import { PRIVATE_VARS } from '../vars.private'
 
 export interface AgentMailIngestNotification {
@@ -22,6 +24,42 @@ interface JsonRpcResponse<TResult> extends Record<string, unknown> {
   result?: TResult
   error?: unknown
 }
+
+const jsonRpcResponseSchema = z.looseObject({
+  jsonrpc: z.literal('2.0'),
+  result: z.unknown().optional()
+})
+
+const agentMailIngestEnqueueResultSchema = z.looseObject({
+  status: z.literal('enqueued'),
+  ingest_id: z.string().min(1)
+})
+
+const agentMailRuntimeSyncResultSchema = z.looseObject({
+  domains: z.array(
+    z.looseObject({
+      changed: z.boolean(),
+      domain: z.unknown()
+    })
+  ),
+  changed: z.boolean()
+})
+
+const agentMailWorkerTemporaryCredentialsSchema = z.looseObject({
+  access_key_id: z.string().min(1),
+  archive_prefix: z.string().min(1),
+  bucket: z.string().min(1),
+  endpoint: z.string().min(1),
+  expires_at: z.string().min(1),
+  region: z.string().min(1),
+  secret_access_key: z.string().min(1),
+  session_token: z.string().min(1)
+})
+
+const agentMailSendSubmitResultSchema = z.looseObject({
+  status: z.string().min(1),
+  idempotency_key: z.string().min(1).optional()
+})
 
 export interface AgentMailIngestEnqueueResult {
   status: 'enqueued'
@@ -84,35 +122,48 @@ export interface AgentMailSendSubmitResult {
 export async function enqueueAgentMailIngest(
   notification: AgentMailIngestNotification
 ): Promise<AgentMailIngestEnqueueResult> {
-  return callControlRPC<AgentMailIngestEnqueueResult>('agentMail.ingest.enqueue', notification)
+  return callControlRPC(
+    'agentMail.ingest.enqueue',
+    notification,
+    parseControlResult(agentMailIngestEnqueueResultSchema)
+  )
 }
 
 export async function getAgentMailControlStatus(): Promise<unknown> {
-  return callControlRPC('agentMail.status.get', { include_source_files: false })
+  return callControlRPC('agentMail.status.get', { include_source_files: false }, (value) => value)
 }
 
 export async function syncAgentMailRuntime(
   domains: AgentMailRuntimeDomainProjection[]
 ): Promise<AgentMailRuntimeSyncResult> {
-  return callControlRPC<AgentMailRuntimeSyncResult>('agentMail.runtime.sync', { domains })
+  return callControlRPC(
+    'agentMail.runtime.sync',
+    { domains },
+    parseControlResult(agentMailRuntimeSyncResultSchema)
+  )
 }
 
 export async function createAgentMailWorkerCredentials(
   input: AgentMailWorkerCredentialsInput
 ): Promise<AgentMailWorkerTemporaryCredentials> {
-  return callControlRPC<AgentMailWorkerTemporaryCredentials>(
+  return callControlRPC(
     'agentMail.worker.archiveCredentials.issue',
-    input
+    input,
+    parseControlResult(agentMailWorkerTemporaryCredentialsSchema)
   )
 }
 
 export async function submitAgentMailSend(
   input: AgentMailSendSubmitInput
 ): Promise<AgentMailSendSubmitResult> {
-  return callControlRPC<AgentMailSendSubmitResult>('agentMail.send.submit', input)
+  return callControlRPC('agentMail.send.submit', input, parseControlResult(agentMailSendSubmitResultSchema))
 }
 
-async function callControlRPC<TResult>(method: string, params: unknown): Promise<TResult> {
+async function callControlRPC<TResult>(
+  method: string,
+  params: unknown,
+  parseResult: (value: unknown) => TResult | undefined
+): Promise<TResult> {
   const { baseUrl, token } = requireControlAPIConfig()
   const id = crypto.randomUUID()
   const response = await fetch(new URL(`/rpc/${method}`, baseUrl), {
@@ -129,59 +180,46 @@ async function callControlRPC<TResult>(method: string, params: unknown): Promise
     method: 'POST'
   })
   const payload = (await response.json().catch(() => null)) as unknown
-  const result = jsonRpcResult<TResult>(payload)
+  const result = jsonRpcResult(payload)
 
   if (!response.ok || result === undefined) {
-    const detail = controlAPIErrorDetail(payload)
-    throw new Error(
-      `Agent Mail control API ${method} failed with HTTP ${response.status}${detail ? `: ${detail}` : ''}`
-    )
+    throw new AgentMailControlAPIError(method, response.status)
   }
 
-  return result
+  const parsedResult = parseResult(result)
+  if (parsedResult === undefined) {
+    throw new AgentMailControlAPIError(method, 502)
+  }
+
+  return parsedResult
 }
 
-function jsonRpcResult<TResult>(payload: unknown): TResult | undefined {
-  if (!isRecord(payload) || !('result' in payload)) {
+export class AgentMailControlAPIError extends Error {
+  readonly method: string
+  readonly status: number
+
+  constructor(method: string, status: number) {
+    super(`Agent Mail control API request failed with HTTP ${status}`)
+    this.name = 'AgentMailControlAPIError'
+    this.method = method
+    this.status = status
+  }
+}
+
+function jsonRpcResult(payload: unknown): unknown {
+  const parsed = jsonRpcResponseSchema.safeParse(payload)
+  if (!parsed.success || !('result' in parsed.data)) {
     return undefined
   }
 
-  return (payload as JsonRpcResponse<TResult>).result
+  return (parsed.data as JsonRpcResponse<unknown>).result
 }
 
-function controlAPIErrorDetail(payload: unknown): string {
-  if (!isRecord(payload)) {
-    return ''
+function parseControlResult<T>(schema: z.ZodType<T>): (value: unknown) => T | undefined {
+  return (value) => {
+    const parsed = schema.safeParse(value)
+    return parsed.success ? parsed.data : undefined
   }
-
-  const values = [
-    stringValue(payload.title),
-    stringValue(payload.detail),
-    stringValue(payload.message),
-    jsonRpcErrorMessage(payload.error)
-  ].filter(Boolean)
-
-  return sanitizeControlErrorDetail(values.join(': '))
-}
-
-function jsonRpcErrorMessage(value: unknown): string {
-  if (!isRecord(value)) {
-    return typeof value === 'string' ? value : ''
-  }
-
-  return stringValue(value.message) || stringValue(value.detail) || stringValue(value.title)
-}
-
-function stringValue(value: unknown): string {
-  return typeof value === 'string' ? value : ''
-}
-
-function sanitizeControlErrorDetail(value: string): string {
-  return value.replace(/\s+/gu, ' ').trim().slice(0, 240)
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object'
 }
 
 function requireControlAPIConfig(): { baseUrl: URL; token: string } {

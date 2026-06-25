@@ -44,6 +44,7 @@ describe('Cloudflare email Worker generated artifact', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.stubEnv('DATABASE_URL', 'mongodb://localhost:27017/app')
+    vi.stubEnv('ENCRYPT_SECRET_KEY', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
     vi.stubEnv('PUBLIC_HOSTNAME', 'https://mail.example.test')
     cloudflareClientTestState.catchAllUpdate.mockReset()
     cloudflareClientTestState.dnsCreate.mockReset()
@@ -82,6 +83,7 @@ describe('Cloudflare email Worker generated artifact', () => {
       domainPublicId: 'domain_public_test',
       domain: 'example.test',
       hmacSecret: 'fake-worker-hmac-secret',
+      organizationId: '01960000-0000-7000-8000-000000000001',
       organizationPublicId: 'org_public_test',
       workerCredentials: {
         accessKeyId: 'fake-r2-access-key',
@@ -97,6 +99,10 @@ describe('Cloudflare email Worker generated artifact', () => {
 
     expect(cloudflareClientTestState.toFile).toHaveBeenCalledTimes(1)
     const [scriptBytes, filename, fileOptions] = cloudflareClientTestState.toFile.mock.calls[0]
+    expect(scriptBytes).toBeInstanceOf(Uint8Array)
+    if (!(scriptBytes instanceof Uint8Array)) {
+      throw new TypeError('Cloudflare worker upload must receive encoded script bytes')
+    }
     expect(new TextDecoder().decode(scriptBytes)).toBe(AGENT_MAIL_CLOUDFLARE_EMAIL_WORKER_SCRIPT)
     expect(filename).toBe('index.js')
     expect(fileOptions).toStrictEqual({ type: 'application/javascript+module' })
@@ -108,9 +114,31 @@ describe('Cloudflare email Worker generated artifact', () => {
     expect(update.files).toStrictEqual([{ name: 'index.js', type: 'application/javascript+module' }])
     expect(update.metadata.main_module).toBe('index.js')
     expect(update.metadata.bindings).toContainEqual({
+      name: 'AGENTTEAM_ORGANIZATION_ID',
+      text: '01960000-0000-7000-8000-000000000001',
+      type: 'plain_text'
+    })
+    expect(update.metadata.bindings).toContainEqual({
       name: 'AGENTTEAM_INGEST_URL',
       text: 'https://mail.example.test/rpc/agent-mail/ingest/v1',
       type: 'plain_text'
     })
+  })
+
+  it('normalizes provider error messages before they can be returned to public surfaces', async () => {
+    expect.hasAssertions()
+    const { sanitizeCloudflareError } = await import('./client')
+
+    const sanitized = sanitizeCloudflareError({
+      status: 403,
+      message: 'Cloudflare rejected bearer token cf_secret_123 for account account_internal_456'
+    })
+
+    expect(sanitized).toStrictEqual({
+      code: 'CLOUDFLARE_403',
+      message: 'Cloudflare authorization failed. Reconnect Cloudflare and try again.'
+    })
+    expect(JSON.stringify(sanitized)).not.toContain('cf_secret_123')
+    expect(JSON.stringify(sanitized)).not.toContain('account_internal_456')
   })
 })

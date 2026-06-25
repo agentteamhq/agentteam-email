@@ -1,4 +1,6 @@
 export * from './better-auth-mongo'
+export * from './agent-mail-permission-schema'
+export * from './agent-mail-trial-schema'
 export * from './ids'
 export * from './models'
 export * from './permission-schema'

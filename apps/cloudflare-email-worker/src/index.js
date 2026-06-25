@@ -18,19 +18,14 @@ export default {
   },
 
   async email(message, env, ctx) {
-    console.log(
-      `agent-mail-ingress receive to=${message.to} from=${message.from} raw_size=${message.rawSize}`
-    )
+    console.log(`agent-mail-ingress receive raw_size=${safeRawSize(message.rawSize)}`)
 
     try {
       const archived = await archiveInboundMessage(message, env)
-      console.log(
-        `agent-mail-ingress archived ingest_id=${archived.ingestId} raw_key=${archived.rawKey} edge_key=${archived.edgeKey}`
-      )
+      console.log(`agent-mail-ingress archived ingest_id=${archived.ingestId}`)
       const notification = sendFastPathNotification(archived, env).catch((error) => {
-        const detail = error instanceof Error ? (error.stack ?? error.message) : String(error)
         console.error(
-          `agent-mail-ingress fast_path_notify_failed ingest_id=${archived.ingestId} edge_key=${archived.edgeKey} error=${detail}`
+          `agent-mail-ingress fast_path_notify_failed ingest_id=${archived.ingestId} error_type=${safeErrorType(error)}`
         )
       })
       if (ctx && typeof ctx.waitUntil === 'function') {
@@ -39,11 +34,25 @@ export default {
         await notification
       }
     } catch (error) {
-      const detail = error instanceof Error ? (error.stack ?? error.message) : String(error)
       console.error(
-        `agent-mail-ingress failure to=${message.to} from=${message.from} raw_size=${message.rawSize} error=${detail}`
+        `agent-mail-ingress failure raw_size=${safeRawSize(message.rawSize)} error_type=${safeErrorType(error)}`
       )
-      throw error
+      throw safeIngressError()
     }
   }
+}
+
+function safeRawSize(value) {
+  return Number.isFinite(value) ? String(value) : 'unknown'
+}
+
+function safeErrorType(error) {
+  const name = error instanceof Error ? error.name : typeof error
+  return /^[A-Za-z0-9_.:-]{1,64}$/u.test(name) ? name : 'Error'
+}
+
+function safeIngressError() {
+  const error = new Error('agent mail ingress failed')
+  error.name = 'AgentMailIngressError'
+  return error
 }

@@ -1,12 +1,13 @@
 import { createAuthPlugin } from "@better-auth-ui/core"
 import {
-  organizationPlugin as coreOrganizationPlugin,
-  type OrganizationLocalization,
-  type OrganizationPluginOptions
+
+
+  organizationPlugin as coreOrganizationPlugin
 } from "@better-auth-ui/core/plugins"
 import { BriefcaseIcon as Briefcase } from "@phosphor-icons/react"
 
 import { OrganizationsSettings } from "src/components/auth/organization/organizations-settings"
+import type { OrganizationLocalization, OrganizationPluginOptions } from "@better-auth-ui/core/plugins";
 
 export const organizationPlugin = createAuthPlugin(
   coreOrganizationPlugin.id,
@@ -15,7 +16,7 @@ export const organizationPlugin = createAuthPlugin(
 
     return {
       ...core,
-      localization: core.localization as OrganizationLocalization,
+      localization: core.localization,
       settingsTabs: [
         {
           view: "organizations",

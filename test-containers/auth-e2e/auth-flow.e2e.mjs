@@ -29,6 +29,8 @@ const testEmail =
 const testPassword =
   process.env.AGENTTEAM_EMAIL_AUTH_E2E_PASSWORD || `AuthE2E-${crypto.randomBytes(12).toString('base64url')}!1`
 const testName = 'Auth E2E User'
+const testUsername =
+  process.env.AGENTTEAM_EMAIL_AUTH_E2E_USERNAME || `authe2e${crypto.randomBytes(6).toString('hex')}`
 const headless = process.env.AGENTTEAM_EMAIL_AUTH_E2E_HEADLESS !== 'false'
 
 const logs = [
@@ -77,7 +79,7 @@ try {
     timeout: 60_000,
     waitUntil: 'domcontentloaded'
   })
-  await waitForPath(page, (url) => url.pathname === '/dashboard/' || url.pathname === '/dashboard', 'email verification redirect')
+  await waitForPath(page, isAuthenticatedLandingPath, 'email verification redirect')
   await page.screenshot({ fullPage: true, path: path.join(screenshotsDir, 'email-verified-dashboard.png') })
 
   const verifiedSession = await getSessionFromBrowser(page)
@@ -142,6 +144,10 @@ async function signUp(targetPage) {
   await submitButton.waitFor({ state: 'visible', timeout: 60_000 })
   await targetPage.getByLabel('Name', { exact: true }).fill(testName)
   await targetPage.getByLabel('Email', { exact: true }).fill(testEmail)
+  const usernameField = targetPage.getByLabel('Username', { exact: true })
+  if (await usernameField.count()) {
+    await usernameField.fill(testUsername)
+  }
   await targetPage.getByLabel('Password', { exact: true }).fill(testPassword)
   await targetPage.getByLabel('Confirm password', { exact: true }).fill(testPassword)
   await submitButton.click()
@@ -155,14 +161,15 @@ async function signIn(targetPage) {
   })
   const submitButton = targetPage.getByRole('button', { exact: true, name: 'Sign In' })
   await submitButton.waitFor({ state: 'visible', timeout: 60_000 })
-  await targetPage.getByLabel('Email', { exact: true }).fill(testEmail)
+  const emailField = targetPage.getByLabel('Email', { exact: true })
+  if (await emailField.count()) {
+    await emailField.fill(testEmail)
+  } else {
+    await targetPage.getByLabel('Username', { exact: true }).fill(testEmail)
+  }
   await targetPage.getByLabel('Password', { exact: true }).fill(testPassword)
   await submitButton.click()
-  await waitForPath(
-    targetPage,
-    (url) => url.pathname === '/dashboard/' || url.pathname === '/dashboard',
-    'credential sign-in dashboard redirect'
-  )
+  await waitForPath(targetPage, isAuthenticatedLandingPath, 'credential sign-in authenticated redirect')
 }
 
 async function waitForVerificationUrl(targetPage, since) {
@@ -393,8 +400,28 @@ function isSignupCompletionPath(url) {
   return (
     url.pathname === '/dashboard/' ||
     url.pathname === '/dashboard' ||
+    url.pathname === '/settings/' ||
+    url.pathname === '/settings' ||
     url.pathname === '/verification-email-sent/' ||
-    url.pathname === '/verification-email-sent'
+    url.pathname === '/verification-email-sent' ||
+    isPendingVerificationSignInPath(url)
+  )
+}
+
+function isPendingVerificationSignInPath(url) {
+  if (url.pathname !== '/signin/' && url.pathname !== '/signin') {
+    return false
+  }
+  const redirect = url.searchParams.get('redirect')
+  return redirect === '/dashboard/' || redirect === '/dashboard'
+}
+
+function isAuthenticatedLandingPath(url) {
+  return (
+    url.pathname === '/dashboard/' ||
+    url.pathname === '/dashboard' ||
+    url.pathname === '/settings/' ||
+    url.pathname === '/settings'
   )
 }
 

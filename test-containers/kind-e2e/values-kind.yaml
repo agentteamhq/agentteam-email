@@ -18,7 +18,7 @@ webServer:
   authSecret:
     value: kind-e2e-better-auth-secret
   encryptionKey:
-    value: a2luZC1lMmUtZW5jcnlwdGlvbi1rZXktMzJi
+    value: a2luZC1lMmUtZW5jcnlwdGlvbi1rZXktMzItYnl0ZSE
 
 controlApi:
   token:

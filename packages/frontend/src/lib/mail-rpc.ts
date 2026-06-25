@@ -1,4 +1,11 @@
-import type { AgentMailComposeInput, AgentMailMessageActionInput, AgentMailWebWorkspace } from '@main/backend'
+import { rpc } from './rpc-api-client'
+import type {
+  AgentMailComposeInput,
+  AgentMailMessageActionInput,
+  AgentMailPublicStatus,
+  AgentMailWebFolder,
+  AgentMailWebWorkspace
+} from '@main/backend'
 
 export class MailRPCError extends Error {
   constructor(
@@ -21,7 +28,7 @@ export interface MailWorkspaceQuery {
   unreadOnly?: boolean
 }
 
-export interface MailDraftInput extends AgentMailComposeInput {
+export type MailDraftInput = AgentMailComposeInput & {
   draftMailboxId?: string
   draftMessageId?: string
 }
@@ -36,115 +43,138 @@ export interface MailUpdateInput extends AgentMailMessageActionInput {
 }
 
 export async function fetchMailWorkspace(input: MailWorkspaceQuery): Promise<AgentMailWebWorkspace> {
-  const search = new URLSearchParams()
-  setSearchParam(search, 'accountId', input.accountId)
-  setSearchParam(search, 'cursor', input.cursor ?? undefined)
-  setSearchParam(search, 'direction', input.direction)
-  setSearchParam(search, 'folderId', input.folderId)
-  setSearchParam(search, 'limit', input.limit === undefined ? undefined : String(input.limit))
-  setSearchParam(search, 'messageId', input.messageId)
-  setSearchParam(search, 'query', input.query)
-  setSearchParam(search, 'unreadOnly', input.unreadOnly ? 'true' : undefined)
+  const result = await rpc.mail.workspace.get({ query: mailWorkspaceQuery(input) })
+  return readMailRpcResult<AgentMailWebWorkspace>(result)
+}
 
-  return requestMailJSON<AgentMailWebWorkspace>(`/rpc/mail/workspace?${search}`)
+export async function fetchMailStatus(): Promise<AgentMailPublicStatus> {
+  const result = await rpc.mail.status.get()
+  return readMailRpcResult<AgentMailPublicStatus>(result)
 }
 
 export function sendMailMessage(input: AgentMailComposeInput) {
-  return requestMailJSON<{ success: boolean }>(
-    `/rpc/mail/accounts/${encodeURIComponent(input.accountId)}/messages`,
-    {
-      body: JSON.stringify(composeRequestBody(input)),
-      method: 'POST'
-    }
-  )
+  return rpc.mail
+    .accounts({ accountId: input.accountId })
+    .messages.post(composeRequestBody(input))
+    .then((result) => readMailRpcResult<{ success: boolean }>(result))
 }
 
 export function saveMailDraft(input: MailDraftInput) {
-  return requestMailJSON<{
-    draftId: string
-    mailboxId: string
-    previousDeleted: boolean
-    success: boolean
-  }>(`/rpc/mail/accounts/${encodeURIComponent(input.accountId)}/drafts`, {
-    body: JSON.stringify(composeRequestBody(input)),
-    method: 'POST'
-  })
+  return rpc.mail
+    .accounts({ accountId: input.accountId })
+    .drafts.post(composeRequestBody(input))
+    .then((result) =>
+      readMailRpcResult<{
+        draftId: string
+        mailboxId: string
+        previousDeleted: boolean
+        success: boolean
+      }>(result)
+    )
 }
 
 export function sendMailDraft(input: AgentMailMessageActionInput) {
-  return requestMailJSON<{ success: boolean }>(messageActionPath(input, 'send-draft'), {
-    method: 'POST'
-  })
+  const route = messageRpc(input)
+  return route['send-draft'].post().then((result) => readMailRpcResult<{ success: boolean }>(result))
 }
 
 export function updateMailMessage(input: MailUpdateInput) {
-  return requestMailJSON<{ success: boolean }>(messageActionPath(input), {
-    body: JSON.stringify({
+  return messageRpc(input)
+    .patch({
       flagged: input.flagged,
       seen: input.seen
-    }),
-    method: 'PATCH'
-  })
+    })
+    .then((result) => readMailRpcResult<{ success: boolean }>(result))
 }
 
 export function moveMailMessage(input: MailMoveInput) {
-  return requestMailJSON<{ success: boolean }>(messageActionPath(input, 'move'), {
-    body: JSON.stringify({
+  return messageRpc(input)
+    .move.post({
       targetMailboxId: input.targetMailboxId
-    }),
-    method: 'POST'
-  })
+    })
+    .then((result) => readMailRpcResult<{ success: boolean }>(result))
 }
 
 export function deleteMailMessage(input: AgentMailMessageActionInput) {
-  return requestMailJSON<{ success: boolean }>(messageActionPath(input), {
-    method: 'DELETE'
-  })
+  return messageRpc(input)
+    .delete()
+    .then((result) => readMailRpcResult<{ success: boolean }>(result))
+}
+
+export function fetchMailOriginalSource(input: AgentMailMessageActionInput) {
+  const route = messageRpc(input)
+  return route['source-preview'].get().then((result) => readMailRpcResult<string>(result))
 }
 
 export function createMailFolder({ accountId, name }: { accountId: string; name: string }) {
-  return requestMailJSON<{ success: boolean }>(
-    `/rpc/mail/accounts/${encodeURIComponent(accountId)}/mailboxes`,
-    {
-      body: JSON.stringify({ name }),
-      method: 'POST'
-    }
-  )
+  return rpc.mail
+    .accounts({ accountId })
+    .mailboxes.post({ name })
+    .then((result) => readMailRpcResult<{ folder: AgentMailWebFolder; success: boolean }>(result))
+}
+
+export function renameMailFolder({
+  accountId,
+  mailboxId,
+  name
+}: {
+  accountId: string
+  mailboxId: string
+  name: string
+}) {
+  return rpc.mail
+    .accounts({ accountId })
+    .mailboxes({ mailboxId })
+    .patch({ name })
+    .then((result) => readMailRpcResult<{ folder: AgentMailWebFolder; success: boolean }>(result))
 }
 
 export function deleteMailFolder({ accountId, mailboxId }: { accountId: string; mailboxId: string }) {
-  return requestMailJSON<{ success: boolean }>(
-    `/rpc/mail/accounts/${encodeURIComponent(accountId)}/mailboxes/${encodeURIComponent(mailboxId)}`,
-    {
-      method: 'DELETE'
-    }
-  )
+  return rpc.mail
+    .accounts({ accountId })
+    .mailboxes({ mailboxId })
+    .delete()
+    .then((result) => readMailRpcResult<{ success: boolean }>(result))
 }
 
-async function requestMailJSON<TResult>(url: string, init: RequestInit = {}): Promise<TResult> {
-  const headers = new Headers(init.headers)
-  headers.set('accept', 'application/json')
-  if (init.body !== undefined) {
-    headers.set('content-type', 'application/json')
+function mailWorkspaceQuery(input: MailWorkspaceQuery) {
+  return {
+    accountId: input.accountId,
+    cursor: input.cursor ?? undefined,
+    direction: input.direction,
+    folderId: input.folderId,
+    limit: input.limit,
+    messageId: input.messageId,
+    query: input.query,
+    unreadOnly: input.unreadOnly
   }
-
-  const response = await fetch(url, {
-    ...init,
-    headers
-  })
-
-  if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as { error?: string } | null
-    throw new MailRPCError(body?.error ?? `Mail request failed with HTTP ${response.status}`, response.status)
-  }
-
-  return (await response.json()) as TResult
 }
 
-function setSearchParam(search: URLSearchParams, key: string, value: string | undefined) {
-  if (value !== undefined && value !== '') {
-    search.set(key, value)
+function readMailRpcResult<TResult>(
+  result:
+    | {
+        data: TResult
+        error: null
+        status: number
+      }
+    | {
+        data: null
+        error: unknown
+        status: number
+      }
+): TResult {
+  if (result.error) {
+    throw new MailRPCError(
+      readRpcErrorMessage(result.error) ?? `Mail request failed with HTTP ${result.status}`,
+      result.status
+    )
   }
+
+  if (result.data === null) {
+    throw new MailRPCError(`Mail request failed with HTTP ${result.status}`, result.status)
+  }
+
+  return result.data
 }
 
 function composeRequestBody(input: MailDraftInput | AgentMailComposeInput) {
@@ -156,12 +186,54 @@ function composeRequestBody(input: MailDraftInput | AgentMailComposeInput) {
     draftMessageId: 'draftMessageId' in input ? input.draftMessageId : undefined,
     html: input.html,
     reference: input.reference,
+    replyTo: input.replyTo,
     subject: input.subject,
     to: input.to
   }
 }
 
-function messageActionPath(input: AgentMailMessageActionInput, action?: string) {
-  const basePath = `/rpc/mail/accounts/${encodeURIComponent(input.accountId)}/mailboxes/${encodeURIComponent(input.mailboxId)}/messages/${encodeURIComponent(input.messageId)}`
-  return action ? `${basePath}/${action}` : basePath
+function messageRpc(input: AgentMailMessageActionInput) {
+  return rpc.mail
+    .accounts({ accountId: input.accountId })
+    .mailboxes({ mailboxId: input.mailboxId })
+    .messages({
+      messageId: input.messageId
+    })
+}
+
+function readRpcErrorMessage(error: unknown): string | null {
+  if (!error || typeof error !== 'object') {
+    return null
+  }
+
+  if ('value' in error) {
+    const valueMessage = readRpcErrorValueMessage(error.value)
+    if (valueMessage) {
+      return valueMessage
+    }
+  }
+
+  return readRpcErrorValueMessage(error)
+}
+
+function readRpcErrorValueMessage(value: unknown): string | null {
+  if (value instanceof Error && value.message.trim()) {
+    return value.message
+  }
+
+  if (!value || typeof value !== 'object') {
+    return null
+  }
+
+  const maybeMessage = 'message' in value ? value.message : null
+  if (typeof maybeMessage === 'string' && maybeMessage.trim()) {
+    return maybeMessage
+  }
+
+  const maybeError = 'error' in value ? value.error : null
+  if (typeof maybeError === 'string' && maybeError.trim()) {
+    return maybeError
+  }
+
+  return null
 }

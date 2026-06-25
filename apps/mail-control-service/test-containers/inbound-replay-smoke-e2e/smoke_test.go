@@ -38,7 +38,81 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-const smokeDomain = "example.test"
+const (
+	smokeDomain                   = "example.test"
+	smokeOrganizationID           = "01960000-0000-7000-8000-000000000001"
+	smokeOrganizationPublicID     = "org_pub_123"
+	smokeWorkerConnectionID       = "worker-connection-1"
+	smokeWorkerDomainDeploymentID = "worker-deployment-1"
+)
+
+func smokeArchivePrefix(t *testing.T, domain string) string {
+	t.Helper()
+
+	archivePrefix, err := smokeArchivePrefixForDomain(domain)
+	if err != nil {
+		t.Fatalf("build smoke archive prefix: %v", err)
+	}
+	return archivePrefix
+}
+
+func smokeArchivePrefixForDomain(domain string) (string, error) {
+	return r2archive.OrganizationInboundArchivePrefix(smokeOrganizationPublicID, domain)
+}
+
+func smokeInboundBundleKeys(t *testing.T, domain string, receivedAt time.Time, ingestID string) r2archive.InboundBundle {
+	t.Helper()
+
+	bundle, err := r2archive.OrganizationInboundBundleKeys(smokeOrganizationPublicID, domain, receivedAt, ingestID)
+	if err != nil {
+		t.Fatalf("build inbound bundle keys: %v", err)
+	}
+	return bundle
+}
+
+func smokePollerDomain(t *testing.T, domain string) poller.Domain {
+	t.Helper()
+
+	pollerDomain, err := smokePollerDomainForDomain(domain)
+	if err != nil {
+		t.Fatalf("build smoke poller domain: %v", err)
+	}
+	return pollerDomain
+}
+
+func smokePollerDomainForDomain(domain string) (poller.Domain, error) {
+	archivePrefix, err := smokeArchivePrefixForDomain(domain)
+	if err != nil {
+		return poller.Domain{}, err
+	}
+	return poller.Domain{
+		Name:                     domain,
+		OrganizationID:           smokeOrganizationID,
+		OrganizationPublicID:     smokeOrganizationPublicID,
+		ArchivePrefix:            archivePrefix,
+		WorkerConnectionID:       smokeWorkerConnectionID,
+		WorkerDomainDeploymentID: smokeWorkerDomainDeploymentID,
+		FeedbackAddress:          "bounces@" + domain,
+	}, nil
+}
+
+func smokeNotificationForBundle(bundle r2archive.InboundBundle, receivedAt time.Time, rawSHA256 string) poller.Notification {
+	return poller.Notification{
+		Schema:                   poller.FastPathSchema,
+		OrganizationID:           smokeOrganizationID,
+		OrganizationPublicID:     smokeOrganizationPublicID,
+		ArchivePrefix:            bundle.ArchivePrefix,
+		WorkerConnectionID:       smokeWorkerConnectionID,
+		WorkerDomainDeploymentID: smokeWorkerDomainDeploymentID,
+		IngestID:                 bundle.IngestID,
+		RecipientDomain:          bundle.RecipientDomain,
+		RawKey:                   bundle.RawKey,
+		EdgeKey:                  bundle.EdgeKey,
+		ResultKey:                bundle.ResultKey,
+		ReceivedAt:               receivedAt,
+		RawSHA256:                rawSHA256,
+	}
+}
 
 func TestInboundReplaySmoke(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -128,10 +202,7 @@ hello from smoke
 	if err != nil {
 		t.Fatalf("decode ingest id time: %v", err)
 	}
-	bundle, err := r2archive.InboundBundleKeys(smokeDomain, receivedAt, ingestID)
-	if err != nil {
-		t.Fatalf("build inbound bundle keys: %v", err)
-	}
+	bundle := smokeInboundBundleKeys(t, smokeDomain, receivedAt, ingestID)
 
 	archive, err := r2archive.New(ctx, r2archive.Config{
 		Endpoint: minio.Endpoint,
@@ -148,6 +219,11 @@ hello from smoke
 	manifest := poller.Manifest{
 		Schema:             r2archive.InboundEdgeSchema,
 		IngestID:           ingestID,
+		OrganizationID:     smokeOrganizationID,
+		OrgPublicID:        smokeOrganizationPublicID,
+		ArchivePrefix:      bundle.ArchivePrefix,
+		ConnectionID:       smokeWorkerConnectionID,
+		DomainID:           smokeWorkerDomainDeploymentID,
 		RawKey:             bundle.RawKey,
 		EdgeKey:            bundle.EdgeKey,
 		Mailbox:            "agent@example.test",
@@ -174,16 +250,7 @@ hello from smoke
 		t.Fatalf("write raw artifact: %v", err)
 	}
 
-	if err := postSmokeNotification(ctx, notifyListenURL+poller.NotifyPath, poller.Notification{
-		Schema:          poller.FastPathSchema,
-		IngestID:        ingestID,
-		RecipientDomain: smokeDomain,
-		RawKey:          bundle.RawKey,
-		EdgeKey:         bundle.EdgeKey,
-		ResultKey:       bundle.ResultKey,
-		ReceivedAt:      receivedAt,
-		RawSHA256:       rawSHA256,
-	}, notifyHMACSecret); err != nil {
+	if err := postSmokeNotification(ctx, notifyListenURL+poller.NotifyPath, smokeNotificationForBundle(bundle, receivedAt, rawSHA256), notifyHMACSecret); err != nil {
 		t.Fatalf("post fast-path notification: %v", err)
 	}
 
@@ -347,7 +414,11 @@ func smokePollerConfig(mongoURI string, controlDB string, wildduckDB string, wil
 type smokeDomainSource struct{}
 
 func (smokeDomainSource) ActivePollerDomains(context.Context) ([]poller.Domain, error) {
-	return []poller.Domain{{Name: smokeDomain, FeedbackAddress: "bounces@" + smokeDomain}}, nil
+	pollerDomain, err := smokePollerDomainForDomain(smokeDomain)
+	if err != nil {
+		return nil, err
+	}
+	return []poller.Domain{pollerDomain}, nil
 }
 
 func newSmokeWildDuckServer(t *testing.T, expectedAccessToken string, userID string) *httptest.Server {

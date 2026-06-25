@@ -120,8 +120,7 @@ export const AgentMailWorkerDeploymentStatusValues = [
   'disabled',
   'disconnected'
 ] as const
-export type AgentMailWorkerDeploymentStatus =
-  (typeof AgentMailWorkerDeploymentStatusValues)[number]
+export type AgentMailWorkerDeploymentStatus = (typeof AgentMailWorkerDeploymentStatusValues)[number]
 
 export const AgentMailWorkerCredentialRefreshStatusValues = ['pending', 'succeeded', 'failed'] as const
 export type AgentMailWorkerCredentialRefreshStatus =
@@ -377,14 +376,11 @@ export type AgentMailDomainPublicView = MongoosePublicView<
   AgentMailDomainPublicId
 >
 
-export const agentMailDomainSchema = new Schema<AgentMailDomainDocument>(
-  agentMailDomainSchemaDefinition,
-  {
-    ...mongooseTimestampSchemaOptions,
-    collection: 'agentMailDomain',
-    virtuals: { publicId: publicIdVirtual }
-  }
-)
+export const agentMailDomainSchema = new Schema<AgentMailDomainDocument>(agentMailDomainSchemaDefinition, {
+  ...mongooseTimestampSchemaOptions,
+  collection: 'agentMailDomain',
+  virtuals: { publicId: publicIdVirtual }
+})
   .index({ organizationId: 1, status: 1, createdAt: -1 }, { name: 'agentMailDomain_org_status_createdAt' })
   .index({ organizationId: 1, domain: 1 }, { name: 'agentMailDomain_org_domain_unique', unique: true })
   .index(
@@ -468,9 +464,12 @@ export const agentMailWorkerDeploymentSchema = new Schema<AgentMailWorkerDeploym
     { name: 'agentMailWorkerDeployment_org_status_refreshAfter' }
   )
   .index({ agentMailDomainId: 1 }, { name: 'agentMailWorkerDeployment_domain_unique', unique: true })
-  .index({
-    cloudflareConnectionId: 1
-  }, { name: 'agentMailWorkerDeployment_connection_unique', unique: true })
+  .index(
+    {
+      cloudflareConnectionId: 1
+    },
+    { name: 'agentMailWorkerDeployment_connection_unique', unique: true }
+  )
   .index(
     { organizationId: 1, cloudflareAccountId: 1, cloudflareZoneId: 1, domain: 1 },
     { name: 'agentMailWorkerDeployment_org_account_zone_domain_unique', unique: true }
@@ -520,20 +519,19 @@ export type AgentMailWorkerCredentialRefreshPublicView = MongoosePublicView<
   AgentMailWorkerCredentialRefreshPublicId
 >
 
-export const agentMailWorkerCredentialRefreshSchema =
-  new Schema<AgentMailWorkerCredentialRefreshDocument>(
-    agentMailWorkerCredentialRefreshSchemaDefinition,
-    {
-      ...mongooseTimestampSchemaOptions,
-      collection: 'agentMailWorkerCredentialRefresh',
-      virtuals: { publicId: publicIdVirtual }
-    }
+export const agentMailWorkerCredentialRefreshSchema = new Schema<AgentMailWorkerCredentialRefreshDocument>(
+  agentMailWorkerCredentialRefreshSchemaDefinition,
+  {
+    ...mongooseTimestampSchemaOptions,
+    collection: 'agentMailWorkerCredentialRefresh',
+    virtuals: { publicId: publicIdVirtual }
+  }
+)
+  .index(
+    { agentMailWorkerDeploymentId: 1, startedAt: -1 },
+    { name: 'agentMailWorkerCredentialRefresh_deployment_startedAt' }
   )
-    .index(
-      { agentMailWorkerDeploymentId: 1, startedAt: -1 },
-      { name: 'agentMailWorkerCredentialRefresh_deployment_startedAt' }
-    )
-    .index(
-      { organizationId: 1, status: 1, startedAt: -1 },
-      { name: 'agentMailWorkerCredentialRefresh_org_status_startedAt' }
-    )
+  .index(
+    { organizationId: 1, status: 1, startedAt: -1 },
+    { name: 'agentMailWorkerCredentialRefresh_org_status_startedAt' }
+  )

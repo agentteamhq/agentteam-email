@@ -131,6 +131,8 @@ describe('OAuth metadata public route rewriting', () => {
   it('serves public API protected-resource metadata from the Better Auth resource helper', async () => {
     expect.hasAssertions()
 
+    const { AGENTTEAM_API_OAUTH_SCOPE_POLICIES } = await import('./oauth-provider-config')
+    const apiScopes = AGENTTEAM_API_OAUTH_SCOPE_POLICIES.map((policy) => policy.scope)
     metadataTestState.globals.mockResolvedValue({ auth: {} })
     metadataTestState.getProtectedResourceMetadata.mockResolvedValue({
       authorization_servers: ['https://mail.example.com'],
@@ -138,7 +140,7 @@ describe('OAuth metadata public route rewriting', () => {
       resource: 'https://mail.example.com/api',
       resource_documentation: 'https://mail.example.com/openapi/',
       resource_name: 'AgentTeam Email API',
-      scopes_supported: []
+      scopes_supported: apiScopes
     })
 
     const { handleOAuthMetadataRequest } = await import('./oauth-metadata')
@@ -153,14 +155,14 @@ describe('OAuth metadata public route rewriting', () => {
       resource: 'https://mail.example.com/api',
       resource_documentation: 'https://mail.example.com/openapi/',
       resource_name: 'AgentTeam Email API',
-      scopes_supported: []
+      scopes_supported: apiScopes
     })
     expect(metadataTestState.getProtectedResourceMetadata).toHaveBeenCalledWith({
       bearer_methods_supported: ['header'],
       resource: 'https://mail.example.com/api',
       resource_documentation: 'https://mail.example.com/openapi/',
       resource_name: 'AgentTeam Email API',
-      scopes_supported: []
+      scopes_supported: apiScopes
     })
   })
 })

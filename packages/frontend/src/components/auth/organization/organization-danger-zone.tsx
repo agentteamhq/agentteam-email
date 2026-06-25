@@ -1,9 +1,8 @@
 import {
-  type OrganizationAuthClient,
+
   useAuth,
   useHasPermission
 } from "@better-auth-ui/react"
-import type { ComponentProps } from "react"
 
 import { Card, CardContent } from "src/components/ui/card"
 import { Separator } from "src/components/ui/separator"
@@ -11,6 +10,8 @@ import { cn } from "src/lib/utils"
 import { DeleteOrganization } from "./delete-organization"
 import { DeleteOrganizationSkeleton } from "./delete-organization-skeleton"
 import { LeaveOrganization } from "./leave-organization"
+import type { OrganizationAuthClient } from "@better-auth-ui/react";
+import type { ComponentProps } from "react"
 
 export type OrganizationDangerZoneProps = {
   className?: string

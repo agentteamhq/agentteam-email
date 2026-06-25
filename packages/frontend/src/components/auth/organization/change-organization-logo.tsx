@@ -1,6 +1,6 @@
 import { fileToBase64 } from "@better-auth-ui/core"
 import {
-  type OrganizationAuthClient,
+
   useActiveOrganization,
   useAuth,
   useAuthPlugin,
@@ -10,7 +10,7 @@ import {
   TrashIcon as Trash2,
   UploadIcon as Upload
 } from "@phosphor-icons/react"
-import { type ChangeEvent, useRef, useState } from "react"
+import {  useRef, useState } from "react"
 import { toast } from "sonner"
 
 import { Button, buttonVariants } from "src/components/ui/button"
@@ -25,6 +25,8 @@ import { Spinner } from "src/components/ui/spinner"
 import { organizationPlugin } from "src/lib/auth/organization-plugin"
 import { cn } from "src/lib/utils"
 import { OrganizationLogo } from "./organization-logo"
+import type { ChangeEvent } from "react";
+import type { OrganizationAuthClient } from "@better-auth-ui/react";
 
 export type ChangeOrganizationLogoProps = {
   className?: string
@@ -51,7 +53,7 @@ export function ChangeOrganizationLogo({
 
   async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
-    if (!file || !activeOrganization) return
+    if (!file || !activeOrganization) {return}
 
     e.target.value = ""
 
@@ -69,7 +71,7 @@ export function ChangeOrganizationLogo({
         {
           onSuccess: () =>
             toast.success(organizationLocalization.logoChangedSuccess),
-          onSettled: () => setIsUploading(false)
+          onSettled: () => { setIsUploading(false); }
         }
       )
     } catch (error) {
@@ -86,23 +88,24 @@ export function ChangeOrganizationLogo({
     updateOrganization(
       { data: { logo: "" } },
       {
-        onSuccess: async () => {
-          if (!currentLogo) {
+        onSuccess: () => {
+          if (!currentLogo || !logo.delete) {
             toast.success(organizationLocalization.logoDeletedSuccess)
             return
           }
 
           setIsDeleting(true)
-          try {
-            await logo.delete?.(currentLogo)
-            toast.success(organizationLocalization.logoDeletedSuccess)
-          } catch (error) {
-            if (error instanceof Error) {
-              toast.error(error.message)
-            }
-          } finally {
-            setIsDeleting(false)
-          }
+          logo
+            .delete(currentLogo)
+            .then(() => {
+              toast.success(organizationLocalization.logoDeletedSuccess)
+            })
+            .catch((error: unknown) => {
+              toast.error(error instanceof Error ? error.message : String(error))
+            })
+            .finally(() => {
+              setIsDeleting(false)
+            })
         }
       }
     )
@@ -120,10 +123,14 @@ export function ChangeOrganizationLogo({
 
       <input
         ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={handleFileChange}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(event) => {
+            handleFileChange(event).catch((error: unknown) => {
+              toast.error(error instanceof Error ? error.message : String(error))
+            })
+          }}
       />
 
       <div className="flex items-center gap-4">
@@ -161,7 +168,11 @@ export function ChangeOrganizationLogo({
 
             <DropdownMenuItem
               disabled={!activeOrganization?.logo}
-              onClick={handleDelete}
+              onClick={() => {
+                handleDelete().catch((error: unknown) => {
+                  toast.error(error instanceof Error ? error.message : String(error))
+                })
+              }}
               variant="destructive"
             >
               <Trash2 />

@@ -1,7 +1,9 @@
 import { DEFAULT_SERVICE_BASE_URL } from './config'
+import { PLUGIN_ID } from './constants'
+import { EMAIL_TOOL_DECLARATION } from './tool'
 import type { JsonSchema, PaperclipPluginManifestV1 } from '@paperclipai/plugin-sdk'
 
-export const PLUGIN_ID = 'agentteam.paperclip-email-plugin'
+export { PLUGIN_ID }
 
 const instanceConfigSchema = {
   type: 'object',
@@ -35,6 +37,7 @@ const manifest: PaperclipPluginManifestV1 = {
   author: 'AgentTeam',
   categories: ['connector'],
   capabilities: [
+    'agent.tools.register',
     'plugin.state.read',
     'plugin.state.write',
     'ui.dashboardWidget.register',
@@ -45,6 +48,7 @@ const manifest: PaperclipPluginManifestV1 = {
     ui: './dist/ui'
   },
   instanceConfigSchema,
+  tools: [EMAIL_TOOL_DECLARATION],
   ui: {
     slots: [
       {

@@ -1,9 +1,11 @@
 import {
   backendRpcApp,
+  handleAgentAuthConfigurationRequest,
   handleAgentMailIngestRequest,
   handleAtEmailMetadataRequest,
   handleCloudflareOAuthCallbackRequest,
   handleOAuthMetadataRequest,
+  isAgentAuthConfigurationRequestPath,
   isAgentMailIngestRequestPath,
   isAtEmailMetadataRequestPath,
   isCloudflareOAuthCallbackRequestPath,
@@ -33,6 +35,10 @@ export async function handleBackendPackageRequest(request: Request): Promise<Res
     return handleOAuthMetadataRequest(request)
   }
 
+  if (isAgentAuthConfigurationRequestPath(url.pathname)) {
+    return handleAgentAuthConfigurationRequest(request)
+  }
+
   if (isAtEmailMetadataRequestPath(url.pathname)) {
     return handleAtEmailMetadataRequest(request)
   }
@@ -45,6 +51,10 @@ export async function handleBackendPackageRequest(request: Request): Promise<Res
     return handleAgentMailIngestRequest(request)
   }
 
+  if (isRoutePath(url.pathname, '/api/auth')) {
+    return handlePublicAuthBridgeRequest(request, url)
+  }
+
   if (isRoutePath(url.pathname, '/rpc')) {
     return backendRpcApp.handle(request)
   }
@@ -54,6 +64,12 @@ export async function handleBackendPackageRequest(request: Request): Promise<Res
   }
 
   return null
+}
+
+function handlePublicAuthBridgeRequest(request: Request, url: URL): Promise<Response> {
+  const bridgedUrl = new URL(request.url)
+  bridgedUrl.pathname = `/rpc/auth/api${url.pathname.slice('/api/auth'.length)}`
+  return backendRpcApp.handle(new Request(bridgedUrl, request))
 }
 
 async function handleFrontendActionRequest(request: Request, url: URL): Promise<Response | null> {

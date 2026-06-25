@@ -44,6 +44,18 @@ or weakening them locally.
 Code must import upstream package types, generated contract types, or exported
 workspace types from the owning package.
 
+## Authorization
+
+Permissions must be modeled as strict backend-owned TypeScript/Zod contracts and
+enforced through CASL Ability.
+
+Each protected domain object must have its own typed permission schema, CASL
+subject, ability builder, and helper surface when its authorization semantics
+differ.
+
+Frontend labels, Storybook fixtures, OAuth scopes, and ad hoc booleans must not
+define or enforce permission semantics.
+
 ## Generated Outputs
 
 Generated outputs must not be manually edited. Agents must update the owning

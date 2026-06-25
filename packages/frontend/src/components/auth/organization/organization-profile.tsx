@@ -1,13 +1,13 @@
 "use client"
 
 import {
-  type OrganizationAuthClient,
+
   useActiveOrganization,
   useAuth,
   useAuthPlugin,
   useUpdateOrganization
 } from "@better-auth-ui/react"
-import { type SyntheticEvent, useEffect, useState } from "react"
+import {  useState } from "react"
 import { toast } from "sonner"
 
 import { Button } from "src/components/ui/button"
@@ -21,6 +21,8 @@ import { organizationPlugin } from "src/lib/auth/organization-plugin"
 import { cn } from "src/lib/utils"
 import { ChangeOrganizationLogo } from "./change-organization-logo"
 import { SlugField } from "./slug-field"
+import type { SyntheticEvent } from "react";
+import type { OrganizationAuthClient } from "@better-auth-ui/react";
 
 export type OrganizationProfileProps = {
   className?: string
@@ -38,11 +40,12 @@ export function OrganizationProfile({ className }: OrganizationProfileProps) {
     authClient as OrganizationAuthClient
   )
 
-  const [slug, setSlug] = useState(activeOrganization?.slug ?? "")
-
-  useEffect(() => {
-    setSlug(activeOrganization?.slug ?? "")
-  }, [activeOrganization?.slug])
+  const [slugByOrganizationId, setSlugByOrganizationId] = useState<Record<string, string>>({})
+  const activeOrganizationId = activeOrganization?.id ?? ""
+  const slug =
+    activeOrganizationId && slugByOrganizationId[activeOrganizationId] !== undefined
+      ? slugByOrganizationId[activeOrganizationId]
+      : (activeOrganization?.slug ?? "")
 
   const { mutate: commitOrganizationUpdate, isPending } = useUpdateOrganization(
     authClient as OrganizationAuthClient,
@@ -54,7 +57,9 @@ export function OrganizationProfile({ className }: OrganizationProfileProps) {
 
   function handleSubmit(e: SyntheticEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (!activeOrganization) return
+    if (!activeOrganization) {
+      return
+    }
 
     const formData = new FormData(e.currentTarget)
     const name = formData.get("name") as string
@@ -104,7 +109,15 @@ export function OrganizationProfile({ className }: OrganizationProfileProps) {
               <SlugField
                 id={slugInputId}
                 value={slug}
-                onChange={setSlug}
+                onChange={(value) => {
+                  if (!activeOrganizationId) {
+                    return
+                  }
+                  setSlugByOrganizationId((current) => ({
+                    ...current,
+                    [activeOrganizationId]: value
+                  }))
+                }}
                 currentSlug={activeOrganization.slug}
                 disabled={isPending}
               />

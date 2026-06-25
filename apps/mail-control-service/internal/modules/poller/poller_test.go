@@ -12,6 +12,9 @@ import (
 
 	"agent-mail/internal/archive/r2archive"
 	"agent-mail/internal/stores/wildduck"
+
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 func TestValidateConfigRequiresExactlyTwoRetries(t *testing.T) {
@@ -159,6 +162,60 @@ func TestNextRetryAtReturnsEarliestRetryWait(t *testing.T) {
 	}
 }
 
+func TestSweepDomainFollowsR2ContinuationPages(t *testing.T) {
+	ctx := context.Background()
+	first := mustInboundBundle(t, "example.com", mustUUIDv7(t))
+	second := mustInboundBundle(t, "example.com", mustUUIDv7(t))
+	sweepStart := first.UTCDate
+	sweepEnd := first.UTCDate.AddDate(0, 0, 1).Add(-time.Nanosecond)
+	prefix, err := r2archive.InboundDailyPrefix("example.com", first.UTCDate)
+	if err != nil {
+		t.Fatalf("build daily prefix: %v", err)
+	}
+	nextToken := "second-page"
+	state := newTestStateStore()
+	r2 := &testR2Client{
+		pages: map[string]*s3.ListObjectsV2Output{
+			"": {
+				Contents: []types.Object{
+					{Key: &first.EdgeKey},
+					{Key: &first.RawKey},
+				},
+				IsTruncated:           boolPtr(true),
+				NextContinuationToken: &nextToken,
+			},
+			nextToken: {
+				Contents:    []types.Object{{Key: &second.EdgeKey}},
+				IsTruncated: boolPtr(false),
+			},
+		},
+		bytesByKey: map[string][]byte{
+			first.EdgeKey:  []byte(`{"schema":"agent-mail.inbound.edge.v1"}`),
+			second.EdgeKey: []byte(`{"schema":"agent-mail.inbound.edge.v1"}`),
+		},
+		existsByKey: map[string]bool{
+			first.ResultKey:  false,
+			second.ResultKey: false,
+		},
+		wantPrefix: prefix,
+	}
+	p := &Poller{r2: r2, state: state}
+
+	if err := p.sweepDomain(ctx, Domain{Name: "example.com"}, sweepStart, sweepEnd); err != nil {
+		t.Fatalf("sweepDomain returned error: %v", err)
+	}
+
+	if _, ok := state.items[first.IngestID]; !ok {
+		t.Fatalf("first-page ingest %s was not queued", first.IngestID)
+	}
+	if _, ok := state.items[second.IngestID]; !ok {
+		t.Fatalf("second-page ingest %s was not queued", second.IngestID)
+	}
+	if got, want := r2.listContinuations, []string{"", nextToken}; strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("R2 list continuations = %#v, want %#v", got, want)
+	}
+}
+
 func TestValidateConfigRequiresStateMongo(t *testing.T) {
 	cfg := validTestConfig()
 	cfg.State.Mongo.URI = ""
@@ -236,6 +293,79 @@ type errTestFailure struct{}
 
 func (errTestFailure) Error() string { return "test failure" }
 
+type testR2Client struct {
+	pages             map[string]*s3.ListObjectsV2Output
+	bytesByKey        map[string][]byte
+	existsByKey       map[string]bool
+	wantPrefix        string
+	listContinuations []string
+}
+
+func (c *testR2Client) List(_ context.Context, prefix string, continuationToken *string) (*s3.ListObjectsV2Output, error) {
+	if prefix != c.wantPrefix {
+		return nil, errUnexpectedR2Prefix{got: prefix, want: c.wantPrefix}
+	}
+	token := ""
+	if continuationToken != nil {
+		token = *continuationToken
+	}
+	c.listContinuations = append(c.listContinuations, token)
+	result, ok := c.pages[token]
+	if !ok {
+		return nil, errUnexpectedR2Continuation{token: token}
+	}
+	return result, nil
+}
+
+func (c *testR2Client) Exists(_ context.Context, key string) (bool, error) {
+	return c.existsByKey[key], nil
+}
+
+func (c *testR2Client) GetBytes(_ context.Context, key string) ([]byte, error) {
+	data, ok := c.bytesByKey[key]
+	if !ok {
+		return nil, errUnexpectedR2Key{key: key}
+	}
+	return data, nil
+}
+
+func (c *testR2Client) PutBytes(context.Context, string, string, []byte) error {
+	return errUnexpectedR2Write{}
+}
+
+func (c *testR2Client) PutJSON(context.Context, string, any) error {
+	return errUnexpectedR2Write{}
+}
+
+type errUnexpectedR2Prefix struct {
+	got  string
+	want string
+}
+
+func (e errUnexpectedR2Prefix) Error() string {
+	return "unexpected R2 prefix " + e.got + ", want " + e.want
+}
+
+type errUnexpectedR2Continuation struct {
+	token string
+}
+
+func (e errUnexpectedR2Continuation) Error() string {
+	return "unexpected R2 continuation " + e.token
+}
+
+type errUnexpectedR2Key struct {
+	key string
+}
+
+func (e errUnexpectedR2Key) Error() string {
+	return "unexpected R2 key " + e.key
+}
+
+type errUnexpectedR2Write struct{}
+
+func (errUnexpectedR2Write) Error() string { return "unexpected R2 write" }
+
 func validTestConfig() Config {
 	var cfg Config
 	cfg.SweepInterval = "24h"
@@ -266,6 +396,10 @@ func validTestConfig() Config {
 
 func textprotoError(code int, msg string) error {
 	return &textproto.Error{Code: code, Msg: msg}
+}
+
+func boolPtr(value bool) *bool {
+	return &value
 }
 
 func mustUUIDv7(t *testing.T) string {

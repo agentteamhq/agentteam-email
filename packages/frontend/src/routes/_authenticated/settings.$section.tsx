@@ -1,16 +1,28 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 
 import { readAuthenticatedRouteState } from '../../lib/authenticated-app-route'
+import { validateDashboardSearch } from '../../lib/dashboard-search'
+import { throwRouteRedirect } from '../../lib/route-redirect'
 import {
   getSettingsSectionFromSegment,
   getSettingsSectionHref
 } from '../../partials/authenticated/settings-dialog-sections'
-import { DashboardScreen } from '../../screens/dashboard-screen'
+import { DashboardMailController } from '../../screens/dashboard-mail-client-controller'
 import { SITE_STRINGS, formatSiteTitle } from '../../strings'
 import type { SettingsSectionId } from '../../partials/authenticated/settings-dialog-sections'
 
 export const Route = createFileRoute('/_authenticated/settings/$section')({
-  loader: ({ context }) => readAuthenticatedRouteState(context),
+  validateSearch: validateDashboardSearch,
+  loader: ({ context, params }) => {
+    if (
+      params.section === 'cli-access' ||
+      params.section === 'cliAccess' ||
+      params.section === 'developer'
+    ) {
+      throwRouteRedirect(getSettingsSectionHref('security'))
+    }
+    return readAuthenticatedRouteState(context)
+  },
   head: () => ({
     meta: [
       {
@@ -28,11 +40,12 @@ export const Route = createFileRoute('/_authenticated/settings/$section')({
 function SettingsSectionRouteScreen() {
   const routeState = Route.useLoaderData()
   const { section } = Route.useParams()
+  const search = Route.useSearch()
   const router = useRouter()
   const settingsSection = getSettingsSectionFromSegment(section)
 
   return (
-    <DashboardScreen
+    <DashboardMailController
       onSettingsOpenChange={(open) => {
         if (!open) {
           void router.navigate({ href: '/dashboard/' })
@@ -43,6 +56,10 @@ function SettingsSectionRouteScreen() {
       }}
       publicEnv={router.options.context.publicEnv}
       routeState={routeState}
+      routeSearch={{
+        ...search,
+        settings: settingsSection === 'agentAccess' ? 'agentAccess' : search.settings
+      }}
       settingsOpen
       settingsSection={settingsSection}
     />

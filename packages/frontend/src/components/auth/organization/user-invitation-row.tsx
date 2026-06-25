@@ -1,13 +1,12 @@
 "use client"
 
 import {
-  type OrganizationAuthClient,
+
   useAcceptInvitation,
   useAuth,
   useAuthPlugin,
   useRejectInvitation
 } from "@better-auth-ui/react"
-import type { Invitation } from "better-auth/client"
 import {
   CheckIcon as Check,
   ClockIcon as Clock,
@@ -18,6 +17,8 @@ import { Badge } from "src/components/ui/badge"
 import { Button } from "src/components/ui/button"
 import { Spinner } from "src/components/ui/spinner"
 import { organizationPlugin } from "src/lib/auth/organization-plugin"
+import type { OrganizationAuthClient } from "@better-auth-ui/react";
+import type { Invitation } from "better-auth/client"
 
 export type UserInvitationRowProps = {
   invitation: Invitation & { organizationName?: string }
@@ -67,7 +68,7 @@ export function UserInvitationRow({ invitation }: UserInvitationRowProps) {
           variant="outline"
           size="sm"
           disabled={isAccepting || isRejecting}
-          onClick={() => acceptInvitation({ invitationId: invitation.id })}
+          onClick={() => { acceptInvitation({ invitationId: invitation.id }); }}
         >
           {isAccepting ? <Spinner /> : <Check />}
 
@@ -79,7 +80,7 @@ export function UserInvitationRow({ invitation }: UserInvitationRowProps) {
           size="icon"
           className="size-8 text-destructive"
           disabled={isAccepting || isRejecting}
-          onClick={() => rejectInvitation({ invitationId: invitation.id })}
+          onClick={() => { rejectInvitation({ invitationId: invitation.id }); }}
           aria-label={organizationLocalization.rejectInvitation}
         >
           {isRejecting ? <Spinner /> : <X />}

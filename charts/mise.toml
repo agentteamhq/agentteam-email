@@ -39,11 +39,17 @@ grep -Eq "missing property|is required|value or .*valueFrom is required" tmp/ren
 
 [tasks."template:basic"]
 description = "Render the AgentTeam Email Helm chart with the basic example values"
-run = "mkdir -p tmp && helm template atemail agentteam-email --namespace agentteam-email -f ../docs/examples/helm/values-basic.yaml > tmp/render-basic.yaml"
+run = [
+  "mkdir -p tmp && helm template atemail agentteam-email --namespace agentteam-email -f ../docs/examples/helm/values-basic.yaml > tmp/render-basic.yaml",
+  "node scripts/assert-rendered-chart.mjs tmp/render-basic.yaml",
+]
 
 [tasks."template:existing-secret"]
 description = "Render the AgentTeam Email Helm chart with the existing Secret example values"
-run = "mkdir -p tmp && helm template atemail agentteam-email --namespace agentteam-email -f ../docs/examples/helm/values-existing-secret.yaml > tmp/render-existing-secret.yaml"
+run = [
+  "mkdir -p tmp && helm template atemail agentteam-email --namespace agentteam-email -f ../docs/examples/helm/values-existing-secret.yaml > tmp/render-existing-secret.yaml",
+  "node scripts/assert-rendered-chart.mjs tmp/render-existing-secret.yaml",
+]
 
 [tasks.template]
 description = "Render the AgentTeam Email example values and verify missing required values fail"

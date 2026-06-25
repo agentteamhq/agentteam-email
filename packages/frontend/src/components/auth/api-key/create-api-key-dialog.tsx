@@ -1,11 +1,11 @@
 import {
-  type ApiKeyAuthClient,
+
   useAuth,
   useAuthPlugin,
   useCreateApiKey
 } from "@better-auth-ui/react"
 import { KeyIcon as Key } from "@phosphor-icons/react"
-import { type SyntheticEvent, useState } from "react"
+import {  useState } from "react"
 
 import {
   AlertDialog,
@@ -24,6 +24,8 @@ import { Label } from "src/components/ui/label"
 import { Spinner } from "src/components/ui/spinner"
 import { apiKeyPlugin } from "src/lib/auth/api-key-plugin"
 import { NewApiKeyDialog } from "./new-api-key-dialog"
+import type { SyntheticEvent } from "react";
+import type { ApiKeyAuthClient } from "@better-auth-ui/react";
 
 export type CreateApiKeyDialogProps = {
   open: boolean

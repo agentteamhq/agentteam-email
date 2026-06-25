@@ -9,6 +9,8 @@ import {
 
 import { globals } from '../globals'
 import { createAgentMailWorkerCredentials, syncAgentMailRuntime } from '../agent-mail/control-client'
+import { agentMailSubject } from '../agent-mail/permission-policy'
+import { isAgentMailAccessError, requireAgentMailOrganizationContext } from '../agent-mail/service'
 import { decryptSecretValue, encryptSecretValue } from '../lib/secret-box'
 import { PUBLIC_VARS } from '../vars.public'
 
@@ -30,6 +32,11 @@ import {
   cloudflareOAuthConnectionIntentPublicView,
   cloudflareOAuthGrantPublicView
 } from './public-views'
+import type {
+  CloudflareConnectionPublicView,
+  CloudflareOAuthConnectionIntentPublicView,
+  CloudflareOAuthGrantPublicView
+} from './public-views'
 import type { CloudflareAccountSummary, CloudflareZoneSummary } from './client'
 import type {
   AccountDocument,
@@ -37,13 +44,10 @@ import type {
   CloudflareConnectionDocument,
   CloudflareConnectionId,
   CloudflareConnectionPublicId,
-  CloudflareConnectionPublicView,
   CloudflareOAuthConnectionIntentId,
   CloudflareOAuthConnectionIntentPublicId,
-  CloudflareOAuthConnectionIntentPublicView,
   CloudflareOAuthGrantDocument,
   CloudflareOAuthGrantId,
-  CloudflareOAuthGrantPublicView,
   OrganizationId,
   OrganizationPublicId,
   UserId
@@ -55,6 +59,11 @@ const WORKER_CREDENTIAL_REFRESH_AFTER_MS = 24 * 60 * 60 * 1000
 const OAUTH_TOKEN_REFRESH_SKEW_MS = 5 * 60 * 1000
 
 export type { CloudflareAccountSummary, CloudflareZoneSummary } from './client'
+export type {
+  CloudflareConnectionPublicView,
+  CloudflareOAuthConnectionIntentPublicView,
+  CloudflareOAuthGrantPublicView
+} from './public-views'
 
 export interface StartCloudflareOAuthResult {
   intent: CloudflareOAuthConnectionIntentPublicView
@@ -100,7 +109,8 @@ export async function startCloudflareOAuth(headers: Headers): Promise<StartCloud
   }
 
   const { auth, db } = await globals()
-  const context = await requireCloudflareOrganizationContext(headers, { requireAdmin: true })
+  const context = await requireCloudflareOrganizationContext(headers)
+  await requireCloudflareDomainManagement(headers, context)
   const userId = context.userId
   const organizationId = context.organizationId
   const expiresAt = new Date(Date.now() + CLOUDFLARE_OAUTH_INTENT_TTL_MS)
@@ -139,7 +149,8 @@ export async function finalizeCloudflareOAuth({
   intentPublicId: CloudflareOAuthConnectionIntentPublicId | string
 }): Promise<FinalizeCloudflareOAuthResult> {
   const { db } = await globals()
-  const context = await requireCloudflareOrganizationContext(headers, { requireAdmin: true })
+  const context = await requireCloudflareOrganizationContext(headers)
+  await requireCloudflareDomainManagement(headers, context)
   const userId = context.userId
   const intentId = parseCloudflareIntentPublicId(intentPublicId)
   const intent = await db.models.cloudflareOAuthConnectionIntent
@@ -212,6 +223,7 @@ export async function finalizeCloudflareOAuth({
 export async function listConnectedCloudflareAccounts(headers: Headers): Promise<CloudflareAccountSummary[]> {
   const { db } = await globals()
   const context = await requireCloudflareOrganizationContext(headers)
+  await requireCloudflareDomainManagement(headers, context)
   const grant = await getActiveGrantForUser(db, context.userId, context.organizationId)
   const accessToken = await getCloudflareAccessToken(headers, grant)
 
@@ -227,6 +239,7 @@ export async function listConnectedCloudflareZones({
 }): Promise<CloudflareZoneSummary[]> {
   const { db } = await globals()
   const context = await requireCloudflareOrganizationContext(headers)
+  await requireCloudflareDomainManagement(headers, context)
   const grant = await getActiveGrantForUser(db, context.userId, context.organizationId)
   const accessToken = await getCloudflareAccessToken(headers, grant)
 
@@ -241,10 +254,11 @@ export async function connectCloudflareDomain({
   input: CloudflareConnectionInput
 }): Promise<CloudflareConnectionPublicView> {
   const { db } = await globals()
-  const context = await requireCloudflareOrganizationContext(headers, { requireAdmin: true })
+  const context = await requireCloudflareOrganizationContext(headers)
   const userId = context.userId
-  const grant = await getActiveGrantForUser(db, userId, context.organizationId)
   const domain = normalizeDomain(input.domain)
+  await requireCloudflareDomainManagement(headers, context, domain)
+  const grant = await getActiveGrantForUser(db, userId, context.organizationId)
   const archivePrefix = createAgentMailArchivePrefix(context.organizationPublicId, domain)
 
   const connection = await db.models.cloudflareConnection
@@ -311,7 +325,7 @@ export async function applyCloudflareConnectionProvisioning({
   headers: Headers
 }): Promise<CloudflareConnectionPublicView> {
   const { db } = await globals()
-  const context = await requireCloudflareOrganizationContext(headers, { requireAdmin: true })
+  const context = await requireCloudflareOrganizationContext(headers)
   const userId = context.userId
   const connectionId = parseCloudflareConnectionPublicId(connectionPublicId)
   const connection = await db.models.cloudflareConnection
@@ -325,6 +339,7 @@ export async function applyCloudflareConnectionProvisioning({
   if (!connection) {
     throw new Error('Cloudflare connection was not found')
   }
+  await requireCloudflareDomainManagement(headers, context, connection.domain)
 
   await db.models.cloudflareConnection
     .updateOne(
@@ -373,6 +388,7 @@ export async function applyCloudflareConnectionProvisioning({
       domainPublicId: publicIdFromUUIDv7(domainRecord._id),
       domain: connection.domain,
       hmacSecret: existingHmacSecret,
+      organizationId: context.organizationId,
       organizationPublicId: context.organizationPublicId,
       workerCredentials: {
         accessKeyId: workerCredentials.accessKeyId,
@@ -540,6 +556,7 @@ export async function applyCloudflareConnectionProvisioning({
 export async function getCloudflareStatus(headers: Headers): Promise<CloudflareStatusResult> {
   const { db } = await globals()
   const context = await requireCloudflareOrganizationContext(headers)
+  await requireCloudflareDomainManagement(headers, context)
   const [grants, connections] = await Promise.all([
     db.models.cloudflareOAuthGrant
       .find({ userId: context.userId, organizationId: context.organizationId })
@@ -565,7 +582,8 @@ export async function disconnectCloudflare({
   headers: Headers
 }): Promise<CloudflareStatusResult> {
   const { auth, db } = await globals()
-  const context = await requireCloudflareOrganizationContext(headers, { requireAdmin: true })
+  const context = await requireCloudflareOrganizationContext(headers)
+  await requireCloudflareDomainManagement(headers, context)
   const userId = context.userId
   const grant = grantPublicId
     ? await db.models.cloudflareOAuthGrant
@@ -736,7 +754,7 @@ export async function refreshDueAgentMailWorkerCredentials(
       }
 
       const grant = await getGrantById(db, connection.grantId, deployment.userId, deployment.organizationId)
-      const accessToken = await getStoredCloudflareAccessToken(db, grant)
+      const accessToken = await getStoredCloudflareAccessToken(db, grant, now)
       const workerCredentials = await createWorkerCredentialsForConnection({
         connectionPublicId: deployment.workerConnectionId,
         context: {
@@ -758,6 +776,7 @@ export async function refreshDueAgentMailWorkerCredentials(
         domainPublicId: publicIdFromUUIDv7(deployment.agentMailDomainId),
         domain: deployment.domain,
         hmacSecret: existingHmacSecret,
+        organizationId: deployment.organizationId,
         organizationPublicId: deployment.organizationPublicId,
         workerCredentials: {
           accessKeyId: workerCredentials.accessKeyId,
@@ -915,6 +934,34 @@ async function requireCloudflareOrganizationContext(
   }
 }
 
+async function requireCloudflareDomainManagement(
+  headers: Headers,
+  context: CloudflareOrganizationContext,
+  domain?: string
+) {
+  const mailContext = await requireAgentMailOrganizationContext(headers).catch((error: unknown) => {
+    if (isAgentMailAccessError(error)) {
+      throw new CloudflareAccessError(error.message, error.status)
+    }
+    throw error
+  })
+
+  if (String(mailContext.organizationId) !== String(context.organizationId)) {
+    throw new CloudflareAccessError('Organization access is required', 403)
+  }
+  if (
+    mailContext.ability.cannot(
+      'manage',
+      agentMailSubject('Domain', {
+        domain: domain ?? null,
+        organizationId: context.organizationId
+      })
+    )
+  ) {
+    throw new CloudflareAccessError('Cloudflare domain management is not authorized', 403)
+  }
+}
+
 async function getCloudflareAccessToken(
   headers: Headers,
   grant: CloudflareOAuthGrantDocument
@@ -947,7 +994,8 @@ async function getCloudflareAccessToken(
 
 async function getStoredCloudflareAccessToken(
   db: Database,
-  grant: CloudflareOAuthGrantDocument
+  grant: CloudflareOAuthGrantDocument,
+  now = new Date()
 ): Promise<string> {
   const account = await db.models.account
     .findOne({
@@ -964,14 +1012,14 @@ async function getStoredCloudflareAccessToken(
   if (
     account.accessToken &&
     (!account.accessTokenExpiresAt ||
-      account.accessTokenExpiresAt.getTime() > Date.now() + OAUTH_TOKEN_REFRESH_SKEW_MS)
+      account.accessTokenExpiresAt.getTime() > now.getTime() + OAUTH_TOKEN_REFRESH_SKEW_MS)
   ) {
     await db.models.cloudflareOAuthGrant
       .updateOne(
         { _id: grant._id },
         {
           $set: {
-            lastTokenCheckAt: new Date(),
+            lastTokenCheckAt: now,
             status: 'active',
             lastErrorCode: null,
             lastErrorMessage: null

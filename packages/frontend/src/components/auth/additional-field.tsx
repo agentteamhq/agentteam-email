@@ -1,5 +1,5 @@
 import {
-  type AdditionalField as AdditionalFieldConfig,
+
   resolveInputType
 } from "@better-auth-ui/core"
 import { useAuth } from "@better-auth-ui/react"
@@ -10,7 +10,7 @@ import {
   CaretDownIcon as ChevronDownIcon,
   CopyIcon as Copy
 } from "@phosphor-icons/react"
-import { type ComponentType, useRef, useState } from "react"
+import {  useRef, useState } from "react"
 import { toast } from "sonner"
 
 import { buttonVariants } from "src/components/ui/button"
@@ -54,6 +54,8 @@ import { Slider } from "src/components/ui/slider"
 import { Switch } from "src/components/ui/switch"
 import { Textarea } from "src/components/ui/textarea"
 import { cn } from "src/lib/utils"
+import type { ComponentType } from "react";
+import type { AdditionalField as AdditionalFieldConfig } from "@better-auth-ui/core";
 
 export type AdditionalFieldProps = {
   name: string
@@ -63,7 +65,7 @@ export type AdditionalFieldProps = {
 
 /** Convert a `defaultValue` into a `Date` for the calendar. */
 function toDate(value: unknown): Date | undefined {
-  if (value instanceof Date) return value
+  if (value instanceof Date) {return value}
   if (typeof value === "string") {
     const parsed = new Date(value)
     return Number.isNaN(parsed.getTime()) ? undefined : parsed
@@ -92,17 +94,23 @@ function CopyButton({
   const { localization } = useAuth()
   const [copied, setCopied] = useState(false)
 
-  async function handleCopy() {
+  function handleCopy() {
     const value = getValue()
-    if (!value) return
-
-    try {
-      await navigator.clipboard.writeText(value)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+    if (!value) {
+      return
     }
+
+    globalThis.navigator.clipboard
+      .writeText(value)
+      .then(() => {
+        setCopied(true)
+        globalThis.setTimeout(() => {
+          setCopied(false)
+        }, 1500)
+      })
+      .catch((error: unknown) => {
+        toast.error(error instanceof Error ? error.message : String(error))
+      })
   }
 
   return (
@@ -445,7 +453,7 @@ function SliderField({ name, field, isPending }: AdditionalFieldProps) {
         id={name}
         name={name}
         value={[value]}
-        onValueChange={(v) => setValue((Array.isArray(v) ? v[0] : v) ?? min)}
+        onValueChange={(v) => { setValue((Array.isArray(v) ? v[0] : v) ?? min); }}
         min={min}
         max={max}
         step={step}
@@ -544,8 +552,8 @@ function DateInput({ name, field, isPending }: AdditionalFieldProps) {
               captionLayout="dropdown"
               onSelect={(value) => {
                 setDate(value)
-                if (value) setError(undefined)
-                if (!isDateTime) setOpen(false)
+                if (value) {setError(undefined)}
+                if (!isDateTime) {setOpen(false)}
               }}
             />
           </PopoverContent>
@@ -562,7 +570,7 @@ function DateInput({ name, field, isPending }: AdditionalFieldProps) {
               id={`${name}-time`}
               step="1"
               value={time}
-              onChange={(e) => setTime(e.target.value)}
+              onChange={(e) => { setTime(e.target.value); }}
               disabled={isPending || field.readOnly}
               className="appearance-none bg-background [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
             />

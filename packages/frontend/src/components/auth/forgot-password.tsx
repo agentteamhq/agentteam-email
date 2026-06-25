@@ -5,7 +5,7 @@ import {
   useFetchOptions,
   useRequestPasswordReset
 } from "@better-auth-ui/react"
-import { type SyntheticEvent, useState } from "react"
+import {  useState } from "react"
 import { toast } from "sonner"
 
 import { Button } from "src/components/ui/button"
@@ -20,6 +20,7 @@ import { Input } from "src/components/ui/input"
 import { Label } from "src/components/ui/label"
 import { Spinner } from "src/components/ui/spinner"
 import { cn } from "src/lib/utils"
+import type { SyntheticEvent } from "react";
 
 export type ForgotPasswordProps = {
   className?: string
@@ -67,8 +68,8 @@ export function ForgotPassword({ className }: ForgotPasswordProps) {
     })
   }
 
-  const Captcha = plugins.find(
-    (plugin) => plugin.captchaComponent
+  const Captcha = plugins.find((plugin) =>
+    Boolean(plugin.captchaComponent)
   )?.captchaComponent
 
   const [fieldErrors, setFieldErrors] = useState<{

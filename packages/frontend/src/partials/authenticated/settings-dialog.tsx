@@ -1,18 +1,19 @@
 import * as React from 'react'
-import { useAuth, useListSessions, useRevokeSession, useSession } from '@better-auth-ui/react'
 import {
+  ArrowClockwiseIcon,
+  CheckCircleIcon,
   CloudIcon,
   GlobeHemisphereWestIcon,
   IdentificationCardIcon,
   LockIcon,
   PlusCircleIcon,
+  RobotIcon,
   SuitcaseSimpleIcon,
-  TerminalWindowIcon,
   TrashIcon,
   UserCircleIcon,
-  UsersIcon
+  UsersIcon,
+  XCircleIcon
 } from '@phosphor-icons/react'
-import { useRouter } from '@tanstack/react-router'
 
 import { Organization } from '../../components/auth/organization/organization'
 import { Settings } from '../../components/auth/settings/settings'
@@ -36,6 +37,7 @@ import {
 } from '../../components/ui/dialog'
 import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select'
 import { Separator } from '../../components/ui/separator'
 import { Skeleton } from '../../components/ui/skeleton'
 import { Spinner } from '../../components/ui/spinner'
@@ -49,18 +51,24 @@ import {
   SidebarMenuItem,
   SidebarProvider
 } from '../../components/ui/sidebar'
-import { rpc } from '../../lib/rpc-api-client'
 import { cn } from '../../lib/utils'
+import { AgentEnrollmentCommandSummary } from './agent-enrollment-command'
 import type { SettingsSectionId } from './settings-dialog-sections'
-import type { CloudflareAccountSummary, CloudflareStatusResult, CloudflareZoneSummary } from '@main/backend'
-import type { Session } from 'better-auth'
+import type {
+  AgentAccessAgent,
+  AgentAccessApproval,
+  AgentAccessGrant,
+  AgentAccessHost,
+  AgentAccessPaperclipConnection,
+  AgentAccessView,
+  AgentMailAdminAgentEnrollment,
+  AgentMailPublicStatus,
+  CloudflareAccountSummary,
+  CloudflareStatusResult,
+  CloudflareZoneSummary
+} from '@main/backend'
 
 export type SettingsDialogContentState = 'ready' | 'loading' | 'empty'
-
-export interface CloudflareOAuthCallbackState {
-  intentPublicId: string
-  oauthError?: string
-}
 
 type CloudflareGrantView = Pick<
   CloudflareStatusResult['grants'][number],
@@ -85,11 +93,12 @@ type CloudflareConnectionView = Pick<
   | 'lastProvisionedAt'
   | 'provisioningStatus'
   | 'publicId'
-  | 'r2BucketName'
   | 'status'
   | 'updatedAt'
   | 'workerScriptName'
 >
+
+type AgentAccessCapabilityRequest = AgentAccessApproval['capabilityRequests'][number]
 
 export interface DomainSettingsStatus {
   connections: readonly CloudflareConnectionView[]
@@ -100,8 +109,22 @@ export interface DomainSettingsState {
   accounts?: readonly CloudflareAccountSummary[]
   busy?: boolean
   draftDomain?: string
+  mailStatus?: AgentMailPublicStatus | null
+  mailStatusMessage?: string | null
   message?: string | null
   mode?: 'addDomain' | 'domain'
+  onAddDomain?: () => void
+  onConnectDomain?: () => void
+  onDisconnectCloudflare?: (grantPublicId?: CloudflareGrantView['publicId']) => void
+  onDraftDomainChange?: (domain: string) => void
+  onLoadAccounts?: () => void
+  onLoadZones?: () => void
+  onProvisionDomain?: (connectionPublicId: CloudflareConnectionView['publicId']) => void
+  onRefreshMailStatus?: () => void
+  onSelectAccount?: (accountId: string) => void
+  onSelectDomain?: (connectionPublicId: CloudflareConnectionView['publicId']) => void
+  onSelectZone?: (zoneId: string) => void
+  onStartOAuth?: () => void
   readOnly?: boolean
   selectedAccountId?: string
   selectedDomainPublicId?: CloudflareConnectionView['publicId'] | null
@@ -110,28 +133,38 @@ export interface DomainSettingsState {
   zones?: readonly CloudflareZoneSummary[]
 }
 
-export interface CLIAccessSessionView {
-  createdAt?: Date | string | null
-  current?: boolean
-  expiresAt?: Date | string | null
-  id: string
-  label: string
-  metadata: string
+export interface AgentAccessSettingsState {
+  busy?: boolean
+  canApproveApproval?: boolean
+  canCopyEnrollmentCommand?: boolean
+  canDenyApproval?: boolean
+  canRefresh?: boolean
+  canRevokeAgent?: boolean
+  canRevokeCapabilityGrant?: boolean
+  connectionHandoff?: AgentAccessConnectionHandoff | null
+  createdAgentEnrollment?: AgentMailAdminAgentEnrollment | null
+  message?: string | null
+  onCopyEnrollmentCommand?: (command: string) => void
+  onApproveApproval?: (approvalId: string) => void
+  onConnectPaperclip?: (handoff: AgentAccessConnectionHandoff) => void
+  onDenyApproval?: (approvalId: string) => void
+  onRefresh?: () => void
+  onRevokeAgent?: (agentId: string) => void
+  onRevokeCapabilityGrant?: (grant: AgentAccessGrant) => void
+  readOnly?: boolean
+  view: AgentAccessView | null
 }
 
-export type CLIAccessPanelState = 'ready' | 'loading' | 'error'
-
-export interface CLIAccessSettingsState {
-  error?: string | null
-  revokingSessionId?: string | null
-  sessions: ReadonlyArray<CLIAccessSessionView>
-  state: CLIAccessPanelState
+export interface AgentAccessConnectionHandoff {
+  companyId: string | null
+  pluginId: string | null
+  source: 'paperclip'
 }
 
 const settingsNavigation = [
   { id: 'account', name: 'Account', icon: UserCircleIcon },
   { id: 'security', name: 'Security', icon: LockIcon },
-  { id: 'cliAccess', name: 'CLI access', icon: TerminalWindowIcon },
+  { id: 'agentAccess', name: 'Agent access', icon: RobotIcon },
   { id: 'organizations', name: 'Organizations', icon: SuitcaseSimpleIcon },
   { id: 'organizationSettings', name: 'Organization settings', icon: IdentificationCardIcon },
   { id: 'organizationPeople', name: 'Organization people', icon: UsersIcon }
@@ -144,7 +177,7 @@ const settingsNavigation = [
 const settingsNames = {
   account: 'Account',
   security: 'Security',
-  cliAccess: 'CLI access',
+  agentAccess: 'Agent access',
   organizations: 'Organizations',
   organizationSettings: 'Organization settings',
   organizationPeople: 'Organization people',
@@ -153,13 +186,11 @@ const settingsNames = {
 
 interface SettingsDialogProps {
   activeSection?: SettingsSectionId
-  cliAccessState?: CLIAccessSettingsState
-  cloudflareOAuthCallback?: CloudflareOAuthCallbackState | null
+  agentAccessState?: AgentAccessSettingsState
   contentState?: SettingsDialogContentState
   defaultActiveSection?: SettingsSectionId
   defaultOpen?: boolean
   domainSettingsState?: DomainSettingsState
-  onCliAccessSessionRevoke?: (session: CLIAccessSessionView) => void
   onActiveSectionChange?: (section: SettingsSectionId) => void
   onOpenChange?: (open: boolean) => void
   open?: boolean
@@ -168,13 +199,11 @@ interface SettingsDialogProps {
 
 export function SettingsDialog({
   activeSection: activeSectionProp,
-  cliAccessState,
-  cloudflareOAuthCallback,
+  agentAccessState,
   contentState = 'ready',
   defaultActiveSection = 'account',
   defaultOpen = true,
   domainSettingsState,
-  onCliAccessSessionRevoke,
   onActiveSectionChange,
   onOpenChange,
   open: openProp,
@@ -187,15 +216,13 @@ export function SettingsDialog({
   const activeSection = activeSectionProp ?? uncontrolledActiveSection
   const setOpen = onOpenChange ?? setUncontrolledOpen
   const setActiveSection = onActiveSectionChange ?? setUncontrolledActiveSection
-  const domainSettings = useDomainSettingsController({
-    cloudflareOAuthCallback,
-    state: domainSettingsState
-  })
+  const domainSettings = domainSettingsControllerFromState(domainSettingsState)
+  const agentAccess = agentAccessControllerFromState(agentAccessState)
   const activeName =
     activeSection === 'domains'
       ? domainSettings.mode === 'addDomain'
         ? 'Add domain'
-        : domainSettings.selectedDomain?.domain ?? 'Domain'
+        : (domainSettings.selectedDomain?.domain ?? 'Domain')
       : settingsNames[activeSection]
 
   return (
@@ -206,7 +233,9 @@ export function SettingsDialog({
       {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
       <DialogContent className='overflow-hidden p-0 md:max-h-[500px] md:max-w-[700px] lg:max-w-[800px]'>
         <DialogTitle className='sr-only'>Settings</DialogTitle>
-        <DialogDescription className='sr-only'>Manage account, security, organization, and domain settings.</DialogDescription>
+        <DialogDescription className='sr-only'>
+          Manage account, security, organization, and domain settings.
+        </DialogDescription>
         <SidebarProvider className='h-full min-h-0 min-w-0 items-start overflow-hidden'>
           <Sidebar
             collapsible='none'
@@ -309,12 +338,44 @@ export function SettingsDialog({
                 </Breadcrumb>
               </div>
             </header>
+            <nav
+              aria-label='Settings sections'
+              className='border-border flex shrink-0 gap-1 overflow-x-auto border-b px-3 pb-3 md:hidden'
+            >
+              {settingsNavigation.map((item) => (
+                <Button
+                  className='shrink-0'
+                  key={item.id}
+                  onClick={() => {
+                    setActiveSection(item.id)
+                  }}
+                  size='sm'
+                  type='button'
+                  variant={item.id === activeSection ? 'secondary' : 'ghost'}
+                >
+                  <item.icon />
+                  {item.name}
+                </Button>
+              ))}
+              <Button
+                className='shrink-0'
+                onClick={() => {
+                  setActiveSection('domains')
+                  domainSettings.onAddDomain()
+                }}
+                size='sm'
+                type='button'
+                variant={activeSection === 'domains' ? 'secondary' : 'ghost'}
+              >
+                <PlusCircleIcon />
+                Add domain
+              </Button>
+            </nav>
             <div className='flex flex-1 flex-col gap-4 overflow-y-auto p-4 pt-0'>
               <SettingsPanelContent
-                cliAccessState={cliAccessState}
+                agentAccess={agentAccess}
                 contentState={contentState}
                 domainSettings={domainSettings}
-                onCliAccessSessionRevoke={onCliAccessSessionRevoke}
                 section={activeSection}
               />
             </div>
@@ -326,16 +387,14 @@ export function SettingsDialog({
 }
 
 function SettingsPanelContent({
-  cliAccessState,
+  agentAccess,
   contentState,
   domainSettings,
-  onCliAccessSessionRevoke,
   section
 }: {
-  cliAccessState?: CLIAccessSettingsState
+  agentAccess: AgentAccessController
   contentState: SettingsDialogContentState
   domainSettings: DomainSettingsController
-  onCliAccessSessionRevoke?: (session: CLIAccessSessionView) => void
   section: SettingsSectionId
 }) {
   if (contentState === 'loading') {
@@ -348,44 +407,60 @@ function SettingsPanelContent({
         description={
           section === 'domains'
             ? 'Domains connected to AgentTeam Email will appear here.'
-            : section === 'cliAccess'
-              ? 'CLI sessions will appear here after at-email authenticates.'
             : 'This settings section has no records to show yet.'
         }
-        title={section === 'domains' ? 'No domains' : section === 'cliAccess' ? 'No CLI sessions' : 'Nothing to show'}
+        title={section === 'domains' ? 'No domains' : 'Nothing to show'}
       />
     )
   }
 
   if (section === 'account') {
-    return <Settings view='account' hideNav />
-  }
-
-  if (section === 'security') {
-    return <Settings view='security' hideNav />
-  }
-
-  if (section === 'cliAccess') {
-    return cliAccessState ? (
-      <CLIAccessPanel
-        {...cliAccessState}
-        onRevoke={onCliAccessSessionRevoke}
+    return (
+      <Settings
+        view='account'
+        hideNav
       />
-    ) : (
-      <CLIAccessPanelLive />
     )
   }
 
+  if (section === 'security') {
+    return (
+      <Settings
+        view='security'
+        hideNav
+      />
+    )
+  }
+
+  if (section === 'agentAccess') {
+    return <AgentAccessPanel access={agentAccess} />
+  }
+
   if (section === 'organizations') {
-    return <Settings view='organizations' hideNav />
+    return (
+      <Settings
+        view='organizations'
+        hideNav
+      />
+    )
   }
 
   if (section === 'organizationSettings') {
-    return <Organization view='settings' hideNav />
+    return (
+      <Organization
+        view='settings'
+        hideNav
+      />
+    )
   }
 
   if (section === 'organizationPeople') {
-    return <Organization view='people' hideNav />
+    return (
+      <Organization
+        view='people'
+        hideNav
+      />
+    )
   }
 
   if (section === 'domains') {
@@ -420,171 +495,634 @@ function SettingsEmptyContent({ description, title }: { description: string; tit
   )
 }
 
-function CLIAccessPanelLive() {
-  const { authClient } = useAuth()
-  const { data: currentSession } = useSession(authClient, { refetchOnMount: false })
-  const { data: sessions, isPending, error } = useListSessions(authClient)
-  const [revokingSessionId, setRevokingSessionId] = React.useState<string | null>(null)
-  const { mutate: revokeSession } = useRevokeSession(authClient, {
-    onSettled: () => {
-      setRevokingSessionId(null)
-    }
-  })
-
-  const currentSessionToken = currentSession?.session.token
-  const cliSessions = (sessions ?? [])
-    .filter((session) => isAtEmailSession(session.userAgent))
-    .map((session) => toCLIAccessSessionView(session, currentSessionToken))
-
-  return (
-    <CLIAccessPanel
-      error={error instanceof Error ? error.message : error ? 'Failed to load CLI sessions.' : null}
-      onRevoke={(session) => {
-        const rawSession = sessions?.find((candidate) => candidate.id === session.id)
-        if (!rawSession) {
-          return
-        }
-        setRevokingSessionId(session.id)
-        revokeSession(rawSession)
-      }}
-      revokingSessionId={revokingSessionId}
-      sessions={cliSessions}
-      state={isPending ? 'loading' : error ? 'error' : 'ready'}
-    />
-  )
+interface AgentAccessController {
+  busy: boolean
+  canCopyEnrollmentCommand: boolean
+  canApproveApproval: boolean
+  canDenyApproval: boolean
+  canRefresh: boolean
+  canRevokeAgent: boolean
+  canRevokeCapabilityGrant: boolean
+  connectionHandoff: AgentAccessConnectionHandoff | null
+  createdAgentEnrollment: AgentMailAdminAgentEnrollment | null
+  message: string | null
+  onCopyEnrollmentCommand: (command: string) => void
+  onApproveApproval: (approvalId: string) => void
+  onConnectPaperclip?: (handoff: AgentAccessConnectionHandoff) => void
+  onDenyApproval: (approvalId: string) => void
+  onRefresh: () => void
+  onRevokeAgent: (agentId: string) => void
+  onRevokeCapabilityGrant: (grant: AgentAccessGrant) => void
+  readOnly: boolean
+  view: AgentAccessView | null
 }
 
-export function CLIAccessPanel({
-  error,
-  onRevoke,
-  revokingSessionId,
-  sessions,
-  state
-}: CLIAccessSettingsState & {
-  onRevoke?: (session: CLIAccessSessionView) => void
-}) {
-  if (state === 'loading') {
-    return <SettingsLoadingContent />
-  }
+function agentAccessControllerFromState(state: AgentAccessSettingsState | undefined): AgentAccessController {
+  const hasCopyEnrollmentCommand = Boolean(state?.onCopyEnrollmentCommand)
+  const hasRefresh = Boolean(state?.onRefresh)
 
-  if (state === 'error') {
+  return {
+    busy: state?.busy ?? false,
+    canApproveApproval: state?.canApproveApproval ?? Boolean(state?.onApproveApproval),
+    canCopyEnrollmentCommand: state?.canCopyEnrollmentCommand ?? hasCopyEnrollmentCommand,
+    canDenyApproval: state?.canDenyApproval ?? Boolean(state?.onDenyApproval),
+    canRefresh: state?.canRefresh ?? hasRefresh,
+    canRevokeAgent: state?.canRevokeAgent ?? Boolean(state?.onRevokeAgent),
+    canRevokeCapabilityGrant:
+      state?.canRevokeCapabilityGrant ?? Boolean(state?.onRevokeCapabilityGrant),
+    connectionHandoff: state?.connectionHandoff ?? null,
+    createdAgentEnrollment: state?.createdAgentEnrollment ?? null,
+    message: state?.message ?? null,
+    onCopyEnrollmentCommand: state?.onCopyEnrollmentCommand ?? ignoreAgentAccessAction,
+    onApproveApproval: state?.onApproveApproval ?? ignoreAgentAccessAction,
+    onConnectPaperclip: state?.onConnectPaperclip,
+    onDenyApproval: state?.onDenyApproval ?? ignoreAgentAccessAction,
+    onRefresh: state?.onRefresh ?? ignoreAgentAccessAction,
+    onRevokeAgent: state?.onRevokeAgent ?? ignoreAgentAccessAction,
+    onRevokeCapabilityGrant: state?.onRevokeCapabilityGrant ?? ignoreAgentAccessAction,
+    readOnly: state?.readOnly ?? true,
+    view: state?.view ?? null
+  }
+}
+
+function ignoreAgentAccessAction() {}
+
+function AgentAccessPanel({ access }: { access: AgentAccessController }) {
+  const view = access.view
+  const enrollment = access.createdAgentEnrollment
+  const paperclipConnections = view?.paperclipConnections ?? []
+  const handoff = access.connectionHandoff ? (
+    <AgentAccessConnectionHandoffCard
+      busy={access.busy}
+      handoff={access.connectionHandoff}
+      onConnect={access.onConnectPaperclip}
+      readOnly={access.readOnly}
+    />
+  ) : null
+
+  if (!view && !access.message) {
     return (
-      <SettingsEmptyContent
-        description={error ?? 'CLI sessions could not be loaded.'}
-        title='CLI sessions unavailable'
-      />
+      <div className='grid max-w-3xl gap-3'>
+        {handoff}
+        <AgentAccessLoadingContent />
+      </div>
     )
   }
 
-  if (sessions.length === 0) {
+  if (!view && access.message) {
     return (
-      <SettingsEmptyContent
-        description='Run at-email auth login to connect the CLI to this account.'
-        title='No CLI sessions'
-      />
+      <div className='grid max-w-3xl gap-3'>
+        {handoff}
+        <div className='flex items-start justify-between gap-3'>
+          <div className='min-w-0'>
+            <p className='font-medium'>Agent access unavailable</p>
+            <p className='text-muted-foreground text-sm'>
+              Agent hosts, delegated agents, and capability approvals could not be loaded.
+            </p>
+          </div>
+          <Button
+            disabled={access.busy || !access.canRefresh}
+            onClick={access.onRefresh}
+            size='sm'
+            variant='outline'
+          >
+            {access.busy ? 'Retrying' : 'Retry'}
+          </Button>
+        </div>
+        <SettingsEmptyContent
+          description={access.message}
+          title='Agent access could not be loaded'
+        />
+      </div>
     )
   }
+
+  if (!view || view.state === 'empty') {
+    return (
+      <div className='grid max-w-3xl gap-3'>
+        {handoff}
+        <div className='flex items-start justify-between gap-3'>
+          <div className='min-w-0'>
+            <p className='font-medium'>Agent access</p>
+            <p className='text-muted-foreground text-sm'>
+              Agent hosts, delegated agents, and capability approvals will appear here.
+            </p>
+          </div>
+          <Button
+            disabled={access.busy || !access.canRefresh}
+            onClick={access.onRefresh}
+            size='sm'
+            variant='outline'
+          >
+            {access.busy ? 'Refreshing' : 'Refresh'}
+          </Button>
+        </div>
+        <SettingsEmptyContent
+          description='No agent hosts or organization-scoped grants are available for this workspace.'
+          title='No agent access'
+        />
+        {paperclipConnections.length > 0 ? (
+          <AgentAccessPaperclipConnectionsSection connections={paperclipConnections} />
+        ) : null}
+        {enrollment ? (
+          <AgentAccessEnrollmentCard
+            busy={access.busy}
+            canCopyCommand={access.canCopyEnrollmentCommand}
+            enrollment={enrollment}
+            onCopyCommand={access.onCopyEnrollmentCommand}
+          />
+        ) : null}
+        {access.message ? <p className='text-muted-foreground text-sm'>{access.message}</p> : null}
+      </div>
+    )
+  }
+
+  const agentById = new Map(view.agents.map((agent: AgentAccessAgent) => [agent.id, agent]))
+  const capabilityCatalog = view.capabilityCatalog
+  const hostById = new Map(view.hosts.map((host: AgentAccessHost) => [host.id, host]))
 
   return (
-    <section className='max-w-3xl space-y-3'>
-      <div>
-        <h2 className='text-sm font-semibold'>CLI access</h2>
-        <p className='text-muted-foreground mt-1 text-sm'>
-          Revoke at-email sessions that were authorized through device login.
-        </p>
+    <section className='grid max-w-3xl gap-4'>
+      {handoff}
+      <div className='flex items-start justify-between gap-3'>
+        <div className='min-w-0'>
+          <p className='font-medium'>Agent access</p>
+          <p className='text-muted-foreground text-sm'>
+            Review Agent Auth hosts, agents, grants, and pending approval requests.
+          </p>
+        </div>
+        <Button
+          disabled={access.busy || !access.canRefresh}
+          onClick={access.onRefresh}
+          size='sm'
+          variant='outline'
+        >
+          {access.busy ? 'Refreshing' : 'Refresh'}
+        </Button>
       </div>
-      <Card className='p-0'>
-        <CardContent className='p-0'>
-          {sessions.map((session, index) => (
-            <React.Fragment key={session.id}>
-              {index > 0 ? <Separator /> : null}
-              <Card className='border-0 bg-transparent shadow-none ring-0'>
-                <CardContent className='flex items-center justify-between gap-3'>
-                  <div className='bg-muted flex size-10 shrink-0 items-center justify-center rounded-md'>
-                    <TerminalWindowIcon className='size-4.5' />
-                  </div>
-                  <div className='flex min-w-0 flex-col'>
-                    <div className='flex min-w-0 flex-wrap items-center gap-2'>
-                      <span className='truncate text-sm font-medium'>{session.label}</span>
-                      {session.current ? <Badge variant='secondary'>Current</Badge> : null}
-                    </div>
-                    <span className='text-muted-foreground truncate text-xs'>{session.metadata}</span>
-                  </div>
-                  <Button
-                    aria-label={`Revoke ${session.label}`}
-                    className='ml-auto shrink-0'
-                    disabled={!onRevoke || revokingSessionId === session.id}
-                    onClick={() => onRevoke?.(session)}
-                    size='sm'
-                    type='button'
-                    variant='outline'
-                  >
-                    {revokingSessionId === session.id ? <Spinner className='size-3.5' /> : <TrashIcon />}
-                    Revoke
-                  </Button>
-                </CardContent>
-              </Card>
-            </React.Fragment>
+
+      {access.message ? <p className='text-muted-foreground text-sm'>{access.message}</p> : null}
+
+      {enrollment ? (
+        <AgentAccessEnrollmentCard
+          busy={access.busy}
+          canCopyCommand={access.canCopyEnrollmentCommand}
+          enrollment={enrollment}
+          onCopyCommand={access.onCopyEnrollmentCommand}
+        />
+      ) : null}
+
+      {paperclipConnections.length > 0 ? (
+        <AgentAccessPaperclipConnectionsSection connections={paperclipConnections} />
+      ) : null}
+
+      {view.approvals.length > 0 ? (
+        <AgentAccessSection title='Capability approvals'>
+          {view.approvals.map((approval: AgentAccessApproval) => (
+            <AgentAccessApprovalRow
+              key={approval.id}
+              agent={approval.agentId ? agentById.get(approval.agentId) : undefined}
+              approval={approval}
+              busy={access.busy}
+              canApprove={access.canApproveApproval && approval.canReview}
+              canDeny={access.canDenyApproval && approval.canDeny}
+              capabilityCatalog={capabilityCatalog}
+              host={approval.hostId ? hostById.get(approval.hostId) : undefined}
+              onApprove={access.onApproveApproval}
+              onDeny={access.onDenyApproval}
+            />
           ))}
-        </CardContent>
-      </Card>
+        </AgentAccessSection>
+      ) : null}
+
+      {view.agents.length > 0 ? (
+        <AgentAccessSection title='Agents'>
+          {view.agents.map((agent: AgentAccessAgent) => (
+            <AgentAccessAgentRow
+              key={agent.id}
+              agent={agent}
+              busy={access.busy}
+              canRevoke={access.canRevokeAgent && agent.canRevoke}
+              host={hostById.get(agent.hostId)}
+              onRevoke={access.onRevokeAgent}
+            />
+          ))}
+        </AgentAccessSection>
+      ) : null}
+
+      {view.hosts.length > 0 ? (
+        <AgentAccessSection title='Hosts'>
+          {view.hosts.map((host: AgentAccessHost) => (
+            <AgentAccessHostRow
+              key={host.id}
+              host={host}
+            />
+          ))}
+        </AgentAccessSection>
+      ) : null}
+
+      {view.grants.length > 0 ? (
+        <AgentAccessSection title='Capability grants'>
+          {view.grants.map((grant: AgentAccessGrant) => (
+            <AgentAccessGrantRow
+              key={grant.id}
+              agent={agentById.get(grant.agentId)}
+              busy={access.busy}
+              canRevoke={access.canRevokeCapabilityGrant && grant.canRevoke}
+              capabilityCatalog={capabilityCatalog}
+              grant={grant}
+              onRevoke={access.onRevokeCapabilityGrant}
+            />
+          ))}
+        </AgentAccessSection>
+      ) : null}
     </section>
   )
 }
 
-function isAtEmailSession(userAgent: string | null | undefined): boolean {
-  return typeof userAgent === 'string' && userAgent.startsWith('at-email/')
+function AgentAccessPaperclipConnectionsSection({
+  connections
+}: {
+  connections: ReadonlyArray<AgentAccessPaperclipConnection>
+}) {
+  return (
+    <AgentAccessSection title='Connected integrations'>
+      {connections.map((connection) => (
+        <AgentAccessPaperclipConnectionRow
+          connection={connection}
+          key={connection.clientId}
+        />
+      ))}
+    </AgentAccessSection>
+  )
 }
 
-function toCLIAccessSessionView(session: Session, currentSessionToken: string | undefined) {
-  const parsed = parseAtEmailUserAgent(session.userAgent)
-  const created = formatSessionDate(session.createdAt)
-  const expires = formatSessionDate(session.expiresAt)
-  const metadata = [
-    parsed.platform,
-    created ? `created ${created}` : null,
-    expires ? `expires ${expires}` : null
-  ].filter(Boolean)
-
-  return {
-    createdAt: session.createdAt,
-    current: session.token === currentSessionToken,
-    expiresAt: session.expiresAt,
-    id: session.id,
-    label: parsed.label,
-    metadata: metadata.join(' - ')
-  } satisfies CLIAccessSessionView
+function AgentAccessPaperclipConnectionRow({
+  connection
+}: {
+  connection: AgentAccessPaperclipConnection
+}) {
+  return (
+    <div className='grid gap-2 border-b p-3 text-sm last:border-b-0'>
+      <div className='flex items-start justify-between gap-3'>
+        <div className='min-w-0'>
+          <p className='truncate font-medium'>{connection.name}</p>
+          <p className='text-muted-foreground truncate'>
+            Paperclip OAuth principal · {formatReferenceId(connection.clientId)}
+          </p>
+        </div>
+        <Badge variant={connection.status === 'active' ? 'secondary' : 'outline'}>
+          {formatStatusLabel(connection.status)}
+        </Badge>
+      </div>
+      <div className='text-muted-foreground grid gap-1 sm:grid-cols-3'>
+        <span>Company context {paperclipCompanyContextLabel(connection.companyId)}</span>
+        <span>{paperclipPluginContextLabel(connection.pluginId)}</span>
+        <span>{formatStatusLabel(connection.scope)} scope</span>
+      </div>
+    </div>
+  )
 }
 
-function parseAtEmailUserAgent(userAgent: string | null | undefined) {
-  const value = userAgent ?? ''
-  const match = /^at-email\/([^\s]+)(?: \(([^;]+); ([^)]+)\))?/.exec(value)
-  const version = match?.[1] ?? 'unknown'
-  const os = match?.[2] ?? null
-  const arch = match?.[3] ?? null
+function AgentAccessConnectionHandoffCard({
+  busy,
+  handoff,
+  onConnect,
+  readOnly
+}: {
+  busy: boolean
+  handoff: AgentAccessConnectionHandoff
+  onConnect?: (handoff: AgentAccessConnectionHandoff) => void
+  readOnly: boolean
+}) {
+  const supportedPlugin = handoff.pluginId === 'agentteam.paperclip-email-plugin'
+  const canConnect = Boolean(onConnect && handoff.companyId && supportedPlugin) && !readOnly
 
-  return {
-    label: `at-email ${version}`,
-    platform: os && arch ? `${os}/${arch}` : 'CLI session'
+  return (
+    <div className='border-border bg-muted/20 grid gap-2 rounded-lg border p-3 text-sm'>
+      <div className='flex items-start justify-between gap-3'>
+        <div className='min-w-0'>
+          <p className='font-medium'>Paperclip connection requested</p>
+          <p className='text-muted-foreground'>
+            AgentTeam Email authorizes mail access from backend grants, not Paperclip context.
+          </p>
+        </div>
+        <Badge variant='outline'>OAuth</Badge>
+      </div>
+      <div className='flex flex-wrap items-center justify-between gap-2'>
+        <p className='text-muted-foreground'>
+          Register a backend-owned OAuth principal before granting mailbox access.
+        </p>
+        <Button
+          disabled={busy || !canConnect}
+          onClick={() => onConnect?.(handoff)}
+          size='sm'
+          variant='outline'
+        >
+          {busy ? 'Registering' : 'Register principal'}
+        </Button>
+      </div>
+      <div className='text-muted-foreground grid gap-1 sm:grid-cols-2'>
+        <p className='truncate'>Company context: {paperclipCompanyContextLabel(handoff.companyId)}</p>
+        <p className='truncate'>Plugin: {paperclipPluginContextLabel(handoff.pluginId)}</p>
+      </div>
+    </div>
+  )
+}
+
+function paperclipCompanyContextLabel(companyId: string | null) {
+  return companyId ? 'Ready' : 'Pending'
+}
+
+function paperclipPluginContextLabel(pluginId: string | null) {
+  if (!pluginId) {
+    return 'Pending'
   }
+  return pluginId === 'agentteam.paperclip-email-plugin' ? 'AgentTeam Email plugin' : 'Unsupported plugin'
 }
 
-function formatSessionDate(value: Date | string | null | undefined): string | null {
-  if (!value) {
+function AgentAccessEnrollmentCard({
+  busy,
+  canCopyCommand,
+  enrollment,
+  onCopyCommand
+}: {
+  busy: boolean
+  canCopyCommand: boolean
+  enrollment: AgentMailAdminAgentEnrollment
+  onCopyCommand: (command: string) => void
+}) {
+  return (
+    <AgentAccessSection title='Pending enrollment'>
+      <AgentEnrollmentCommandSummary
+        busy={busy}
+        canCopyCommand={canCopyCommand}
+        enrollment={enrollment}
+        onCopyCommand={onCopyCommand}
+      />
+    </AgentAccessSection>
+  )
+}
+
+function AgentAccessLoadingContent() {
+  return (
+    <div className='grid max-w-3xl gap-3'>
+      <Skeleton className='h-16 rounded-lg' />
+      <Skeleton className='h-24 rounded-lg' />
+      <Skeleton className='h-24 rounded-lg' />
+    </div>
+  )
+}
+
+function AgentAccessSection({ children, title }: { children: React.ReactNode; title: string }) {
+  return (
+    <div className='grid gap-2'>
+      <p className='text-sm font-medium'>{title}</p>
+      <div className='divide-border overflow-hidden rounded-lg border'>{children}</div>
+    </div>
+  )
+}
+
+function AgentAccessAgentRow({
+  agent,
+  busy,
+  canRevoke,
+  host,
+  onRevoke
+}: {
+  agent: AgentAccessAgent
+  busy: boolean
+  canRevoke: boolean
+  host: AgentAccessHost | undefined
+  onRevoke: (agentId: string) => void
+}) {
+  const canRevokeAgent = canRevoke && agent.status !== 'revoked' && agent.status !== 'expired'
+  const handleRevoke = React.useCallback(() => {
+    onRevoke(agent.id)
+  }, [agent.id, onRevoke])
+  return (
+    <div className='grid gap-2 border-b p-3 text-sm last:border-b-0'>
+      <div className='flex items-start justify-between gap-3'>
+        <div className='min-w-0'>
+          <p className='truncate font-medium'>{agent.name}</p>
+          <p className='text-muted-foreground truncate'>
+            {formatStatusLabel(agent.mode)} · {formatReferenceId(agent.id)}
+          </p>
+        </div>
+        <Badge variant={agent.status === 'active' ? 'secondary' : 'outline'}>
+          {formatStatusLabel(agent.status)}
+        </Badge>
+      </div>
+      <div className='text-muted-foreground grid gap-1 sm:grid-cols-5'>
+        <span>{agent.activeCapabilityCount} active grants</span>
+        <span>{agent.pendingCapabilityCount} pending grants</span>
+        <span>Host {host?.name ?? formatReferenceId(agent.hostId)}</span>
+        <span>Workspace {formatReferenceId(agent.organizationId)}</span>
+        <span>Last used {formatDateTime(agent.lastUsedAt)}</span>
+      </div>
+      {canRevokeAgent ? (
+        <div>
+          <Button
+            disabled={busy}
+            onClick={handleRevoke}
+            size='sm'
+            variant='outline'
+          >
+            <TrashIcon />
+            Revoke agent
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function AgentAccessHostRow({ host }: { host: AgentAccessHost }) {
+  return (
+    <div className='grid gap-2 border-b p-3 text-sm last:border-b-0'>
+      <div className='flex items-start justify-between gap-3'>
+        <div className='min-w-0'>
+          <p className='truncate font-medium'>{host.name}</p>
+          <p className='text-muted-foreground truncate'>Host ref {formatReferenceId(host.id)}</p>
+        </div>
+        <Badge variant={host.status === 'active' ? 'secondary' : 'outline'}>
+          {formatStatusLabel(host.status)}
+        </Badge>
+      </div>
+      <div className='text-muted-foreground grid gap-1 sm:grid-cols-4'>
+        <span>{host.agentCount} agents</span>
+        <span>{host.defaultCapabilities.length} default capabilities</span>
+        <span>Workspace {formatReferenceId(host.organizationId)}</span>
+        <span>Last used {formatDateTime(host.lastUsedAt)}</span>
+      </div>
+    </div>
+  )
+}
+
+function AgentAccessGrantRow({
+  agent,
+  busy,
+  canRevoke,
+  capabilityCatalog,
+  grant,
+  onRevoke
+}: {
+  agent: AgentAccessAgent | undefined
+  busy: boolean
+  canRevoke: boolean
+  capabilityCatalog: AgentAccessView['capabilityCatalog']
+  grant: AgentAccessGrant
+  onRevoke: (grant: AgentAccessGrant) => void
+}) {
+  const canRevokeGrant = canRevoke && (grant.status === 'active' || grant.status === 'pending')
+  const handleRevoke = React.useCallback(() => {
+    onRevoke(grant)
+  }, [grant, onRevoke])
+  return (
+    <div className='grid gap-2 border-b p-3 text-sm last:border-b-0'>
+      <div className='flex items-start justify-between gap-3'>
+        <div className='min-w-0'>
+          <p className='truncate font-medium'>{formatCapabilityLabel(capabilityCatalog, grant.capability)}</p>
+          <p className='text-muted-foreground truncate'>{constraintSummary(grant.constraints)}</p>
+        </div>
+        <Badge variant={grant.status === 'active' ? 'secondary' : 'outline'}>
+          {formatStatusLabel(grant.status)}
+        </Badge>
+      </div>
+      <ConstraintDetails constraints={grant.constraints} />
+      <p className='text-muted-foreground text-xs'>
+        Agent {agent?.name ?? formatReferenceId(grant.agentId)} · Workspace{' '}
+        {formatReferenceId(grant.organizationId) ?? 'Unknown'} · {formatGrantActor(grant)} · Expires{' '}
+        {formatDateTime(grant.expiresAt)}
+      </p>
+      {canRevokeGrant ? (
+        <div>
+          <Button
+            disabled={busy}
+            onClick={handleRevoke}
+            size='sm'
+            variant='outline'
+          >
+            <TrashIcon />
+            Revoke capability
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function AgentAccessApprovalRow({
+  agent,
+  approval,
+  busy,
+  canApprove,
+  canDeny,
+  capabilityCatalog,
+  host,
+  onApprove,
+  onDeny
+}: {
+  agent: AgentAccessAgent | undefined
+  approval: AgentAccessApproval
+  busy: boolean
+  canApprove: boolean
+  canDeny: boolean
+  capabilityCatalog: AgentAccessView['capabilityCatalog']
+  host: AgentAccessHost | undefined
+  onApprove: (approvalId: string) => void
+  onDeny: (approvalId: string) => void
+}) {
+  const actionUnavailable = busy || approval.status !== 'pending'
+  const handleApprove = React.useCallback(() => {
+    onApprove(approval.id)
+  }, [approval.id, onApprove])
+  const handleDeny = React.useCallback(() => {
+    onDeny(approval.id)
+  }, [approval.id, onDeny])
+  return (
+    <div className='grid gap-2 border-b p-3 text-sm last:border-b-0'>
+      <div className='flex items-start justify-between gap-3'>
+        <div className='min-w-0'>
+          <p className='truncate font-medium'>{approval.bindingMessage ?? 'Capability approval'}</p>
+          <p className='text-muted-foreground truncate'>
+            {approval.capabilityRequests
+              .map((request) => formatApprovalCapabilityRequest(capabilityCatalog, request))
+              .join(', ')}
+          </p>
+        </div>
+        <Badge variant='outline'>{formatStatusLabel(approval.status)}</Badge>
+      </div>
+      {approval.capabilityRequests.some((request: AgentAccessCapabilityRequest) => request.reason) ? (
+        <p className='text-muted-foreground text-xs'>
+          {approval.capabilityRequests
+            .map((request: AgentAccessCapabilityRequest) => request.reason)
+            .filter((reason): reason is string => typeof reason === 'string' && reason.length > 0)
+            .join(' · ')}
+        </p>
+      ) : null}
+      {approval.capabilityRequests.some(
+        (request: AgentAccessCapabilityRequest) => request.approvalStrength === 'webauthn'
+      ) ? (
+        <p className='text-muted-foreground text-xs'>Passkey verification required</p>
+      ) : null}
+      {approval.capabilityRequests.map((request: AgentAccessCapabilityRequest) => (
+        <ConstraintDetails
+          constraints={request.constraints}
+          key={request.capability}
+        />
+      ))}
+      <p className='text-muted-foreground text-xs'>
+        Agent {agent?.name ?? formatReferenceId(approval.agentId) ?? 'Pending'} · Host{' '}
+        {host?.name ?? formatReferenceId(approval.hostId) ?? 'Pending'} ·{' '}
+        {formatStatusLabel(approval.method)} · Expires {formatDateTime(approval.expiresAt)}
+      </p>
+      <div className='flex flex-wrap gap-2'>
+        <Button
+          disabled={actionUnavailable || !canApprove}
+          onClick={handleApprove}
+          size='sm'
+          variant='outline'
+        >
+          <CheckCircleIcon />
+          Review approval
+        </Button>
+        <Button
+          disabled={actionUnavailable || !canDeny}
+          onClick={handleDeny}
+          size='sm'
+          variant='outline'
+        >
+          <XCircleIcon />
+          Deny
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function ConstraintDetails({ constraints }: { constraints: Record<string, unknown> | null }) {
+  const details = constraintDetailItems(constraints)
+  if (details.length === 0) {
     return null
   }
-  const date = value instanceof Date ? value : new Date(value)
-  if (!Number.isFinite(date.getTime())) {
-    return null
-  }
-  return date.toLocaleDateString(undefined, {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric'
-  })
+
+  return (
+    <div className='text-muted-foreground flex flex-wrap gap-1 text-xs'>
+      {details.map((detail) => (
+        <Badge
+          key={detail}
+          variant='outline'
+        >
+          {detail}
+        </Badge>
+      ))}
+    </div>
+  )
 }
 
 type DomainPublicId = CloudflareConnectionView['publicId']
+type CloudflareGrantPublicId = CloudflareGrantView['publicId']
 
 interface DomainSettingsController {
   accounts: readonly CloudflareAccountSummary[]
@@ -592,15 +1130,19 @@ interface DomainSettingsController {
   busy: boolean
   connections: readonly CloudflareConnectionView[]
   draftDomain: string
+  mailStatus: AgentMailPublicStatus | null
+  mailStatusMessage: string | null
   message: string | null
   missingScopes: readonly string[]
   mode: 'addDomain' | 'domain'
   onAddDomain: () => void
   onConnectDomain: () => void
+  onDisconnectCloudflare: (grantPublicId?: CloudflareGrantPublicId) => void
   onDraftDomainChange: (domain: string) => void
   onLoadAccounts: () => void
   onLoadZones: () => void
   onProvisionDomain: (connectionPublicId: DomainPublicId) => void
+  onRefreshMailStatus: () => void
   onSelectAccount: (accountId: string) => void
   onSelectDomain: (connectionPublicId: DomainPublicId) => void
   onSelectZone: (zoneId: string) => void
@@ -614,317 +1156,58 @@ interface DomainSettingsController {
   zones: readonly CloudflareZoneSummary[]
 }
 
-function useDomainSettingsController({
-  cloudflareOAuthCallback,
-  state
-}: {
-  cloudflareOAuthCallback?: CloudflareOAuthCallbackState | null
-  state?: DomainSettingsState
-}): DomainSettingsController {
-  const router = useRouter()
-  const isStoryState = state !== undefined
-  const readOnly = state?.readOnly ?? false
-  const [runtimeStatus, setRuntimeStatus] = React.useState<DomainSettingsStatus | null>(null)
-  const [runtimeAccounts, setRuntimeAccounts] = React.useState<CloudflareAccountSummary[]>([])
-  const [runtimeZones, setRuntimeZones] = React.useState<CloudflareZoneSummary[]>([])
-  const [runtimeSelectedAccountId, setRuntimeSelectedAccountId] = React.useState('')
-  const [runtimeSelectedZoneId, setRuntimeSelectedZoneId] = React.useState('')
-  const [runtimeSelectedDomainPublicId, setRuntimeSelectedDomainPublicId] = React.useState<DomainPublicId | null>(
-    null
-  )
-  const [runtimeMode, setRuntimeMode] = React.useState<'addDomain' | 'domain' | null>(null)
-  const [runtimeDraftDomain, setRuntimeDraftDomain] = React.useState('')
-  const [runtimeMessage, setRuntimeMessage] = React.useState<string | null>(null)
-  const [runtimeBusy, setRuntimeBusy] = React.useState(false)
-  const handledCloudflareIntentIdsRef = React.useRef(new Set<string>())
-  const busy = state?.busy ?? runtimeBusy
-  const status = state ? state.status : runtimeStatus
-  const accounts = state?.accounts ?? runtimeAccounts
-  const zones = state?.zones ?? runtimeZones
-  const selectedAccountId = state?.selectedAccountId ?? runtimeSelectedAccountId
-  const selectedZoneId = state?.selectedZoneId ?? runtimeSelectedZoneId
-  const draftDomain = state?.draftDomain ?? runtimeDraftDomain
-  const message = state?.message ?? runtimeMessage
+function domainSettingsControllerFromState(state?: DomainSettingsState): DomainSettingsController {
+  const readOnly = state ? (state.readOnly ?? false) : true
+  const status = state?.status ?? null
+  const accounts = state?.accounts ?? []
+  const zones = state?.zones ?? []
+  const selectedAccountId = state?.selectedAccountId ?? ''
+  const selectedZoneId = state?.selectedZoneId ?? ''
+  const draftDomain = state?.draftDomain ?? ''
+  const mailStatus = state?.mailStatus ?? null
+  const mailStatusMessage = state?.mailStatusMessage ?? null
+  const message = state?.message ?? null
   const connections = status?.connections ?? []
-  const selectedDomainPublicId =
-    state?.selectedDomainPublicId ??
-    runtimeSelectedDomainPublicId ??
-    connections[0]?.publicId ??
-    null
-  const mode = state?.mode ?? runtimeMode ?? (connections.length > 0 ? 'domain' : 'addDomain')
-  const selectedDomain =
-    selectedDomainPublicId
-      ? connections.find((connection) => connection.publicId === selectedDomainPublicId) ?? connections[0] ?? null
-      : connections[0] ?? null
-
+  const selectedDomainPublicId = state?.selectedDomainPublicId ?? connections[0]?.publicId ?? null
+  const selectedDomain = selectedDomainPublicId
+    ? (connections.find((connection) => connection.publicId === selectedDomainPublicId) ??
+      connections[0] ??
+      null)
+    : (connections[0] ?? null)
+  const mode = state?.mode ?? (connections.length > 0 ? 'domain' : 'addDomain')
   const activeGrant = status?.grants.find((grant) => grant.status === 'active') ?? null
   const missingScopes = activeGrant ? getMissingScopes(activeGrant) : []
-  const selectedAccount = accounts.find((account) => account.id === selectedAccountId) ?? null
-  const selectedZone = zones.find((zone) => zone.id === selectedZoneId) ?? null
-
-  const refreshStatus = React.useCallback(async () => {
-    if (isStoryState) {
-      return
-    }
-
-    const result = await rpc.cloudflare.status.get()
-    if (result.error) {
-      throw createRpcError(result.error, result.status)
-    }
-    setRuntimeStatus(result.data)
-    setRuntimeSelectedDomainPublicId((current) => current ?? result.data.connections[0]?.publicId ?? null)
-  }, [isStoryState])
-  const handleUnexpectedCloudflareActionError = React.useCallback((error: unknown) => {
-    setRuntimeMessage(error instanceof Error ? error.message : 'Cloudflare action failed')
-    setRuntimeBusy(false)
-  }, [])
-
-  React.useEffect(() => {
-    if (isStoryState) {
-      return
-    }
-
-    Promise.resolve()
-      .then(refreshStatus)
-      .catch((error: unknown) => {
-        setRuntimeMessage(error instanceof Error ? error.message : 'Failed to load Cloudflare status')
-      })
-  }, [isStoryState, refreshStatus])
-
-  React.useEffect(() => {
-    if (isStoryState) {
-      return
-    }
-
-    const intentPublicId = cloudflareOAuthCallback?.intentPublicId
-    const oauthError = cloudflareOAuthCallback?.oauthError
-
-    if (!intentPublicId || handledCloudflareIntentIdsRef.current.has(intentPublicId)) {
-      return
-    }
-    handledCloudflareIntentIdsRef.current.add(intentPublicId)
-
-    const finalize = async () => {
-      setRuntimeBusy(true)
-
-      if (oauthError) {
-        throw new Error('Cloudflare authorization was not completed')
+  const action =
+    <TArgs extends unknown[]>(handler: ((...args: TArgs) => void) | undefined) =>
+    (...args: TArgs) => {
+      if (!readOnly) {
+        handler?.(...args)
       }
-
-      const result = await rpc.cloudflare.oauth.finalize.post({ intentPublicId })
-      if (result.error) {
-        throw createRpcError(result.error, result.status)
-      }
-
-      if (result.data.missingScopes.length > 0) {
-        setRuntimeMessage(`Missing Cloudflare scopes: ${result.data.missingScopes.join(', ')}`)
-      } else {
-        setRuntimeMessage('Cloudflare account connected')
-      }
-
-      await router.navigate({
-        to: '/dashboard/',
-        search: {},
-        replace: true
-      })
-      await refreshStatus()
-      setRuntimeMode('addDomain')
     }
-
-    Promise.resolve()
-      .then(finalize)
-      .catch((error: unknown) => {
-        setRuntimeMessage(error instanceof Error ? error.message : 'Failed to finalize Cloudflare OAuth')
-      })
-      .finally(() => {
-        setRuntimeBusy(false)
-      })
-  }, [cloudflareOAuthCallback?.intentPublicId, cloudflareOAuthCallback?.oauthError, isStoryState, refreshStatus, router])
-
-  const startOAuth = async () => {
-    if (isStoryState || readOnly) {
-      return
-    }
-
-    setRuntimeBusy(true)
-    setRuntimeMessage(null)
-    try {
-      const result = await rpc.cloudflare.oauth.start.post()
-      if (result.error) {
-        throw createRpcError(result.error, result.status)
-      }
-      await router.navigate({ href: result.data.redirectUrl })
-    } catch (error) {
-      setRuntimeMessage(error instanceof Error ? error.message : 'Failed to start Cloudflare OAuth')
-      setRuntimeBusy(false)
-    }
-  }
-
-  const loadAccounts = async () => {
-    if (isStoryState || readOnly) {
-      return
-    }
-
-    setRuntimeBusy(true)
-    setRuntimeMessage(null)
-    try {
-      const result = await rpc.cloudflare.accounts.get()
-      if (result.error) {
-        throw createRpcError(result.error, result.status)
-      }
-      setRuntimeAccounts(result.data.accounts)
-      setRuntimeSelectedAccountId(result.data.accounts[0]?.id ?? '')
-    } catch (error) {
-      setRuntimeMessage(error instanceof Error ? error.message : 'Failed to load Cloudflare accounts')
-    } finally {
-      setRuntimeBusy(false)
-    }
-  }
-
-  const loadZones = async () => {
-    if (isStoryState || readOnly) {
-      return
-    }
-
-    if (!selectedAccountId) {
-      return
-    }
-
-    setRuntimeBusy(true)
-    setRuntimeMessage(null)
-    try {
-      const result = await rpc.cloudflare.zones.get({ query: { accountId: selectedAccountId } })
-      if (result.error) {
-        throw createRpcError(result.error, result.status)
-      }
-      setRuntimeZones(result.data.zones)
-      setRuntimeSelectedZoneId(result.data.zones[0]?.id ?? '')
-      setRuntimeDraftDomain(result.data.zones[0]?.name ?? '')
-    } catch (error) {
-      setRuntimeMessage(error instanceof Error ? error.message : 'Failed to load Cloudflare zones')
-    } finally {
-      setRuntimeBusy(false)
-    }
-  }
-
-  const connectDomain = async () => {
-    if (isStoryState || readOnly) {
-      return
-    }
-
-    if (!selectedAccount || !selectedZone || !draftDomain) {
-      setRuntimeMessage('Select a Cloudflare account, zone, and domain')
-      return
-    }
-
-    setRuntimeBusy(true)
-    setRuntimeMessage(null)
-    try {
-      const result = await rpc.cloudflare.connections.post({
-        cloudflareAccountId: selectedAccount.id,
-        cloudflareAccountName: selectedAccount.name,
-        cloudflareZoneId: selectedZone.id,
-        cloudflareZoneName: selectedZone.name,
-        domain: draftDomain
-      })
-      if (result.error) {
-        throw createRpcError(result.error, result.status)
-      }
-      setRuntimeSelectedDomainPublicId(result.data.connection.publicId)
-      setRuntimeMode('domain')
-      await refreshStatus()
-      setRuntimeMessage('Cloudflare domain connected')
-    } catch (error) {
-      setRuntimeMessage(error instanceof Error ? error.message : 'Failed to connect Cloudflare domain')
-    } finally {
-      setRuntimeBusy(false)
-    }
-  }
-
-  const provisionConnection = async (connectionPublicId: string) => {
-    if (isStoryState || readOnly) {
-      return
-    }
-
-    setRuntimeBusy(true)
-    setRuntimeMessage(null)
-    try {
-      const result = await rpc.cloudflare.connections({ connectionPublicId }).provision.post()
-      if (result.error) {
-        throw createRpcError(result.error, result.status)
-      }
-      setRuntimeSelectedDomainPublicId(result.data.connection.publicId)
-      setRuntimeMode('domain')
-      await refreshStatus()
-      setRuntimeMessage('Cloudflare provisioning applied')
-    } catch (error) {
-      setRuntimeMessage(error instanceof Error ? error.message : 'Failed to provision Cloudflare connection')
-    } finally {
-      setRuntimeBusy(false)
-    }
-  }
 
   return {
     accounts,
     activeGrant,
-    busy,
+    busy: state?.busy ?? false,
     connections,
     draftDomain,
+    mailStatus,
+    mailStatusMessage,
     message,
     missingScopes,
     mode,
-    onAddDomain: () => {
-      if (isStoryState || readOnly) {
-        return
-      }
-      setRuntimeMode('addDomain')
-      setRuntimeMessage(null)
-    },
-    onConnectDomain: () => {
-      connectDomain().catch(handleUnexpectedCloudflareActionError)
-    },
-    onDraftDomainChange: (nextDomain: string) => {
-      if (!isStoryState && !readOnly) {
-        setRuntimeDraftDomain(nextDomain)
-      }
-    },
-    onLoadAccounts: () => {
-      loadAccounts().catch(handleUnexpectedCloudflareActionError)
-    },
-    onLoadZones: () => {
-      loadZones().catch(handleUnexpectedCloudflareActionError)
-    },
-    onProvisionDomain: (connectionPublicId: DomainPublicId) => {
-      provisionConnection(connectionPublicId).catch(handleUnexpectedCloudflareActionError)
-    },
-    onSelectAccount: (accountId: string) => {
-      if (isStoryState || readOnly) {
-        return
-      }
-      setRuntimeSelectedAccountId(accountId)
-      setRuntimeSelectedZoneId('')
-      setRuntimeZones([])
-      setRuntimeDraftDomain('')
-    },
-    onSelectDomain: (connectionPublicId: DomainPublicId) => {
-      if (isStoryState || readOnly) {
-        return
-      }
-      setRuntimeSelectedDomainPublicId(connectionPublicId)
-      setRuntimeMode('domain')
-      setRuntimeMessage(null)
-    },
-    onSelectZone: (zoneId: string) => {
-      if (isStoryState || readOnly) {
-        return
-      }
-      const nextZone = zones.find((zone) => zone.id === zoneId) ?? null
-      setRuntimeSelectedZoneId(zoneId)
-      setRuntimeDraftDomain(nextZone?.name ?? '')
-    },
-    onStartOAuth: () => {
-      startOAuth().catch(handleUnexpectedCloudflareActionError)
-    },
+    onAddDomain: action(state?.onAddDomain),
+    onConnectDomain: action(state?.onConnectDomain),
+    onDisconnectCloudflare: action(state?.onDisconnectCloudflare),
+    onDraftDomainChange: action(state?.onDraftDomainChange),
+    onLoadAccounts: action(state?.onLoadAccounts),
+    onLoadZones: action(state?.onLoadZones),
+    onProvisionDomain: action(state?.onProvisionDomain),
+    onRefreshMailStatus: action(state?.onRefreshMailStatus),
+    onSelectAccount: action(state?.onSelectAccount),
+    onSelectDomain: action(state?.onSelectDomain),
+    onSelectZone: action(state?.onSelectZone),
+    onStartOAuth: action(state?.onStartOAuth),
     readOnly,
     selectedAccountId,
     selectedDomain,
@@ -940,11 +1223,19 @@ function DomainSettingsPanel({ settings }: { settings: DomainSettingsController 
     return <DomainSettingsLoadingContent />
   }
 
-  if (settings.mode === 'addDomain' || !settings.selectedDomain) {
-    return <AddDomainPanel settings={settings} />
-  }
+  const domainPanel =
+    settings.mode === 'addDomain' || !settings.selectedDomain ? (
+      <AddDomainPanel settings={settings} />
+    ) : (
+      <DomainDetailPanel settings={settings} />
+    )
 
-  return <DomainDetailPanel settings={settings} />
+  return (
+    <div className='grid max-w-3xl gap-4'>
+      {domainPanel}
+      <MailRuntimeStatusPanel settings={settings} />
+    </div>
+  )
 }
 
 function DomainSettingsLoadingContent() {
@@ -954,6 +1245,80 @@ function DomainSettingsLoadingContent() {
       <Skeleton className='h-28 rounded-lg' />
       <Skeleton className='h-28 rounded-lg' />
     </div>
+  )
+}
+
+function MailRuntimeStatusPanel({ settings }: { settings: DomainSettingsController }) {
+  const status = settings.mailStatus
+  const queue = status ? aggregateMailRuntimeQueue(status) : null
+  const moduleSummary = status ? summarizeMailRuntimeModules(status) : null
+  const activeDomains = status?.controlState?.domainsActive
+  const totalDomains = status?.controlState?.domainsTotal
+
+  if (!status && !settings.mailStatusMessage) {
+    return null
+  }
+
+  return (
+    <Card className='p-0'>
+      <CardContent className='space-y-3 p-4'>
+        <div className='flex items-start justify-between gap-3'>
+          <div className='min-w-0'>
+            <p className='text-sm font-medium'>Mail runtime</p>
+            <p className='text-muted-foreground text-sm'>
+              {status?.selectedProvider ? `${status.selectedProvider} provider` : 'Runtime status'}
+            </p>
+          </div>
+          <div className='flex items-center gap-2'>
+            {status ? (
+              <Badge variant={status.ok ? 'secondary' : 'destructive'}>{formatStatusLabel(status.status)}</Badge>
+            ) : null}
+            <Button
+              disabled={settings.busy || settings.readOnly}
+              onClick={settings.onRefreshMailStatus}
+              size='icon'
+              variant='ghost'
+            >
+              <ArrowClockwiseIcon />
+              <span className='sr-only'>Refresh mail runtime status</span>
+            </Button>
+          </div>
+        </div>
+
+        {settings.mailStatusMessage ? (
+          <p className='text-destructive text-sm'>{settings.mailStatusMessage}</p>
+        ) : null}
+
+        {status ? (
+          <div className='grid gap-2 text-sm md:grid-cols-2'>
+            <DomainDetailRow
+              label='Modules'
+              value={
+                moduleSummary
+                  ? `${moduleSummary.ok}/${moduleSummary.total} healthy`
+                  : 'No module status'
+              }
+            />
+            <DomainDetailRow
+              label='Queue'
+              value={queue ? `${queue.pending} pending · ${queue.retryWait} retry` : 'No queue status'}
+            />
+            <DomainDetailRow
+              label='Provisioning'
+              value={formatStatusLabel(status.provisioning?.status ?? 'unknown')}
+            />
+            <DomainDetailRow
+              label='Runtime domains'
+              value={
+                typeof activeDomains === 'number' && typeof totalDomains === 'number'
+                  ? `${activeDomains}/${totalDomains} active`
+                  : 'No domain status'
+              }
+            />
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -1036,25 +1401,28 @@ function AddDomainPanel({ settings }: { settings: DomainSettingsController }) {
         <div className='grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]'>
           <label className='grid gap-1.5'>
             <Label htmlFor='domain-cloudflare-account'>Cloudflare account</Label>
-            <select
-              id='domain-cloudflare-account'
-              className='border-input bg-background h-9 rounded-md border px-3 text-sm'
+            <Select
               disabled={settings.readOnly}
-              value={settings.selectedAccountId}
-              onChange={(event) => {
-                settings.onSelectAccount(event.currentTarget.value)
-              }}
+              value={settings.selectedAccountId || undefined}
+              onValueChange={settings.onSelectAccount}
             >
-              <option value=''>Select account</option>
-              {settings.accounts.map((account) => (
-                <option
-                  key={account.id}
-                  value={account.id}
-                >
-                  {account.name}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger
+                className='w-full'
+                id='domain-cloudflare-account'
+              >
+                <SelectValue placeholder='Select account' />
+              </SelectTrigger>
+              <SelectContent>
+                {settings.accounts.map((account) => (
+                  <SelectItem
+                    key={account.id}
+                    value={account.id}
+                  >
+                    {account.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </label>
           <div className='flex items-end'>
             <Button
@@ -1071,25 +1439,28 @@ function AddDomainPanel({ settings }: { settings: DomainSettingsController }) {
         <div className='grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]'>
           <label className='grid gap-1.5'>
             <Label htmlFor='domain-cloudflare-zone'>Cloudflare zone</Label>
-            <select
-              id='domain-cloudflare-zone'
-              className='border-input bg-background h-9 rounded-md border px-3 text-sm'
+            <Select
               disabled={settings.readOnly}
-              value={settings.selectedZoneId}
-              onChange={(event) => {
-                settings.onSelectZone(event.currentTarget.value)
-              }}
+              value={settings.selectedZoneId || undefined}
+              onValueChange={settings.onSelectZone}
             >
-              <option value=''>Select zone</option>
-              {settings.zones.map((zone) => (
-                <option
-                  key={zone.id}
-                  value={zone.id}
-                >
-                  {zone.name}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger
+                className='w-full'
+                id='domain-cloudflare-zone'
+              >
+                <SelectValue placeholder='Select zone' />
+              </SelectTrigger>
+              <SelectContent>
+                {settings.zones.map((zone) => (
+                  <SelectItem
+                    key={zone.id}
+                    value={zone.id}
+                  >
+                    {zone.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </label>
           <div className='flex items-end'>
             <Button
@@ -1144,6 +1515,8 @@ function DomainDetailPanel({ settings }: { settings: DomainSettingsController })
       : domain.provisioningStatus === 'not_started'
         ? 'Provision domain'
         : 'Provisioning'
+  const disconnectDisabled =
+    settings.busy || settings.readOnly || !settings.activeGrant || domain.status === 'disconnected'
 
   return (
     <section className='max-w-2xl space-y-3'>
@@ -1190,18 +1563,35 @@ function DomainDetailPanel({ settings }: { settings: DomainSettingsController })
 
       {domain.lastErrorMessage ? <p className='text-destructive text-sm'>{domain.lastErrorMessage}</p> : null}
 
-      {provisionVisible ? (
+      {provisionVisible || settings.activeGrant ? (
         <div className='flex flex-wrap gap-2'>
-          <Button
-            disabled={settings.busy || settings.readOnly || domain.status === 'disconnected'}
-            onClick={() => {
-              settings.onProvisionDomain(domain.publicId)
-            }}
-            size='sm'
-            variant={domain.status === 'degraded' || domain.provisioningStatus === 'failed' ? 'default' : 'outline'}
-          >
-            {provisionLabel}
-          </Button>
+          {provisionVisible ? (
+            <Button
+              disabled={settings.busy || settings.readOnly || domain.status === 'disconnected'}
+              onClick={() => {
+                settings.onProvisionDomain(domain.publicId)
+              }}
+              size='sm'
+              variant={
+                domain.status === 'degraded' || domain.provisioningStatus === 'failed' ? 'default' : 'outline'
+              }
+            >
+              {provisionLabel}
+            </Button>
+          ) : null}
+          {settings.activeGrant ? (
+            <Button
+              disabled={disconnectDisabled}
+              onClick={() => {
+                settings.onDisconnectCloudflare(settings.activeGrant?.publicId)
+              }}
+              size='sm'
+              variant='outline'
+            >
+              <TrashIcon />
+              Disconnect Cloudflare
+            </Button>
+          ) : null}
         </div>
       ) : null}
 
@@ -1223,6 +1613,35 @@ function getMissingScopes(grant: CloudflareGrantView): string[] {
   return grant.requiredScopes.filter((scope) => !grant.grantedScopes.includes(scope))
 }
 
+function aggregateMailRuntimeQueue(status: AgentMailPublicStatus) {
+  let pending = 0
+  let retryWait = 0
+  let seen = false
+
+  for (const moduleStatus of Object.values(status.modules)) {
+    if (!moduleStatus.queue) {
+      continue
+    }
+    pending += moduleStatus.queue.pending ?? 0
+    retryWait += moduleStatus.queue.retryWait ?? 0
+    seen = true
+  }
+
+  return seen ? { pending, retryWait } : null
+}
+
+function summarizeMailRuntimeModules(status: AgentMailPublicStatus) {
+  const modules = Object.values(status.modules)
+  if (modules.length === 0) {
+    return null
+  }
+
+  return {
+    ok: modules.filter((moduleStatus) => moduleStatus.ok === true).length,
+    total: modules.length
+  }
+}
+
 function formatDateTime(value: Date | string | null | undefined): string {
   if (!value) {
     return 'Never'
@@ -1242,11 +1661,109 @@ function formatDateTime(value: Date | string | null | undefined): string {
 function formatStatusLabel(value: string): string {
   return value
     .split('_')
+    .join(' ')
+    .split(/[\s.]+/u)
     .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
     .join(' ')
 }
 
-function getDomainStatusBadgeVariant(connection: CloudflareConnectionView): 'secondary' | 'destructive' | 'outline' {
+function formatCapabilityLabel(catalog: AgentAccessView['capabilityCatalog'], value: string): string {
+  return (
+    catalog.capabilityOptions.find((option) => option.value === value)?.label ??
+    `Unknown capability (${value})`
+  )
+}
+
+function formatGrantActor(grant: AgentAccessGrant): string {
+  if (grant.deniedBy) {
+    return `Denied by ${formatAgentAccessActor(grant.deniedBy)}`
+  }
+  if (grant.grantedBy) {
+    return `Granted by ${formatAgentAccessActor(grant.grantedBy)}`
+  }
+  if (grant.deniedByUser) {
+    return 'Denied by user'
+  }
+  if (grant.grantedByUser) {
+    return 'Granted by user'
+  }
+  return 'Granted by system'
+}
+
+function formatAgentAccessActor(actor: NonNullable<AgentAccessGrant['grantedBy']>): string {
+  return `user ${formatReferenceId(actor.id) ?? actor.id}`
+}
+
+function formatApprovalCapabilityRequest(
+  catalog: AgentAccessView['capabilityCatalog'],
+  request: AgentAccessApproval['capabilityRequests'][number]
+): string {
+  const constraints = constraintSummary(request.constraints)
+  return constraints === 'No constraints'
+    ? formatCapabilityLabel(catalog, request.capability)
+    : `${formatCapabilityLabel(catalog, request.capability)} (${constraints})`
+}
+
+function constraintSummary(constraints: Record<string, unknown> | null): string {
+  if (!constraints) {
+    return 'No constraints'
+  }
+
+  const mailboxAddress = typeof constraints.mailboxAddress === 'string' ? constraints.mailboxAddress : null
+  const organizationId = typeof constraints.organizationId === 'string' ? constraints.organizationId : null
+  const details = constraintDetailItems(constraints)
+  if (mailboxAddress) {
+    return details.length > 0 ? `${mailboxAddress} · ${formatConstraintSummaryDetails(details)}` : mailboxAddress
+  }
+  if (organizationId) {
+    const organization = `Workspace ${formatReferenceId(organizationId)}`
+    return details.length > 0 ? `${organization} · ${formatConstraintSummaryDetails(details)}` : organization
+  }
+  return details.length > 0 ? formatConstraintSummaryDetails(details) : 'No constraints'
+}
+
+function formatConstraintSummaryDetails(details: ReadonlyArray<string>): string {
+  return details.length > 2 ? `${details.slice(0, 2).join(' · ')} · ${details.length - 2} more` : details.join(' · ')
+}
+
+function formatReferenceId(value: string | null | undefined): string | null {
+  if (!value) {
+    return null
+  }
+  return value.length > 12 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value
+}
+
+function constraintDetailItems(constraints: Record<string, unknown> | null): string[] {
+  if (!constraints) {
+    return []
+  }
+
+  return Object.entries(constraints)
+    .filter(([key]) => key !== 'mailboxAddress' && key !== 'organizationId')
+    .map(([key, value]) => `${key}: ${formatConstraintValue(value)}`)
+    .sort()
+}
+
+function formatConstraintValue(value: unknown): string {
+  if (typeof value === 'string') {
+    return value
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+  if (Array.isArray(value)) {
+    return value.map(formatConstraintValue).join(', ')
+  }
+  if (!value || typeof value !== 'object') {
+    return 'null'
+  }
+
+  return JSON.stringify(value)
+}
+
+function getDomainStatusBadgeVariant(
+  connection: CloudflareConnectionView
+): 'secondary' | 'destructive' | 'outline' {
   if (connection.status === 'active' && connection.provisioningStatus === 'succeeded') {
     return 'secondary'
   }
@@ -1272,46 +1789,4 @@ function formatDomainStateLabel(connection: CloudflareConnectionView): string {
   }
 
   return formatStatusLabel(connection.status)
-}
-
-function createRpcError(error: unknown, status: number): Error {
-  return new Error(readRpcErrorMessage(error) ?? `Request failed with HTTP ${status}`)
-}
-
-function readRpcErrorMessage(error: unknown): string | null {
-  if (!error || typeof error !== 'object') {
-    return null
-  }
-
-  if ('value' in error) {
-    const valueMessage = readRpcErrorValueMessage(error.value)
-
-    if (valueMessage) {
-      return valueMessage
-    }
-  }
-
-  return readRpcErrorValueMessage(error)
-}
-
-function readRpcErrorValueMessage(value: unknown): string | null {
-  if (value instanceof Error && value.message.trim()) {
-    return value.message
-  }
-
-  if (!value || typeof value !== 'object') {
-    return null
-  }
-
-  const maybeMessage = 'message' in value ? value.message : null
-  if (typeof maybeMessage === 'string' && maybeMessage.trim()) {
-    return maybeMessage
-  }
-
-  const maybeError = 'error' in value ? value.error : null
-  if (typeof maybeError === 'string' && maybeError.trim()) {
-    return maybeError
-  }
-
-  return null
 }

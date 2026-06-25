@@ -118,17 +118,8 @@ func handleAuthLogin(ctx context.Context, args parsedArgs, env []string, stdout 
 		return newProtocolError("AgentTeam Email device login returned an incomplete device code response")
 	}
 
-	if !args.JSON {
-		verificationURL := code.VerificationURIComplete
-		if resolution.AuthBaseURL != "" {
-			verificationURL = rewriteVerificationURL(code.VerificationURIComplete, resolution.AuthBaseURL)
-		}
-		fmt.Fprintf(progress, "Open: %s\n\n", verificationURL)
-		fmt.Fprintf(progress, "Code: %s\n\n", formatAuthUserCode(code.UserCode))
-		if args.Open {
-			_ = openBrowser(verificationURL)
-		}
-		fmt.Fprintln(progress, "Waiting for approval...")
+	if err := renderAuthLoginApproval(args, progress, code, resolution.AuthBaseURL); err != nil {
+		return err
 	}
 
 	token, err := client.pollDeviceToken(ctx, code, progress, args.JSON)
@@ -170,6 +161,56 @@ func handleAuthLogin(ctx context.Context, args parsedArgs, env []string, stdout 
 	fmt.Fprintln(stdout, "Logged in.")
 	renderAuthSession(stdout, resolution.APIBaseURL, session)
 	return nil
+}
+
+func shouldOpenAuthLoginBrowser(args parsedArgs) bool {
+	return !args.JSON && !args.Device && !args.NoOpen
+}
+
+func renderAuthLoginApproval(args parsedArgs, progress io.Writer, code deviceCodeResponse, authBaseURL string) error {
+	verificationURL := authLoginVerificationURL(code, authBaseURL, args)
+	if args.JSON {
+		if !args.Device {
+			return printJSON(progress, map[string]any{
+				"event":                     "browser_authorization_pending",
+				"expires_in":                code.ExpiresIn,
+				"interval":                  code.Interval,
+				"operation":                 "auth_login",
+				"verification_uri_complete": verificationURL,
+			})
+		}
+		return printJSON(progress, map[string]any{
+			"event":                     "device_authorization_pending",
+			"expires_in":                code.ExpiresIn,
+			"formatted_user_code":       formatAuthUserCode(code.UserCode),
+			"interval":                  code.Interval,
+			"operation":                 "auth_login",
+			"user_code":                 code.UserCode,
+			"verification_uri":          code.VerificationURI,
+			"verification_uri_complete": verificationURL,
+		})
+	}
+
+	fmt.Fprintf(progress, "Open: %s\n\n", verificationURL)
+	if args.Device {
+		fmt.Fprintf(progress, "Code: %s\n\n", formatAuthUserCode(code.UserCode))
+	}
+	if shouldOpenAuthLoginBrowser(args) {
+		_ = openBrowser(verificationURL)
+	}
+	fmt.Fprintln(progress, "Waiting for approval...")
+	return nil
+}
+
+func authLoginVerificationURL(code deviceCodeResponse, authBaseURL string, args parsedArgs) string {
+	verificationURL := code.VerificationURIComplete
+	if args.Device && code.VerificationURI != "" {
+		verificationURL = code.VerificationURI
+	}
+	if authBaseURL != "" {
+		verificationURL = rewriteVerificationURL(verificationURL, authBaseURL)
+	}
+	return verificationURL
 }
 
 func handleAuthStatus(ctx context.Context, args parsedArgs, stdout io.Writer) error {
@@ -544,8 +585,11 @@ func saveAuthCredential(credential authCredential) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return newAgentMailError("could not create local at-email auth directory")
+	if err := ensurePrivateCredentialDirectory(
+		filepath.Dir(path),
+		"could not create local at-email auth directory",
+	); err != nil {
+		return err
 	}
 	data, err := json.MarshalIndent(credential, "", "  ")
 	if err != nil {
@@ -559,6 +603,26 @@ func saveAuthCredential(credential authCredential) error {
 	if err := os.Rename(tmp, path); err != nil {
 		_ = os.Remove(tmp)
 		return newAgentMailError("could not save local at-email auth credential")
+	}
+	if err := ensurePrivateCredentialFile(path, "could not save local at-email auth credential"); err != nil {
+		return err
+	}
+	return nil
+}
+
+func ensurePrivateCredentialDirectory(path string, message string) error {
+	if err := os.MkdirAll(path, 0o700); err != nil {
+		return newAgentMailError(message)
+	}
+	if err := os.Chmod(path, 0o700); err != nil {
+		return newAgentMailError(message)
+	}
+	return nil
+}
+
+func ensurePrivateCredentialFile(path string, message string) error {
+	if err := os.Chmod(path, 0o600); err != nil {
+		return newAgentMailError(message)
 	}
 	return nil
 }
@@ -577,22 +641,29 @@ func deleteAuthCredential() error {
 
 func readAuthServiceError(raw []byte, status int) (string, string, int) {
 	code := fmt.Sprintf("http_%d", status)
-	message := http.StatusText(status)
 	interval := 0
 	var envelope map[string]any
 	if err := json.Unmarshal(raw, &envelope); err == nil {
-		if value := stringValue(envelope["error"]); value != "" {
+		if value := safeAuthServiceErrorCode(stringValue(envelope["error"])); value != "" {
 			code = value
-		}
-		for _, key := range []string{"error_description", "message", "error"} {
-			if value := stringValue(envelope[key]); value != "" {
-				message = value
-				break
-			}
 		}
 		interval = intValueOrDefault(envelope["interval"], 0)
 	}
-	return code, "AgentTeam Email auth failed: " + message, interval
+	return code, fmt.Sprintf("AgentTeam Email auth failed (%s)", code), interval
+}
+
+func safeAuthServiceErrorCode(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > 80 {
+		return ""
+	}
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' || r == '.' {
+			continue
+		}
+		return ""
+	}
+	return value
 }
 
 func safeAuthSession(envelope map[string]any) map[string]any {

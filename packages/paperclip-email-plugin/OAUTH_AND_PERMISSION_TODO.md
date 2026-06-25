@@ -1,7 +1,7 @@
 # OAuth And Permission TODO
 
-This note captures the planned security-sensitive work for the AgentTeam Email
-Paperclip plugin. It is intentionally not implemented in this scaffold.
+This note captures the security-sensitive work for the AgentTeam Email
+Paperclip plugin and the service-owned connection boundary.
 
 ## Current Scaffold Boundary
 
@@ -9,16 +9,23 @@ Paperclip plugin. It is intentionally not implemented in this scaffold.
   `apiKeySecretRef` pointer.
 - The worker does not resolve Paperclip secrets.
 - The worker does not send outbound HTTP requests.
-- The custom settings page exposes a branded OAuth connect placeholder,
+- The custom settings page exposes a branded AgentTeam Email connect handoff,
   redacted connection status, and advanced self-hosting fields.
 - The dashboard widget exposes only redacted connection status.
+- The AgentTeam Email app accepts the Paperclip handoff in Agent Access and can
+  register a backend-owned OAuth grant principal for that Paperclip company and
+  plugin id without returning client secrets to the browser or plugin.
+- Runtime email tool execution uses `at-email paperclip-tool` with local Agent
+  Auth credentials; Paperclip run context is request context only and does not
+  define mailbox policy.
 
 ## Later Security-Sensitive Work
 
 - Use a Paperclip `secret-ref` field for the AgentTeam Email service API key
   only for self-hosted or preview setups that cannot use OAuth.
-- Add the real OAuth connection action, callback handling, and persisted
-  account metadata once the service contract exists.
+- Add service-owned OAuth callback handling, consent reference, token storage,
+  and persisted account metadata only if a Paperclip-native OAuth runtime lane
+  replaces the current CLI Agent Auth execution lane.
 - Add `secrets.read-ref` only when the worker actually resolves the API key at
   the execution boundary.
 - Add `http.outbound` only when the worker starts calling the upstream service.
@@ -38,7 +45,7 @@ Paperclip plugin. It is intentionally not implemented in this scaffold.
 
 ## Planned Provisioning Interfaces
 
-- Custom Paperclip settings page with visible OAuth connect flow placeholder.
+- Custom Paperclip settings page with visible AgentTeam Email connect handoff.
 - Advanced self-hosting disclosure for `serviceBaseUrl` and
   `apiKeySecretRef`.
 - Dashboard status widget for connected/not-connected state and last synthetic

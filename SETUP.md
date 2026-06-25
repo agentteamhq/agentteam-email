@@ -129,6 +129,8 @@ mise run test
 ```
 
 This aggregate runs workspace package tests and Mail Control Service Go tests.
+End-to-end test-container packages are excluded from the unit aggregate and run
+through `mise run test:e2e`.
 
 Apply package-owned formatting with:
 
@@ -292,9 +294,10 @@ mise run //test-containers/full-stack-e2e:test
 The kind E2E task uses `WT` to scope local image names, the kind cluster,
 namespace, and Helm release.
 
-The full-stack E2E task is a P1 contract suite: failures are expected while the
-Helm-deployed stack does not yet satisfy the web-server-only public boundary
-and full inbound/outbound mail-flow contracts.
+The full-stack E2E task is a P1 contract suite for the Helm-deployed stack,
+the web-server-only public boundary, and full inbound/outbound mail-flow
+contracts. Failures in this suite should be triaged through the failing
+runtime boundary.
 
 ### Shell And Diff Hygiene
 

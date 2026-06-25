@@ -6,6 +6,11 @@ import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
 import { chromium } from 'playwright'
 
+const transparentPng = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lIu2ZQAAAABJRU5ErkJggg==',
+  'base64'
+)
+
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 const packageRoot = resolve(scriptDir, '..')
 const runId = new Date().toISOString().replaceAll(':', '').replaceAll('.', '')
@@ -105,7 +110,7 @@ async function captureStory(context, baseUrl, story) {
   const storyUrl = `${baseUrl}/iframe.html?id=${encodeURIComponent(story.id)}&viewMode=story`
 
   page.on('console', (message) => {
-    if (message.type() === 'error') {
+    if (message.type() === 'error' && !isExpectedStoryConsoleError(message.text())) {
       consoleErrors.push(message.text())
     }
   })
@@ -204,6 +209,9 @@ async function serveDirectory(directory) {
   const server = createServer(async (request, response) => {
     try {
       const requestUrl = new URL(request.url ?? '/', 'http://127.0.0.1')
+      if (writeStoryDynamicResponse(requestUrl, response)) {
+        return
+      }
       const pathname = decodeURIComponent(requestUrl.pathname)
       const relativePath = pathname === '/' ? 'index.html' : pathname.slice(1)
       const candidate = resolve(directory, relativePath)
@@ -312,6 +320,34 @@ function contentType(filePath) {
     default:
       return 'application/octet-stream'
   }
+}
+
+function isExpectedStoryConsoleError(message) {
+  return (
+    message ===
+      "The Content Security Policy directive 'frame-ancestors' is ignored when delivered via a <meta> element." ||
+    message === "Unrecognized Content-Security-Policy directive 'navigate-to'." ||
+    (message.includes('violates the following Content Security Policy directive') &&
+      message.includes('https://fonts.googleapis.com/'))
+  )
+}
+
+function writeStoryDynamicResponse(requestUrl, response) {
+  if (
+    /^\/rpc\/mail\/accounts\/[^/]+\/mailboxes\/[^/]+\/messages\/[^/]+\/attachments\/inline-provider-logo$/u.test(
+      requestUrl.pathname
+    )
+  ) {
+    response.writeHead(200, {
+      'Cache-Control': 'no-store',
+      'Content-Length': String(transparentPng.byteLength),
+      'Content-Type': 'image/png'
+    })
+    response.end(transparentPng)
+    return true
+  }
+
+  return false
 }
 
 function safeFileName(value) {

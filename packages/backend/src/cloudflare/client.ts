@@ -50,6 +50,7 @@ export interface CloudflareProvisioningInput {
   domainPublicId: string
   domain: string
   hmacSecret?: string
+  organizationId: string
   organizationPublicId: string
   workerCredentials: CloudflareWorkerArchiveCredentials
 }
@@ -114,6 +115,7 @@ export async function applyCloudflareProvisioning({
   domainPublicId,
   domain,
   hmacSecret: existingHmacSecret,
+  organizationId,
   organizationPublicId,
   workerCredentials
 }: CloudflareProvisioningInput): Promise<CloudflareProvisioningResult> {
@@ -130,6 +132,7 @@ export async function applyCloudflareProvisioning({
     domainPublicId,
     domain,
     hmacSecret,
+    organizationId,
     organizationPublicId,
     workerCredentials,
     workerScriptName
@@ -156,12 +159,25 @@ export async function applyCloudflareProvisioning({
 export function sanitizeCloudflareError(error: unknown): { code: string; message: string } {
   const status = readErrorNumber(error, 'status')
   const code = status ? `CLOUDFLARE_${status}` : 'CLOUDFLARE_REQUEST_FAILED'
-  const message = readErrorString(error, 'message') ?? 'Cloudflare request failed'
 
   return {
     code,
-    message
+    message: cloudflarePublicErrorMessage(status)
   }
+}
+
+function cloudflarePublicErrorMessage(status: number | null): string {
+  if (status === 401 || status === 403) {
+    return 'Cloudflare authorization failed. Reconnect Cloudflare and try again.'
+  }
+  if (status === 429) {
+    return 'Cloudflare is rate limiting requests. Try again shortly.'
+  }
+  if (status && status >= 500) {
+    return 'Cloudflare is temporarily unavailable. Try again shortly.'
+  }
+
+  return 'Cloudflare request failed. Check the selected account, zone, and permissions.'
 }
 
 async function upsertEmailWorker({
@@ -172,6 +188,7 @@ async function upsertEmailWorker({
   domainPublicId,
   domain,
   hmacSecret,
+  organizationId,
   organizationPublicId,
   workerCredentials,
   workerScriptName
@@ -183,6 +200,7 @@ async function upsertEmailWorker({
   domainPublicId: string
   domain: string
   hmacSecret: string
+  organizationId: string
   organizationPublicId: string
   workerCredentials: CloudflareWorkerArchiveCredentials
   workerScriptName: string
@@ -202,6 +220,7 @@ async function upsertEmailWorker({
       main_module: 'index.js',
       compatibility_date: '2026-06-19',
       bindings: [
+        { name: 'AGENTTEAM_ORGANIZATION_ID', text: organizationId, type: 'plain_text' },
         { name: 'AGENTTEAM_ORG_PUBLIC_ID', text: organizationPublicId, type: 'plain_text' },
         { name: 'AGENTTEAM_CONNECTION_ID', text: connectionPublicId, type: 'plain_text' },
         { name: 'AGENTTEAM_DOMAIN_ID', text: domainPublicId, type: 'plain_text' },
@@ -254,13 +273,4 @@ function readErrorNumber(error: unknown, key: string): number | null {
 
   const value = error[key as keyof typeof error]
   return typeof value === 'number' ? value : null
-}
-
-function readErrorString(error: unknown, key: string): string | null {
-  if (!error || typeof error !== 'object' || !(key in error)) {
-    return null
-  }
-
-  const value = error[key as keyof typeof error]
-  return typeof value === 'string' ? value : null
 }

@@ -1,11 +1,12 @@
 import { createAuthPlugin } from "@better-auth-ui/core"
 import {
-  magicLinkPlugin as coreMagicLinkPlugin,
-  type MagicLinkPluginOptions
+
+  magicLinkPlugin as coreMagicLinkPlugin
 } from "@better-auth-ui/core/plugins"
 
 import { MagicLink } from "src/components/auth/magic-link"
 import { MagicLinkButton } from "src/components/auth/magic-link-button"
+import type { MagicLinkPluginOptions } from "@better-auth-ui/core/plugins";
 
 export const magicLinkPlugin = createAuthPlugin(
   coreMagicLinkPlugin.id,

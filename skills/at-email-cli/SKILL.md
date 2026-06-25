@@ -9,26 +9,14 @@ metadata:
         - at-email
         - npx
         - npm
-    primaryEnv: AT_EMAIL_WILDDUCK_ACCESS_TOKEN
+    primaryEnv: AT_EMAIL_API_BASE_URL
     envVars:
-      - name: AT_EMAIL_WILDDUCK_API_BASE_URL
+      - name: AT_EMAIL_API_BASE_URL
         required: false
-        description: WildDuck API base URL for mailbox commands.
-      - name: AT_EMAIL_WILDDUCK_ACCESS_TOKEN
-        required: false
-        description: WildDuck API access token for mailbox commands.
-      - name: AT_EMAIL_WILDDUCK_USER_ID
-        required: false
-        description: WildDuck user ID for mailbox commands.
+        description: Optional AgentTeam Email app origin for auth and agent enrollment.
       - name: AT_EMAIL_MAILBOX_ADDRESS
         required: false
-        description: Optional default mailbox address for display and replies.
-      - name: AT_EMAIL_CONTROL_API_BASE_URL
-        required: false
-        description: Control API base URL for safe message reads.
-      - name: AT_EMAIL_MESSAGE_READ_TOKEN
-        required: false
-        description: Message-read token for safe message body access.
+        description: Optional authorized mailbox selector for mailbox commands.
     homepage: https://github.com/agentteamhq/agentteam-email/tree/main/apps/at-email-cli
 ---
 
@@ -49,32 +37,37 @@ If `at-email` is missing, see **Install Or Run If Missing** at the end of this s
 
 ## Runtime Configuration
 
-The CLI reads its connection settings from environment variables. Do not invent
-credentials or print secret values.
+Mailbox commands use a local Agent Auth credential and call the AgentTeam Email
+webserver. Public clients must not call WildDuck or mail-control APIs directly.
+Do not invent credentials or print secret values.
 
-Required for most mailbox commands:
+First check local agent status:
 
-```text
-AT_EMAIL_WILDDUCK_API_BASE_URL
-AT_EMAIL_WILDDUCK_ACCESS_TOKEN
-AT_EMAIL_WILDDUCK_USER_ID
+```bash
+at-email agent status
 ```
 
-Optional but useful:
+If no agent is configured, use one of these setup paths:
 
-```text
-AT_EMAIL_MAILBOX_ADDRESS
+```bash
+at-email agent connect
+at-email agent trial
+at-email agent enroll TOKEN
 ```
 
-Required for safe message reads:
+Use `agent connect` for delegated access to a human or organization mailbox.
+It creates a local Agent Auth host/agent credential; the browser approval
+session selects the organization and enforces whether the requested mailbox
+constraints are allowed. Use `agent trial` for an autonomous trial mailbox. Use
+`agent enroll TOKEN` when the web app has created a one-time enrollment token.
 
-```text
-AT_EMAIL_CONTROL_API_BASE_URL
-AT_EMAIL_MESSAGE_READ_TOKEN
-```
+Optional environment variables:
 
-If configuration is missing, run the command and relay the CLI's exact missing
-variable message rather than guessing values.
+- `AT_EMAIL_API_BASE_URL`: app origin for auth and agent enrollment.
+- `AT_EMAIL_MAILBOX_ADDRESS`: authorized mailbox selector.
+
+If configuration is missing, run the command and relay the CLI's exact message
+rather than guessing values.
 
 ## Output Mode
 
@@ -100,6 +93,7 @@ Check configured mailbox status:
 
 ```bash
 at-email status
+at-email agent status
 ```
 
 List inbox messages:
@@ -111,7 +105,7 @@ at-email inbox --limit 50
 at-email inbox --folder INBOX --json
 ```
 
-Read a message through the safe message-read path:
+Read a message through the webserver:
 
 ```bash
 at-email read 123

@@ -1,19 +1,25 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalDependencies": [
-    ".env"
-  ],
+  "globalDependencies": [".env"],
   "globalEnv": [
     "NODE_ENV",
     "NODE_OPTIONS",
     "NODE_COMPILE_CACHE",
     "PATH",
+    "WT",
+    "CONTAINER_ENGINE",
+    "PODMAN_SOCK",
     "PUBLIC_HOSTNAME",
+    "MONGODB_URI",
+    "MONGODB_DATABASE",
+    "DATABASE_URL",
     "BUILD_MINIFY",
     "BUILD_SOURCEMAPS",
     "BUILD_REACT_PROFILER",
     "BUILD_ANALYZE_BUNDLE",
     "ANALYZE_ROLLUP",
+    "AGENTTEAM_EMAIL_*",
+    "AT_EMAIL_*",
     "DOCKER_HOST",
     "TESTCONTAINERS_HOST_OVERRIDE",
     "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE",
@@ -22,72 +28,50 @@
   "tasks": {
     "build": {
       "cache": true,
-      "dependsOn": [
-        "^build"
-      ],
-      "outputs": [
-        "dist/**",
-        ".cache/**"
-      ]
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".cache/**"]
     },
     "clean": {
       "cache": false
     },
     "dev": {
       "cache": false,
-      "dependsOn": [
-        "^dev:build"
-      ],
+      "dependsOn": ["^dev:build"],
       "interruptible": true,
       "persistent": true
     },
     "dev:build": {
-      "dependsOn": [
-        "^dev:build",
-        "build"
-      ],
-      "outputs": [
-        "dist/**"
-      ]
+      "dependsOn": ["^dev:build", "build"],
+      "outputs": ["dist/**"]
     },
     "format": {
-      "dependsOn": [
-        "^build"
-      ],
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "generated:check": {
       "outputs": []
     },
     "lint": {
-      "dependsOn": [
-        "^build"
-      ],
+      "dependsOn": ["^build"],
       "outputs": []
     },
     "preview": {
       "cache": false,
-      "dependsOn": [
-        "build",
-        "^build"
-      ],
+      "dependsOn": ["build", "^build"],
       "outputs": [],
       "persistent": true
     },
     "test": {
-      "dependsOn": [
-        "^build"
-      ],
+      "dependsOn": ["^build"],
       "outputs": []
     },
     "test:integration": {
       "cache": false,
-      "dependsOn": [
-        "^build"
-      ],
+      "dependsOn": ["^build"],
       "outputs": []
     },
     "typecheck": {
-      "dependsOn": [
-        "^build"
-      ],
+      "dependsOn": ["^build"],
       "outputs": []
     }
   }

@@ -1,5 +1,5 @@
 import {
-  type OrganizationAuthClient,
+
   useActiveOrganization,
   useAuth,
   useAuthPlugin
@@ -9,6 +9,7 @@ import { useState } from "react"
 import { Button } from "src/components/ui/button"
 import { organizationPlugin } from "src/lib/auth/organization-plugin"
 import { LeaveOrganizationDialog } from "./leave-organization-dialog"
+import type { OrganizationAuthClient } from "@better-auth-ui/react";
 
 /**
  * Danger-zone row to leave the active organization.
@@ -41,7 +42,7 @@ export function LeaveOrganization() {
         size="sm"
         variant="outline"
         className="text-destructive"
-        onClick={() => setConfirmOpen(true)}
+        onClick={() => { setConfirmOpen(true); }}
       >
         {organizationLocalization.leaveOrganization}
       </Button>

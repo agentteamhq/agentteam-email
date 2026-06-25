@@ -11,6 +11,13 @@
         "import": "./dist/index.mjs"
       },
       "default": "./dist/index.mjs"
+    },
+    "./agent-mail-permission-schema": {
+      "import": {
+        "types": "./dist/src/agent-mail-permission-schema.d.ts",
+        "import": "./dist/agent-mail-permission-schema.mjs"
+      },
+      "default": "./dist/agent-mail-permission-schema.mjs"
     }
   },
   "sideEffects": false,

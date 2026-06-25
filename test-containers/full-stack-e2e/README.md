@@ -10,6 +10,6 @@ Run from the repository root:
 TEST_ARTIFACT_SUBMIT_SKIP=1 mise run //test-containers/full-stack-e2e:test
 ```
 
-One invocation writes one artifact directory under `tmp/run-<id>/`. The current
-suite is expected to fail until the deployed chart and web-server-owned mail
-flows implement the full P1 stack contract.
+One invocation writes one artifact directory under `tmp/run-<id>/`. This suite
+is the P1 contract gate for the deployed chart and web-server-owned mail flows;
+failures should be triaged through the failing runtime boundary.

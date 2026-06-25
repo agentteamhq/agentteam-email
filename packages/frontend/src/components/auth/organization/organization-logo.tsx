@@ -1,12 +1,12 @@
 "use client"
 
-import type { Organization } from "better-auth/client"
 import { BriefcaseIcon as Briefcase } from "@phosphor-icons/react"
-import type { ComponentProps, CSSProperties, ReactNode } from "react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "src/components/ui/avatar"
 import { Skeleton } from "src/components/ui/skeleton"
 import { cn } from "src/lib/utils"
+import type { CSSProperties, ComponentProps, ReactNode } from "react"
+import type { Organization } from "better-auth/client"
 
 export type OrganizationLogoSize = "sm" | "md" | "lg"
 
