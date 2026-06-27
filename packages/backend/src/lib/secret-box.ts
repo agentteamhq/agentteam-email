@@ -1,45 +1,39 @@
-import { Buffer } from 'node:buffer'
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
-
 import { base64urlnopad as base64url } from '@scure/base'
+import { CompactEncrypt, compactDecrypt } from 'jose'
 
 import { PRIVATE_VARS } from '../vars.private'
 
-const SECRET_BOX_VERSION = 'v1'
 const SECRET_BOX_KEY_BYTES = 32
-const NONCE_BYTES = 12
+const SECRET_BOX_JWE_ALG = 'dir'
+const SECRET_BOX_JWE_ENC = 'A256GCM'
 
-export function encryptSecretValue(value: string): string {
+export async function encryptSecretValue(value: string): Promise<string> {
   const key = readSecretBoxKey()
-  const nonce = randomBytes(NONCE_BYTES)
-  const cipher = createCipheriv('aes-256-gcm', key, nonce)
-  const ciphertext = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()])
-  const tag = cipher.getAuthTag()
-
-  return [
-    SECRET_BOX_VERSION,
-    base64url.encode(nonce),
-    base64url.encode(ciphertext),
-    base64url.encode(tag)
-  ].join('.')
+  return new CompactEncrypt(new TextEncoder().encode(value))
+    .setProtectedHeader({
+      alg: SECRET_BOX_JWE_ALG,
+      enc: SECRET_BOX_JWE_ENC
+    })
+    .encrypt(key)
 }
 
-export function decryptSecretValue(value: string): string {
+export async function decryptSecretValue(value: string): Promise<string> {
   const key = readSecretBoxKey()
+  const { plaintext, protectedHeader } = await compactDecrypt(value, key, {
+    contentEncryptionAlgorithms: [SECRET_BOX_JWE_ENC],
+    keyManagementAlgorithms: [SECRET_BOX_JWE_ALG],
+    maxDecompressedLength: 0
+  })
 
-  const [version, nonceValue, ciphertextValue, tagValue, extra] = value.split('.')
-  if (version !== SECRET_BOX_VERSION || !nonceValue || !ciphertextValue || !tagValue || extra) {
+  if (
+    protectedHeader.alg !== SECRET_BOX_JWE_ALG ||
+    protectedHeader.enc !== SECRET_BOX_JWE_ENC ||
+    protectedHeader.zip !== undefined
+  ) {
     throw new Error('encrypted secret value has an unsupported format')
   }
 
-  const decipher = createDecipheriv('aes-256-gcm', key, base64url.decode(nonceValue))
-  decipher.setAuthTag(Buffer.from(base64url.decode(tagValue)))
-  const plaintext = Buffer.concat([
-    decipher.update(Buffer.from(base64url.decode(ciphertextValue))),
-    decipher.final()
-  ])
-
-  return plaintext.toString('utf8')
+  return new TextDecoder().decode(plaintext)
 }
 
 function readSecretBoxKey(): Uint8Array {

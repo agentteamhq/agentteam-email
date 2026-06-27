@@ -1,7 +1,8 @@
-import { createHmac } from 'node:crypto'
+import { Buffer } from 'node:buffer'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { parse as parseUUID } from 'uuid'
+import { Webhook } from 'standardwebhooks'
 
 const ingestTestState = vi.hoisted(() => ({
   enqueueAgentMailIngest: vi.fn(),
@@ -11,6 +12,9 @@ const ingestTestState = vi.hoisted(() => ({
 }))
 const TEST_CONNECTION_ID = '01960000-0000-7000-8000-000000000000'
 const TEST_CONNECTION_PUBLIC_ID = '2zXdRMpXKicecXjRnFg1Y'
+const TEST_WEBHOOK_SECRET = standardWebhookSecret('test-secret')
+const DEPLOYMENT_WEBHOOK_SECRET = standardWebhookSecret('deployment-secret')
+const TEST_ARCHIVE_PREFIX = 'orgs/org_public_test/domains/example.com/mail/inbound'
 
 vi.mock('../globals', () => ({
   globals: ingestTestState.globals
@@ -44,6 +48,44 @@ describe('Agent Mail web-owned Worker ingest', () => {
     })
   })
 
+  it('accepts application/json Content-Type parameters before authentication checks', async () => {
+    expect.hasAssertions()
+    const { handleAgentMailIngestRequest } = await import('./ingest')
+
+    const response = await handleAgentMailIngestRequest(
+      new Request('https://mail.example.com/rpc/agent-mail/ingest/v1', {
+        body: '{}',
+        headers: {
+          'content-type': 'application/json; charset=utf-8'
+        },
+        method: 'POST'
+      }),
+      ''
+    )
+
+    expect(response.status).toBe(401)
+    expect(ingestTestState.globals).not.toHaveBeenCalled()
+  })
+
+  it('rejects non-json media types before authentication checks', async () => {
+    expect.hasAssertions()
+    const { handleAgentMailIngestRequest } = await import('./ingest')
+
+    const response = await handleAgentMailIngestRequest(
+      new Request('https://mail.example.com/rpc/agent-mail/ingest/v1', {
+        body: '{}',
+        headers: {
+          'content-type': 'application/json-patch+json'
+        },
+        method: 'POST'
+      }),
+      ''
+    )
+
+    expect(response.status).toBe(415)
+    expect(ingestTestState.globals).not.toHaveBeenCalled()
+  })
+
   it('accepts a valid signed Worker notification and calls mail-control enqueue', async () => {
     expect.hasAssertions()
     const { handleAgentMailIngestRequest } = await import('./ingest')
@@ -53,13 +95,8 @@ describe('Agent Mail web-owned Worker ingest', () => {
       includeAuthority: true
     })
     const body = JSON.stringify(notification)
-    const timestamp = new Date().toISOString()
-    const signature = sign({
-      body,
-      connectionPublicId: TEST_CONNECTION_PUBLIC_ID,
-      secret: 'test-secret',
-      timestamp
-    })
+    const headers = signedHeaders({ body, secret: TEST_WEBHOOK_SECRET, webhookId: notification.ingest_id })
+    const encryptedWorkerSecret = await encryptSecretValue(TEST_WEBHOOK_SECRET)
 
     ingestTestState.findOne.mockReturnValue({
       exec: () =>
@@ -74,7 +111,7 @@ describe('Agent Mail web-owned Worker ingest', () => {
         Promise.resolve({
           archivePrefix: 'orgs/org_public_test/domains/example.com/mail/inbound',
           domain: 'example.com',
-          encryptedWorkerHmacSecret: encryptSecretValue('test-secret'),
+          encryptedWorkerHmacSecret: encryptedWorkerSecret,
           agentMailDomainId: TEST_CONNECTION_ID,
           organizationId: parseUUID('01960000-0000-7000-8000-000000000001'),
           organizationPublicId: 'org_public_test',
@@ -87,11 +124,12 @@ describe('Agent Mail web-owned Worker ingest', () => {
     })
 
     const response = await handleAgentMailIngestRequest(
-      new Request('https://mail.example.com/rpc/agent-mail/ingest/v1', {
+      new Request(`https://mail.example.com/rpc/agent-mail/ingest/v1/${TEST_CONNECTION_PUBLIC_ID}`, {
         body,
-        headers: signedHeaders({ connectionPublicId: TEST_CONNECTION_PUBLIC_ID, signature, timestamp }),
+        headers,
         method: 'POST'
-      })
+      }),
+      TEST_CONNECTION_PUBLIC_ID
     )
 
     expect(response.status).toBe(202)
@@ -117,13 +155,12 @@ describe('Agent Mail web-owned Worker ingest', () => {
       includeAuthority: true
     })
     const body = JSON.stringify(notification)
-    const timestamp = new Date().toISOString()
-    const signature = sign({
+    const headers = signedHeaders({
       body,
-      connectionPublicId: TEST_CONNECTION_PUBLIC_ID,
-      secret: 'deployment-secret',
-      timestamp
+      secret: DEPLOYMENT_WEBHOOK_SECRET,
+      webhookId: notification.ingest_id
     })
+    const encryptedWorkerSecret = await encryptSecretValue(DEPLOYMENT_WEBHOOK_SECRET)
 
     ingestTestState.findOne.mockReturnValue({
       exec: () =>
@@ -138,7 +175,7 @@ describe('Agent Mail web-owned Worker ingest', () => {
         Promise.resolve({
           archivePrefix: 'orgs/org_public_test/domains/example.com/mail/inbound',
           domain: 'example.com',
-          encryptedWorkerHmacSecret: encryptSecretValue('deployment-secret'),
+          encryptedWorkerHmacSecret: encryptedWorkerSecret,
           agentMailDomainId: TEST_CONNECTION_ID,
           organizationId: parseUUID('01960000-0000-7000-8000-000000000001'),
           organizationPublicId: 'org_public_test',
@@ -151,11 +188,12 @@ describe('Agent Mail web-owned Worker ingest', () => {
     })
 
     const response = await handleAgentMailIngestRequest(
-      new Request('https://mail.example.com/rpc/agent-mail/ingest/v1', {
+      new Request(`https://mail.example.com/rpc/agent-mail/ingest/v1/${TEST_CONNECTION_PUBLIC_ID}`, {
         body,
-        headers: signedHeaders({ connectionPublicId: TEST_CONNECTION_PUBLIC_ID, signature, timestamp }),
+        headers,
         method: 'POST'
-      })
+      }),
+      TEST_CONNECTION_PUBLIC_ID
     )
 
     expect(response.status).toBe(202)
@@ -173,7 +211,7 @@ describe('Agent Mail web-owned Worker ingest', () => {
     })
   })
 
-  it('rejects notifications when deployment-owned HMAC state is unavailable', async () => {
+  it('rejects notifications when deployment-owned webhook signing state is unavailable', async () => {
     expect.hasAssertions()
     const { handleAgentMailIngestRequest } = await import('./ingest')
     const notification = testNotification({
@@ -181,12 +219,10 @@ describe('Agent Mail web-owned Worker ingest', () => {
       includeAuthority: true
     })
     const body = JSON.stringify(notification)
-    const timestamp = new Date().toISOString()
-    const signature = sign({
+    const headers = signedHeaders({
       body,
-      connectionPublicId: TEST_CONNECTION_PUBLIC_ID,
-      secret: 'connection-secret',
-      timestamp
+      secret: standardWebhookSecret('connection-secret'),
+      webhookId: notification.ingest_id
     })
 
     ingestTestState.findOne.mockReturnValue({
@@ -201,11 +237,12 @@ describe('Agent Mail web-owned Worker ingest', () => {
     ingestTestState.findDeploymentOne.mockReturnValue({ exec: () => Promise.resolve(null) })
 
     const response = await handleAgentMailIngestRequest(
-      new Request('https://mail.example.com/rpc/agent-mail/ingest/v1', {
+      new Request(`https://mail.example.com/rpc/agent-mail/ingest/v1/${TEST_CONNECTION_PUBLIC_ID}`, {
         body,
-        headers: signedHeaders({ connectionPublicId: TEST_CONNECTION_PUBLIC_ID, signature, timestamp }),
+        headers,
         method: 'POST'
-      })
+      }),
+      TEST_CONNECTION_PUBLIC_ID
     )
 
     expect(response.status).toBe(401)
@@ -217,11 +254,15 @@ describe('Agent Mail web-owned Worker ingest', () => {
     expect(ingestTestState.enqueueAgentMailIngest).not.toHaveBeenCalled()
   })
 
-  it('rejects an invalid HMAC before enqueue', async () => {
+  it('fails closed when the stored Worker webhook signing secret cannot be decrypted', async () => {
     expect.hasAssertions()
     const { handleAgentMailIngestRequest } = await import('./ingest')
-    const { encryptSecretValue } = await import('../lib/secret-box')
-    const timestamp = new Date().toISOString()
+    const notification = testNotification({
+      archivePrefix: 'orgs/org_public_test/domains/example.com/mail/inbound',
+      includeAuthority: true
+    })
+    const body = JSON.stringify(notification)
+    const headers = signedHeaders({ body, secret: TEST_WEBHOOK_SECRET, webhookId: notification.ingest_id })
 
     ingestTestState.findOne.mockReturnValue({
       exec: () =>
@@ -236,7 +277,7 @@ describe('Agent Mail web-owned Worker ingest', () => {
         Promise.resolve({
           archivePrefix: 'orgs/org_public_test/domains/example.com/mail/inbound',
           domain: 'example.com',
-          encryptedWorkerHmacSecret: encryptSecretValue('test-secret'),
+          encryptedWorkerHmacSecret: 'v1.AQID.BAQF.BgcI',
           agentMailDomainId: TEST_CONNECTION_ID,
           organizationId: parseUUID('01960000-0000-7000-8000-000000000001'),
           organizationPublicId: 'org_public_test',
@@ -245,26 +286,23 @@ describe('Agent Mail web-owned Worker ingest', () => {
     })
 
     const response = await handleAgentMailIngestRequest(
-      new Request('https://mail.example.com/rpc/agent-mail/ingest/v1', {
-        body: JSON.stringify(testNotification()),
-        headers: signedHeaders({
-          connectionPublicId: TEST_CONNECTION_PUBLIC_ID,
-          signature: 'a'.repeat(64),
-          timestamp
-        }),
+      new Request(`https://mail.example.com/rpc/agent-mail/ingest/v1/${TEST_CONNECTION_PUBLIC_ID}`, {
+        body,
+        headers,
         method: 'POST'
-      })
+      }),
+      TEST_CONNECTION_PUBLIC_ID
     )
 
     expect(response.status).toBe(401)
     expect(ingestTestState.enqueueAgentMailIngest).not.toHaveBeenCalled()
   })
 
-  it('does not parse unauthenticated notification bodies before HMAC verification', async () => {
+  it('rejects an invalid Standard Webhooks signature before enqueue', async () => {
     expect.hasAssertions()
     const { handleAgentMailIngestRequest } = await import('./ingest')
     const { encryptSecretValue } = await import('../lib/secret-box')
-    const timestamp = new Date().toISOString()
+    const encryptedWorkerSecret = await encryptSecretValue(TEST_WEBHOOK_SECRET)
 
     ingestTestState.findOne.mockReturnValue({
       exec: () =>
@@ -279,7 +317,7 @@ describe('Agent Mail web-owned Worker ingest', () => {
         Promise.resolve({
           archivePrefix: 'orgs/org_public_test/domains/example.com/mail/inbound',
           domain: 'example.com',
-          encryptedWorkerHmacSecret: encryptSecretValue('test-secret'),
+          encryptedWorkerHmacSecret: encryptedWorkerSecret,
           agentMailDomainId: TEST_CONNECTION_ID,
           organizationId: parseUUID('01960000-0000-7000-8000-000000000001'),
           organizationPublicId: 'org_public_test',
@@ -288,18 +326,104 @@ describe('Agent Mail web-owned Worker ingest', () => {
     })
 
     const response = await handleAgentMailIngestRequest(
-      new Request('https://mail.example.com/rpc/agent-mail/ingest/v1', {
-        body: '{',
-        headers: signedHeaders({
-          connectionPublicId: TEST_CONNECTION_PUBLIC_ID,
-          signature: 'a'.repeat(64),
-          timestamp
-        }),
+      new Request(`https://mail.example.com/rpc/agent-mail/ingest/v1/${TEST_CONNECTION_PUBLIC_ID}`, {
+        body: JSON.stringify(testNotification()),
+        headers: webhookHeaders(
+          testNotification().ingest_id,
+          'v1,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
+        ),
         method: 'POST'
-      })
+      }),
+      TEST_CONNECTION_PUBLIC_ID
     )
 
     expect(response.status).toBe(401)
+    expect(ingestTestState.enqueueAgentMailIngest).not.toHaveBeenCalled()
+  })
+
+  it('does not parse unauthenticated notification bodies before Standard Webhooks verification', async () => {
+    expect.hasAssertions()
+    const { handleAgentMailIngestRequest } = await import('./ingest')
+    const { encryptSecretValue } = await import('../lib/secret-box')
+    const encryptedWorkerSecret = await encryptSecretValue(TEST_WEBHOOK_SECRET)
+
+    ingestTestState.findOne.mockReturnValue({
+      exec: () =>
+        Promise.resolve({
+          _id: TEST_CONNECTION_ID,
+          domain: 'example.com',
+          status: 'active'
+        })
+    })
+    ingestTestState.findDeploymentOne.mockReturnValue({
+      exec: () =>
+        Promise.resolve({
+          archivePrefix: 'orgs/org_public_test/domains/example.com/mail/inbound',
+          domain: 'example.com',
+          encryptedWorkerHmacSecret: encryptedWorkerSecret,
+          agentMailDomainId: TEST_CONNECTION_ID,
+          organizationId: parseUUID('01960000-0000-7000-8000-000000000001'),
+          organizationPublicId: 'org_public_test',
+          workerConnectionId: TEST_CONNECTION_PUBLIC_ID
+        })
+    })
+
+    const response = await handleAgentMailIngestRequest(
+      new Request(`https://mail.example.com/rpc/agent-mail/ingest/v1/${TEST_CONNECTION_PUBLIC_ID}`, {
+        body: '{',
+        headers: webhookHeaders(
+          testNotification().ingest_id,
+          'v1,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
+        ),
+        method: 'POST'
+      }),
+      TEST_CONNECTION_PUBLIC_ID
+    )
+
+    expect(response.status).toBe(401)
+    expect(ingestTestState.enqueueAgentMailIngest).not.toHaveBeenCalled()
+  })
+
+  it('reports signed malformed JSON notifications as validation failures', async () => {
+    expect.hasAssertions()
+    const { handleAgentMailIngestRequest } = await import('./ingest')
+    const { encryptSecretValue } = await import('../lib/secret-box')
+    const body = '{'
+    const headers = signedHeaders({ body, secret: TEST_WEBHOOK_SECRET, webhookId: TEST_CONNECTION_ID })
+    const encryptedWorkerSecret = await encryptSecretValue(TEST_WEBHOOK_SECRET)
+
+    ingestTestState.findOne.mockReturnValue({
+      exec: () =>
+        Promise.resolve({
+          _id: TEST_CONNECTION_ID,
+          domain: 'example.com',
+          status: 'active'
+        })
+    })
+    ingestTestState.findDeploymentOne.mockReturnValue({
+      exec: () =>
+        Promise.resolve({
+          archivePrefix: 'orgs/org_public_test/domains/example.com/mail/inbound',
+          domain: 'example.com',
+          encryptedWorkerHmacSecret: encryptedWorkerSecret,
+          agentMailDomainId: TEST_CONNECTION_ID,
+          organizationId: parseUUID('01960000-0000-7000-8000-000000000001'),
+          organizationPublicId: 'org_public_test',
+          workerConnectionId: TEST_CONNECTION_PUBLIC_ID
+        })
+    })
+
+    const response = await handleAgentMailIngestRequest(
+      new Request(`https://mail.example.com/rpc/agent-mail/ingest/v1/${TEST_CONNECTION_PUBLIC_ID}`, {
+        body,
+        headers,
+        method: 'POST'
+      }),
+      TEST_CONNECTION_PUBLIC_ID
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toStrictEqual({ error: 'Invalid notification' })
     expect(ingestTestState.enqueueAgentMailIngest).not.toHaveBeenCalled()
   })
 
@@ -308,23 +432,18 @@ describe('Agent Mail web-owned Worker ingest', () => {
     const { handleAgentMailIngestRequest } = await import('./ingest')
     const notification = testNotification()
     const body = JSON.stringify(notification)
-    const timestamp = new Date().toISOString()
-    const signature = sign({
-      body,
-      connectionPublicId: TEST_CONNECTION_PUBLIC_ID,
-      secret: 'test-secret',
-      timestamp
-    })
+    const headers = signedHeaders({ body, secret: TEST_WEBHOOK_SECRET, webhookId: notification.ingest_id })
 
     ingestTestState.findOne.mockReturnValue({ exec: () => Promise.resolve(null) })
     ingestTestState.findDeploymentOne.mockReturnValue({ exec: () => Promise.resolve(null) })
 
     const response = await handleAgentMailIngestRequest(
-      new Request('https://mail.example.com/rpc/agent-mail/ingest/v1', {
+      new Request(`https://mail.example.com/rpc/agent-mail/ingest/v1/${TEST_CONNECTION_PUBLIC_ID}`, {
         body,
-        headers: signedHeaders({ connectionPublicId: TEST_CONNECTION_PUBLIC_ID, signature, timestamp }),
+        headers,
         method: 'POST'
-      })
+      }),
+      TEST_CONNECTION_PUBLIC_ID
     )
 
     expect(response.status).toBe(401)
@@ -333,16 +452,14 @@ describe('Agent Mail web-owned Worker ingest', () => {
 })
 
 function testNotification({
-  archivePrefix,
+  archivePrefix = TEST_ARCHIVE_PREFIX,
   includeAuthority = false
 }: {
   archivePrefix?: string
   includeAuthority?: boolean
 } = {}) {
   const ingestId = TEST_CONNECTION_ID
-  const bundlePrefix = archivePrefix
-    ? `${archivePrefix.replace(/\/+$/u, '')}/2026/06/20/${ingestId}`
-    : `mail/inbound/example.com/2026/06/20/${ingestId}`
+  const bundlePrefix = `${archivePrefix.replace(/\/+$/u, '')}/2026/06/20/${ingestId}`
   return {
     schema: 'agent-mail.inbound.ingest.v1' as const,
     ingest_id: ingestId,
@@ -364,38 +481,28 @@ function testNotification({
 }
 
 function signedHeaders({
-  connectionPublicId,
-  signature,
-  timestamp
+  body,
+  secret,
+  webhookId
 }: {
-  connectionPublicId: string
-  signature: string
-  timestamp: string
+  body: string
+  secret: string
+  webhookId: string
 }): Headers {
+  const timestamp = new Date()
+  const webhook = new Webhook(secret)
+  return webhookHeaders(webhookId, webhook.sign(webhookId, timestamp, body), timestamp)
+}
+
+function webhookHeaders(webhookId: string, signature: string, timestamp = new Date()): Headers {
   return new Headers({
     'content-type': 'application/json',
-    'x-agent-mail-connection-id': connectionPublicId,
-    'x-agent-mail-signature': signature,
-    'x-agent-mail-timestamp': timestamp
+    'webhook-id': webhookId,
+    'webhook-signature': signature,
+    'webhook-timestamp': String(Math.floor(timestamp.getTime() / 1000))
   })
 }
 
-function sign({
-  body,
-  connectionPublicId,
-  secret,
-  timestamp
-}: {
-  body: string
-  connectionPublicId: string
-  secret: string
-  timestamp: string
-}): string {
-  return createHmac('sha256', secret)
-    .update(timestamp)
-    .update('\n')
-    .update(connectionPublicId)
-    .update('\n')
-    .update(body)
-    .digest('hex')
+function standardWebhookSecret(value: string): string {
+  return `whsec_${Buffer.from(value, 'utf8').toString('base64')}`
 }

@@ -4,15 +4,23 @@ import type { GenericOAuthConfig } from 'better-auth/plugins'
 export const CLOUDFLARE_OAUTH_PROVIDER_ID = 'cloudflare'
 
 const DEFAULT_CLOUDFLARE_REQUIRED_OAUTH_SCOPES = [
-  'openid',
-  'email',
-  'profile',
-  'offline_access',
-  'zone.read',
-  'dns.write',
-  'email-routing-rules.write',
+  'workers-r2.read',
+  'workers-r2.write',
+  'workers-scripts.read',
   'workers-scripts.write',
-  'workers-r2-storage.write'
+  'dns.read',
+  'dns.write',
+  'zone.read',
+  'cloud-email-security.read',
+  'email-routing-address.read',
+  'email-routing-address.write',
+  'email-routing-rule.read',
+  'email-routing-rule.write',
+  'email-routing-suppression.read',
+  'email-security-dmarcreports.read',
+  'email-sending.read',
+  'email-sending.write',
+  'offline_access'
 ] as const
 
 export const CLOUDFLARE_OAUTH_DEFAULTS = {
@@ -38,7 +46,7 @@ export function getCloudflareRequiredOAuthScopes(): string[] {
 }
 
 export function isCloudflareOAuthConfigured(): boolean {
-  return Boolean(PRIVATE_VARS.CLOUDFLARE_OAUTH_CLIENT_ID && PRIVATE_VARS.CLOUDFLARE_OAUTH_CLIENT_SECRET)
+  return Boolean(PRIVATE_VARS.CLOUDFLARE_OAUTH_CLIENT_ID)
 }
 
 export function getCloudflareApiBaseUrl(): string {
@@ -53,22 +61,10 @@ export function getCloudflareOAuthTokenUrl(): string {
   return PRIVATE_VARS.CLOUDFLARE_OAUTH_TOKEN_URL ?? CLOUDFLARE_OAUTH_DEFAULTS.tokenUrl
 }
 
-export function requireCloudflareOAuthClientCredentials(): { clientId: string; clientSecret: string } {
-  const clientId = PRIVATE_VARS.CLOUDFLARE_OAUTH_CLIENT_ID
-  const clientSecret = PRIVATE_VARS.CLOUDFLARE_OAUTH_CLIENT_SECRET
-
-  if (!clientId || !clientSecret) {
-    throw new Error('Cloudflare OAuth client credentials are not configured')
-  }
-
-  return { clientId, clientSecret }
-}
-
 export function createCloudflareGenericOAuthConfig(): GenericOAuthConfig | null {
   const clientId = PRIVATE_VARS.CLOUDFLARE_OAUTH_CLIENT_ID
-  const clientSecret = PRIVATE_VARS.CLOUDFLARE_OAUTH_CLIENT_SECRET
 
-  if (!clientId || !clientSecret) {
+  if (!clientId) {
     return null
   }
 
@@ -80,9 +76,8 @@ export function createCloudflareGenericOAuthConfig(): GenericOAuthConfig | null 
     userInfoUrl: PRIVATE_VARS.CLOUDFLARE_OAUTH_USERINFO_URL ?? CLOUDFLARE_OAUTH_DEFAULTS.userInfoUrl,
     issuer: PRIVATE_VARS.CLOUDFLARE_OAUTH_ISSUER,
     clientId,
-    clientSecret,
     scopes: getCloudflareRequiredOAuthScopes(),
-    authentication: 'basic',
+    pkce: true,
     disableImplicitSignUp: true,
     disableSignUp: true,
     mapProfileToUser: (profile: Record<string, unknown>) => {
