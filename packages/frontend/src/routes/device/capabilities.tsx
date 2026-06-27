@@ -62,6 +62,10 @@ export const Route = createFileRoute('/device/capabilities')({
         serverRouteContext.request
       )
 
+      if (routeState.shouldRedirectToSetup) {
+        throwRouteRedirect(routeState.redirectTo)
+      }
+
       if (routeState.shouldRedirectToSignIn) {
         throwRouteRedirect(createSignInRedirectHref(routeState.redirectTo))
       }
@@ -81,6 +85,7 @@ export const Route = createFileRoute('/device/capabilities')({
       redirectTo,
       setCookieHeaders: [],
       shouldRedirectToSignIn: false,
+      shouldRedirectToSetup: false,
       user: {
         ...auth.data.user,
         id: parseUUIDv7(auth.data.user.id) as NonNullable<DeviceRouteState['user']>['id']

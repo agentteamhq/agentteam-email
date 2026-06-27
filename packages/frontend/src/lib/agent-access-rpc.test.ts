@@ -147,6 +147,17 @@ describe('agent access RPC adapter', () => {
       status: 200
     })
     const { decideAgentAccessApproval, fetchAgentAccessApprovalPreview } = await import('./agent-access-rpc')
+    const webauthnResponse = {
+      clientExtensionResults: {},
+      id: 'credential-1',
+      rawId: 'raw-credential-1',
+      response: {
+        authenticatorData: 'authenticator-data',
+        clientDataJSON: 'client-data-json',
+        signature: 'signature'
+      },
+      type: 'public-key'
+    } as const
 
     await expect(
       fetchAgentAccessApprovalPreview({
@@ -161,7 +172,7 @@ describe('agent access RPC adapter', () => {
         agentId: 'agent-1',
         approvalId: 'approval-1',
         userCode: 'ABCD-EFGH',
-        webauthnResponse: { id: 'credential-1' }
+        webauthnResponse
       })
     ).resolves.toStrictEqual({ status: 'approved', success: true })
     expect(agentAccessRpcTestState.approvalLookupPost).toHaveBeenCalledWith({
@@ -174,7 +185,7 @@ describe('agent access RPC adapter', () => {
       agentId: 'agent-1',
       approvalId: 'approval-1',
       userCode: 'ABCD-EFGH',
-      webauthnResponse: { id: 'credential-1' }
+      webauthnResponse
     })
   })
 

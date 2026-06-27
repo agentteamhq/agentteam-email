@@ -8,10 +8,12 @@ import {
   rewriteEmailHTMLForIframe
 } from './email-safety'
 
+const itWithDOM = typeof globalThis.document === 'undefined' ? it.skip : it
+
 describe('email safety rendering', () => {
-  it('blocks remote image sources by replacing them with inert placeholders', () => {
+  itWithDOM('blocks remote image sources by replacing them with inert placeholders', () => {
     const rewritten = rewriteEmailHTMLForIframe(
-      '<p>Hello</p><img src="https://assets.example.test/pixel.png" alt="Tracking pixel" width="24" height="24">',
+      '<p onclick="alert(1)">Hello</p><img src="https://assets.example.test/pixel.png" onerror="alert(1)" alt="Tracking pixel" width="24" height="24">',
       { allowRemoteImages: false, baseURL: 'https://mail.example.test/dashboard/' }
     )
 
@@ -19,9 +21,11 @@ describe('email safety rendering', () => {
     expect(rewritten.html).toContain('email-remote-image-placeholder')
     expect(rewritten.html).toContain('Remote image blocked')
     expect(rewritten.html).not.toContain('src="https://assets.example.test/pixel.png"')
+    expect(rewritten.html).not.toContain('onclick')
+    expect(rewritten.html).not.toContain('onerror')
   })
 
-  it('strips remote background attributes and style image URLs when remote images are blocked', () => {
+  itWithDOM('strips background attributes and inline styles before iframe rendering', () => {
     const rewritten = rewriteEmailHTMLForIframe(
       [
         '<table background="https://assets.example.test/table.png">',
@@ -33,24 +37,24 @@ describe('email safety rendering', () => {
       { allowRemoteImages: false, baseURL: 'https://mail.example.test/dashboard/' }
     )
 
-    expect(rewritten.blockedRemoteImageCount).toBe(2)
+    expect(rewritten.blockedRemoteImageCount).toBe(0)
     expect(rewritten.html).not.toContain('background="https://assets.example.test/table.png"')
     expect(rewritten.html).not.toContain('background-image')
     expect(rewritten.html).not.toContain('assets.example.test')
   })
 
-  it('strips encoded style image URLs when remote images are blocked', () => {
+  itWithDOM('strips encoded inline styles through DOM attribute handling', () => {
     const rewritten = rewriteEmailHTMLForIframe(
       '<div style="background-image: url(&quot;https://assets.example.test/encoded.png&quot;); color: red">Content</div>',
       { allowRemoteImages: false, baseURL: 'https://mail.example.test/dashboard/' }
     )
 
-    expect(rewritten.blockedRemoteImageCount).toBe(1)
+    expect(rewritten.blockedRemoteImageCount).toBe(0)
     expect(rewritten.html).not.toContain('background-image')
     expect(rewritten.html).not.toContain('assets.example.test')
   })
 
-  it('drops document resource and navigation tags before iframe rendering', () => {
+  itWithDOM('drops document resource and navigation tags before iframe rendering', () => {
     const rewritten = rewriteEmailHTMLForIframe(
       [
         '<base href="https://wildduck.example.test/">',
@@ -78,26 +82,42 @@ describe('email safety rendering', () => {
     expect(rewritten.html).not.toContain('<embed')
   })
 
-  it('blocks remote image sources even when they appear in duplicate attributes', () => {
+  itWithDOM('sanitizes every srcset candidate before preserving the attribute', () => {
     const rewritten = rewriteEmailHTMLForIframe(
       [
-        '<img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" src="https://assets.example.test/duplicate.png" alt="Duplicate image">',
-        '<picture><source srcset="data:image/gif;base64,R0lGODlhAQABAAAAACw=" srcset="https://assets.example.test/source.png"><img alt="Fallback"></picture>'
+        '<picture>',
+        '<source srcset="https://assets.example.test/hero.avif 1x, javascript:alert(1) 2x">',
+        '<img srcset="data:image/gif;base64,R0lGODlhAQABAAAAACw= 1x, https://assets.example.test/hero.png 2x, /same-origin.png 3x" alt="Fallback">',
+        '</picture>'
       ].join(''),
-      { allowRemoteImages: false, baseURL: 'https://mail.example.test/dashboard/' }
+      { allowRemoteImages: true, baseURL: 'https://mail.example.test/dashboard/' }
     )
 
-    expect(rewritten.blockedRemoteImageCount).toBe(2)
-    expect(rewritten.html).toContain('Remote image blocked')
-    expect(rewritten.html).not.toContain('assets.example.test')
+    expect(rewritten.blockedRemoteImageCount).toBe(0)
+    expect(rewritten.html).toContain('srcset="https://assets.example.test/hero.avif 1x"')
+    expect(rewritten.html).toContain(
+      'srcset="data:image/gif;base64,R0lGODlhAQABAAAAACw= 1x, https://assets.example.test/hero.png 2x"'
+    )
+    expect(rewritten.html).not.toContain('javascript:')
+    expect(rewritten.html).not.toContain('/same-origin.png')
   })
 
-  it('restores known blocked remote image sources only after opt-in', () => {
+  itWithDOM('restores known blocked remote image sources only after opt-in metadata matches', () => {
     const blocked = rewriteEmailHTMLForIframe(
       '<img data-agent-mail-remote-image-id="image-1" data-agent-mail-remote-image-src="https://assets.example.test/hero.png" alt="Hero">',
-      { allowRemoteImages: false }
+      {
+        allowRemoteImages: false,
+        knownRemoteImages: [{ id: 'image-1', url: 'https://assets.example.test/hero.png' }]
+      }
     )
     const allowed = rewriteEmailHTMLForIframe(
+      '<img data-agent-mail-remote-image-id="image-1" data-agent-mail-remote-image-src="https://assets.example.test/hero.png" alt="Hero">',
+      {
+        allowRemoteImages: true,
+        knownRemoteImages: [{ id: 'image-1', url: 'https://assets.example.test/hero.png' }]
+      }
+    )
+    const untrusted = rewriteEmailHTMLForIframe(
       '<img data-agent-mail-remote-image-id="image-1" data-agent-mail-remote-image-src="https://assets.example.test/hero.png" alt="Hero">',
       { allowRemoteImages: true }
     )
@@ -107,9 +127,12 @@ describe('email safety rendering', () => {
     expect(allowed.blockedRemoteImageCount).toBe(0)
     expect(allowed.html).toContain('src="https://assets.example.test/hero.png"')
     expect(allowed.html).not.toContain('data-agent-mail-remote-image-src')
+    expect(untrusted.html).not.toContain('data-agent-mail-remote-image-id')
+    expect(untrusted.html).not.toContain('data-agent-mail-remote-image-src')
+    expect(untrusted.html).not.toContain('src="https://assets.example.test/hero.png"')
   })
 
-  it('rewrites external anchors to mediated link markers without navigable hrefs', () => {
+  itWithDOM('rewrites external anchors to mediated link markers without navigable hrefs', () => {
     const rewritten = rewriteEmailHTMLForIframe(
       '<a href="https://docs.example.test/path?q=1" target="_blank" ping="https://tracker.example.test">Docs</a>',
       { allowRemoteImages: false, baseURL: 'https://mail.example.test/dashboard/' }
@@ -129,7 +152,30 @@ describe('email safety rendering', () => {
     expect(rewritten.html).not.toContain('ping=')
   })
 
-  it('keeps discovered external link IDs separate from controller-provided link IDs', () => {
+  itWithDOM('regenerates known backend link markers without preserving incoming data attributes', () => {
+    const rewritten = rewriteEmailHTMLForIframe(
+      '<a href="#agent-mail-external-link-1" data-agent-mail-external-link-id="attacker-id">Docs</a>',
+      {
+        allowRemoteImages: false,
+        baseURL: 'https://mail.example.test/dashboard/',
+        knownExternalLinks: [
+          {
+            host: 'docs.example.test',
+            id: 'link-1',
+            url: 'https://docs.example.test/path'
+          }
+        ],
+        reservedExternalLinkIds: ['link-1']
+      }
+    )
+
+    expect(rewritten.externalLinks).toStrictEqual([])
+    expect(rewritten.html).toContain('href="#agent-mail-external-link-1"')
+    expect(rewritten.html).toContain('data-agent-mail-external-link-id="link-1"')
+    expect(rewritten.html).not.toContain('attacker-id')
+  })
+
+  itWithDOM('keeps discovered external link IDs separate from controller-provided link IDs', () => {
     const rewritten = rewriteEmailHTMLForIframe(
       '<a href="https://docs.example.test/path">Docs</a><a href="https://status.example.test/">Status</a>',
       {
@@ -156,7 +202,7 @@ describe('email safety rendering', () => {
     expect(rewritten.html).not.toContain('data-agent-mail-external-link-id="link-1"')
   })
 
-  it('labels mediated mailto links by recipient address', () => {
+  itWithDOM('labels mediated mailto links by recipient address', () => {
     const rewritten = rewriteEmailHTMLForIframe(
       '<a href="mailto:support@example.test?subject=Help">Email support</a>',
       { allowRemoteImages: false, baseURL: 'https://mail.example.test/dashboard/' }
@@ -173,7 +219,7 @@ describe('email safety rendering', () => {
     expect(rewritten.html).not.toContain('href="mailto:support@example.test')
   })
 
-  it('neutralizes forms and controls inside email bodies', () => {
+  itWithDOM('removes forms and controls inside email bodies', () => {
     const rewritten = rewriteEmailHTMLForIframe(
       [
         '<form action="https://phish.example.test/login" method="post" target="_blank">',
@@ -185,14 +231,15 @@ describe('email safety rendering', () => {
       { allowRemoteImages: false, baseURL: 'https://mail.example.test/dashboard/' }
     )
 
-    expect(rewritten.html).toContain('data-agent-mail-inert-form="true"')
+    expect(rewritten.html).not.toContain('<form')
+    expect(rewritten.html).not.toContain('<input')
+    expect(rewritten.html).not.toContain('<textarea')
+    expect(rewritten.html).not.toContain('<button')
+    expect(rewritten.html).not.toContain('data-agent-mail-inert-form')
     expect(rewritten.html).not.toContain('https://phish.example.test')
     expect(rewritten.html).not.toContain('method="post"')
     expect(rewritten.html).not.toContain('name="email"')
     expect(rewritten.html).not.toContain('formaction=')
-    expect(rewritten.html).toContain('<input disabled aria-disabled="true"')
-    expect(rewritten.html).toContain('<textarea disabled aria-disabled="true"')
-    expect(rewritten.html).toContain('<button disabled aria-disabled="true"')
   })
 
   it('rejects unsafe and route-relative links', () => {
@@ -229,7 +276,7 @@ describe('email safety rendering', () => {
     ).toBeNull()
   })
 
-  it('rewrites cid images to matching same-origin attachment URLs', () => {
+  itWithDOM('rewrites cid images to matching same-origin attachment URLs', () => {
     const rewritten = rewriteEmailHTMLForIframe('<p>Logo</p><img src="cid:logo%40example.test" alt="Logo">', {
       allowRemoteImages: false,
       baseURL: 'https://mail.example.test/dashboard/',
@@ -248,7 +295,7 @@ describe('email safety rendering', () => {
     expect(rewritten.html).not.toContain('cid:logo')
   })
 
-  it('replaces cid images without same-origin attachment URLs with inert placeholders', () => {
+  itWithDOM('replaces cid images without same-origin attachment URLs with inert placeholders', () => {
     const missingAttachment = rewriteEmailHTMLForIframe('<img src="cid:missing@example.test" alt="Logo">', {
       allowRemoteImages: false,
       baseURL: 'https://mail.example.test/dashboard/',
@@ -299,5 +346,26 @@ describe('email safety rendering', () => {
     expect(document).toContain('Content-Security-Policy')
     expect(document).toContain('default-src &quot;none&quot;')
     expect(document).toContain('<body><p>Body</p></body>')
+  })
+
+  it('builds an iframe document that can follow system or explicit color scheme', () => {
+    const automaticDocument = buildEmailIframeDocument({
+      bodyHTML: '<p>Body</p>',
+      csp: "default-src 'none'"
+    })
+    const darkDocument = buildEmailIframeDocument({
+      bodyHTML: '<p>Body</p>',
+      csp: "default-src 'none'",
+      themeMode: 'dark'
+    })
+
+    expect(automaticDocument).toContain('color-scheme: light dark')
+    expect(automaticDocument).toContain('--email-background: light-dark(')
+    expect(automaticDocument).toContain('background: var(--email-background) !important')
+    expect(automaticDocument).toContain('color: var(--email-foreground) !important')
+    expect(automaticDocument).toContain('<html>')
+    expect(automaticDocument).not.toContain('<html data-theme=')
+    expect(darkDocument).toContain('<html data-theme="dark">')
+    expect(darkDocument).toContain(":root[data-theme='dark'] { color-scheme: dark; }")
   })
 })

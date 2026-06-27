@@ -142,9 +142,18 @@ describe('agent capability approval route data', () => {
         })
       )
       .mockResolvedValueOnce({ status: 'approved', success: true })
-    capabilitiesRouteTestState.createWebAuthnAssertionResponse.mockResolvedValue({
-      id: 'credential-1'
-    })
+    const webauthnResponse = {
+      clientExtensionResults: {},
+      id: 'credential-1',
+      rawId: 'raw-credential-1',
+      response: {
+        authenticatorData: 'authenticator-data',
+        clientDataJSON: 'client-data-json',
+        signature: 'signature'
+      },
+      type: 'public-key'
+    } as const
+    capabilitiesRouteTestState.createWebAuthnAssertionResponse.mockResolvedValue(webauthnResponse)
 
     await expect(
       decideAgentAccessApprovalWithWebAuthn({
@@ -162,7 +171,7 @@ describe('agent capability approval route data', () => {
     expect(capabilitiesRouteTestState.decideAgentAccessApproval).toHaveBeenNthCalledWith(2, {
       action: 'approve',
       approvalId: 'approval-1',
-      webauthnResponse: { id: 'credential-1' }
+      webauthnResponse
     })
   })
 })

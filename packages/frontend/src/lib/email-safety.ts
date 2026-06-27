@@ -1,4 +1,49 @@
+import DOMPurify from 'dompurify'
+import { parseSrcset, stringifySrcset } from 'srcset'
+import type { Config, ElementHook } from 'dompurify'
+import type { SrcSetDefinition } from 'srcset'
+
 const DEFAULT_BASE_URL = 'https://agent-mail.invalid/'
+const AGENT_MAIL_EXTERNAL_LINK_PREFIX = '#agent-mail-external-'
+const AGENT_MAIL_ATTRIBUTE_PREFIX = 'data-agent-mail-'
+
+const EMAIL_SANITIZER_CONFIG = {
+  ALLOW_DATA_ATTR: false,
+  FORBID_ATTR: [
+    'action',
+    'background',
+    'download',
+    'formaction',
+    'ping',
+    'poster',
+    'srcdoc',
+    'style',
+    'target'
+  ],
+  FORBID_TAGS: [
+    'base',
+    'button',
+    'datalist',
+    'embed',
+    'fieldset',
+    'form',
+    'frame',
+    'frameset',
+    'iframe',
+    'input',
+    'link',
+    'meta',
+    'object',
+    'optgroup',
+    'option',
+    'script',
+    'select',
+    'style',
+    'textarea'
+  ],
+  RETURN_TRUSTED_TYPE: false,
+  USE_PROFILES: { html: true }
+} satisfies Config
 
 export interface RewrittenEmailLink {
   host: string
@@ -17,15 +62,15 @@ export interface EmailInlineAttachment {
   url: string
 }
 
-interface TagParts {
-  attrText: string
-  name: string
-  selfClosing: boolean
+export interface KnownEmailExternalLink {
+  host?: string | null
+  id: string
+  url: string
 }
 
-interface ParsedAttribute {
-  name: string
-  value: string | null
+export interface KnownEmailRemoteImage {
+  id: string
+  url: string
 }
 
 export function normalizeEmailLink(rawHref: string | null | undefined, baseURL = DEFAULT_BASE_URL) {
@@ -73,96 +118,89 @@ export function rewriteEmailHTMLForIframe(
     allowRemoteImages?: boolean
     baseURL?: string
     inlineAttachments?: ReadonlyArray<EmailInlineAttachment>
+    knownExternalLinks?: ReadonlyArray<KnownEmailExternalLink>
+    knownRemoteImages?: ReadonlyArray<KnownEmailRemoteImage>
     reservedExternalLinkIds?: Iterable<string>
   }
 ) {
+  const sanitizer = getSupportedEmailSanitizer()
+  if (!sanitizer) {
+    return {
+      blockedRemoteImageCount: 0,
+      externalLinks: [],
+      html: ''
+    } satisfies RewrittenEmailHtml
+  }
+
   const allowRemoteImages = Boolean(options.allowRemoteImages)
   const baseURL = options.baseURL ?? DEFAULT_BASE_URL
   const reservedExternalLinkIds = new Set(options.reservedExternalLinkIds ?? [])
+  const knownExternalLinksById = getKnownExternalLinksById(options.knownExternalLinks ?? [])
+  const knownRemoteImagesById = getKnownRemoteImagesById(options.knownRemoteImages ?? [])
   const inlineAttachmentURLsByContentId = getInlineAttachmentURLsByContentId(
     options.inlineAttachments ?? [],
     baseURL
   )
   const externalLinks: RewrittenEmailLink[] = []
+  const incomingRemoteImageIds = new WeakMap<Element, string>()
   let blockedRemoteImageCount = 0
-  let output = ''
-  let index = 0
 
-  while (index < html.length) {
-    const tagStart = html.indexOf('<', index)
-    if (tagStart === -1) {
-      output += html.slice(index)
-      break
+  const beforeSanitizeAttributes: ElementHook = (node) => {
+    if (getElementTagName(node) === 'img') {
+      incomingRemoteImageIds.set(
+        node,
+        stripControlCharacters(node.getAttribute('data-agent-mail-remote-image-id'))
+      )
     }
-
-    output += html.slice(index, tagStart)
-    const tagEnd = findTagEnd(html, tagStart)
-    if (tagEnd === -1) {
-      output += html.slice(tagStart)
-      break
-    }
-
-    const rawTag = html.slice(tagStart, tagEnd + 1)
-    const inner = html.slice(tagStart + 1, tagEnd)
-    const trimmed = inner.trimStart()
-
-    if (trimmed.startsWith('/') || trimmed.startsWith('!') || trimmed.startsWith('?')) {
-      output += rawTag
-      index = tagEnd + 1
-      continue
-    }
-
-    const tag = parseTag(trimmed)
-    if (!tag) {
-      output += rawTag
-      index = tagEnd + 1
-      continue
-    }
-
-    if (isDroppedEmailDocumentTag(tag.name)) {
-      const closingTagEnd = shouldDropEmailDocumentTagContent(tag.name)
-        ? findClosingTagEnd(html, tagEnd + 1, tag.name)
-        : -1
-      index = closingTagEnd === -1 ? tagEnd + 1 : closingTagEnd + 1
-      continue
-    }
-
-    const remotePresentationAttrs = rewriteRemotePresentationAttributes(
-      parseAttributes(tag.attrText),
-      allowRemoteImages
-    )
-    const attrs = remotePresentationAttrs.attrs
-    blockedRemoteImageCount += remotePresentationAttrs.blocked
-
-    if (tag.name === 'a') {
-      output += rewriteAnchor(attrs, baseURL, externalLinks, reservedExternalLinkIds)
-    } else if (tag.name === 'form') {
-      output += rewriteForm(attrs)
-    } else if (isFormControlTag(tag.name)) {
-      output += rewriteFormControl(tag.name, attrs, tag.selfClosing)
-    } else if (tag.name === 'img') {
-      const result = rewriteImage(attrs, {
-        allowRemoteImages,
-        inlineAttachmentURLsByContentId
-      })
-      output += result.html
-      blockedRemoteImageCount += result.blocked
-    } else if (tag.name === 'source') {
-      const result = rewriteSource(attrs, allowRemoteImages, tag.selfClosing)
-      output += result.html
-      blockedRemoteImageCount += result.blocked
-    } else {
-      output += remotePresentationAttrs.blocked > 0 ? serializeTag(tag.name, attrs, tag.selfClosing) : rawTag
-    }
-
-    index = tagEnd + 1
+    removeIncomingAgentMailAttributes(node)
   }
 
-  return {
-    blockedRemoteImageCount,
-    externalLinks,
-    html: output
-  } satisfies RewrittenEmailHtml
+  const afterSanitizeAttributes: ElementHook = (node) => {
+    removeForbiddenAttributes(node)
+
+    switch (getElementTagName(node)) {
+      case 'a':
+        rewriteAnchorElement(node, {
+          baseURL,
+          externalLinks,
+          knownExternalLinksById,
+          reservedExternalLinkIds
+        })
+        break
+      case 'img':
+        blockedRemoteImageCount += rewriteImageElement(node, {
+          allowRemoteImages,
+          baseURL,
+          inlineAttachmentURLsByContentId,
+          knownRemoteImageId: incomingRemoteImageIds.get(node) ?? '',
+          knownRemoteImagesById
+        })
+        break
+      case 'source':
+        blockedRemoteImageCount += rewriteSourceElement(node, {
+          allowRemoteImages,
+          baseURL,
+          inlineAttachmentURLsByContentId
+        })
+        break
+      default:
+        break
+    }
+  }
+
+  sanitizer.addHook('beforeSanitizeAttributes', beforeSanitizeAttributes)
+  sanitizer.addHook('afterSanitizeAttributes', afterSanitizeAttributes)
+  try {
+    const sanitizedHTML = sanitizer.sanitize(html, EMAIL_SANITIZER_CONFIG)
+    return {
+      blockedRemoteImageCount,
+      externalLinks,
+      html: sanitizedHTML
+    } satisfies RewrittenEmailHtml
+  } finally {
+    sanitizer.removeHook('beforeSanitizeAttributes', beforeSanitizeAttributes)
+    sanitizer.removeHook('afterSanitizeAttributes', afterSanitizeAttributes)
+  }
 }
 
 export function buildEmailContentSecurityPolicy(options: {
@@ -194,32 +232,51 @@ export function buildEmailContentSecurityPolicy(options: {
   ].join('; ')
 }
 
-export function buildEmailIframeDocument({ bodyHTML, csp }: { bodyHTML: string; csp: string }) {
+export type EmailIframeThemeMode = 'dark' | 'light'
+
+export function buildEmailIframeDocument({
+  bodyHTML,
+  csp,
+  themeMode
+}: {
+  bodyHTML: string
+  csp: string
+  themeMode?: EmailIframeThemeMode
+}) {
+  const themeAttribute = themeMode ? ` data-theme="${themeMode}"` : ''
+
   return `<!doctype html>
-<html>
+<html${themeAttribute}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="${escapeAttribute(csp)}">
 <style>
 * { box-sizing: border-box; }
-html {
-  background: #ffffff;
-  color-scheme: light;
+:root {
+  color-scheme: light dark;
+  --email-background: light-dark(#ffffff, oklch(0.1 0 0));
+  --email-foreground: light-dark(#18181b, oklch(0.99 0 0));
+  --email-muted: light-dark(#64748b, oklch(0.708 0 0));
+  --email-border: light-dark(#d1d5db, oklch(0.3092 0 0));
+  --email-link: light-dark(#2563eb, #93c5fd);
+  --email-surface: light-dark(#f8fafc, oklch(0.16 0 0));
+  --email-code: light-dark(#f3f4f6, oklch(0.2 0 0));
 }
+:root[data-theme='light'] { color-scheme: light; }
+:root[data-theme='dark'] { color-scheme: dark; }
+html { background: var(--email-background); }
 body {
-  background: #ffffff;
-  color: #18181b;
+  background: var(--email-background) !important;
+  color: var(--email-foreground) !important;
   font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   margin: 0;
+  min-height: 100%;
   overflow-wrap: break-word;
   padding: 24px;
   word-wrap: break-word;
 }
-[style*="position: fixed"], [style*="position:fixed"], [style*="position: absolute"], [style*="position:absolute"] {
-  position: relative !important;
-}
-a { color: #2563eb; }
+a { color: var(--email-link); }
 a[data-agent-mail-external-link-id] {
   cursor: pointer;
   text-decoration: underline;
@@ -228,26 +285,12 @@ img {
   height: auto;
   max-width: 100%;
 }
-[data-agent-mail-inert-form] {
-  background: #f8fafc;
-  border: 1px dashed #cbd5e1;
-  border-radius: 6px;
-  margin: 8px 0;
-  padding: 12px;
-}
-[data-agent-mail-inert-form]::before {
-  color: #64748b;
-  content: "Email form disabled";
-  display: block;
-  font-size: 12px;
-  margin-bottom: 8px;
-}
 .email-remote-image-placeholder {
   align-items: center;
-  background: #f8fafc;
-  border: 1px dashed #cbd5e1;
+  background: var(--email-surface);
+  border: 1px dashed var(--email-border);
   border-radius: 4px;
-  color: #64748b;
+  color: var(--email-muted);
   display: inline-flex;
   font-size: 12px;
   justify-content: center;
@@ -257,13 +300,13 @@ img {
   vertical-align: middle;
 }
 blockquote {
-  border-left: 3px solid #d1d5db;
-  color: #6b7280;
+  border-left: 3px solid var(--email-border);
+  color: var(--email-muted);
   margin-left: 0;
   padding-left: 1em;
 }
 pre {
-  background: #f3f4f6;
+  background: var(--email-code);
   border-radius: 6px;
   font-size: 13px;
   overflow-x: auto;
@@ -284,6 +327,325 @@ ul, ol {
 </head>
 <body>${bodyHTML}</body>
 </html>`
+}
+
+function getSupportedEmailSanitizer() {
+  return DOMPurify.isSupported &&
+    typeof DOMPurify.sanitize === 'function' &&
+    typeof DOMPurify.addHook === 'function'
+    ? DOMPurify
+    : null
+}
+
+function getElementTagName(element: Element) {
+  return typeof element.tagName === 'string' ? element.tagName.toLowerCase() : ''
+}
+
+function rewriteAnchorElement(
+  element: Element,
+  {
+    baseURL,
+    externalLinks,
+    knownExternalLinksById,
+    reservedExternalLinkIds
+  }: {
+    baseURL: string
+    externalLinks: RewrittenEmailLink[]
+    knownExternalLinksById: ReadonlyMap<string, RewrittenEmailLink>
+    reservedExternalLinkIds: ReadonlySet<string>
+  }
+) {
+  const rawHref = element.getAttribute('href')
+  removeAttributes(element, ['download', 'ping', 'rel', 'role', 'tabindex', 'target'])
+
+  const knownLinkId = getKnownExternalLinkIdFromFragment(rawHref)
+  if (knownLinkId && knownExternalLinksById.has(knownLinkId)) {
+    element.setAttribute('href', `${AGENT_MAIL_EXTERNAL_LINK_PREFIX}${knownLinkId}`)
+    element.setAttribute('data-agent-mail-external-link-id', knownLinkId)
+    element.setAttribute('role', 'link')
+    element.setAttribute('tabindex', '0')
+    element.setAttribute('rel', 'noopener noreferrer')
+    return
+  }
+
+  const normalizedURL = normalizeEmailLink(rawHref, baseURL)
+  if (!normalizedURL) {
+    if (stripControlCharacters(rawHref).startsWith('#')) {
+      element.setAttribute('href', stripControlCharacters(rawHref))
+    } else {
+      element.removeAttribute('href')
+    }
+    return
+  }
+
+  const parsed = new URL(normalizedURL)
+  const id = getNextGeneratedExternalLinkId(externalLinks, reservedExternalLinkIds)
+  externalLinks.push({ host: getExternalLinkHostLabel(parsed), id, url: normalizedURL })
+  element.removeAttribute('href')
+  element.setAttribute('data-agent-mail-external-link-id', id)
+  element.setAttribute('role', 'link')
+  element.setAttribute('tabindex', '0')
+  element.setAttribute('rel', 'noopener noreferrer')
+}
+
+function rewriteImageElement(
+  element: Element,
+  {
+    allowRemoteImages,
+    baseURL,
+    inlineAttachmentURLsByContentId,
+    knownRemoteImageId,
+    knownRemoteImagesById
+  }: {
+    allowRemoteImages: boolean
+    baseURL: string
+    inlineAttachmentURLsByContentId: ReadonlyMap<string, string>
+    knownRemoteImageId: string
+    knownRemoteImagesById: ReadonlyMap<string, KnownEmailRemoteImage>
+  }
+) {
+  const srcsetResult = rewriteSrcsetAttribute(element, {
+    allowRemoteImages,
+    baseURL,
+    inlineAttachmentURLsByContentId
+  })
+  const rawSrc = element.getAttribute('src')
+  const knownRemoteImage = knownRemoteImageId ? knownRemoteImagesById.get(knownRemoteImageId) : undefined
+
+  if (!rawSrc && knownRemoteImage) {
+    if (allowRemoteImages) {
+      element.setAttribute('src', knownRemoteImage.url)
+      return 0
+    }
+    replaceWithImagePlaceholder(element, 'Remote image blocked')
+    return 1
+  }
+
+  const inlineContentId = getInlineContentIdFromSource(rawSrc)
+  if (inlineContentId) {
+    const inlineAttachmentURL = inlineAttachmentURLsByContentId.get(inlineContentId)
+    element.removeAttribute('srcset')
+    element.removeAttribute('sizes')
+    if (!inlineAttachmentURL) {
+      replaceWithImagePlaceholder(element, 'Inline image unavailable')
+      return srcsetResult.blockedRemoteImage ? 1 : 0
+    }
+    element.setAttribute('src', inlineAttachmentURL)
+    return srcsetResult.blockedRemoteImage ? 1 : 0
+  }
+
+  const remoteURL = normalizeRemoteImageURL(rawSrc, baseURL)
+  if (remoteURL) {
+    if (!allowRemoteImages) {
+      replaceWithImagePlaceholder(element, 'Remote image blocked')
+      return 1
+    }
+    element.setAttribute('src', remoteURL)
+    return srcsetResult.blockedRemoteImage ? 1 : 0
+  }
+
+  if (rawSrc && !isDataImageSource(rawSrc)) {
+    element.removeAttribute('src')
+  }
+
+  if (srcsetResult.blockedRemoteImage && !rawSrc && !srcsetResult.keptCandidate) {
+    replaceWithImagePlaceholder(element, 'Remote image blocked')
+  }
+
+  return srcsetResult.blockedRemoteImage ? 1 : 0
+}
+
+function rewriteSourceElement(
+  element: Element,
+  {
+    allowRemoteImages,
+    baseURL,
+    inlineAttachmentURLsByContentId
+  }: {
+    allowRemoteImages: boolean
+    baseURL: string
+    inlineAttachmentURLsByContentId: ReadonlyMap<string, string>
+  }
+) {
+  const srcsetResult = rewriteSrcsetAttribute(element, {
+    allowRemoteImages,
+    baseURL,
+    inlineAttachmentURLsByContentId
+  })
+  const rawSrc = element.getAttribute('src')
+  const remoteURL = normalizeRemoteImageURL(rawSrc, baseURL)
+  if (remoteURL) {
+    if (!allowRemoteImages) {
+      element.remove()
+      return srcsetResult.blockedRemoteImage ? 1 : 0
+    }
+    element.setAttribute('src', remoteURL)
+    return srcsetResult.blockedRemoteImage ? 1 : 0
+  }
+  if (rawSrc && !isDataImageSource(rawSrc)) {
+    element.removeAttribute('src')
+  }
+  if (srcsetResult.blockedRemoteImage && !srcsetResult.keptCandidate) {
+    element.remove()
+  }
+  return srcsetResult.blockedRemoteImage ? 1 : 0
+}
+
+function rewriteSrcsetAttribute(
+  element: Element,
+  {
+    allowRemoteImages,
+    baseURL,
+    inlineAttachmentURLsByContentId
+  }: {
+    allowRemoteImages: boolean
+    baseURL: string
+    inlineAttachmentURLsByContentId: ReadonlyMap<string, string>
+  }
+) {
+  const rawSrcset = element.getAttribute('srcset')
+  if (!rawSrcset) {
+    return { blockedRemoteImage: false, keptCandidate: false }
+  }
+
+  let parsed: SrcSetDefinition[]
+  try {
+    parsed = parseSrcset(rawSrcset, { strict: true })
+  } catch {
+    element.removeAttribute('srcset')
+    element.removeAttribute('sizes')
+    return { blockedRemoteImage: false, keptCandidate: false }
+  }
+
+  let blockedRemoteImage = false
+  const kept: SrcSetDefinition[] = []
+  for (const candidate of parsed) {
+    const inlineContentId = getInlineContentIdFromSource(candidate.url)
+    if (inlineContentId) {
+      const inlineAttachmentURL = inlineAttachmentURLsByContentId.get(inlineContentId)
+      if (inlineAttachmentURL) {
+        kept.push({ ...candidate, url: inlineAttachmentURL })
+      }
+      continue
+    }
+
+    const remoteURL = normalizeRemoteImageURL(candidate.url, baseURL)
+    if (remoteURL) {
+      if (allowRemoteImages) {
+        kept.push({ ...candidate, url: remoteURL })
+      } else {
+        blockedRemoteImage = true
+      }
+      continue
+    }
+
+    if (isDataImageSource(candidate.url)) {
+      kept.push(candidate)
+    }
+  }
+
+  if (kept.length > 0) {
+    element.setAttribute('srcset', stringifySrcset(kept, { strict: true }))
+  } else {
+    element.removeAttribute('srcset')
+    element.removeAttribute('sizes')
+  }
+
+  return { blockedRemoteImage, keptCandidate: kept.length > 0 }
+}
+
+function replaceWithImagePlaceholder(element: Element, fallbackLabel: string) {
+  const placeholder = element.ownerDocument.createElement('span')
+  const alt = stripControlCharacters(element.getAttribute('alt')) || fallbackLabel
+  placeholder.className = 'email-remote-image-placeholder'
+  placeholder.setAttribute('role', 'img')
+  placeholder.setAttribute('aria-label', alt)
+  placeholder.textContent = fallbackLabel
+  element.replaceWith(placeholder)
+}
+
+function getKnownExternalLinkIdFromFragment(rawHref: string | null) {
+  const href = stripControlCharacters(rawHref)
+  if (!href.startsWith(AGENT_MAIL_EXTERNAL_LINK_PREFIX)) {
+    return null
+  }
+  const id = href.slice(AGENT_MAIL_EXTERNAL_LINK_PREFIX.length)
+  return id ? id : null
+}
+
+function getKnownExternalLinksById(links: ReadonlyArray<KnownEmailExternalLink>) {
+  const map = new Map<string, RewrittenEmailLink>()
+  for (const link of links) {
+    const id = stripControlCharacters(link.id)
+    const url = normalizeEmailLink(link.url)
+    if (id && url) {
+      map.set(id, { host: link.host || getExternalLinkHostLabel(new URL(url)), id, url })
+    }
+  }
+  return map
+}
+
+function getKnownRemoteImagesById(images: ReadonlyArray<KnownEmailRemoteImage>) {
+  const map = new Map<string, KnownEmailRemoteImage>()
+  for (const image of images) {
+    const id = stripControlCharacters(image.id)
+    const url = normalizeRemoteImageURL(image.url)
+    if (id && url) {
+      map.set(id, { id, url })
+    }
+  }
+  return map
+}
+
+function getNextGeneratedExternalLinkId(
+  externalLinks: ReadonlyArray<RewrittenEmailLink>,
+  reservedExternalLinkIds: ReadonlySet<string>
+) {
+  const usedIds = new Set(externalLinks.map((link) => link.id))
+  let index = externalLinks.length + 1
+
+  while (true) {
+    const id = `generated-link-${index}`
+    if (!usedIds.has(id) && !reservedExternalLinkIds.has(id)) {
+      return id
+    }
+    index += 1
+  }
+}
+
+function removeIncomingAgentMailAttributes(element: Element) {
+  if (!element.attributes) {
+    return
+  }
+  for (const attr of [...element.attributes]) {
+    if (attr.name.toLowerCase().startsWith(AGENT_MAIL_ATTRIBUTE_PREFIX)) {
+      element.removeAttribute(attr.name)
+    }
+  }
+}
+
+function removeForbiddenAttributes(element: Element) {
+  if (!element.attributes) {
+    return
+  }
+  for (const attr of [...element.attributes]) {
+    const name = attr.name.toLowerCase()
+    if (
+      name.startsWith('on') ||
+      name === 'background' ||
+      name === 'poster' ||
+      name === 'srcdoc' ||
+      name === 'style'
+    ) {
+      element.removeAttribute(attr.name)
+    }
+  }
+}
+
+function removeAttributes(element: Element, names: ReadonlyArray<string>) {
+  for (const name of names) {
+    element.removeAttribute(name)
+  }
 }
 
 function stripControlCharacters(value: string | null | undefined) {
@@ -307,400 +669,25 @@ function escapeAttribute(value: string) {
     .replaceAll('>', '&gt;')
 }
 
-function decodeAttribute(value: string | null) {
-  if (value === null) {
+function normalizeRemoteImageURL(rawSrc: string | null | undefined, baseURL = DEFAULT_BASE_URL) {
+  const src = stripControlCharacters(rawSrc)
+  if (!src || !/^(?:https?:)?\/\//iu.test(src)) {
     return null
   }
 
-  return value.replace(/&(?:#(\d+)|#x([0-9a-f]+)|amp|quot|apos|lt|gt);/giu, (entity, decimal, hex) => {
-    if (decimal) {
-      return String.fromCodePoint(Number.parseInt(String(decimal), 10))
+  try {
+    const url = new URL(src, baseURL)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      return null
     }
-    if (hex) {
-      return String.fromCodePoint(Number.parseInt(String(hex), 16))
-    }
-
-    switch (entity.toLowerCase()) {
-      case '&amp;':
-        return '&'
-      case '&quot;':
-        return '"'
-      case '&apos;':
-        return "'"
-      case '&lt;':
-        return '<'
-      case '&gt;':
-        return '>'
-      default:
-        return entity
-    }
-  })
-}
-
-function findTagEnd(html: string, tagStart: number) {
-  let quote = ''
-  for (let index = tagStart + 1; index < html.length; index += 1) {
-    const char = html[index]
-    if (quote) {
-      if (char === quote) {
-        quote = ''
-      }
-      continue
-    }
-    if (char === '"' || char === "'") {
-      quote = char
-      continue
-    }
-    if (char === '>') {
-      return index
-    }
-  }
-
-  return -1
-}
-
-function parseTag(content: string): TagParts | null {
-  const match = /^([^\s/>]+)([\s\S]*)$/u.exec(content)
-  if (!match?.[1]) {
+    return url.href
+  } catch {
     return null
   }
-
-  return {
-    attrText: match[2] ?? '',
-    name: match[1].toLowerCase(),
-    selfClosing: /\/\s*$/u.test(match[2] ?? '')
-  }
 }
 
-function parseAttributes(attrText: string) {
-  const attrs: ParsedAttribute[] = []
-  let index = 0
-
-  while (index < attrText.length) {
-    while (/\s/u.test(attrText[index] ?? '')) {
-      index += 1
-    }
-    if (index >= attrText.length || attrText[index] === '/') {
-      break
-    }
-
-    const nameStart = index
-    while (index < attrText.length && !/[\s=/>]/u.test(attrText[index] ?? '')) {
-      index += 1
-    }
-
-    const name = attrText.slice(nameStart, index)
-    if (!name) {
-      break
-    }
-
-    while (/\s/u.test(attrText[index] ?? '')) {
-      index += 1
-    }
-
-    let value: string | null = null
-    if (attrText[index] === '=') {
-      index += 1
-      while (/\s/u.test(attrText[index] ?? '')) {
-        index += 1
-      }
-
-      const quote = attrText[index]
-      if (quote === '"' || quote === "'") {
-        index += 1
-        const valueStart = index
-        while (index < attrText.length && attrText[index] !== quote) {
-          index += 1
-        }
-        value = attrText.slice(valueStart, index)
-        if (attrText[index] === quote) {
-          index += 1
-        }
-      } else {
-        const valueStart = index
-        while (index < attrText.length && !/[\s>]/u.test(attrText[index] ?? '')) {
-          index += 1
-        }
-        value = attrText.slice(valueStart, index)
-      }
-    }
-
-    attrs.push({ name, value })
-  }
-
-  return attrs
-}
-
-function getAttribute(attrs: ReadonlyArray<ParsedAttribute>, attrName: string) {
-  return getAttributes(attrs, attrName)[0] ?? null
-}
-
-function getAttributes(attrs: ReadonlyArray<ParsedAttribute>, attrName: string) {
-  const lowerName = attrName.toLowerCase()
-  return attrs
-    .filter((attr) => attr.name.toLowerCase() === lowerName)
-    .map((attr) => decodeAttribute(attr.value))
-}
-
-function withoutAttributes(attrs: ReadonlyArray<ParsedAttribute>, names: ReadonlyArray<string>) {
-  const blocked = new Set(names.map((name) => name.toLowerCase()))
-  return attrs.filter((attr) => !blocked.has(attr.name.toLowerCase()))
-}
-
-function rewriteRemotePresentationAttributes(
-  attrs: ReadonlyArray<ParsedAttribute>,
-  allowRemoteImages: boolean
-) {
-  if (allowRemoteImages) {
-    return { attrs, blocked: 0 }
-  }
-
-  let blocked = 0
-  const nextAttrs: ParsedAttribute[] = []
-
-  for (const attr of attrs) {
-    const attrName = attr.name.toLowerCase()
-    if (attrName === 'background' && isRemoteImageSource(decodeAttribute(attr.value))) {
-      blocked += 1
-      continue
-    }
-    if (attrName === 'style' && styleContainsRemoteImageURL(attr.value)) {
-      blocked += 1
-      continue
-    }
-
-    nextAttrs.push(attr)
-  }
-
-  return { attrs: nextAttrs, blocked }
-}
-
-function serializeAttributes(attrs: ReadonlyArray<ParsedAttribute>) {
-  return attrs
-    .map((attr) => {
-      if (attr.value === null) {
-        return ` ${attr.name}`
-      }
-      return ` ${attr.name}="${escapeAttribute(attr.value)}"`
-    })
-    .join('')
-}
-
-function serializeTag(name: string, attrs: ReadonlyArray<ParsedAttribute>, selfClosing = false) {
-  return `<${name}${serializeAttributes(attrs)}${selfClosing ? ' /' : ''}>`
-}
-
-function rewriteAnchor(
-  attrs: ReadonlyArray<ParsedAttribute>,
-  baseURL: string,
-  externalLinks: RewrittenEmailLink[],
-  reservedExternalLinkIds: ReadonlySet<string>
-) {
-  const existingLinkId = stripControlCharacters(getAttribute(attrs, 'data-agent-mail-external-link-id'))
-  const rawHref = getAttribute(attrs, 'href')
-  const nextAttrs = withoutAttributes(attrs, [
-    'download',
-    'href',
-    'ping',
-    'rel',
-    'role',
-    'tabindex',
-    'target'
-  ])
-
-  if (existingLinkId) {
-    nextAttrs.push({ name: 'data-agent-mail-external-link-id', value: existingLinkId })
-    nextAttrs.push({ name: 'role', value: 'link' })
-    nextAttrs.push({ name: 'tabindex', value: '0' })
-    nextAttrs.push({ name: 'rel', value: 'noopener noreferrer' })
-    return serializeTag('a', nextAttrs)
-  }
-
-  const normalizedURL = normalizeEmailLink(rawHref, baseURL)
-  if (!normalizedURL) {
-    if (stripControlCharacters(rawHref).startsWith('#')) {
-      nextAttrs.push({ name: 'href', value: stripControlCharacters(rawHref) })
-    }
-    return serializeTag('a', nextAttrs)
-  }
-
-  const parsed = new URL(normalizedURL)
-  const id = getNextGeneratedExternalLinkId(externalLinks, reservedExternalLinkIds)
-  externalLinks.push({ host: getExternalLinkHostLabel(parsed), id, url: normalizedURL })
-  nextAttrs.push({ name: 'data-agent-mail-external-link-id', value: id })
-  nextAttrs.push({ name: 'role', value: 'link' })
-  nextAttrs.push({ name: 'tabindex', value: '0' })
-  nextAttrs.push({ name: 'rel', value: 'noopener noreferrer' })
-  return serializeTag('a', nextAttrs)
-}
-
-function getNextGeneratedExternalLinkId(
-  externalLinks: ReadonlyArray<RewrittenEmailLink>,
-  reservedExternalLinkIds: ReadonlySet<string>
-) {
-  const usedIds = new Set(externalLinks.map((link) => link.id))
-  let index = externalLinks.length + 1
-
-  while (true) {
-    const id = `generated-link-${index}`
-    if (!usedIds.has(id) && !reservedExternalLinkIds.has(id)) {
-      return id
-    }
-    index += 1
-  }
-}
-
-function rewriteForm(attrs: ReadonlyArray<ParsedAttribute>) {
-  const nextAttrs = withoutAttributes(attrs, [
-    'accept-charset',
-    'action',
-    'autocomplete',
-    'enctype',
-    'method',
-    'name',
-    'novalidate',
-    'target'
-  ])
-
-  nextAttrs.push({ name: 'data-agent-mail-inert-form', value: 'true' })
-  nextAttrs.push({ name: 'aria-label', value: 'Email form disabled' })
-  return serializeTag('form', nextAttrs)
-}
-
-function rewriteFormControl(tagName: string, attrs: ReadonlyArray<ParsedAttribute>, selfClosing: boolean) {
-  const nextAttrs = withoutAttributes(attrs, [
-    'autofocus',
-    'form',
-    'formaction',
-    'formenctype',
-    'formmethod',
-    'formnovalidate',
-    'formtarget',
-    'name',
-    'required'
-  ])
-
-  if (!hasAttribute(nextAttrs, 'disabled')) {
-    nextAttrs.push({ name: 'disabled', value: null })
-  }
-  nextAttrs.push({ name: 'aria-disabled', value: 'true' })
-  return serializeTag(tagName, nextAttrs, selfClosing)
-}
-
-function rewriteImage(
-  attrs: ReadonlyArray<ParsedAttribute>,
-  {
-    allowRemoteImages,
-    inlineAttachmentURLsByContentId
-  }: {
-    allowRemoteImages: boolean
-    inlineAttachmentURLsByContentId: ReadonlyMap<string, string>
-  }
-) {
-  const srcValues = getAttributes(attrs, 'src')
-  const srcsetValues = getAttributes(attrs, 'srcset')
-  const blockedRemoteSrc = getAttributes(attrs, 'data-agent-mail-remote-image-src').find((value) =>
-    isRemoteImageSource(value)
-  )
-  const inlineContentId = getFirstInlineContentIdFromSources(srcValues)
-  const hasKnownBlockedRemote = Boolean(getAttribute(attrs, 'data-agent-mail-remote-image-id'))
-  const hasRemoteSrc = srcValues.some((src) => isRemoteImageSource(src))
-  const hasRemoteSrcset = srcsetValues.some((srcset) => srcsetContainsRemoteImage(srcset))
-
-  if (!allowRemoteImages && (hasRemoteSrc || hasRemoteSrcset || hasKnownBlockedRemote)) {
-    return { blocked: 1, html: imagePlaceholder(attrs, 'Remote image blocked') }
-  }
-
-  if (inlineContentId) {
-    const inlineAttachmentURL = inlineAttachmentURLsByContentId.get(inlineContentId)
-    if (!inlineAttachmentURL) {
-      return { blocked: 0, html: imagePlaceholder(attrs, 'Inline image unavailable') }
-    }
-
-    const nextAttrs = withoutAttributes(attrs, ['src', 'srcset'])
-    nextAttrs.push({ name: 'src', value: inlineAttachmentURL })
-    return { blocked: 0, html: serializeTag('img', nextAttrs) }
-  }
-
-  if (
-    allowRemoteImages &&
-    srcValues.length === 0 &&
-    blockedRemoteSrc &&
-    isRemoteImageSource(blockedRemoteSrc)
-  ) {
-    const nextAttrs = withoutAttributes(attrs, [
-      'data-agent-mail-remote-image-id',
-      'data-agent-mail-remote-image-src'
-    ])
-    nextAttrs.push({ name: 'src', value: blockedRemoteSrc })
-    return { blocked: 0, html: serializeTag('img', nextAttrs) }
-  }
-
-  return { blocked: 0, html: serializeTag('img', attrs) }
-}
-
-function hasAttribute(attrs: ReadonlyArray<ParsedAttribute>, attrName: string) {
-  const lowerName = attrName.toLowerCase()
-  return attrs.some((attr) => attr.name.toLowerCase() === lowerName)
-}
-
-function isFormControlTag(tagName: string) {
-  return (
-    tagName === 'button' ||
-    tagName === 'input' ||
-    tagName === 'option' ||
-    tagName === 'select' ||
-    tagName === 'textarea'
-  )
-}
-
-function rewriteSource(
-  attrs: ReadonlyArray<ParsedAttribute>,
-  allowRemoteImages: boolean,
-  selfClosing: boolean
-) {
-  const hasRemoteSource =
-    getAttributes(attrs, 'src').some((src) => isRemoteImageSource(src)) ||
-    getAttributes(attrs, 'srcset').some((srcset) => srcsetContainsRemoteImage(srcset))
-
-  if (!allowRemoteImages && hasRemoteSource) {
-    return { blocked: 1, html: '' }
-  }
-
-  return { blocked: 0, html: serializeTag('source', attrs, selfClosing) }
-}
-
-function imagePlaceholder(attrs: ReadonlyArray<ParsedAttribute>, fallbackLabel: string) {
-  const alt = getAttribute(attrs, 'alt') || fallbackLabel
-  const width = getAttribute(attrs, 'width')
-  const height = getAttribute(attrs, 'height')
-  const styleParts: string[] = []
-  if (width && /^\d{1,5}$/u.test(width)) {
-    styleParts.push(`width: ${width}px`)
-  }
-  if (height && /^\d{1,5}$/u.test(height)) {
-    styleParts.push(`min-height: ${height}px`)
-  }
-
-  const style = styleParts.length > 0 ? ` style="${escapeAttribute(styleParts.join('; '))}"` : ''
-  return `<span class="email-remote-image-placeholder" role="img" aria-label="${escapeAttribute(alt)}"${style}>${escapeAttribute(fallbackLabel)}</span>`
-}
-
-function isRemoteImageSource(rawSrc: string | null | undefined) {
-  return /^(?:https?:)?\/\//iu.test(stripControlCharacters(rawSrc))
-}
-
-function srcsetContainsRemoteImage(srcset: string | null | undefined) {
-  const value = stripControlCharacters(srcset)
-  if (!value) {
-    return false
-  }
-
-  return /(?:^|,)\s*(?:https?:)?\/\//iu.test(value)
-}
-
-function styleContainsRemoteImageURL(style: string | null | undefined) {
-  return /url\(\s*(?:"|')?(?:https?:)?\/\//iu.test(stripControlCharacters(decodeAttribute(style ?? null)))
+function isDataImageSource(rawSrc: string | null | undefined) {
+  return /^data:image\/(?:gif|jpeg|jpg|png|webp);/iu.test(stripControlCharacters(rawSrc))
 }
 
 function getExternalLinkHostLabel(url: URL) {
@@ -737,17 +724,6 @@ function getInlineContentIdFromSource(rawSrc: string | null | undefined) {
   return normalizeContentId(src.slice(4))
 }
 
-function getFirstInlineContentIdFromSources(sources: ReadonlyArray<string | null>) {
-  for (const source of sources) {
-    const contentId = getInlineContentIdFromSource(source)
-    if (contentId) {
-      return contentId
-    }
-  }
-
-  return null
-}
-
 function normalizeContentId(value: string | null | undefined) {
   let contentId = stripControlCharacters(value)
   if (!contentId) {
@@ -762,34 +738,4 @@ function normalizeContentId(value: string | null | undefined) {
 
   contentId = contentId.replace(/^<|>$/gu, '').trim()
   return contentId ? contentId.toLowerCase() : null
-}
-
-function isDroppedEmailDocumentTag(tagName: string) {
-  return (
-    tagName === 'base' ||
-    tagName === 'embed' ||
-    tagName === 'iframe' ||
-    tagName === 'link' ||
-    tagName === 'meta' ||
-    tagName === 'object' ||
-    tagName === 'script'
-  )
-}
-
-function shouldDropEmailDocumentTagContent(tagName: string) {
-  return tagName === 'iframe' || tagName === 'object' || tagName === 'script'
-}
-
-function findClosingTagEnd(html: string, start: number, tagName: string) {
-  const closingTagPattern = new RegExp(`</\\s*${escapeRegExp(tagName)}\\s*>`, 'iu')
-  const match = closingTagPattern.exec(html.slice(start))
-  if (!match) {
-    return -1
-  }
-
-  return start + match.index + match[0].length - 1
-}
-
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
 }

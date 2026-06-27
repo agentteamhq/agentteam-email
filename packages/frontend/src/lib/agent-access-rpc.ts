@@ -1,5 +1,9 @@
 import { rpc } from './rpc-api-client'
 import type {
+  AuthenticationResponseJSON,
+  PublicKeyCredentialRequestOptionsJSON
+} from '@simplewebauthn/browser'
+import type {
   AgentAccessApprovalPreview,
   AgentAccessMutationResult,
   AgentAccessPaperclipConnectResult,
@@ -19,7 +23,7 @@ export class AgentAccessRPCError extends Error {
     message: string,
     public readonly status: number,
     public readonly code?: AgentAccessRPCErrorCode,
-    public readonly webauthnOptions?: Record<string, unknown>
+    public readonly webauthnOptions?: PublicKeyCredentialRequestOptionsJSON
   ) {
     super(message)
     this.name = 'AgentAccessRPCError'
@@ -51,7 +55,7 @@ export async function decideAgentAccessApproval(input: {
   approvalId?: string
   reason?: string
   userCode?: string
-  webauthnResponse?: Record<string, unknown>
+  webauthnResponse?: AuthenticationResponseJSON
 }): Promise<AgentAccessMutationResult> {
   const result = await rpc['agent-access'].approvals.decision.post(input)
   return readAgentAccessRpcResult<AgentAccessMutationResult>(result)
@@ -155,13 +159,13 @@ function readRpcErrorCode(error: unknown): AgentAccessRPCErrorCode | null {
   return isAgentAccessRPCErrorCode(error.code) ? error.code : null
 }
 
-function readRpcWebAuthnOptions(error: unknown): Record<string, unknown> | null {
+function readRpcWebAuthnOptions(error: unknown): PublicKeyCredentialRequestOptionsJSON | null {
   if (!error || typeof error !== 'object' || !('webauthnOptions' in error)) {
     return null
   }
   const options = error.webauthnOptions
   return options && typeof options === 'object' && !Array.isArray(options)
-    ? (options as Record<string, unknown>)
+    ? (options as PublicKeyCredentialRequestOptionsJSON)
     : null
 }
 
