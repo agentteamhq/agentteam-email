@@ -62,8 +62,8 @@ reconciler discovers inbound edge objects by listing the active domain's
 service-owned archive prefix for objects ending in `/edge.json`, then
 classifies them by schema.
 
-After `edge.json` is committed, the Worker must attempt one HMAC-signed
-worker notification through the configured web-owned ingest URL. The
+After `edge.json` is committed, the Worker must attempt one Standard
+Webhooks-signed worker notification through the configured web-owned ingest URL. The
 notification is not an R2 artifact, does not carry raw mail bytes, and does not
 define completion. The web server verifies the Worker request and calls
 `agentMail.ingest.enqueue`; mail-control then validates the metadata against
@@ -106,7 +106,7 @@ by the internal SMTP relay, not Worker replay work.
 Required local routed inbound bundle path:
 
 ```text
-mail/inbound/<target_domain>/YYYY/MM/DD/<local_route_id>/
+orgs/<org_public_id>/domains/<target_domain>/mail/inbound/YYYY/MM/DD/<local_route_id>/
   raw.eml
   edge.json
   result.json
@@ -118,7 +118,7 @@ Required local routed `edge.json` fields:
 {
   "schema": "agent-mail.inbound.local-route.edge.v1",
   "local_route_id": "018f0000-0000-7000-8000-000000000000",
-  "raw_key": "mail/inbound/<target_domain>/YYYY/MM/DD/<local_route_id>/raw.eml",
+  "raw_key": "orgs/<org_public_id>/domains/<target_domain>/mail/inbound/YYYY/MM/DD/<local_route_id>/raw.eml",
   "raw_sha256": "<sha256-of-raw-eml>",
   "source_mailbox": "media@example.com",
   "source_domain": "example.com",
@@ -272,7 +272,7 @@ Exactly one provider-bound payload object is required once a provider payload is
 built:
 
 - `provider.eml` for SES raw RFC822 handoff.
-- `provider.json` for Cloudflare Email Sending JSON handoff.
+- `provider.json` for Cloudflare Email Sending raw-send JSON handoff.
 
 The provider-bound payload must remove inbound and internal headers, including
 `X-ATMCF-*`, `X-ATM-Ingest-ID`, `X-Agent-Mail-ZoneMTA-Queue-ID`, `Bcc`,
@@ -308,9 +308,9 @@ For Agent Mail-generated DSNs sent through SES,
 `provider_reverse_path_mode` is `provider_feedback_fallback`,
 `provider_boundary_sender` is the service-owned feedback mailbox, and
 `provider.eml` contains sanitized `Return-Path: <bounces@sender-domain>`.
-For providers that cannot request a null sender, `provider_reverse_path_mode`
-is `api_from_fallback` and `provider_boundary_sender` is the service-owned
-feedback mailbox.
+For Cloudflare Email Sending, `provider_reverse_path_mode` is
+`cloudflare_send_raw_from` and `provider_boundary_sender` is the raw-send
+`from` address.
 
 Valid outbound terminal statuses are `provider_accepted`,
 `provider_rejected`, `provider_failed`, `local_routed`, and
@@ -348,7 +348,7 @@ Inbound:
 4. Worker generates UUIDv7 `ingest_id` and computes `raw_sha256`.
 5. Worker writes `raw.eml`.
 6. Worker writes `edge.json`; this is the durable inbound commit marker.
-7. Worker sends one HMAC-signed worker notification to the web-owned ingest
+7. Worker sends one Standard Webhooks-signed worker notification to the web-owned ingest
    boundary containing `organization_id`, `organization_public_id`,
    `archive_prefix`, `worker_connection_id`, `worker_domain_deployment_id`,
    `ingest_id`, `recipient_domain`, `raw_key`, `edge_key`, `result_key`,

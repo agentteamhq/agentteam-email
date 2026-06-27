@@ -105,8 +105,11 @@ func (c *Client) ResolveAddress(ctx context.Context, address string) (ResolveAdd
 	}
 
 	var result ResolveAddressResult
-	path := "/addresses/resolve/" + url.PathEscape(address)
-	if err := c.doJSON(ctx, http.MethodGet, path, nil, &result); err != nil {
+	path, err := wildduckPath("addresses", "resolve", address)
+	if err != nil {
+		return ResolveAddressResult{}, err
+	}
+	if err := c.doJSON(ctx, http.MethodGet, path, nil, nil, &result); err != nil {
 		return ResolveAddressResult{}, err
 	}
 	return result, nil
@@ -117,16 +120,20 @@ func (c *Client) ListMailboxes(ctx context.Context, userID string, specialUseOnl
 		return nil, fmt.Errorf("missing user id")
 	}
 
-	path := "/users/" + url.PathEscape(userID) + "/mailboxes"
+	path, err := wildduckPath("users", userID, "mailboxes")
+	if err != nil {
+		return nil, err
+	}
+	query := url.Values{}
 	if specialUseOnly {
-		path += "?specialUse=true"
+		query.Set("specialUse", "true")
 	}
 
 	var response struct {
 		Success bool      `json:"success"`
 		Results []Mailbox `json:"results"`
 	}
-	if err := c.doJSON(ctx, http.MethodGet, path, nil, &response); err != nil {
+	if err := c.doJSON(ctx, http.MethodGet, path, query, nil, &response); err != nil {
 		return nil, err
 	}
 
@@ -157,14 +164,16 @@ func (c *Client) ListMessages(ctx context.Context, userID string, mailboxID stri
 		slices.Sort(headerKeys)
 		query.Set("includeHeaders", strings.Join(headerKeys, ","))
 	}
-	path := "/users/" + url.PathEscape(userID) + "/mailboxes/" + url.PathEscape(mailboxID) + "/messages"
-	path = path + "?" + query.Encode()
+	path, err := wildduckPath("users", userID, "mailboxes", mailboxID, "messages")
+	if err != nil {
+		return nil, err
+	}
 
 	var response struct {
 		Success bool             `json:"success"`
 		Results []MessageSummary `json:"results"`
 	}
-	if err := c.doJSON(ctx, http.MethodGet, path, nil, &response); err != nil {
+	if err := c.doJSON(ctx, http.MethodGet, path, query, nil, &response); err != nil {
 		return nil, err
 	}
 
@@ -182,8 +191,15 @@ func (c *Client) FetchMessageSource(ctx context.Context, userID string, mailboxI
 		return nil, fmt.Errorf("missing message uid")
 	}
 
-	path := "/users/" + url.PathEscape(userID) + "/mailboxes/" + url.PathEscape(mailboxID) + "/messages/" + strconv.Itoa(uid) + "/message.eml"
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
+	path, err := wildduckPath("users", userID, "mailboxes", mailboxID, "messages", strconv.Itoa(uid), "message.eml")
+	if err != nil {
+		return nil, err
+	}
+	requestURL, err := c.requestURL(path, nil)
+	if err != nil {
+		return nil, err
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("build wildduck source fetch %s: %w", path, err)
 	}
@@ -237,7 +253,10 @@ func (c *Client) UploadRawMessage(ctx context.Context, userID string, mailboxID 
 	}
 
 	var result UploadResult
-	path := "/users/" + url.PathEscape(userID) + "/mailboxes/" + url.PathEscape(mailboxID) + "/messages"
+	path, err := wildduckPath("users", userID, "mailboxes", mailboxID, "messages")
+	if err != nil {
+		return UploadResult{}, err
+	}
 	if err := c.doRawUpload(ctx, http.MethodPost, path, raw, &result); err != nil {
 		return UploadResult{}, err
 	}
@@ -247,7 +266,7 @@ func (c *Client) UploadRawMessage(ctx context.Context, userID string, mailboxID 
 	return result, nil
 }
 
-func (c *Client) doJSON(ctx context.Context, method string, path string, requestBody any, responseBody any) error {
+func (c *Client) doJSON(ctx context.Context, method string, path string, query url.Values, requestBody any, responseBody any) error {
 	var body io.Reader
 	if requestBody != nil {
 		encoded, err := json.Marshal(requestBody)
@@ -257,7 +276,11 @@ func (c *Client) doJSON(ctx context.Context, method string, path string, request
 		body = bytes.NewReader(encoded)
 	}
 
-	request, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
+	requestURL, err := c.requestURL(path, query)
+	if err != nil {
+		return err
+	}
+	request, err := http.NewRequestWithContext(ctx, method, requestURL, body)
 	if err != nil {
 		return fmt.Errorf("build wildduck request %s %s: %w", method, path, err)
 	}
@@ -309,7 +332,11 @@ func (c *Client) doJSON(ctx context.Context, method string, path string, request
 }
 
 func (c *Client) doRawUpload(ctx context.Context, method string, path string, raw []byte, responseBody any) error {
-	request, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, bytes.NewReader(raw))
+	requestURL, err := c.requestURL(path, nil)
+	if err != nil {
+		return err
+	}
+	request, err := http.NewRequestWithContext(ctx, method, requestURL, bytes.NewReader(raw))
 	if err != nil {
 		return fmt.Errorf("build wildduck raw upload %s %s: %w", method, path, err)
 	}
@@ -344,4 +371,27 @@ func (c *Client) doRawUpload(ctx context.Context, method string, path string, ra
 	}
 
 	return nil
+}
+
+func (c *Client) requestURL(requestPath string, query url.Values) (string, error) {
+	requestURL, err := url.JoinPath(c.baseURL, strings.TrimPrefix(requestPath, "/"))
+	if err != nil {
+		return "", fmt.Errorf("build wildduck URL %s: %w", requestPath, err)
+	}
+	parsed, err := url.Parse(requestURL)
+	if err != nil {
+		return "", fmt.Errorf("parse wildduck URL %s: %w", requestPath, err)
+	}
+	if len(query) > 0 {
+		parsed.RawQuery = query.Encode()
+	}
+	return parsed.String(), nil
+}
+
+func wildduckPath(elements ...string) (string, error) {
+	escaped := make([]string, 0, len(elements))
+	for _, element := range elements {
+		escaped = append(escaped, url.PathEscape(element))
+	}
+	return url.JoinPath("/", escaped...)
 }

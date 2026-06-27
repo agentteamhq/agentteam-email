@@ -146,48 +146,15 @@ func TestValidateConfigAcceptsLocalDeliveryConfig(t *testing.T) {
 	}
 }
 
-func TestValidateOutboundProvider(t *testing.T) {
-	tests := []struct {
-		name string
-		in   string
-		want string
-	}{
-		{name: "cloudflare", in: "cloudflare", want: outboundProviderCloudflare},
-		{name: "ses", in: "ses", want: outboundProviderSES},
-		{name: "trim and lower", in: " SES ", want: outboundProviderSES},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := validateOutboundProvider(tt.in)
-			if err != nil {
-				t.Fatalf("validateOutboundProvider returned error: %v", err)
-			}
-			if got != tt.want {
-				t.Fatalf("unexpected provider: got %q want %q", got, tt.want)
-			}
-		})
-	}
-}
-
 func validRelayConfigForTest() Config {
 	var cfg Config
 	cfg.ListenAddress = ":2587"
 	cfg.Hostname = "atemail-mail-control-service.agentteam-email.svc.cluster.local"
 	cfg.RelayAuth.Username = "zonemta"
 	cfg.RelayAuth.Password = "agent-mail-zonemta-relay"
-	cfg.Cloudflare.APIBaseURL = "http://cloudflare.test"
+	cfg.WebServer.APIBaseURL = "http://web.test"
+	cfg.WebServer.ControlToWebToken = "control-to-web-token"
 	return cfg
-}
-
-func TestValidateOutboundProviderRejectsEmptyAndUnknown(t *testing.T) {
-	for _, value := range []string{"", "smtp", "sendmail"} {
-		t.Run(value, func(t *testing.T) {
-			if _, err := validateOutboundProvider(value); err == nil {
-				t.Fatalf("expected error for provider %q", value)
-			}
-		})
-	}
 }
 
 func TestSESFeedbackReturnPathsBySenderDomain(t *testing.T) {
@@ -336,9 +303,6 @@ func TestSESSenderFeedbackReturnPathUsesParsedSenderDomain(t *testing.T) {
 }
 
 func TestMaxMessageBytesForProvider(t *testing.T) {
-	if got := maxMessageBytesForProvider(outboundProviderSES); got != 10*1024*1024 {
-		t.Fatalf("unexpected SES max message bytes: %d", got)
-	}
 	if got := maxMessageBytesForProvider(outboundProviderCloudflare); got != 5*1024*1024 {
 		t.Fatalf("unexpected Cloudflare max message bytes: %d", got)
 	}

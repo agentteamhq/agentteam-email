@@ -1,20 +1,20 @@
 package smtprelay
 
 import (
-	"bufio"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net"
-	"net/mail"
+	"net/http"
 	"net/smtp"
-	"net/textproto"
-	"os"
+	"net/url"
 	"regexp"
 	"slices"
 	"strings"
@@ -41,12 +41,10 @@ const (
 )
 
 type Config struct {
-	ListenAddress string          `yaml:"listen_address"`
-	Hostname      string          `yaml:"hostname"`
-	RelayAuth     RelayAuthConfig `yaml:"relay_auth"`
-	Cloudflare    struct {
-		APIBaseURL string `yaml:"api_base_url"`
-	} `yaml:"cloudflare"`
+	ListenAddress string              `yaml:"listen_address"`
+	Hostname      string              `yaml:"hostname"`
+	RelayAuth     RelayAuthConfig     `yaml:"relay_auth"`
+	WebServer     WebServerConfig     `yaml:"web_server"`
 	LocalDelivery LocalDeliveryConfig `yaml:"local_delivery"`
 	// Delivery is checked-in operator reference data for mail identity setup.
 	// The SES sender consumes the feedback return-path mapping from this config
@@ -57,6 +55,11 @@ type Config struct {
 type RelayAuthConfig struct {
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
+}
+
+type WebServerConfig struct {
+	APIBaseURL        string `yaml:"api_base_url"`
+	ControlToWebToken string `yaml:"control_to_web_token"`
 }
 
 type DeliveryConfig struct {
@@ -107,17 +110,19 @@ type runtimeConfig struct {
 	RelayUsername   string
 	RelayPassword   string
 	R2              r2archive.Config
+	WebServer       webServerRuntimeConfig
 	LocalDelivery   localDeliveryRuntimeConfig
 }
 
 type Server struct {
-	cfg                 runtimeConfig
-	sender              outboundSender
-	r2                  *r2archive.Client
-	localDomainResolver LocalRecipientDomainResolver
-	localDeliverer      localDeliverer
-	localProof          *localDeliveryProof
-	mongo               *mongo.Client
+	cfg                  runtimeConfig
+	sender               outboundSender
+	r2                   *r2archive.Client
+	localDomainResolver  LocalRecipientDomainResolver
+	activeDomainResolver ActiveDomainResolver
+	localDeliverer       localDeliverer
+	localProof           *localDeliveryProof
+	mongo                *mongo.Client
 }
 
 type Status struct {
@@ -301,6 +306,17 @@ type outboundSender interface {
 	Send(ctx context.Context, submission rfc822.Submission, envelopeRecipients []string) (outboundSendResult, error)
 }
 
+type ActiveDomainContext struct {
+	OrganizationID       string
+	OrganizationPublicID string
+	Domain               string
+	ArchivePrefix        string
+}
+
+type ActiveDomainResolver interface {
+	ActiveDomain(ctx context.Context, domain string) (ActiveDomainContext, error)
+}
+
 type localDeliveryRuntimeConfig struct {
 	Enabled       bool
 	SMTPAddress   string
@@ -308,6 +324,11 @@ type localDeliveryRuntimeConfig struct {
 	APIBaseURL    string
 	MongoURI      string
 	MongoDatabase string
+}
+
+type webServerRuntimeConfig struct {
+	APIBaseURL        string
+	ControlToWebToken string
 }
 
 type localDeliverer interface {
@@ -331,8 +352,27 @@ type smtpLocalDeliverer struct {
 	heloName string
 }
 
-type cloudflareSender struct {
-	client *cloudflaremail.Client
+type webCloudflareSender struct {
+	baseURL        *url.URL
+	controlToken   string
+	domainResolver ActiveDomainResolver
+	httpClient     *http.Client
+}
+
+type webCloudflareSendRequest struct {
+	OrganizationID       string   `json:"organization_id"`
+	OrganizationPublicID string   `json:"organization_public_id"`
+	Domain               string   `json:"domain"`
+	From                 string   `json:"from"`
+	Recipients           []string `json:"recipients"`
+	MIMEMessage          string   `json:"mime_message"`
+	ZoneMTAQueueID       string   `json:"zonemta_queue_id,omitempty"`
+}
+
+type webCloudflareSendResult struct {
+	Delivered        []string `json:"delivered"`
+	PermanentBounces []string `json:"permanent_bounces"`
+	Queued           []string `json:"queued"`
 }
 
 type sesSender struct {
@@ -383,37 +423,34 @@ func newServer(ctx context.Context, cfg Config, resolver SESReturnPathResolver) 
 		return nil, err
 	}
 
-	outboundProvider, err := configfile.RequireEnv("AGENT_MAIL_OUTBOUND_PROVIDER")
-	if err != nil {
-		return nil, err
-	}
-	runtimeCfg.Provider, err = validateOutboundProvider(outboundProvider)
-	if err != nil {
-		return nil, err
-	}
+	runtimeCfg.Provider = outboundProviderCloudflare
 	runtimeCfg.MaxMessageBytes = maxMessageBytesForProvider(runtimeCfg.Provider)
-	r2KeyID, err := configfile.RequireEnv("AGENT_MAIL_R2_ACCESS_KEY_ID")
+	activeDomainResolver, _ := resolver.(ActiveDomainResolver)
+	if runtimeCfg.Provider == outboundProviderCloudflare && activeDomainResolver == nil {
+		return nil, fmt.Errorf("missing active domain resolver for Cloudflare outbound relay")
+	}
+	r2KeyID, err := configfile.RequireEnv("AT_EMAIL_ADMIN_R2_ACCESS_KEY_ID")
 	if err != nil {
 		return nil, err
 	}
-	r2Secret, err := configfile.RequireEnv("AGENT_MAIL_R2_SECRET_ACCESS_KEY")
+	r2Secret, err := configfile.RequireEnv("AT_EMAIL_ADMIN_R2_SECRET_ACCESS_KEY")
 	if err != nil {
 		return nil, err
 	}
-	r2Endpoint, err := configfile.RequireEnv("AGENT_MAIL_R2_ENDPOINT")
+	r2Endpoint, err := configfile.RequireEnv("AT_EMAIL_ADMIN_R2_ENDPOINT")
 	if err != nil {
 		return nil, err
 	}
-	r2Region, err := configfile.RequireEnv("AGENT_MAIL_R2_REGION")
+	r2Region, err := configfile.RequireEnv("AT_EMAIL_ADMIN_R2_REGION")
 	if err != nil {
 		return nil, err
 	}
-	r2Bucket, err := configfile.RequireEnv("AGENT_MAIL_R2_BUCKET")
+	r2Bucket, err := configfile.RequireEnv("AT_EMAIL_ADMIN_R2_BUCKET")
 	if err != nil {
 		return nil, err
 	}
 
-	sender, err := newOutboundSender(ctx, runtimeCfg.Provider, cfg, resolver)
+	sender, err := newOutboundSender(runtimeCfg.Provider, runtimeCfg.WebServer, activeDomainResolver)
 	if err != nil {
 		return nil, err
 	}
@@ -438,7 +475,7 @@ func newServer(ctx context.Context, cfg Config, resolver SESReturnPathResolver) 
 	var mongoClient *mongo.Client
 	var localProof *localDeliveryProof
 	if runtimeCfg.LocalDelivery.Enabled {
-		accessToken, err := configfile.RequireEnv("AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN")
+		accessToken, err := configfile.RequireEnv("AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN")
 		if err != nil {
 			return nil, err
 		}
@@ -457,13 +494,14 @@ func newServer(ctx context.Context, cfg Config, resolver SESReturnPathResolver) 
 	}
 
 	return &Server{
-		cfg:                 runtimeCfg,
-		sender:              sender,
-		r2:                  r2Client,
-		localDomainResolver: localDomainResolver,
-		localDeliverer:      newLocalDeliverer(runtimeCfg.LocalDelivery),
-		localProof:          localProof,
-		mongo:               mongoClient,
+		cfg:                  runtimeCfg,
+		sender:               sender,
+		r2:                   r2Client,
+		localDomainResolver:  localDomainResolver,
+		activeDomainResolver: activeDomainResolver,
+		localDeliverer:       newLocalDeliverer(runtimeCfg.LocalDelivery),
+		localProof:           localProof,
+		mongo:                mongoClient,
 	}, nil
 }
 
@@ -822,11 +860,18 @@ func (s *Session) prepareLocalRoute(ctx context.Context, submission rfc822.Submi
 	sourceRawKey := ""
 	sourceResultKey := ""
 	if sourceIngestID != "" {
+		if s.server.activeDomainResolver == nil {
+			return nil, fmt.Errorf("local route source archive prefix resolver is not configured")
+		}
 		sourceCreatedAt, err := r2archive.UUIDv7Time(sourceIngestID)
 		if err != nil {
 			return nil, fmt.Errorf("local route source ingest id is invalid: %w", err)
 		}
-		sourceBundle, err := r2archive.InboundBundleKeys(sourceDomain, sourceCreatedAt, sourceIngestID)
+		sourceActiveDomain, err := s.server.activeDomainResolver.ActiveDomain(ctx, sourceDomain)
+		if err != nil {
+			return nil, fmt.Errorf("resolve source archive prefix: %w", err)
+		}
+		sourceBundle, err := r2archive.InboundBundleKeysFromArchivePrefix(sourceActiveDomain.ArchivePrefix, sourceCreatedAt, sourceIngestID)
 		if err != nil {
 			return nil, fmt.Errorf("build source inbound keys: %w", err)
 		}
@@ -857,7 +902,14 @@ func (s *Session) prepareLocalRoute(ctx context.Context, submission rfc822.Submi
 	if err != nil {
 		return nil, fmt.Errorf("local route id is invalid: %w", err)
 	}
-	targetBundle, err := r2archive.InboundBundleKeys(targetDomain, routeCreatedAt, localRouteID)
+	if s.server.activeDomainResolver == nil {
+		return nil, fmt.Errorf("local route target archive prefix resolver is not configured")
+	}
+	targetActiveDomain, err := s.server.activeDomainResolver.ActiveDomain(ctx, targetDomain)
+	if err != nil {
+		return nil, fmt.Errorf("resolve target archive prefix: %w", err)
+	}
+	targetBundle, err := r2archive.InboundBundleKeysFromArchivePrefix(targetActiveDomain.ArchivePrefix, routeCreatedAt, localRouteID)
 	if err != nil {
 		return nil, fmt.Errorf("build target inbound keys: %w", err)
 	}
@@ -868,7 +920,7 @@ func (s *Session) prepareLocalRoute(ctx context.Context, submission rfc822.Submi
 		SourceDomain:           sourceDomain,
 		TargetMailbox:          targetMailbox,
 		TargetDomain:           targetDomain,
-		VisibleFrom:            formatAddress(submission.From),
+		VisibleFrom:            rfc822.FormatAddress(submission.From),
 		VisibleSenderDomain:    domainPart(submission.From.Address),
 		SourceIngestID:         sourceIngestID,
 		SourceInboundRawKey:    sourceRawKey,
@@ -1105,7 +1157,7 @@ func (p *localDeliveryProof) find(ctx context.Context, targetMailbox string, que
 		return localDeliveryRecord{}, false, fmt.Errorf("query local route delivery proof: %w", err)
 	}
 	return localDeliveryRecord{
-		RouteID:   headerValue(record.MimeTree.Header, "X-Agent-Mail-Local-Route-ID"),
+		RouteID:   rfc822.HeaderValue(record.MimeTree.Header, "X-Agent-Mail-Local-Route-ID"),
 		UserID:    resolved.User,
 		MailboxID: record.Mailbox.Hex(),
 		MessageID: record.ID.Hex(),
@@ -1125,26 +1177,17 @@ func (s *Session) Logout() error {
 	return nil
 }
 
-func (s cloudflareSender) Send(ctx context.Context, submission rfc822.Submission, envelopeRecipients []string) (outboundSendResult, error) {
-	if submission.IsDSN {
-		return s.sendRawDSN(ctx, submission, envelopeRecipients)
+func (s webCloudflareSender) Send(ctx context.Context, submission rfc822.Submission, envelopeRecipients []string) (outboundSendResult, error) {
+	recipients := uniqueStrings(envelopeRecipients)
+	providerRawMessage, err := rfc822.BuildProviderRaw(submission.RawMessage, rfc822.ProviderRawOptions{})
+	if err != nil {
+		return outboundSendResult{}, err
 	}
-	request := cloudflaremail.SendRequest{
-		To:      submission.To,
-		CC:      submission.CC,
-		BCC:     submission.BCC,
-		From:    cloudflaremail.Address{Address: submission.From.Address, Name: submission.From.Name},
-		Subject: submission.Subject,
-		HTML:    submission.HTML,
-		Text:    submission.Text,
-		Headers: rfc822.SanitizeProviderHeaders(submission.Headers),
-		Attach:  submission.Attach,
-	}
-	if submission.ReplyTo != nil {
-		request.ReplyTo = &cloudflaremail.Address{Address: submission.ReplyTo.Address, Name: submission.ReplyTo.Name}
-	}
-
-	payload, err := cloudflaremail.BuildPayload(request)
+	payload, err := cloudflaremail.BuildRawPayload(cloudflaremail.RawSendRequest{
+		From:        submission.From.Address,
+		Recipients:  recipients,
+		MIMEMessage: providerRawMessage,
+	})
 	if err != nil {
 		return outboundSendResult{}, err
 	}
@@ -1154,9 +1197,17 @@ func (s cloudflareSender) Send(ctx context.Context, submission rfc822.Submission
 		ProviderRaw:             payload,
 		ProviderContentType:     "application/json",
 		ProviderBoundarySender:  submission.From.Address,
-		ProviderReversePathMode: "cloudflare_json_from",
+		ProviderReversePathMode: "cloudflare_send_raw_from",
 	}
-	result, err := s.client.SendPayload(ctx, payload)
+	senderDomain := domainPart(submission.From.Address)
+	if senderDomain == "" {
+		return baseResult, fmt.Errorf("sender address %q does not contain a canonical domain", submission.From.Address)
+	}
+	activeDomain, err := s.domainResolver.ActiveDomain(ctx, senderDomain)
+	if err != nil {
+		return baseResult, err
+	}
+	result, err := s.sendRawThroughWeb(ctx, activeDomain, submission, recipients, string(providerRawMessage))
 	if err != nil {
 		return baseResult, err
 	}
@@ -1165,15 +1216,59 @@ func (s cloudflareSender) Send(ctx context.Context, submission rfc822.Submission
 		baseResult.Queued = result.Queued
 		return baseResult, fmt.Errorf("cloudflare permanently bounced recipients: %s", strings.Join(result.PermanentBounces, ", "))
 	}
-	if len(result.Delivered)+len(result.Queued) != len(uniqueStrings(envelopeRecipients)) {
+	if len(result.Delivered)+len(result.Queued) != len(recipients) {
 		baseResult.Delivered = result.Delivered
 		baseResult.Queued = result.Queued
-		return baseResult, fmt.Errorf("cloudflare accepted %d recipients but smtp envelope contained %d recipients", len(result.Delivered)+len(result.Queued), len(uniqueStrings(envelopeRecipients)))
+		return baseResult, fmt.Errorf("cloudflare accepted %d recipients but smtp envelope contained %d recipients", len(result.Delivered)+len(result.Queued), len(recipients))
 	}
 
 	baseResult.Delivered = result.Delivered
 	baseResult.Queued = result.Queued
 	return baseResult, nil
+}
+
+func (s webCloudflareSender) sendRawThroughWeb(ctx context.Context, activeDomain ActiveDomainContext, submission rfc822.Submission, recipients []string, mimeMessage string) (webCloudflareSendResult, error) {
+	requestBody, err := json.Marshal(webCloudflareSendRequest{
+		OrganizationID:       activeDomain.OrganizationID,
+		OrganizationPublicID: activeDomain.OrganizationPublicID,
+		Domain:               activeDomain.Domain,
+		From:                 submission.From.Address,
+		Recipients:           recipients,
+		MIMEMessage:          mimeMessage,
+		ZoneMTAQueueID:       submission.ZoneMTAQueueID,
+	})
+	if err != nil {
+		return webCloudflareSendResult{}, fmt.Errorf("marshal web Cloudflare send request: %w", err)
+	}
+
+	sendURL := *s.baseURL
+	sendURL.Path = strings.TrimRight(sendURL.Path, "/") + "/rpc/internal/agent-mail/cloudflare/send-raw"
+	sendURL.RawQuery = ""
+	sendURL.Fragment = ""
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, sendURL.String(), bytes.NewReader(requestBody))
+	if err != nil {
+		return webCloudflareSendResult{}, fmt.Errorf("build web Cloudflare send request: %w", err)
+	}
+	request.Header.Set("Accept", "application/json")
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Agent-Mail-Control-Web-Token", s.controlToken)
+
+	response, err := s.httpClient.Do(request)
+	if err != nil {
+		return webCloudflareSendResult{}, fmt.Errorf("web Cloudflare send request: %w", err)
+	}
+	defer response.Body.Close()
+
+	var result webCloudflareSendResult
+	if response.StatusCode >= 200 && response.StatusCode < 300 {
+		if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+			return webCloudflareSendResult{}, fmt.Errorf("decode web Cloudflare send response: %w", err)
+		}
+		return result, nil
+	}
+
+	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
+	return webCloudflareSendResult{}, fmt.Errorf("web Cloudflare send failed with HTTP %d", response.StatusCode)
 }
 
 func (s sesSender) Send(ctx context.Context, submission rfc822.Submission, envelopeRecipients []string) (outboundSendResult, error) {
@@ -1220,48 +1315,6 @@ func (s sesSender) Send(ctx context.Context, submission rfc822.Submission, envel
 	return baseResult, nil
 }
 
-func (s cloudflareSender) sendRawDSN(ctx context.Context, submission rfc822.Submission, envelopeRecipients []string) (outboundSendResult, error) {
-	recipients := uniqueStrings(envelopeRecipients)
-	providerRawMessage, err := rfc822.BuildProviderRaw(submission.RawMessage, rfc822.ProviderRawOptions{})
-	if err != nil {
-		return outboundSendResult{}, err
-	}
-	payload, err := cloudflaremail.BuildRawPayload(cloudflaremail.RawSendRequest{
-		From:        submission.From.Address,
-		Recipients:  recipients,
-		MIMEMessage: providerRawMessage,
-	})
-	if err != nil {
-		return outboundSendResult{}, err
-	}
-	baseResult := outboundSendResult{
-		Provider:                outboundProviderCloudflare,
-		ProviderRawSHA256:       sha256Hex(payload),
-		ProviderRaw:             payload,
-		ProviderContentType:     "application/json",
-		ProviderBoundarySender:  submission.From.Address,
-		ProviderReversePathMode: "api_from_fallback",
-	}
-	result, err := s.client.SendRawPayload(ctx, payload)
-	if err != nil {
-		return baseResult, err
-	}
-	if len(result.PermanentBounces) > 0 {
-		baseResult.Delivered = result.Delivered
-		baseResult.Queued = result.Queued
-		return baseResult, fmt.Errorf("cloudflare permanently bounced recipients: %s", strings.Join(result.PermanentBounces, ", "))
-	}
-	if len(result.Delivered)+len(result.Queued) != len(recipients) {
-		baseResult.Delivered = result.Delivered
-		baseResult.Queued = result.Queued
-		return baseResult, fmt.Errorf("cloudflare accepted %d recipients but smtp envelope contained %d recipients", len(result.Delivered)+len(result.Queued), len(recipients))
-	}
-
-	baseResult.Delivered = result.Delivered
-	baseResult.Queued = result.Queued
-	return baseResult, nil
-}
-
 func (s sesSender) feedbackReturnPath(ctx context.Context, fromAddress string) (string, error) {
 	domain := domainPart(fromAddress)
 	if domain == "" {
@@ -1281,48 +1334,25 @@ func (s sesSender) feedbackReturnPath(ctx context.Context, fromAddress string) (
 	return returnPath, nil
 }
 
-func newOutboundSender(ctx context.Context, provider string, cfg Config, resolver SESReturnPathResolver) (outboundSender, error) {
+func newOutboundSender(provider string, webServer webServerRuntimeConfig, activeDomainResolver ActiveDomainResolver) (outboundSender, error) {
 	switch provider {
 	case outboundProviderCloudflare:
-		cloudflareToken, err := configfile.RequireEnv("AGENT_MAIL_CLOUDFLARE_API_TOKEN")
+		baseURL, err := url.Parse(webServer.APIBaseURL)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("parse web_server.api_base_url: %w", err)
 		}
-		cloudflareAccountID, err := configfile.RequireEnv("AGENT_MAIL_CLOUDFLARE_ACCOUNT_ID")
-		if err != nil {
-			return nil, err
+		if baseURL.Scheme == "" || baseURL.Host == "" {
+			return nil, fmt.Errorf("web_server.api_base_url must include scheme and host")
 		}
-		cfClient, err := cloudflaremail.New(cfg.Cloudflare.APIBaseURL, cloudflareAccountID, cloudflareToken)
-		if err != nil {
-			return nil, err
+		if activeDomainResolver == nil {
+			return nil, fmt.Errorf("missing active domain resolver")
 		}
-		return cloudflareSender{client: cfClient}, nil
-	case outboundProviderSES:
-		feedbackReturnPaths := map[string]string{}
-		if resolver == nil {
-			var err error
-			feedbackReturnPaths, err = sesFeedbackReturnPathsBySenderDomain(cfg.Delivery)
-			if err != nil {
-				return nil, err
-			}
-		}
-		region, err := configfile.RequireEnv("AGENT_MAIL_AWS_REGION")
-		if err != nil {
-			return nil, err
-		}
-		accessKeyID, err := configfile.RequireEnv("AGENT_MAIL_AWS_ACCESS_KEY_ID")
-		if err != nil {
-			return nil, err
-		}
-		secretAccessKey, err := configfile.RequireEnv("AGENT_MAIL_AWS_SECRET_ACCESS_KEY")
-		if err != nil {
-			return nil, err
-		}
-		sesClient, err := sesmail.New(ctx, region, accessKeyID, secretAccessKey, os.Getenv("AGENT_MAIL_AWS_SES_ENDPOINT"))
-		if err != nil {
-			return nil, err
-		}
-		return sesSender{client: sesClient, feedbackReturnPaths: feedbackReturnPaths, returnPathResolver: resolver}, nil
+		return webCloudflareSender{
+			baseURL:        baseURL,
+			controlToken:   webServer.ControlToWebToken,
+			domainResolver: activeDomainResolver,
+			httpClient:     &http.Client{Timeout: 30 * time.Second},
+		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported outbound provider %q", provider)
 	}
@@ -1331,9 +1361,7 @@ func newOutboundSender(ctx context.Context, provider string, cfg Config, resolve
 func validateSubmissionForProvider(provider string, submission rfc822.Submission) error {
 	switch provider {
 	case outboundProviderCloudflare:
-		if !submission.IsDSN && strings.TrimSpace(submission.Text) == "" && strings.TrimSpace(submission.HTML) == "" {
-			return fmt.Errorf("cloudflare outbound provider requires a text or html body")
-		}
+		return nil
 	case outboundProviderSES:
 		return nil
 	default:
@@ -1527,8 +1555,11 @@ func validateConfig(cfg Config) (runtimeConfig, error) {
 	if cfg.RelayAuth.Password == "" {
 		return runtimeCfg, fmt.Errorf("missing relay_auth.password")
 	}
-	if cfg.Cloudflare.APIBaseURL == "" {
-		return runtimeCfg, fmt.Errorf("missing cloudflare.api_base_url")
+	if cfg.WebServer.APIBaseURL == "" {
+		return runtimeCfg, fmt.Errorf("missing web_server.api_base_url")
+	}
+	if cfg.WebServer.ControlToWebToken == "" {
+		return runtimeCfg, fmt.Errorf("missing web_server.control_to_web_token")
 	}
 	if cfg.LocalDelivery.SMTPAddress != "" || cfg.LocalDelivery.HelloName != "" {
 		if cfg.LocalDelivery.SMTPAddress == "" {
@@ -1559,18 +1590,11 @@ func validateConfig(cfg Config) (runtimeConfig, error) {
 	runtimeCfg.Hostname = cfg.Hostname
 	runtimeCfg.RelayUsername = cfg.RelayAuth.Username
 	runtimeCfg.RelayPassword = cfg.RelayAuth.Password
-	return runtimeCfg, nil
-}
-
-func validateOutboundProvider(value string) (string, error) {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case outboundProviderCloudflare:
-		return outboundProviderCloudflare, nil
-	case outboundProviderSES:
-		return outboundProviderSES, nil
-	default:
-		return "", fmt.Errorf("AGENT_MAIL_OUTBOUND_PROVIDER must be %q or %q", outboundProviderCloudflare, outboundProviderSES)
+	runtimeCfg.WebServer = webServerRuntimeConfig{
+		APIBaseURL:        cfg.WebServer.APIBaseURL,
+		ControlToWebToken: cfg.WebServer.ControlToWebToken,
 	}
+	return runtimeCfg, nil
 }
 
 func maxMessageBytesForProvider(provider string) int64 {
@@ -1602,14 +1626,6 @@ func normalizeAddress(value string) string {
 
 func canonicalDomain(value string) (string, error) {
 	return structured.CanonicalDomain(value)
-}
-
-func formatAddress(address rfc822.Address) string {
-	normalized := normalizeAddress(address.Address)
-	if normalized == "" {
-		return strings.TrimSpace(address.Address)
-	}
-	return (&mail.Address{Name: strings.TrimSpace(address.Name), Address: normalized}).String()
 }
 
 func smtpHost(address string) string {
@@ -1652,16 +1668,4 @@ func messageIDHeaderRegex(messageID string) bson.Regex {
 	trimmed := strings.Trim(strings.TrimSpace(messageID), "<>")
 	pattern := "^" + regexp.QuoteMeta("Message-ID") + `:\s*<?` + regexp.QuoteMeta(trimmed) + ">?$"
 	return bson.Regex{Pattern: pattern, Options: "i"}
-}
-
-func headerValue(lines []string, name string) string {
-	if len(lines) == 0 {
-		return ""
-	}
-	raw := strings.Join(lines, "\r\n") + "\r\n\r\n"
-	header, err := textproto.NewReader(bufio.NewReader(strings.NewReader(raw))).ReadMIMEHeader()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(header.Get(name))
 }

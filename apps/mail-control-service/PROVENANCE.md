@@ -113,7 +113,7 @@ the R2 `raw.eml` object and its recorded `raw_sha256`.
 The Control API message view/security surfaces build on the same WildDuck
 delivery identity as `agentMail.message.provenance.get`:
 
-- `agentMail.message.view.get`: returns plain text, sanitized display HTML,
+- `agentMail.message.view.get`: returns plain text, a sanitized display HTML fragment,
   inert external-link markers plus external-link metadata, remote image
   metadata, and attachment-backed inline image metadata for authenticated
   frontend and operator display.
@@ -292,8 +292,9 @@ provider-bound payload, and records `source_ingest_id`, `dsn_id`, and
 `provider_reverse_path_mode: "provider_feedback_fallback"` and provider raw
 `Return-Path: <bounces@sender-domain>` because SES `SendRawEmail` rejects raw
 `Return-Path: <>` as an empty address. Providers that cannot request a null
-sender use the per-domain feedback mailbox fallback and record
-`provider_reverse_path_mode: "api_from_fallback"`.
+sender use the provider raw-send `from` address and record the provider-specific
+mode. Cloudflare Email Sending records
+`provider_reverse_path_mode: "cloudflare_send_raw_from"`.
 
 For forwarded copies to active local Agent Mail domains, the visible `From`
 domain may belong to a domain Agent Mail does not own. That visible sender

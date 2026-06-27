@@ -33,27 +33,28 @@ type keyLayoutFixture struct {
 	} `json:"outbound_ses"`
 }
 
-func TestInboundBundleKeysAndParser(t *testing.T) {
+func TestInboundBundleKeysFromArchivePrefixAndParser(t *testing.T) {
 	id, err := NewUUIDv7String()
 	if err != nil {
 		t.Fatalf("NewUUIDv7String returned error: %v", err)
 	}
 	ts := time.Date(2026, 4, 18, 12, 34, 56, 0, time.FixedZone("test", -7*60*60))
 
-	bundle, err := InboundBundleKeys("Example.com", ts, id)
+	bundle, err := InboundBundleKeysFromArchivePrefix("orgs/org_pub_123/domains/example.com/mail/inbound", ts, id)
 	if err != nil {
-		t.Fatalf("InboundBundleKeys returned error: %v", err)
+		t.Fatalf("InboundBundleKeysFromArchivePrefix returned error: %v", err)
 	}
-	if bundle.RawKey != "mail/inbound/example.com/2026/04/18/"+id+"/raw.eml" {
+	wantPrefix := "orgs/org_pub_123/domains/example.com/mail/inbound"
+	if bundle.RawKey != wantPrefix+"/2026/04/18/"+id+"/raw.eml" {
 		t.Fatalf("unexpected raw key: %s", bundle.RawKey)
 	}
-	if bundle.EdgeKey != "mail/inbound/example.com/2026/04/18/"+id+"/edge.json" {
+	if bundle.EdgeKey != wantPrefix+"/2026/04/18/"+id+"/edge.json" {
 		t.Fatalf("unexpected edge key: %s", bundle.EdgeKey)
 	}
-	if bundle.ResultKey != "mail/inbound/example.com/2026/04/18/"+id+"/result.json" {
+	if bundle.ResultKey != wantPrefix+"/2026/04/18/"+id+"/result.json" {
 		t.Fatalf("unexpected result key: %s", bundle.ResultKey)
 	}
-	if bundle.DSNKey != "mail/inbound/example.com/2026/04/18/"+id+"/dsn.eml" {
+	if bundle.DSNKey != wantPrefix+"/2026/04/18/"+id+"/dsn.eml" {
 		t.Fatalf("unexpected dsn key: %s", bundle.DSNKey)
 	}
 
@@ -63,6 +64,15 @@ func TestInboundBundleKeysAndParser(t *testing.T) {
 	}
 	if parsed != bundle {
 		t.Fatalf("parsed bundle mismatch: got %#v want %#v", parsed, bundle)
+	}
+}
+
+func TestParseInboundEdgeKeyRejectsLegacyDomainPrefix(t *testing.T) {
+	if IsInboundEdgeKey("mail/inbound/example.com/2026/04/18/01970a6e-0000-7000-8000-000000000000/edge.json") {
+		t.Fatal("legacy inbound edge key was recognized")
+	}
+	if _, err := ParseInboundEdgeKey("mail/inbound/example.com/2026/04/18/01970a6e-0000-7000-8000-000000000000/edge.json"); err == nil {
+		t.Fatal("expected legacy inbound edge key rejection")
 	}
 }
 
@@ -206,7 +216,7 @@ func TestR2KeyLayoutGoldenFixture(t *testing.T) {
 
 func loadKeyLayoutFixture(t *testing.T) keyLayoutFixture {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "cloudflare-email-worker", "test", "fixtures", "r2-key-layout.json"))
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "..", "packages", "cloudflare-email-worker", "test", "fixtures", "r2-key-layout.json"))
 	if err != nil {
 		t.Fatalf("read key layout fixture: %v", err)
 	}

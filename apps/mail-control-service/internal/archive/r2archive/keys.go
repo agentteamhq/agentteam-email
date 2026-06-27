@@ -83,34 +83,6 @@ func UUIDv7Time(value string) (time.Time, error) {
 	return time.Unix(sec, nsec).UTC(), nil
 }
 
-func InboundBundleKeys(recipientDomain string, ts time.Time, ingestID string) (InboundBundle, error) {
-	domain, err := CanonicalDomain(recipientDomain)
-	if err != nil {
-		return InboundBundle{}, fmt.Errorf("canonical recipient domain: %w", err)
-	}
-	if domain == "" {
-		return InboundBundle{}, fmt.Errorf("missing recipient domain")
-	}
-	if err := ValidateUUIDv7(ingestID); err != nil {
-		return InboundBundle{}, fmt.Errorf("invalid ingest_id: %w", err)
-	}
-
-	date := utcDate(ts)
-	archivePrefix := path.Join(MailPrefix, "inbound", domain)
-	prefix := path.Join(archivePrefix, date.Format("2006/01/02"), ingestID)
-	return InboundBundle{
-		RecipientDomain: domain,
-		ArchivePrefix:   archivePrefix,
-		UTCDate:         date,
-		IngestID:        ingestID,
-		Prefix:          prefix,
-		RawKey:          path.Join(prefix, "raw.eml"),
-		EdgeKey:         path.Join(prefix, "edge.json"),
-		DSNKey:          path.Join(prefix, "dsn.eml"),
-		ResultKey:       path.Join(prefix, "result.json"),
-	}, nil
-}
-
 func OrganizationInboundArchivePrefix(organizationPublicID string, recipientDomain string) (string, error) {
 	orgID, err := CanonicalPathSegment(organizationPublicID, "organization_public_id")
 	if err != nil {
@@ -131,6 +103,10 @@ func OrganizationInboundBundleKeys(organizationPublicID string, recipientDomain 
 	if err != nil {
 		return InboundBundle{}, err
 	}
+	return InboundBundleKeysFromArchivePrefix(archivePrefix, ts, ingestID)
+}
+
+func InboundBundleKeysFromArchivePrefix(archivePrefix string, ts time.Time, ingestID string) (InboundBundle, error) {
 	parsedPrefix, err := ParseInboundArchivePrefix(archivePrefix)
 	if err != nil {
 		return InboundBundle{}, err
@@ -160,17 +136,6 @@ func InboundDSNKey(bundlePrefix string) (string, error) {
 		return "", fmt.Errorf("missing inbound bundle prefix")
 	}
 	return path.Join(bundlePrefix, "dsn.eml"), nil
-}
-
-func InboundDailyPrefix(recipientDomain string, ts time.Time) (string, error) {
-	domain, err := CanonicalDomain(recipientDomain)
-	if err != nil {
-		return "", fmt.Errorf("canonical recipient domain: %w", err)
-	}
-	if domain == "" {
-		return "", fmt.Errorf("missing recipient domain")
-	}
-	return path.Join(MailPrefix, "inbound", domain, utcDate(ts).Format("2006/01/02")) + "/", nil
 }
 
 func OrganizationInboundDailyPrefix(organizationPublicID string, recipientDomain string, ts time.Time) (string, error) {
@@ -250,10 +215,7 @@ func OutboundBundleKeys(senderDomain string, ts time.Time, sendID string, provid
 
 func IsInboundEdgeKey(key string) bool {
 	parts := splitObjectKey(key)
-	if len(parts) == 11 {
-		return parts[0] == OrgsPrefix && parts[2] == DomainsPrefix && parts[4] == MailPrefix && parts[5] == "inbound" && parts[10] == "edge.json"
-	}
-	return len(parts) == 8 && parts[0] == MailPrefix && parts[1] == "inbound" && parts[7] == "edge.json"
+	return len(parts) == 11 && parts[0] == OrgsPrefix && parts[2] == DomainsPrefix && parts[4] == MailPrefix && parts[5] == "inbound" && parts[10] == "edge.json"
 }
 
 func ParseInboundEdgeKey(key string) (InboundBundle, error) {
@@ -277,30 +239,7 @@ func ParseInboundEdgeKey(key string) (InboundBundle, error) {
 		}
 		return OrganizationInboundBundleKeys(prefix.OrganizationPublicID, prefix.RecipientDomain, date, ingestID)
 	}
-	if len(parts) != 8 {
-		return InboundBundle{}, fmt.Errorf("inbound edge key must have 8 path segments")
-	}
-	if parts[0] != MailPrefix || parts[1] != "inbound" || parts[7] != "edge.json" {
-		return InboundBundle{}, fmt.Errorf("inbound edge key does not match mail/inbound/.../edge.json")
-	}
-
-	domain, err := CanonicalDomain(parts[2])
-	if err != nil {
-		return InboundBundle{}, fmt.Errorf("canonical recipient domain: %w", err)
-	}
-	if domain != parts[2] {
-		return InboundBundle{}, fmt.Errorf("recipient domain path segment is not canonical")
-	}
-
-	date, err := parseUTCDateSegments(parts[3], parts[4], parts[5])
-	if err != nil {
-		return InboundBundle{}, err
-	}
-	ingestID := parts[6]
-	if err := ValidateUUIDv7(ingestID); err != nil {
-		return InboundBundle{}, fmt.Errorf("invalid ingest_id: %w", err)
-	}
-	return InboundBundleKeys(domain, date, ingestID)
+	return InboundBundle{}, fmt.Errorf("inbound edge key must match orgs/.../domains/.../mail/inbound/.../edge.json")
 }
 
 func splitObjectKey(key string) []string {

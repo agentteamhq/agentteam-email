@@ -35,6 +35,23 @@ func (r testArchiveReader) GetBytes(ctx context.Context, key string) ([]byte, er
 	return append([]byte(nil), data...), nil
 }
 
+type testArchivePrefixResolver map[string]string
+
+func (r testArchivePrefixResolver) InboundArchivePrefix(ctx context.Context, recipientDomain string) (string, error) {
+	_ = ctx
+	prefix := r[recipientDomain]
+	if prefix == "" {
+		return "", fmt.Errorf("missing archive prefix for %s", recipientDomain)
+	}
+	return prefix, nil
+}
+
+func testArchiveResolver() testArchivePrefixResolver {
+	return testArchivePrefixResolver{
+		"example.com": "orgs/org_pub_123/domains/example.com/mail/inbound",
+	}
+}
+
 func TestMessageViewBlocksRemoteImagesAndMarksExternalLinks(t *testing.T) {
 	t.Parallel()
 
@@ -45,7 +62,7 @@ func TestMessageViewBlocksRemoteImagesAndMarksExternalLinks(t *testing.T) {
 		"MIME-Version: 1.0",
 		"Content-Type: text/html; charset=utf-8",
 		"",
-		`<p>Hello <a href="https://example.net/path?q=1" target="_self">open this</a></p>`,
+		`<p>Hello <a href="https://example.net/path?q=1" target="_self" data-agent-mail-external-link-id="attacker-id">open this</a></p>`,
 		`<a href="/internal/admin/path">relative</a>`,
 		`<a href="javascript:alert(1)">bad</a>`,
 		`<img src="https://tracker.example/pixel.png" alt="tracker">`,
@@ -82,7 +99,9 @@ func TestMessageViewBlocksRemoteImagesAndMarksExternalLinks(t *testing.T) {
 	for _, forbidden := range []string{
 		`<img src="https://tracker.example/pixel.png"`,
 		`src="cid:inline-image@example.net"`,
+		`alert(1)`,
 		`javascript:alert`,
+		`attacker-id`,
 		`target="_self"`,
 		`href="/internal/admin/path"`,
 	} {
@@ -135,7 +154,7 @@ func TestMessageViewAllowsRemoteImagesWhenRequested(t *testing.T) {
 	}
 }
 
-func TestMessageViewPreservesNonLinkAndNonImageMarkup(t *testing.T) {
+func TestMessageViewSanitizesHTMLAfterStructuredTransform(t *testing.T) {
 	t.Parallel()
 
 	raw := []byte(strings.Join([]string{
@@ -163,37 +182,26 @@ func TestMessageViewPreservesNonLinkAndNonImageMarkup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("View: %v", err)
 	}
-	if len(view.RemoteImages) != 2 {
+	if len(view.RemoteImages) != 0 {
 		t.Fatalf("remote images = %#v", view.RemoteImages)
 	}
-	remoteImageURLs := map[string]bool{}
-	for _, image := range view.RemoteImages {
-		remoteImageURLs[image.URL] = true
-	}
-	for _, want := range []string{
-		"https://cdn.example/hero.avif",
-		"https://cdn.example/hero.png",
-	} {
-		if !remoteImageURLs[want] {
-			t.Fatalf("remote images missing %q: %#v", want, view.RemoteImages)
-		}
-	}
 	for _, forbidden := range []string{
+		`background=`,
+		`poster=`,
 		`srcset=`,
+		`style=`,
 		`https://cdn.example/hero.avif`,
+		`https://cdn.example/hero.png`,
+		`https://tracker.example/background.png`,
+		`https://tracker.example/poster.png`,
+		`https://tracker.example/style.png`,
 	} {
 		if strings.Contains(view.DisplayHTML, forbidden) {
 			t.Fatalf("display HTML still contains %q: %s", forbidden, view.DisplayHTML)
 		}
 	}
-	for _, required := range []string{
-		`style="background-image: url(https://tracker.example/style.png)"`,
-		`background="https://tracker.example/background.png"`,
-		`poster="https://tracker.example/poster.png"`,
-	} {
-		if !strings.Contains(view.DisplayHTML, required) {
-			t.Fatalf("display HTML missing preserved markup %q: %s", required, view.DisplayHTML)
-		}
+	if !strings.Contains(view.DisplayHTML, `box`) {
+		t.Fatalf("display HTML removed safe body text: %s", view.DisplayHTML)
 	}
 	if strings.Contains(view.DisplayHTML, `<img src="https://`) {
 		t.Fatalf("display HTML still contains active remote image src: %s", view.DisplayHTML)
@@ -219,7 +227,7 @@ func TestMessageSecurityParsesTrustedAuthenticationResults(t *testing.T) {
 		"",
 		"body",
 	}, "\r\n"))
-	service, err := New(testSourceFetcher{source: raw}, WithArchiveReader(archive))
+	service, err := New(testSourceFetcher{source: raw}, WithArchiveReader(archive), WithArchivePrefixResolver(testArchiveResolver()))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -284,9 +292,9 @@ func TestMessageSecurityReadsCloudflareEdgeEvidenceFromArchive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UUIDv7Time: %v", err)
 	}
-	bundle, err := r2archive.InboundBundleKeys("example.com", receivedAt, ingestID)
+	bundle, err := r2archive.OrganizationInboundBundleKeys("org_pub_123", "example.com", receivedAt, ingestID)
 	if err != nil {
-		t.Fatalf("InboundBundleKeys: %v", err)
+		t.Fatalf("OrganizationInboundBundleKeys: %v", err)
 	}
 	rawArchive := []byte(strings.Join([]string{
 		"Received: from mail.example.net (203.0.113.7) by cloudflare-email.net (cloudflare) id cf-session for <agent@example.com>; Thu, 18 Jun 2026 06:56:11 +0000",
@@ -336,10 +344,14 @@ func TestMessageSecurityReadsCloudflareEdgeEvidenceFromArchive(t *testing.T) {
 		"",
 		"body",
 	}, "\r\n"))
-	service, err := New(testSourceFetcher{source: raw}, WithArchiveReader(testArchiveReader{
-		bundle.EdgeKey: edgeManifest,
-		bundle.RawKey:  rawArchive,
-	}))
+	service, err := New(
+		testSourceFetcher{source: raw},
+		WithArchiveReader(testArchiveReader{
+			bundle.EdgeKey: edgeManifest,
+			bundle.RawKey:  rawArchive,
+		}),
+		WithArchivePrefixResolver(testArchiveResolver()),
+	)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -420,7 +432,7 @@ func TestMessageSecurityRejectsArchiveEnvelopeFromMismatch(t *testing.T) {
 		"",
 		"body",
 	}, "\r\n"))
-	service, err := New(testSourceFetcher{source: raw}, WithArchiveReader(archive))
+	service, err := New(testSourceFetcher{source: raw}, WithArchiveReader(archive), WithArchivePrefixResolver(testArchiveResolver()))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -459,7 +471,7 @@ func TestMessageSecurityRejectsArchiveReceivedAtMismatch(t *testing.T) {
 		"",
 		"body",
 	}, "\r\n"))
-	service, err := New(testSourceFetcher{source: raw}, WithArchiveReader(archive))
+	service, err := New(testSourceFetcher{source: raw}, WithArchiveReader(archive), WithArchivePrefixResolver(testArchiveResolver()))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -629,9 +641,9 @@ func testVerifiedArchive(t *testing.T, envelopeFrom string, envelopeTo string, r
 	if err != nil {
 		t.Fatalf("UUIDv7Time: %v", err)
 	}
-	bundle, err := r2archive.InboundBundleKeys("example.com", receivedAt, ingestID)
+	bundle, err := r2archive.OrganizationInboundBundleKeys("org_pub_123", "example.com", receivedAt, ingestID)
 	if err != nil {
-		t.Fatalf("InboundBundleKeys: %v", err)
+		t.Fatalf("OrganizationInboundBundleKeys: %v", err)
 	}
 	rawSHA := sha256.Sum256(rawArchive)
 	edgeManifest, err := json.Marshal(map[string]any{

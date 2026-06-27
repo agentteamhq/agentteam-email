@@ -2,7 +2,7 @@
 
 - Message provenance startup must receive the WildDuck API base URL through the
   Mail Control Service runtime wiring. Module runtime wiring belongs to typed
-  Mail Control Service configuration and service-owned control state.
+  Mail Control Service configuration and the web-synced runtime projection.
 - Message view generation must preserve message HTML outside the approved
   security mutations for external-link mediation and remote-image blocking.
   Do not strip styles, non-link/non-image attributes, or layout markup from the

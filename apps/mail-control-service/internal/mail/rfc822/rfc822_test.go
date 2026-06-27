@@ -91,6 +91,66 @@ func TestBuildProviderRawSanitizesHeadersInjectsReturnPathAndPreservesBody(t *te
 	}
 }
 
+func TestAddHeaderIfAbsentAddsHeaderAndPreservesBody(t *testing.T) {
+	raw := []byte(strings.Join([]string{
+		"From: Sender <sender@example.net>",
+		"To: Recipient <recipient@example.net>",
+		"Subject: Header Insert",
+		"",
+		"body",
+		"",
+	}, "\r\n"))
+
+	stamped, err := AddHeaderIfAbsent(raw, "X-Agent-Mail-ZoneMTA-Queue-ID", "zone-queue-123")
+	if err != nil {
+		t.Fatalf("AddHeaderIfAbsent returned error: %v", err)
+	}
+
+	header, body := splitForTest(t, stamped)
+	_, originalBody := splitForTest(t, raw)
+	if !bytes.Equal(body, originalBody) {
+		t.Fatalf("stamped body changed:\n%s", string(stamped))
+	}
+	if !strings.Contains(string(header), "X-Agent-Mail-Zonemta-Queue-Id: zone-queue-123\r\n") {
+		t.Fatalf("stamped header missing queue id:\n%s", string(header))
+	}
+}
+
+func TestAddHeaderIfAbsentRejectsExistingHeader(t *testing.T) {
+	raw := []byte(strings.Join([]string{
+		"x-agent-mail-zonemta-queue-id: stale-queue",
+		"From: Sender <sender@example.net>",
+		"To: Recipient <recipient@example.net>",
+		"Subject: Header Insert",
+		"",
+		"body",
+		"",
+	}, "\r\n"))
+
+	if _, err := AddHeaderIfAbsent(raw, "X-Agent-Mail-ZoneMTA-Queue-ID", "zone-queue-123"); err == nil {
+		t.Fatal("AddHeaderIfAbsent succeeded with an existing queue id header")
+	}
+}
+
+func TestHeaderValueAndStructuredFormatHelpers(t *testing.T) {
+	lines := []string{
+		"Subject: Delivered",
+		"X-Agent-Mail-Local-Route-ID: route-123",
+	}
+	if got := HeaderValue(lines, "X-Agent-Mail-Local-Route-ID"); got != "route-123" {
+		t.Fatalf("HeaderValue = %q, want route-123", got)
+	}
+	if got := FormatAddress(Address{Name: "Support Team", Address: "Support@Example.Test"}); got != "\"Support Team\" <support@example.test>" {
+		t.Fatalf("FormatAddress = %q", got)
+	}
+	if got := FormatAddress(Address{Name: "Support Team", Address: "not an address"}); got != "" {
+		t.Fatalf("FormatAddress invalid address = %q", got)
+	}
+	if got := FormatMessageID("message@example.test"); got != "<message@example.test>" {
+		t.Fatalf("FormatMessageID = %q", got)
+	}
+}
+
 func TestProjectLocalRouteHeadersAddsTraceHeadersAndPreservesBody(t *testing.T) {
 	raw := []byte(strings.Join([]string{
 		"From: Sender <sender@example.net>",

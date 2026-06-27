@@ -6,13 +6,22 @@ import (
 	"fmt"
 	htmltemplate "html/template"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"agent-mail/internal/mail/rfc822"
 
 	"github.com/jhillyerd/enmime"
+	"github.com/microcosm-cc/bluemonday"
 	xhtml "golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
+)
+
+var (
+	agentMailTokenValue  = regexp.MustCompile(`^[A-Za-z0-9._:-]+$`)
+	linkRelValue         = regexp.MustCompile(`^noopener noreferrer$`)
+	remoteImageURLValue  = regexp.MustCompile(`^https?://[^\s<>"']+$`)
+	displayHTMLSanitizer = newDisplayHTMLSanitizer()
 )
 
 func (s *Service) View(ctx context.Context, params ViewParams) (MessageViewResult, error) {
@@ -242,22 +251,18 @@ func transformDisplayHTML(body string, remoteImagesAllowed bool, inlineContentID
 			return htmlTransformResult{}, fmt.Errorf("render transformed message html: %w", err)
 		}
 	}
-	result.HTML = rendered.String()
+	result.HTML = displayHTMLSanitizer.Sanitize(rendered.String())
 	return result, nil
 }
 
 func transformHTMLNode(node *xhtml.Node, result *htmlTransformResult, remoteImagesAllowed bool, inlineContentIDs map[string]inlineImagePart) {
 	if node.Type == xhtml.ElementNode {
-		// Preserve message markup here. Rendering security is scoped to link
-		// mediation and image loading; the admin iframe CSP blocks other active
-		// resource classes without stripping layout-critical email HTML.
+		stripMessageControlledAttributes(node)
 		switch strings.ToLower(node.Data) {
 		case "a":
 			transformAnchor(node, result)
 		case "img":
 			transformImage(node, result, remoteImagesAllowed, inlineContentIDs)
-		case "source":
-			transformSource(node, result, remoteImagesAllowed)
 		}
 	}
 	for child := node.FirstChild; child != nil; child = child.NextSibling {
@@ -295,13 +300,10 @@ func transformAnchor(node *xhtml.Node, result *htmlTransformResult) {
 
 func transformImage(node *xhtml.Node, result *htmlTransformResult, remoteImagesAllowed bool, inlineContentIDs map[string]inlineImagePart) {
 	alt, _ := getHTMLAttr(node, "alt")
-	firstSrcsetID, firstSrcsetURL := transformSrcset(node, result, remoteImagesAllowed, alt)
+	delHTMLAttr(node, "sizes")
+	delHTMLAttr(node, "srcset")
 	rawSrc, ok := getHTMLAttr(node, "src")
 	if !ok {
-		if firstSrcsetID != "" && !remoteImagesAllowed {
-			setHTMLAttr(node, "data-agent-mail-remote-image-id", firstSrcsetID)
-			setHTMLAttr(node, "data-agent-mail-remote-image-src", firstSrcsetURL)
-		}
 		return
 	}
 	parsed, err := url.Parse(strings.TrimSpace(rawSrc))
@@ -332,81 +334,6 @@ func transformImage(node *xhtml.Node, result *htmlTransformResult, remoteImagesA
 		return
 	}
 	delHTMLAttr(node, "src")
-}
-
-func transformSource(node *xhtml.Node, result *htmlTransformResult, remoteImagesAllowed bool) {
-	transformSrcset(node, result, remoteImagesAllowed, "")
-	if !remoteImagesAllowed {
-		delHTMLAttr(node, "src")
-	}
-}
-
-func transformSrcset(node *xhtml.Node, result *htmlTransformResult, remoteImagesAllowed bool, alt string) (string, string) {
-	rawSrcset, ok := getHTMLAttr(node, "srcset")
-	if !ok {
-		return "", ""
-	}
-	firstID := ""
-	firstURL := ""
-	for _, candidate := range srcsetCandidateURLs(rawSrcset) {
-		parsed, err := url.Parse(candidate)
-		if err != nil || !isRemoteURL(parsed) {
-			continue
-		}
-		id := addRemoteImage(result, candidate, alt)
-		if firstID == "" {
-			firstID = id
-			firstURL = candidate
-		}
-	}
-	if !remoteImagesAllowed {
-		delHTMLAttr(node, "srcset")
-		delHTMLAttr(node, "sizes")
-	}
-	return firstID, firstURL
-}
-
-func srcsetCandidateURLs(raw string) []string {
-	value := strings.TrimSpace(raw)
-	if value == "" {
-		return nil
-	}
-	candidates := []string{}
-	start := 0
-	inParens := 0
-	for index, r := range value {
-		switch r {
-		case '(':
-			inParens++
-		case ')':
-			if inParens > 0 {
-				inParens--
-			}
-		case ',':
-			if inParens == 0 {
-				if candidate := srcsetCandidateURL(value[start:index]); candidate != "" {
-					candidates = append(candidates, candidate)
-				}
-				start = index + len(string(r))
-			}
-		}
-	}
-	if candidate := srcsetCandidateURL(value[start:]); candidate != "" {
-		candidates = append(candidates, candidate)
-	}
-	return candidates
-}
-
-func srcsetCandidateURL(candidate string) string {
-	candidate = strings.TrimSpace(candidate)
-	if candidate == "" {
-		return ""
-	}
-	fields := strings.Fields(candidate)
-	if len(fields) == 0 {
-		return ""
-	}
-	return strings.TrimSpace(fields[0])
 }
 
 func addRemoteImage(result *htmlTransformResult, rawURL string, alt string) string {
@@ -506,6 +433,107 @@ func htmlAttrMatches(attr xhtml.Attribute, key string) bool {
 		return strings.EqualFold(attr.Namespace, "xlink") && strings.EqualFold(attr.Key, "href")
 	}
 	return false
+}
+
+func stripMessageControlledAttributes(node *xhtml.Node) {
+	attrs := node.Attr[:0]
+	for _, attr := range node.Attr {
+		key := strings.ToLower(attr.Key)
+		if strings.HasPrefix(key, "data-agent-mail-") {
+			continue
+		}
+		switch key {
+		case "background", "poster", "sizes", "srcset", "style":
+			continue
+		default:
+			attrs = append(attrs, attr)
+		}
+	}
+	node.Attr = attrs
+}
+
+func newDisplayHTMLSanitizer() *bluemonday.Policy {
+	policy := bluemonday.NewPolicy()
+	policy.AllowElements(
+		"a",
+		"abbr",
+		"address",
+		"article",
+		"aside",
+		"b",
+		"blockquote",
+		"br",
+		"caption",
+		"cite",
+		"code",
+		"col",
+		"colgroup",
+		"dd",
+		"del",
+		"details",
+		"dfn",
+		"div",
+		"dl",
+		"dt",
+		"em",
+		"figcaption",
+		"figure",
+		"h1",
+		"h2",
+		"h3",
+		"h4",
+		"h5",
+		"h6",
+		"hr",
+		"i",
+		"img",
+		"ins",
+		"kbd",
+		"li",
+		"mark",
+		"ol",
+		"p",
+		"picture",
+		"pre",
+		"q",
+		"s",
+		"samp",
+		"section",
+		"small",
+		"span",
+		"strong",
+		"sub",
+		"summary",
+		"sup",
+		"table",
+		"tbody",
+		"td",
+		"tfoot",
+		"th",
+		"thead",
+		"time",
+		"tr",
+		"u",
+		"ul",
+		"var",
+	)
+	policy.RequireParseableURLs(true)
+	policy.AllowRelativeURLs(true)
+	policy.AllowURLSchemes("cid", "http", "https", "mailto")
+
+	policy.AllowAttrs("href").OnElements("a")
+	policy.AllowAttrs("rel").Matching(linkRelValue).OnElements("a")
+	policy.AllowAttrs("data-agent-mail-external-link-id").Matching(agentMailTokenValue).OnElements("a")
+	policy.AllowAttrs("data-agent-mail-remote-image-id").Matching(agentMailTokenValue).OnElements("img")
+	policy.AllowAttrs("data-agent-mail-remote-image-src").Matching(remoteImageURLValue).OnElements("img")
+	policy.AllowAttrs("src").OnElements("img")
+	policy.AllowAttrs("alt").Matching(bluemonday.Paragraph).OnElements("img")
+	policy.AllowAttrs("height", "width").Matching(bluemonday.NumberOrPercent).OnElements("img", "table", "td", "th", "col", "colgroup")
+	policy.AllowAttrs("colspan", "rowspan").Matching(bluemonday.Integer).OnElements("td", "th")
+	policy.AllowAttrs("title").Matching(bluemonday.Paragraph).Globally()
+	policy.AllowAttrs("dir").Matching(bluemonday.Direction).Globally()
+	policy.AllowAttrs("lang").Matching(regexp.MustCompile(`^[a-zA-Z]{2,20}$`)).Globally()
+	return policy
 }
 
 func nodeText(node *xhtml.Node) string {

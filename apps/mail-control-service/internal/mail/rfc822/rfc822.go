@@ -579,6 +579,81 @@ func BuildProviderRaw(raw []byte, opts ProviderRawOptions) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
+func AddHeaderIfAbsent(raw []byte, name string, value string) ([]byte, error) {
+	if len(raw) == 0 {
+		return nil, fmt.Errorf("missing raw message")
+	}
+	canonical := stdtextproto.CanonicalMIMEHeaderKey(strings.TrimSpace(name))
+	if canonical == "" || strings.ContainsAny(canonical, ":\r\n") {
+		return nil, fmt.Errorf("invalid header name %q", name)
+	}
+	normalizedValue := strings.TrimSpace(value)
+	if normalizedValue == "" || strings.ContainsAny(normalizedValue, "\r\n") {
+		return nil, fmt.Errorf("invalid %s header value", canonical)
+	}
+	headers, body, err := readMessageHeaderAndBody(raw)
+	if err != nil {
+		return nil, err
+	}
+	fields := headers.Fields()
+	for fields.Next() {
+		if strings.EqualFold(fields.Key(), canonical) {
+			return nil, fmt.Errorf("raw message must not include %s header", canonical)
+		}
+	}
+	headers.Add(canonical, normalizedValue)
+
+	var out bytes.Buffer
+	if err := messagetextproto.WriteHeader(&out, headers); err != nil {
+		return nil, fmt.Errorf("serialize message headers: %w", err)
+	}
+	out.Write(body)
+	return out.Bytes(), nil
+}
+
+func FormatAddress(address Address) string {
+	normalized := normalizeAddress(address.Address)
+	if normalized == "" {
+		return ""
+	}
+	var header messagemail.Header
+	header.SetAddressList("From", []*mail.Address{{
+		Name:    strings.TrimSpace(address.Name),
+		Address: normalized,
+	}})
+	return strings.TrimSpace(header.Get("From"))
+}
+
+func FormatMessageID(messageID string) string {
+	trimmed := strings.Trim(strings.TrimSpace(messageID), "<>")
+	if trimmed == "" {
+		return ""
+	}
+	var header messagemail.Header
+	header.SetMessageID(trimmed)
+	return strings.TrimSpace(header.Get("Message-Id"))
+}
+
+func HeaderValue(lines []string, name string) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	var raw bytes.Buffer
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		raw.WriteString(line)
+		raw.WriteString("\r\n")
+	}
+	raw.WriteString("\r\n")
+	headers, _, err := readMessageHeaderAndBody(raw.Bytes())
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(headers.Get(name))
+}
+
 func IsForbiddenProviderHeader(name string) bool {
 	normalized := strings.ToLower(strings.TrimSpace(name))
 	if normalized == "" {

@@ -338,6 +338,9 @@ func (s *Service) resolveCloudflareArchiveEvidence(ctx context.Context, provenan
 	if s.archive == nil {
 		return unavailableCloudflareArchive("r2_archive_reader_not_configured"), nil
 	}
+	if s.archivePrefixResolver == nil {
+		return unavailableCloudflareArchive("archive_prefix_resolver_not_configured"), nil
+	}
 	if strings.TrimSpace(provenance.IngestID) == "" {
 		return unavailableCloudflareArchive("ingest_id_missing"), nil
 	}
@@ -357,7 +360,11 @@ func (s *Service) resolveCloudflareArchiveEvidence(ctx context.Context, provenan
 	if err != nil {
 		return unavailableCloudflareArchive("cloudflare_ingest_id_time_invalid"), []string{fmt.Sprintf("derive archive received_at from ingest_id: %v", err)}
 	}
-	bundle, err := r2archive.InboundBundleKeys(recipientDomain, receivedAt, provenance.IngestID)
+	archivePrefix, err := s.archivePrefixResolver.InboundArchivePrefix(ctx, recipientDomain)
+	if err != nil {
+		return unavailableCloudflareArchive("archive_prefix_unavailable"), []string{fmt.Sprintf("resolve archive prefix for %q: %v", recipientDomain, err)}
+	}
+	bundle, err := r2archive.InboundBundleKeysFromArchivePrefix(archivePrefix, receivedAt, provenance.IngestID)
 	if err != nil {
 		return unavailableCloudflareArchive("cloudflare_archive_key_invalid"), []string{fmt.Sprintf("derive archive bundle keys: %v", err)}
 	}

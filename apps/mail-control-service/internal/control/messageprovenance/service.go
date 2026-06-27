@@ -43,9 +43,14 @@ type ArchiveReader interface {
 	GetBytes(ctx context.Context, key string) ([]byte, error)
 }
 
+type ArchivePrefixResolver interface {
+	InboundArchivePrefix(ctx context.Context, recipientDomain string) (string, error)
+}
+
 type Service struct {
-	fetcher SourceFetcher
-	archive ArchiveReader
+	fetcher               SourceFetcher
+	archive               ArchiveReader
+	archivePrefixResolver ArchivePrefixResolver
 }
 
 type Option func(*Service)
@@ -53,6 +58,12 @@ type Option func(*Service)
 func WithArchiveReader(archive ArchiveReader) Option {
 	return func(service *Service) {
 		service.archive = archive
+	}
+}
+
+func WithArchivePrefixResolver(resolver ArchivePrefixResolver) Option {
+	return func(service *Service) {
+		service.archivePrefixResolver = resolver
 	}
 }
 
@@ -69,8 +80,8 @@ func New(fetcher SourceFetcher, opts ...Option) (*Service, error) {
 	return service, nil
 }
 
-func NewFromWildDuckAPIBaseURL(apiBaseURL string, archive ArchiveReader) (*Service, error) {
-	adminToken, err := configfile.RequireEnv("AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN")
+func NewFromWildDuckAPIBaseURL(apiBaseURL string, archive ArchiveReader, opts ...Option) (*Service, error) {
+	adminToken, err := configfile.RequireEnv("AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN")
 	if err != nil {
 		return nil, err
 	}
@@ -78,24 +89,25 @@ func NewFromWildDuckAPIBaseURL(apiBaseURL string, archive ArchiveReader) (*Servi
 	if err != nil {
 		return nil, err
 	}
-	return New(client, WithArchiveReader(archive))
+	options := append([]Option{WithArchiveReader(archive)}, opts...)
+	return New(client, options...)
 }
 
-func NewFromRuntimeEnv(ctx context.Context, wildDuckAPIBaseURL string) (*Service, error) {
+func NewFromRuntimeEnv(ctx context.Context, wildDuckAPIBaseURL string, opts ...Option) (*Service, error) {
 	archive, err := newArchiveReaderFromEnv(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return NewFromWildDuckAPIBaseURL(wildDuckAPIBaseURL, archive)
+	return NewFromWildDuckAPIBaseURL(wildDuckAPIBaseURL, archive, opts...)
 }
 
 func newArchiveReaderFromEnv(ctx context.Context) (ArchiveReader, error) {
 	keys := []string{
-		"AGENT_MAIL_R2_ENDPOINT",
-		"AGENT_MAIL_R2_REGION",
-		"AGENT_MAIL_R2_BUCKET",
-		"AGENT_MAIL_R2_ACCESS_KEY_ID",
-		"AGENT_MAIL_R2_SECRET_ACCESS_KEY",
+		"AT_EMAIL_ADMIN_R2_ENDPOINT",
+		"AT_EMAIL_ADMIN_R2_REGION",
+		"AT_EMAIL_ADMIN_R2_BUCKET",
+		"AT_EMAIL_ADMIN_R2_ACCESS_KEY_ID",
+		"AT_EMAIL_ADMIN_R2_SECRET_ACCESS_KEY",
 	}
 	values := map[string]string{}
 	missing := []string{}
@@ -116,10 +128,10 @@ func newArchiveReaderFromEnv(ctx context.Context) (ArchiveReader, error) {
 		return nil, fmt.Errorf("incomplete R2 archive environment for message provenance: missing %s", strings.Join(missing, ", "))
 	}
 	return r2archive.New(ctx, r2archive.Config{
-		Endpoint: values["AGENT_MAIL_R2_ENDPOINT"],
-		Region:   values["AGENT_MAIL_R2_REGION"],
-		Bucket:   values["AGENT_MAIL_R2_BUCKET"],
-	}, values["AGENT_MAIL_R2_ACCESS_KEY_ID"], values["AGENT_MAIL_R2_SECRET_ACCESS_KEY"])
+		Endpoint: values["AT_EMAIL_ADMIN_R2_ENDPOINT"],
+		Region:   values["AT_EMAIL_ADMIN_R2_REGION"],
+		Bucket:   values["AT_EMAIL_ADMIN_R2_BUCKET"],
+	}, values["AT_EMAIL_ADMIN_R2_ACCESS_KEY_ID"], values["AT_EMAIL_ADMIN_R2_SECRET_ACCESS_KEY"])
 }
 
 func (s *Service) Get(ctx context.Context, params Params) (MessageProvenanceResult, error) {
