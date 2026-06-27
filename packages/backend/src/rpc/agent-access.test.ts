@@ -692,6 +692,58 @@ describe('agent Access RPC routes', () => {
     expect(agentAccessRpcTestState.startAgentMailTrial).toHaveBeenCalledTimes(5)
   })
 
+  it('rate limits autonomous trial starts with malformed forwarded IP headers by a stable fallback key', async () => {
+    expect.hasAssertions()
+    vi.stubEnv('NODE_ENV', 'production')
+
+    agentAccessRpcTestState.startAgentMailTrial.mockResolvedValue({
+      agent_capability_grants: [],
+      agent_id: 'agent-1',
+      capabilities: ['email.status'],
+      claim: {
+        expires_at: '2026-06-23T00:00:00.000Z',
+        url: 'https://mail.example.com/agent/claim/claim-token'
+      },
+      expires_at: '2026-06-29T00:00:00.000Z',
+      host_id: 'host-1',
+      mailbox: {
+        address: 'trial-1@example.test'
+      },
+      mode: 'autonomous',
+      name: 'Trial agent',
+      post_claim_capabilities: [],
+      status: 'active',
+      trial_id: 'trial-public-1'
+    })
+
+    const body = {
+      agent_public_key: { crv: 'Ed25519', kty: 'OKP', x: 'agent-key' },
+      host_public_key: { crv: 'Ed25519', kty: 'OKP', x: 'host-key' },
+      name: 'Trial agent'
+    }
+    const { default: agentAccess } = await import('./agent-access')
+    const responses: Response[] = []
+    for (let index = 0; index < 6; index += 1) {
+      responses.push(
+        await agentAccess.handle(
+          new Request('https://mail.example.com/agent-access/trials', {
+            body: JSON.stringify(body),
+            headers: {
+              'content-type': 'application/json',
+              host: 'mail.example.com',
+              'x-forwarded-for': `not-an-ip-${index}`
+            },
+            method: 'POST'
+          })
+        )
+      )
+    }
+
+    expect(responses.slice(0, 5).map((response) => response.status)).toStrictEqual([200, 200, 200, 200, 200])
+    expect(responses[5]?.status).toBe(429)
+    expect(agentAccessRpcTestState.startAgentMailTrial).toHaveBeenCalledTimes(5)
+  })
+
   it('routes autonomous trial claim previews through the signed-in webserver boundary', async () => {
     expect.hasAssertions()
 

@@ -58,12 +58,12 @@ describe('Agent Mail autonomous trial service', () => {
     vi.stubEnv('DATABASE_URL', 'mongodb://localhost:27017/app')
     vi.stubEnv('ENCRYPT_SECRET_KEY', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
     vi.stubEnv('PUBLIC_HOSTNAME', 'https://mail.example.com')
-    vi.stubEnv('AGENT_MAIL_TRIAL_ENABLED', 'true')
-    vi.stubEnv('AGENT_MAIL_TRIAL_ORGANIZATION_ID', organizationId)
-    vi.stubEnv('AGENT_MAIL_TRIAL_DOMAIN', 'trial.example.test')
-    vi.stubEnv('AGENT_MAIL_TRIAL_ADMISSION_TOKEN', 'trial-admission-token')
+    vi.stubEnv('AT_EMAIL_ADMIN_TRIAL_ENABLED', 'true')
+    vi.stubEnv('AT_EMAIL_ADMIN_TRIAL_ORGANIZATION_ID', organizationId)
+    vi.stubEnv('AT_EMAIL_ADMIN_TRIAL_DOMAIN', 'trial.example.test')
+    vi.stubEnv('AT_EMAIL_ADMIN_TRIAL_ADMISSION_TOKEN', 'trial-admission-token')
     vi.stubEnv(
-      'AGENT_MAIL_TRIAL_CAPABILITIES',
+      'AT_EMAIL_ADMIN_TRIAL_CAPABILITIES',
       [
         'email.status',
         'email.message.list',
@@ -221,7 +221,7 @@ describe('Agent Mail autonomous trial service', () => {
   it('fails closed without provisioning when trials are disabled', async () => {
     expect.hasAssertions()
 
-    vi.stubEnv('AGENT_MAIL_TRIAL_ENABLED', 'false')
+    vi.stubEnv('AT_EMAIL_ADMIN_TRIAL_ENABLED', 'false')
 
     const { startAgentMailTrial } = await import('./trial-service')
 
@@ -236,7 +236,7 @@ describe('Agent Mail autonomous trial service', () => {
   it('fails closed without provisioning when trial admission is not configured', async () => {
     expect.hasAssertions()
 
-    vi.stubEnv('AGENT_MAIL_TRIAL_ADMISSION_TOKEN', '')
+    vi.stubEnv('AT_EMAIL_ADMIN_TRIAL_ADMISSION_TOKEN', '')
 
     const { startAgentMailTrial } = await import('./trial-service')
 
@@ -286,7 +286,7 @@ describe('Agent Mail autonomous trial service', () => {
   it('rejects new autonomous trials before provisioning when active trial capacity is reached', async () => {
     expect.hasAssertions()
 
-    vi.stubEnv('AGENT_MAIL_TRIAL_MAX_ACTIVE', '2')
+    vi.stubEnv('AT_EMAIL_ADMIN_TRIAL_MAX_ACTIVE', '2')
     trialServiceTestState.agentMailTrialCountDocuments.mockReturnValue({
       exec: () => Promise.resolve(2)
     })
@@ -535,7 +535,7 @@ describe('Agent Mail autonomous trial service', () => {
   it('rejects configured trial capabilities outside the trial-safe contract', async () => {
     expect.hasAssertions()
 
-    vi.stubEnv('AGENT_MAIL_TRIAL_CAPABILITIES', 'email.status,email.agent.manage')
+    vi.stubEnv('AT_EMAIL_ADMIN_TRIAL_CAPABILITIES', 'email.status,email.agent.manage')
 
     const { startAgentMailTrial } = await import('./trial-service')
 
@@ -549,7 +549,7 @@ describe('Agent Mail autonomous trial service', () => {
   it('does not let a request broaden capabilities beyond server policy', async () => {
     expect.hasAssertions()
 
-    vi.stubEnv('AGENT_MAIL_TRIAL_CAPABILITIES', 'email.status')
+    vi.stubEnv('AT_EMAIL_ADMIN_TRIAL_CAPABILITIES', 'email.status')
 
     const { startAgentMailTrial } = await import('./trial-service')
 

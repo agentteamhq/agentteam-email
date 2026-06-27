@@ -1,4 +1,7 @@
 import { Elysia, t } from 'elysia'
+import parseForwarded from 'forwarded-parse'
+import ipaddr from 'ipaddr.js'
+import proxyaddr from 'proxy-addr'
 import {
   AgentAuthAgentStatusValues,
   AgentAuthApprovalMethodValues,
@@ -29,6 +32,7 @@ import {
 } from '../agent-access/trial-service'
 import { PUBLIC_VARS } from '../vars.public'
 import { typedResponseSchema } from './response-schema'
+import type { IncomingMessage } from 'node:http'
 import type {
   AgentAccessApprovalPreview,
   AgentAccessMutationResult,
@@ -563,12 +567,97 @@ function assertTrialStartRateLimit(request: Request) {
 
 function trialStartRateLimitKey(headers: Headers) {
   return (
-    headers.get('x-forwarded-for')?.split(',', 1)[0]?.trim() ||
-    headers.get('cf-connecting-ip')?.trim() ||
-    headers.get('x-real-ip')?.trim() ||
-    headers.get('host')?.trim() ||
+    forwardedHeaderClientIP(headers.get('forwarded')) ||
+    xForwardedForClientIP(headers.get('x-forwarded-for')) ||
+    normalizeIPAddress(headers.get('cf-connecting-ip')) ||
+    normalizeIPAddress(headers.get('x-real-ip')) ||
+    normalizeHostHeader(headers.get('host')) ||
     'unknown'
   )
+}
+
+function forwardedHeaderClientIP(header: string | null) {
+  if (!header) {
+    return null
+  }
+  try {
+    for (const entry of parseForwarded(header)) {
+      const normalized = normalizeIPAddress(entry.for)
+      if (normalized) {
+        return normalized
+      }
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
+function xForwardedForClientIP(header: string | null) {
+  if (!header) {
+    return null
+  }
+  const request = {
+    connection: { remoteAddress: '127.0.0.1' },
+    headers: { 'x-forwarded-for': header },
+    socket: { remoteAddress: '127.0.0.1' }
+  } as unknown as IncomingMessage
+  const candidates = proxyaddr.all(request).slice(1).reverse()
+  for (const candidate of candidates) {
+    const normalized = normalizeIPAddress(candidate)
+    if (normalized) {
+      return normalized
+    }
+  }
+  return null
+}
+
+function normalizeIPAddress(value: string | null | undefined) {
+  const host = hostFromHTTPHeaderIdentifier(value)
+  if (!host) {
+    return null
+  }
+  try {
+    return ipaddr.process(host).toString()
+  } catch {
+    return null
+  }
+}
+
+function normalizeHostHeader(value: string | null | undefined) {
+  const host = hostFromHTTPHeaderIdentifier(value)
+  if (!host) {
+    return null
+  }
+  try {
+    const parsed = new URL(`http://${host}`)
+    if (parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash) {
+      return null
+    }
+    return parsed.host.toLowerCase()
+  } catch {
+    return null
+  }
+}
+
+function hostFromHTTPHeaderIdentifier(value: string | null | undefined) {
+  const trimmed = value?.trim()
+  if (!trimmed) {
+    return null
+  }
+  try {
+    const parsed = new URL(`http://${trimmed}`)
+    if (parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash) {
+      return null
+    }
+    return unbracketHostname(parsed.hostname)
+  } catch {
+    return unbracketHostname(trimmed)
+  }
+}
+
+function unbracketHostname(value: string) {
+  return value.startsWith('[') && value.endsWith(']') ? value.slice(1, -1) : value
 }
 
 export default agentAccess

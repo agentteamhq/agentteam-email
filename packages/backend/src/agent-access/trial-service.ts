@@ -186,7 +186,7 @@ export async function startAgentMailTrial(input: unknown): Promise<AgentMailTria
   const name = normalizeTrialAgentName(parsedInput.name)
   const mailboxAddress = createTrialMailboxAddress(
     policy.hostedDomain,
-    PRIVATE_VARS.AGENT_MAIL_TRIAL_MAILBOX_LOCAL_PREFIX
+    PRIVATE_VARS.AT_EMAIL_ADMIN_TRIAL_MAILBOX_LOCAL_PREFIX
   )
   const claimToken = randomBytes(32).toString('base64url')
   const claimTokenHash = hashClaimToken(claimToken)
@@ -812,19 +812,19 @@ function resolveTrialPolicy({
   requestedCapabilities: ReadonlyArray<AgentMailTrialCapabilityValue> | undefined
   requestedPostClaimCapabilities: ReadonlyArray<AgentMailTrialCapabilityValue> | undefined
 }) {
-  if (!PRIVATE_VARS.AGENT_MAIL_TRIAL_ENABLED) {
+  if (!PRIVATE_VARS.AT_EMAIL_ADMIN_TRIAL_ENABLED) {
     throw new AgentMailTrialError('Agent Mail trials are not enabled', 503)
   }
-  if (!PRIVATE_VARS.AGENT_MAIL_TRIAL_ORGANIZATION_ID) {
+  if (!PRIVATE_VARS.AT_EMAIL_ADMIN_TRIAL_ORGANIZATION_ID) {
     throw new AgentMailTrialError('Agent Mail trial organization is not configured', 503)
   }
-  if (!PRIVATE_VARS.AGENT_MAIL_TRIAL_DOMAIN) {
+  if (!PRIVATE_VARS.AT_EMAIL_ADMIN_TRIAL_DOMAIN) {
     throw new AgentMailTrialError('Agent Mail trial domain is not configured', 503)
   }
 
-  const organizationId = parseTrialOrganizationId(PRIVATE_VARS.AGENT_MAIL_TRIAL_ORGANIZATION_ID)
-  const hostedDomain = parseTrialHostedDomain(PRIVATE_VARS.AGENT_MAIL_TRIAL_DOMAIN)
-  const configuredCapabilities = parseTrialCapabilities(PRIVATE_VARS.AGENT_MAIL_TRIAL_CAPABILITIES)
+  const organizationId = parseTrialOrganizationId(PRIVATE_VARS.AT_EMAIL_ADMIN_TRIAL_ORGANIZATION_ID)
+  const hostedDomain = parseTrialHostedDomain(PRIVATE_VARS.AT_EMAIL_ADMIN_TRIAL_DOMAIN)
+  const configuredCapabilities = parseTrialCapabilities(PRIVATE_VARS.AT_EMAIL_ADMIN_TRIAL_CAPABILITIES)
   const allowedCapabilities = new Set(configuredCapabilities)
   const capabilities = requestedCapabilities?.length ? requestedCapabilities : configuredCapabilities
   const postClaimCapabilities = requestedPostClaimCapabilities?.length
@@ -839,11 +839,11 @@ function resolveTrialPolicy({
 
   const policy = AgentMailTrialPolicyContractV1.safeParse({
     capabilities,
-    claimIntentTtlSeconds: PRIVATE_VARS.AGENT_MAIL_TRIAL_CLAIM_INTENT_TTL_SECONDS,
-    dailySendLimit: PRIVATE_VARS.AGENT_MAIL_TRIAL_DAILY_SEND_LIMIT,
+    claimIntentTtlSeconds: PRIVATE_VARS.AT_EMAIL_ADMIN_TRIAL_CLAIM_INTENT_TTL_SECONDS,
+    dailySendLimit: PRIVATE_VARS.AT_EMAIL_ADMIN_TRIAL_DAILY_SEND_LIMIT,
     hostedDomain,
-    mailboxLifetimeSeconds: PRIVATE_VARS.AGENT_MAIL_TRIAL_MAILBOX_LIFETIME_SECONDS,
-    totalSendLimit: PRIVATE_VARS.AGENT_MAIL_TRIAL_TOTAL_SEND_LIMIT,
+    mailboxLifetimeSeconds: PRIVATE_VARS.AT_EMAIL_ADMIN_TRIAL_MAILBOX_LIFETIME_SECONDS,
+    totalSendLimit: PRIVATE_VARS.AT_EMAIL_ADMIN_TRIAL_TOTAL_SEND_LIMIT,
     version: 1
   })
   if (!policy.success) {
@@ -854,8 +854,8 @@ function resolveTrialPolicy({
     ...policy.data,
     capabilities: [...new Set(policy.data.capabilities)],
     postClaimCapabilities: [...new Set(postClaimCapabilities)],
-    admissionToken: PRIVATE_VARS.AGENT_MAIL_TRIAL_ADMISSION_TOKEN,
-    maxActiveTrials: PRIVATE_VARS.AGENT_MAIL_TRIAL_MAX_ACTIVE,
+    admissionToken: PRIVATE_VARS.AT_EMAIL_ADMIN_TRIAL_ADMISSION_TOKEN,
+    maxActiveTrials: PRIVATE_VARS.AT_EMAIL_ADMIN_TRIAL_MAX_ACTIVE,
     organizationId
   }
 }
