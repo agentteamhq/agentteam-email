@@ -1,11 +1,11 @@
 "use client"
 
 import { useAuth } from "@better-auth-ui/react"
+import type { ComponentProps } from "react"
 
 import { cn } from "src/lib/utils"
 import { OrganizationDangerZone } from "./organization-danger-zone"
 import { OrganizationProfile } from "./organization-profile"
-import type { ComponentProps } from "react"
 
 export type OrganizationSettingsProps = {
   className?: string

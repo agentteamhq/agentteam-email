@@ -58,23 +58,23 @@ export function VerifyEmail({ className }: VerifyEmailProps) {
   } = useAuth()
 
   const isHydrated = useIsHydrated()
-  const email = isHydrated
-    ? (globalThis.sessionStorage.getItem("better-auth-ui.verify-email") ?? "")
-    : ""
+  const [email, setEmail] = useState(
+    (isHydrated && sessionStorage.getItem("better-auth-ui.verify-email")) || ""
+  )
   const [cooldown, setCooldown] = useState(RESEND_COOLDOWN_SECONDS)
 
   useEffect(() => {
-    if (cooldown <= 0 || !email) {
-      return
-    }
+    setEmail(sessionStorage.getItem("better-auth-ui.verify-email") ?? "")
+  }, [])
+
+  useEffect(() => {
+    if (cooldown <= 0 || !email) return
 
     const interval = setInterval(() => {
       setCooldown((current) => (current > 0 ? current - 1 : 0))
     }, 1000)
 
-    return () => {
-      clearInterval(interval)
-    }
+    return () => clearInterval(interval)
   }, [cooldown, email])
 
   const { mutate: sendVerificationEmail, isPending } = useSendVerificationEmail(
@@ -111,12 +111,12 @@ export function VerifyEmail({ className }: VerifyEmailProps) {
                 type="button"
                 variant="outline"
                 disabled={!email || isCoolingDown || isPending}
-                onClick={() => {
+                onClick={() =>
                   sendVerificationEmail({
                     email,
                     callbackURL: `${baseURL}${redirectTo}`
                   })
-                }}
+                }
               >
                 {isPending && <Spinner />}
 

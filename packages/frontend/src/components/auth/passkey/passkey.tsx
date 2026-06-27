@@ -1,10 +1,5 @@
-"use client"
-
 import { useAuth, useAuthPlugin } from "@better-auth-ui/react"
-import {
-  FingerprintIcon as Fingerprint,
-  XIcon as X
-} from "@phosphor-icons/react"
+import { Fingerprint, X } from "lucide-react"
 import { useState } from "react"
 
 import { Button } from "src/components/ui/button"
@@ -12,10 +7,9 @@ import { Card, CardContent } from "src/components/ui/card"
 import { passkeyPlugin } from "src/lib/auth/passkey-plugin"
 
 import {
-  DeletePasskeyDialog
-
+  DeletePasskeyDialog,
+  type ListedPasskey
 } from "./delete-passkey-dialog"
-import type { ListedPasskey } from "./delete-passkey-dialog";
 
 export type PasskeyProps = {
   passkey: ListedPasskey
@@ -52,7 +46,7 @@ export function Passkey({ passkey }: PasskeyProps) {
           className="ml-auto shrink-0"
           variant="outline"
           size="sm"
-          onClick={() => { setDeleteOpen(true); }}
+          onClick={() => setDeleteOpen(true)}
           aria-label={passkeyLocalization.deletePasskey.replace(
             "{{name}}",
             passkeyName

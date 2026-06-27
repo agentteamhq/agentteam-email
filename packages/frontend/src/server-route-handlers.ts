@@ -1,4 +1,7 @@
 import {
+  loadAdminRoute,
+  loadAdminSetupRoute,
+  loadAppRouteGate,
   loadBillingRoute,
   loadDashboardRoute,
   loadDeviceRoute,
@@ -14,6 +17,9 @@ import type { FrontendServerRouteHandlers } from './types'
 
 export function createFrontendServerRouteHandlers(): FrontendServerRouteHandlers {
   return {
+    loadAdminRoute,
+    loadAdminSetupRoute,
+    loadAppRouteGate,
     loadBillingRoute,
     loadDashboardRoute,
     loadDeviceRoute,

@@ -1,12 +1,14 @@
+"use client"
+
+import type { SettingsView } from "@better-auth-ui/core"
 import { useAuth, useAuthenticate } from "@better-auth-ui/react"
-import { ShieldIcon as Shield, UserIcon as User2 } from "@phosphor-icons/react"
+import { Shield, User2 } from "lucide-react"
 import { useMemo } from "react"
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "src/components/ui/tabs"
 import { cn } from "src/lib/utils"
 import { AccountSettings } from "./account/account-settings"
 import { SecuritySettings } from "./security/security-settings"
-import type { SettingsView } from "@better-auth-ui/core"
 
 export type SettingsProps = {
   className?: string
@@ -35,23 +37,25 @@ export function Settings({ className, view, path, hideNav }: SettingsProps) {
   }
 
   const currentView = useMemo(() => {
-    if (view) {return view}
-    if (!path) {return undefined}
+    if (view) return view
+    if (!path) return undefined
 
     const match = [
       viewPaths.settings,
       ...plugins.map((plugin) => plugin.viewPaths?.settings)
     ]
-      .flatMap(settingsPathEntries)
+      .flatMap((source) => Object.entries(source ?? {}))
       .find(([, segment]) => segment === path)
 
     return match?.[0] as SettingsView | undefined
   }, [view, path, viewPaths.settings, plugins])
 
   if (!currentView) {
-    const validPaths = settingsPathSources(viewPaths.settings, plugins)
-      .flatMap(settingsPathEntries)
-      .map(([, segment]) => segment)
+    const validPaths = [
+      viewPaths.settings,
+      ...plugins.map((plugin) => plugin.viewPaths?.settings)
+    ]
+      .flatMap((source) => Object.values(source ?? {}))
       .join(", ")
     throw new Error(
       `[Better Auth UI] Unknown settings path "${path}". Valid paths are: ${validPaths}`
@@ -69,9 +73,9 @@ export function Settings({ className, view, path, hideNav }: SettingsProps) {
             value="account"
             className="gap-1"
             onClick={() =>
-              { navigate({
+              navigate({
                 to: `${basePaths.settings}/${viewPaths.settings.account}`
-              }); }
+              })
             }
           >
             <User2 className="text-muted-foreground" />
@@ -83,9 +87,9 @@ export function Settings({ className, view, path, hideNav }: SettingsProps) {
             value="security"
             className="gap-1"
             onClick={() =>
-              { navigate({
+              navigate({
                 to: `${basePaths.settings}/${viewPaths.settings.security}`
-              }); }
+              })
             }
           >
             <Shield className="text-muted-foreground" />
@@ -101,9 +105,9 @@ export function Settings({ className, view, path, hideNav }: SettingsProps) {
                   value={settingsTab.view}
                   className="gap-1"
                   onClick={() =>
-                    { navigate({
+                    navigate({
                       to: `${basePaths.settings}/${plugin.viewPaths?.settings?.[settingsTab.view]}`
-                    }); }
+                    })
                   }
                 >
                   {settingsTab.label}
@@ -133,18 +137,5 @@ export function Settings({ className, view, path, hideNav }: SettingsProps) {
         ))
       )}
     </Tabs>
-  )
-}
-
-function settingsPathSources(
-  settingsPaths: object,
-  plugins: ReadonlyArray<{ viewPaths?: { settings?: object } }>
-) {
-  return [settingsPaths, ...plugins.map((plugin) => plugin.viewPaths?.settings ?? {})]
-}
-
-function settingsPathEntries(source: object | undefined): Array<[string, string]> {
-  return Object.entries(source ?? {}).filter(
-    (entry): entry is [string, string] => typeof entry[1] === "string"
   )
 }

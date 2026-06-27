@@ -1,10 +1,12 @@
 import {
-
+  type OrganizationAuthClient,
   useAuth,
   useAuthPlugin,
   useDeleteOrganization
 } from "@better-auth-ui/react"
-import { WarningIcon as TriangleAlert } from "@phosphor-icons/react"
+import type { Organization } from "better-auth/client"
+import { TriangleAlert } from "lucide-react"
+import type { SyntheticEvent } from "react"
 import { toast } from "sonner"
 
 import {
@@ -22,9 +24,6 @@ import { Card, CardContent } from "src/components/ui/card"
 import { Spinner } from "src/components/ui/spinner"
 import { organizationPlugin } from "src/lib/auth/organization-plugin"
 import { OrganizationView } from "./organization-view"
-import type { SyntheticEvent } from "react"
-import type { OrganizationAuthClient } from "@better-auth-ui/react";
-import type { Organization } from "better-auth/client"
 
 export type DeleteOrganizationDialogProps = {
   open: boolean

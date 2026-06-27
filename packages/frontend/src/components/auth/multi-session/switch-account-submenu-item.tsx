@@ -1,13 +1,12 @@
 import {
-
-
+  type ListDeviceSession,
+  type MultiSessionAuthClient,
   useAuth,
   useSetActiveSession
 } from "@better-auth-ui/react"
 import { UserView } from "src/components/auth/user/user-view"
 import { DropdownMenuItem } from "src/components/ui/dropdown-menu"
 import { Spinner } from "src/components/ui/spinner"
-import type { ListDeviceSession, MultiSessionAuthClient } from "@better-auth-ui/react";
 
 export type SwitchAccountSubmenuItemProps = {
   deviceSession: ListDeviceSession
@@ -26,9 +25,7 @@ export function SwitchAccountSubmenuItem({
   const { mutate: setActiveSession, isPending } = useSetActiveSession(
     authClient as MultiSessionAuthClient,
     {
-      onSuccess: () => {
-        globalThis.window.scrollTo({ top: 0 })
-      }
+      onSuccess: () => window.scrollTo({ top: 0 })
     }
   )
 
@@ -36,7 +33,7 @@ export function SwitchAccountSubmenuItem({
     <DropdownMenuItem
       disabled={isPending}
       onClick={() =>
-        { setActiveSession({ sessionToken: deviceSession.session.token }); }
+        setActiveSession({ sessionToken: deviceSession.session.token })
       }
     >
       <UserView user={deviceSession.user} />

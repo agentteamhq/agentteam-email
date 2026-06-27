@@ -1,15 +1,16 @@
+"use client"
+
+import type { AuthView } from "@better-auth-ui/core"
 import { useAuth } from "@better-auth-ui/react"
-import {  useEffect } from "react"
+import { type ComponentType, useEffect } from "react"
 
 import { ForgotPassword } from "./forgot-password"
+import type { SocialLayout } from "./provider-buttons"
 import { ResetPassword } from "./reset-password"
 import { SignIn } from "./sign-in"
 import { SignOut } from "./sign-out"
 import { SignUp } from "./sign-up"
 import { VerifyEmail } from "./verify-email"
-import type { ComponentType } from "react";
-import type { SocialLayout } from "./provider-buttons"
-import type { AuthView } from "@better-auth-ui/core"
 
 export type AuthProps = {
   className?: string
@@ -106,10 +107,10 @@ export function Auth({
         Object.keys(pluginAuthPaths).find(
           (key) => pluginAuthPaths[key] === path
         ))
-    if (!pluginView) {continue}
+    if (!pluginView) continue
 
     const PluginView = plugin.views?.auth?.[pluginView]
-    if (!PluginView) {continue}
+    if (!PluginView) continue
 
     return (
       <PluginView

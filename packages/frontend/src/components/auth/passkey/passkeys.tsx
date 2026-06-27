@@ -1,5 +1,7 @@
-import {
+"use client"
 
+import {
+  type PasskeyAuthClient,
   useAuth,
   useAuthPlugin,
   useListPasskeys
@@ -16,7 +18,6 @@ import { AddPasskeyDialog } from "./add-passkey-dialog"
 import { Passkey } from "./passkey"
 import { PasskeySkeleton } from "./passkey-skeleton"
 import { PasskeysEmpty } from "./passkeys-empty"
-import type { PasskeyAuthClient } from "@better-auth-ui/react";
 
 export type PasskeysProps = {
   className?: string
@@ -43,7 +44,7 @@ export function Passkeys({ className }: PasskeysProps) {
           className="shrink-0"
           size="sm"
           disabled={isPending}
-          onClick={() => { setAddOpen(true); }}
+          onClick={() => setAddOpen(true)}
         >
           {passkeyLocalization.addPasskey}
         </Button>
@@ -54,7 +55,7 @@ export function Passkeys({ className }: PasskeysProps) {
           {isPending ? (
             <PasskeySkeleton />
           ) : !passkeys?.length ? (
-            <PasskeysEmpty onAddPress={() => { setAddOpen(true); }} />
+            <PasskeysEmpty onAddPress={() => setAddOpen(true)} />
           ) : (
             passkeys.map((passkey, index) => (
               <div key={passkey.id}>

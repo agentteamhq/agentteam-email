@@ -4,8 +4,8 @@ import {
 } from "@better-auth-ui/core"
 import { useAuth, useFetchOptions, useSignUpEmail } from "@better-auth-ui/react"
 import { useIsMutating } from "@tanstack/react-query"
-import { EyeIcon as Eye, EyeSlashIcon as EyeOff } from "@phosphor-icons/react"
-import {  useState } from "react"
+import { Eye, EyeOff } from "lucide-react"
+import { type SyntheticEvent, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "src/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "src/components/ui/card"
@@ -27,9 +27,7 @@ import { Label } from "src/components/ui/label"
 import { Spinner } from "src/components/ui/spinner"
 import { cn } from "src/lib/utils"
 import { AdditionalField } from "./additional-field"
-import { ProviderButtons  } from "./provider-buttons"
-import type { SyntheticEvent } from "react";
-import type { SocialLayout } from "./provider-buttons";
+import { ProviderButtons, type SocialLayout } from "./provider-buttons"
 
 export type SignUpProps = {
   className?: string
@@ -85,7 +83,7 @@ export function SignUp({
       },
       onSuccess: (_data, { email }) => {
         if (emailAndPassword?.requireEmailVerification) {
-          globalThis.sessionStorage.setItem("better-auth-ui.verify-email", email)
+          sessionStorage.setItem("better-auth-ui.verify-email", email)
           navigate({
             to: `${basePaths.auth}/${viewPaths.auth.verifyEmail}`
           })
@@ -104,8 +102,8 @@ export function SignUp({
   })
   const isPending = signInMutating + signUpMutating > 0
 
-  const Captcha = plugins.find((plugin) =>
-    Boolean(plugin.captchaComponent)
+  const Captcha = plugins.find(
+    (plugin) => plugin.captchaComponent
   )?.captchaComponent
 
   const [isPasswordVisible, setIsPasswordVisible] = useState(false)
@@ -137,7 +135,7 @@ export function SignUp({
     const additionalFieldValues: Record<string, unknown> = {}
 
     for (const field of additionalFields ?? []) {
-      if (!field.signUp || field.readOnly) {continue}
+      if (!field.signUp || field.readOnly) continue
       const value = parseAdditionalFieldValue(
         field,
         formData.get(field.name) as string | null
@@ -194,15 +192,7 @@ export function SignUp({
           )}
 
           {emailAndPassword?.enabled && (
-            <form
-              onSubmit={(event) => {
-                handleSubmit(event).catch((error: unknown) => {
-                  toast.error(
-                    error instanceof Error ? error.message : String(error)
-                  )
-                })
-              }}
-            >
+            <form onSubmit={handleSubmit}>
               <FieldGroup>
                 {emailAndPassword.name !== false && (
                   <Field data-invalid={!!fieldErrors.name}>
@@ -421,9 +411,9 @@ export function SignUp({
                               : localization.auth.showPassword
                           }
                           onClick={() =>
-                            { setIsConfirmPasswordVisible(
+                            setIsConfirmPasswordVisible(
                               !isConfirmPasswordVisible
-                            ); }
+                            )
                           }
                         >
                           {isConfirmPasswordVisible ? <EyeOff /> : <Eye />}

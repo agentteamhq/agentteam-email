@@ -1,16 +1,13 @@
 import {
-
+  type OrganizationAuthClient,
   useAuth,
   useAuthPlugin,
   useHasPermission,
   useSession,
   useUpdateMemberRole
 } from "@better-auth-ui/react"
-import {
-  SignOutIcon as LogOut,
-  PencilIcon as Pencil,
-  TrashIcon as Trash2
-} from "@phosphor-icons/react"
+import type { Member, Organization, User } from "better-auth/client"
+import { LogOut, Pencil, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
 
@@ -29,8 +26,6 @@ import { UserView } from "../user/user-view"
 import { LeaveOrganizationDialog } from "./leave-organization-dialog"
 import { OrganizationMemberRowSkeleton } from "./organization-member-row-skeleton"
 import { RemoveMemberDialog } from "./remove-member-dialog"
-import type { OrganizationAuthClient } from "@better-auth-ui/react";
-import type { Member, Organization, User } from "better-auth/client"
 
 export type OrganizationMemberRowProps = {
   member: Member & { user: Partial<User> }
@@ -110,7 +105,7 @@ export function OrganizationMemberRow({
                     key={role}
                     disabled={member.role === role}
                     onClick={() =>
-                      { updateMemberRole({ memberId: member.id, role }); }
+                      updateMemberRole({ memberId: member.id, role })
                     }
                   >
                     {label}
@@ -126,7 +121,7 @@ export function OrganizationMemberRow({
               variant="outline"
               className="size-8 text-destructive"
               aria-label={organizationLocalization.leaveOrganization}
-              onClick={() => { setLeaveOpen(true); }}
+              onClick={() => setLeaveOpen(true)}
             >
               <LogOut />
             </Button>
@@ -137,7 +132,7 @@ export function OrganizationMemberRow({
                 variant="outline"
                 className="size-8 text-destructive"
                 aria-label={organizationLocalization.removeMember}
-                onClick={() => { setRemoveOpen(true); }}
+                onClick={() => setRemoveOpen(true)}
               >
                 <Trash2 />
               </Button>

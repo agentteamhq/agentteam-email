@@ -8,8 +8,9 @@ import type { AuthRouteState } from '@main/backend/routes/webapp'
 
 const defaultSignUpRouteState: AuthRouteState = {
   flash: null,
-  redirectTo: '/dashboard/',
+  redirectTo: '/',
   shouldRedirectToDashboard: false,
+  shouldRedirectToSetup: false,
   user: null
 }
 
@@ -23,7 +24,7 @@ export const Route = createFileRoute('/signup')({
       )
 
       if (routeState.shouldRedirectToDashboard) {
-        throwRouteRedirect('/dashboard/')
+        throwRouteRedirect(routeState.redirectTo)
       }
 
       return routeState

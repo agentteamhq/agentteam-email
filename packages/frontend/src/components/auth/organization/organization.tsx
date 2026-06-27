@@ -1,16 +1,14 @@
 "use client"
 
+import type { OrganizationView } from "@better-auth-ui/core/plugins"
 import {
-
+  type OrganizationAuthClient,
   useActiveOrganization,
   useAuth,
-  useAuthPlugin,
-  useAuthenticate
+  useAuthenticate,
+  useAuthPlugin
 } from "@better-auth-ui/react"
-import {
-  GearSixIcon as SettingsIcon,
-  UserIcon
-} from "@phosphor-icons/react"
+import { Settings as SettingsIcon, User2 as UserIcon } from "lucide-react"
 import { useEffect, useMemo } from "react"
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "src/components/ui/tabs"
@@ -18,8 +16,6 @@ import { organizationPlugin } from "src/lib/auth/organization-plugin"
 import { cn } from "src/lib/utils"
 import { OrganizationPeople } from "./organization-people"
 import { OrganizationSettings } from "./organization-settings"
-import type { OrganizationAuthClient } from "@better-auth-ui/react";
-import type { OrganizationView } from "@better-auth-ui/core/plugins"
 
 export type OrganizationProps = {
   className?: string
@@ -74,7 +70,7 @@ export function Organization({
   ])
 
   const currentView = useMemo(() => {
-    if (view) {return view}
+    if (view) return view
 
     const match = Object.entries(organizationViewPaths.organization).find(
       ([, segment]) => segment === path
@@ -107,11 +103,11 @@ export function Organization({
             value="settings"
             className="gap-1"
             onClick={() =>
-              { navigate({
+              navigate({
                 to: slug
                   ? `${basePaths.organization}/${slugPrefix}${slug}/${organizationViewPaths.organization.settings}`
                   : `${basePaths.organization}/${organizationViewPaths.organization.settings}`
-              }); }
+              })
             }
           >
             <SettingsIcon className="text-muted-foreground" />
@@ -123,11 +119,11 @@ export function Organization({
             value="people"
             className="gap-1"
             onClick={() =>
-              { navigate({
+              navigate({
                 to: slug
                   ? `${basePaths.organization}/${slugPrefix}${slug}/${organizationViewPaths.organization.people}`
                   : `${basePaths.organization}/${organizationViewPaths.organization.people}`
-              }); }
+              })
             }
           >
             <UserIcon className="text-muted-foreground" />

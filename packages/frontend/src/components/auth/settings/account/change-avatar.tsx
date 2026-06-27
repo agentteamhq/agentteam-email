@@ -1,12 +1,7 @@
-"use client"
-
 import { fileToBase64 } from "@better-auth-ui/core"
 import { useAuth, useSession, useUpdateUser } from "@better-auth-ui/react"
-import {
-  TrashIcon as Trash2,
-  UploadIcon as Upload
-} from "@phosphor-icons/react"
-import {  useRef, useState } from "react"
+import { Trash2, Upload } from "lucide-react"
+import { type ChangeEvent, useRef, useState } from "react"
 import { toast } from "sonner"
 import { UserAvatar } from "src/components/auth/user/user-avatar"
 import { Button, buttonVariants } from "src/components/ui/button"
@@ -20,7 +15,6 @@ import { Field } from "src/components/ui/field"
 import { Label } from "src/components/ui/label"
 import { Spinner } from "src/components/ui/spinner"
 import { cn } from "src/lib/utils"
-import type { ChangeEvent } from "react";
 
 export type ChangeAvatarProps = {
   className?: string
@@ -41,7 +35,7 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
 
   async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
-    if (!file) {return}
+    if (!file) return
 
     e.target.value = ""
 
@@ -76,19 +70,14 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
     updateUser(
       { image: null },
       {
-        onSuccess: () => {
-          if (currentImage && avatar.delete) {
+        onSuccess: async () => {
+          if (currentImage) {
             setIsDeleting(true)
-            avatar
-              .delete(currentImage)
-              .catch((error: unknown) => {
-                toast.error(error instanceof Error ? error.message : String(error))
-              })
-              .finally(() => {
-                setIsDeleting(false)
-                toast.success(localization.settings.avatarDeletedSuccess)
-              })
-            return
+            try {
+              await avatar.delete?.(currentImage)
+            } finally {
+              setIsDeleting(false)
+            }
           }
 
           toast.success(localization.settings.avatarDeletedSuccess)
@@ -103,14 +92,10 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
 
       <input
         ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(event) => {
-            handleFileChange(event).catch((error: unknown) => {
-              toast.error(error instanceof Error ? error.message : String(error))
-            })
-          }}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileChange}
       />
 
       <div className="flex items-center gap-4">
@@ -144,11 +129,7 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
             <DropdownMenuItem
               variant="destructive"
               disabled={!session?.user.image}
-              onClick={() => {
-                handleDelete().catch((error: unknown) => {
-                  toast.error(error instanceof Error ? error.message : String(error))
-                })
-              }}
+              onClick={handleDelete}
             >
               <Trash2 />
 

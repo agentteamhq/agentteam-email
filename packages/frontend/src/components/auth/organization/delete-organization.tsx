@@ -1,5 +1,5 @@
 import {
-
+  type OrganizationAuthClient,
   useActiveOrganization,
   useAuth,
   useAuthPlugin,
@@ -11,7 +11,6 @@ import { Button } from "src/components/ui/button"
 import { organizationPlugin } from "src/lib/auth/organization-plugin"
 import { DeleteOrganizationDialog } from "./delete-organization-dialog"
 import { DeleteOrganizationSkeleton } from "./delete-organization-skeleton"
-import type { OrganizationAuthClient } from "@better-auth-ui/react";
 
 /**
  * Danger-zone row to delete the active organization. Hidden for members without
@@ -60,7 +59,7 @@ export function DeleteOrganization() {
         size="sm"
         variant="outline"
         className="text-destructive"
-        onClick={() => { setConfirmOpen(true); }}
+        onClick={() => setConfirmOpen(true)}
       >
         {organizationLocalization.deleteOrganization}
       </Button>

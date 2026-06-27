@@ -1,5 +1,5 @@
 import {
-
+  type OrganizationAuthClient,
   useAuth,
   useAuthPlugin,
   useListUserInvitations
@@ -11,7 +11,6 @@ import { organizationPlugin } from "src/lib/auth/organization-plugin"
 import { UserInvitationRow } from "./user-invitation-row"
 import { UserInvitationRowSkeleton } from "./user-invitation-row-skeleton"
 import { UserInvitationsEmpty } from "./user-invitations-empty"
-import type { OrganizationAuthClient } from "@better-auth-ui/react";
 
 export type UserInvitationsProps = {
   className?: string

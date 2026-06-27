@@ -1,24 +1,22 @@
 import {
-
+  type OrganizationAuthClient,
   useActiveOrganization,
   useAuth,
   useAuthPlugin,
   useListOrganizationMembers,
   useSession
 } from "@better-auth-ui/react"
+import type { Organization } from "better-auth/client"
+import type { ComponentProps } from "react"
 
 import { Badge } from "src/components/ui/badge"
 import { organizationPlugin } from "src/lib/auth/organization-plugin"
 import { cn } from "src/lib/utils"
 import {
-  OrganizationLogo
-
+  OrganizationLogo,
+  type OrganizationLogoSize
 } from "./organization-logo"
 import { OrganizationViewSkeleton } from "./organization-view-skeleton"
-import type { OrganizationLogoSize } from "./organization-logo";
-import type { ComponentProps } from "react"
-import type { OrganizationAuthClient } from "@better-auth-ui/react";
-import type { Organization } from "better-auth/client"
 
 export type OrganizationViewProps = {
   className?: string

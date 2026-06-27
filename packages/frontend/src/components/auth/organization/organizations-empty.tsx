@@ -1,7 +1,7 @@
 "use client"
 
 import { useAuthPlugin } from "@better-auth-ui/react"
-import { BriefcaseIcon as Briefcase } from "@phosphor-icons/react"
+import { Briefcase } from "lucide-react"
 
 import { Button } from "src/components/ui/button"
 import { organizationPlugin } from "src/lib/auth/organization-plugin"

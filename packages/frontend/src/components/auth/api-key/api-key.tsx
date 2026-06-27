@@ -1,18 +1,15 @@
-"use client"
-
 import {
-
+  type ListedApiKey,
   useAuth,
   useAuthPlugin
 } from "@better-auth-ui/react"
-import { KeyIcon as Key, XIcon as X } from "@phosphor-icons/react"
+import { Key, X } from "lucide-react"
 import { useState } from "react"
 
 import { Button } from "src/components/ui/button"
 import { Card, CardContent } from "src/components/ui/card"
 import { apiKeyPlugin } from "src/lib/auth/api-key-plugin"
 import { DeleteApiKeyDialog } from "./delete-api-key-dialog"
-import type { ListedApiKey } from "@better-auth-ui/react";
 
 export type ApiKeyProps = {
   apiKey: ListedApiKey
@@ -59,7 +56,7 @@ export function ApiKey({ apiKey, hideDelete, organizationId }: ApiKeyProps) {
               className="ml-auto shrink-0"
               variant="outline"
               size="sm"
-              onClick={() => { setDeleteOpen(true); }}
+              onClick={() => setDeleteOpen(true)}
               aria-label={apiKeyLocalization.deleteApiKey}
             >
               <X />

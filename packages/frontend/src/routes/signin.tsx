@@ -8,8 +8,9 @@ import type { AuthRouteState } from '@main/backend/routes/webapp'
 
 const defaultSignInRouteState: AuthRouteState = {
   flash: null,
-  redirectTo: '/dashboard/',
+  redirectTo: '/',
   shouldRedirectToDashboard: false,
+  shouldRedirectToSetup: false,
   user: null
 }
 

@@ -1,7 +1,7 @@
 "use client"
 
 import { useAuthPlugin } from "@better-auth-ui/react"
-import { PaperPlaneTiltIcon as Send } from "@phosphor-icons/react"
+import { Send } from "lucide-react"
 
 import { Button } from "src/components/ui/button"
 import { organizationPlugin } from "src/lib/auth/organization-plugin"

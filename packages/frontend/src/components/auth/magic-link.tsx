@@ -1,14 +1,12 @@
-"use client"
-
 import { authMutationKeys } from "@better-auth-ui/core"
 import {
-
+  type MagicLinkAuthClient,
   useAuth,
   useAuthPlugin,
   useSignInMagicLink
 } from "@better-auth-ui/react"
 import { useIsMutating } from "@tanstack/react-query"
-import {  useState } from "react"
+import { type SyntheticEvent, useState } from "react"
 import { toast } from "sonner"
 
 import { Button } from "src/components/ui/button"
@@ -25,10 +23,7 @@ import { Label } from "src/components/ui/label"
 import { Spinner } from "src/components/ui/spinner"
 import { magicLinkPlugin } from "src/lib/auth/magic-link-plugin"
 import { cn } from "src/lib/utils"
-import { ProviderButtons  } from "./provider-buttons"
-import type { SyntheticEvent } from "react";
-import type { MagicLinkAuthClient } from "@better-auth-ui/react";
-import type { SocialLayout } from "./provider-buttons";
+import { ProviderButtons, type SocialLayout } from "./provider-buttons"
 
 export type MagicLinkProps = {
   className?: string

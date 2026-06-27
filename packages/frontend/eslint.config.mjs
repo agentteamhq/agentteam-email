@@ -418,7 +418,14 @@ export default defineConfig([
   ...rootConfig,
   {
     name: 'frontend-ignore-generated',
-    ignores: ['src/routeTree.gen.ts', 'src/components/ui/**']
+    ignores: [
+      'src/routeTree.gen.ts',
+      'src/components/ui/**',
+      'src/hooks/use-mobile.ts',
+      'src/lib/utils.ts',
+      'src/components/auth/**',
+      'src/lib/auth/**'
+    ]
   },
   {
     name: 'frontend-tanstack-router-boundaries',

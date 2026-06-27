@@ -1,19 +1,15 @@
 "use client"
 
 import {
-
-
+  type ListDeviceSession,
+  type MultiSessionAuthClient,
   useAuth,
   useAuthPlugin,
   useRevokeMultiSession,
   useSession,
   useSetActiveSession
 } from "@better-auth-ui/react"
-import {
-  ArrowsLeftRightIcon as ArrowLeftRight,
-  SignOutIcon as LogOut,
-  DotsThreeIcon as MoreHorizontal
-} from "@phosphor-icons/react"
+import { ArrowLeftRight, LogOut, MoreHorizontal } from "lucide-react"
 import { toast } from "sonner"
 import { UserView } from "src/components/auth/user/user-view"
 import { Button, buttonVariants } from "src/components/ui/button"
@@ -27,7 +23,6 @@ import {
 import { Spinner } from "src/components/ui/spinner"
 import { multiSessionPlugin } from "src/lib/auth/multi-session-plugin"
 import { cn } from "src/lib/utils"
-import type { ListDeviceSession, MultiSessionAuthClient } from "@better-auth-ui/react";
 
 export type ManageAccountProps = {
   deviceSession?: ListDeviceSession | null
@@ -55,9 +50,7 @@ export function ManageAccount({
 
   const { mutate: setActiveSession, isPending: isSwitching } =
     useSetActiveSession(authClient as MultiSessionAuthClient, {
-      onSuccess: () => {
-        globalThis.window.scrollTo({ top: 0 })
-      }
+      onSuccess: () => window.scrollTo({ top: 0 })
     })
 
   const { mutate: revokeSession, isPending: isRevoking } =
@@ -79,7 +72,7 @@ export function ManageAccount({
             variant="outline"
             size="sm"
             onClick={() =>
-              { revokeSession({ sessionToken: deviceSession.session.token }); }
+              revokeSession({ sessionToken: deviceSession.session.token })
             }
             disabled={isBusy}
           >
@@ -103,9 +96,9 @@ export function ManageAccount({
             <DropdownMenuContent align="end" className="min-w-fit">
               <DropdownMenuItem
                 onClick={() =>
-                  { setActiveSession({
+                  setActiveSession({
                     sessionToken: deviceSession.session.token
-                  }); }
+                  })
                 }
               >
                 <ArrowLeftRight className="text-muted-foreground" />
@@ -114,9 +107,9 @@ export function ManageAccount({
 
               <DropdownMenuItem
                 onClick={() =>
-                  { revokeSession({
+                  revokeSession({
                     sessionToken: deviceSession.session.token
-                  }); }
+                  })
                 }
               >
                 <LogOut className="text-muted-foreground" />

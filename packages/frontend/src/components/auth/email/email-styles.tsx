@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 export const defaultColors = {
   light: {
     background: "#F5F5F5",

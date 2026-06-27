@@ -1,12 +1,13 @@
 "use client"
 
 import {
-
+  type OrganizationAuthClient,
   useAuth,
   useAuthPlugin,
   useRemoveMember
 } from "@better-auth-ui/react"
-import { TrashIcon as Trash2 } from "@phosphor-icons/react"
+import type { Member, User } from "better-auth/client"
+import { Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
 import {
@@ -25,8 +26,6 @@ import { Card, CardContent } from "src/components/ui/card"
 import { Spinner } from "src/components/ui/spinner"
 import { organizationPlugin } from "src/lib/auth/organization-plugin"
 import { UserView } from "../user/user-view"
-import type { OrganizationAuthClient } from "@better-auth-ui/react";
-import type { Member, User } from "better-auth/client"
 
 export type RemoveMemberDialogProps = {
   open: boolean
@@ -89,10 +88,10 @@ export function RemoveMemberDialog({
             variant="destructive"
             disabled={isPending}
             onClick={() =>
-              { removeMember({
+              removeMember({
                 memberIdOrEmail: member.id,
                 organizationId: member.organizationId
-              }); }
+              })
             }
           >
             {isPending && <Spinner />}

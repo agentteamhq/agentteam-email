@@ -1,5 +1,7 @@
+"use client"
+
 import { useAuthPlugin } from "@better-auth-ui/react"
-import { FingerprintIcon as Fingerprint } from "@phosphor-icons/react"
+import { Fingerprint } from "lucide-react"
 
 import { Button } from "src/components/ui/button"
 import { Card, CardContent } from "src/components/ui/card"

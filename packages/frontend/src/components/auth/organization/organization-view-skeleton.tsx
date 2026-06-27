@@ -1,14 +1,13 @@
 "use client"
 
+import type { ComponentProps } from "react"
 
 import { Skeleton } from "src/components/ui/skeleton"
 import { cn } from "src/lib/utils"
 import {
-  OrganizationLogo
-
+  OrganizationLogo,
+  type OrganizationLogoSize
 } from "./organization-logo"
-import type { OrganizationLogoSize } from "./organization-logo";
-import type { ComponentProps } from "react"
 
 export type OrganizationViewSkeletonProps = {
   className?: string

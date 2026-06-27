@@ -1,8 +1,8 @@
+import type { ComponentProps } from "react"
 
 import { cn } from "src/lib/utils"
 import { Organizations } from "./organizations"
 import { UserInvitations } from "./user-invitations"
-import type { ComponentProps } from "react"
 
 export type OrganizationsSettingsProps = {
   className?: string

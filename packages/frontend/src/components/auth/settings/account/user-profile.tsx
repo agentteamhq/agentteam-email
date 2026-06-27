@@ -1,14 +1,16 @@
-import {
+"use client"
 
+import {
+  type AdditionalFieldValue,
   parseAdditionalFieldValue
 } from "@better-auth-ui/core"
 import {
-
+  type UsernameAuthClient,
   useAuth,
   useSession,
   useUpdateUser
 } from "@better-auth-ui/react"
-import {  useState } from "react"
+import { type SyntheticEvent, useState } from "react"
 import { toast } from "sonner"
 
 import { Button } from "src/components/ui/button"
@@ -21,9 +23,6 @@ import { Spinner } from "src/components/ui/spinner"
 import { cn } from "src/lib/utils"
 import { AdditionalField } from "../../additional-field"
 import { ChangeAvatar } from "./change-avatar"
-import type { SyntheticEvent } from "react";
-import type { UsernameAuthClient } from "@better-auth-ui/react";
-import type { AdditionalFieldValue } from "@better-auth-ui/core";
 
 export type UserProfileProps = {
   className?: string
@@ -56,7 +55,7 @@ export function UserProfile({ className }: UserProfileProps) {
     const additionalFieldValues: Record<string, unknown> = {}
 
     for (const field of additionalFields ?? []) {
-      if (field.profile === false || field.readOnly) {continue}
+      if (field.profile === false || field.readOnly) continue
       const value = parseAdditionalFieldValue(
         field,
         formData.get(field.name) as string | null
@@ -89,13 +88,7 @@ export function UserProfile({ className }: UserProfileProps) {
         {localization.settings.userProfile}
       </h2>
 
-      <form
-        onSubmit={(event) => {
-          handleSubmit(event).catch((error: unknown) => {
-            toast.error(error instanceof Error ? error.message : String(error))
-          })
-        }}
-      >
+      <form onSubmit={handleSubmit}>
         <Card className={cn(className)}>
           <CardContent className="flex flex-col gap-6">
             <ChangeAvatar />
@@ -139,7 +132,7 @@ export function UserProfile({ className }: UserProfileProps) {
             </Field>
 
             {additionalFields?.map((field) => {
-              if (field.profile === false) {return null}
+              if (field.profile === false) return null
 
               if (!session) {
                 if (field.inputType === "hidden") {
@@ -159,7 +152,11 @@ export function UserProfile({ className }: UserProfileProps) {
 
               // Re-mount when the session value loads so the field's
               // uncontrolled `defaultValue` reflects the latest data.
-              const key = `${field.name}:${additionalFieldKey(value)}`
+              const key = `${field.name}:${
+                value instanceof Date
+                  ? value.toISOString()
+                  : String(value ?? "")
+              }`
 
               return (
                 <AdditionalField
@@ -188,22 +185,4 @@ export function UserProfile({ className }: UserProfileProps) {
       </form>
     </div>
   )
-}
-
-function additionalFieldKey(value: unknown) {
-  if (value == null) {
-    return ""
-  }
-  if (value instanceof Date) {
-    return value.toISOString()
-  }
-  if (
-    typeof value === "bigint" ||
-    typeof value === "boolean" ||
-    typeof value === "number" ||
-    typeof value === "string"
-  ) {
-    return String(value)
-  }
-  return JSON.stringify(value) ?? ""
 }

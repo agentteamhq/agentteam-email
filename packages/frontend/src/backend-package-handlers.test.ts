@@ -18,17 +18,13 @@ vi.mock('@main/backend', () => ({
   },
   handleAgentAuthConfigurationRequest: backendPackageHandlersTestState.handleAgentAuthConfigurationRequest,
   handleAtEmailMetadataRequest: backendPackageHandlersTestState.handleAtEmailMetadataRequest,
-  handleCloudflareOAuthCallbackRequest:
-    backendPackageHandlersTestState.handleCloudflareOAuthCallbackRequest,
+  handleCloudflareOAuthCallbackRequest: backendPackageHandlersTestState.handleCloudflareOAuthCallbackRequest,
   handleOAuthMetadataRequest: backendPackageHandlersTestState.handleOAuthMetadataRequest,
-  isAgentAuthConfigurationRequestPath: (pathname: string) =>
-    pathname === '/.well-known/agent-configuration',
+  isAgentAuthConfigurationRequestPath: (pathname: string) => pathname === '/.well-known/agent-configuration',
   isAtEmailMetadataRequestPath: (pathname: string) => pathname === '/.well-known/at-email',
-  isCloudflareOAuthCallbackRequestPath: (pathname: string) =>
-    pathname === '/cloudflare/oauth/callback',
+  isCloudflareOAuthCallbackRequestPath: (pathname: string) => pathname === '/cloudflare/oauth/callback',
   isOAuthMetadataRequestPath: (pathname: string) =>
-    pathname === '/.well-known/oauth-authorization-server' ||
-    pathname === '/.well-known/openid-configuration'
+    pathname === '/.well-known/oauth-authorization-server' || pathname === '/.well-known/openid-configuration'
 }))
 
 vi.mock('@main/backend/routes/webapp', () => ({
@@ -165,7 +161,7 @@ describe('backend package request handler', () => {
     const { handleBackendPackageRequest } = await import('./backend-package-handlers')
 
     const response = await handleBackendPackageRequest(
-      new Request('https://mail.example.com/rpc/agent-mail/ingest/v1', {
+      new Request('https://mail.example.com/rpc/agent-mail/ingest/v1/conn_public_test', {
         body: '{}',
         headers: { 'content-type': 'application/json' },
         method: 'POST'
@@ -174,7 +170,7 @@ describe('backend package request handler', () => {
 
     await expect(response?.json()).resolves.toStrictEqual({
       method: 'POST',
-      path: '/rpc/agent-mail/ingest/v1'
+      path: '/rpc/agent-mail/ingest/v1/conn_public_test'
     })
     expect(backendPackageHandlersTestState.backendRpcHandle).toHaveBeenCalledTimes(1)
   })

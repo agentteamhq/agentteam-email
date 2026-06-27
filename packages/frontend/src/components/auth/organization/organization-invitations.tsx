@@ -1,17 +1,13 @@
+import type { OrganizationLocalization } from "@better-auth-ui/core/plugins"
 import {
-
+  type OrganizationAuthClient,
   useAuth,
   useAuthPlugin,
   useHasPermission,
   useListOrganizationInvitations
 } from "@better-auth-ui/react"
-import {
-  CaretUpIcon as ChevronUp,
-  FunnelIcon as Filter,
-  MagnifyingGlassIcon as Search,
-  XIcon as X
-} from "@phosphor-icons/react"
-import {   useMemo, useState } from "react"
+import { ChevronUp, Filter, Search, X } from "lucide-react"
+import { type ComponentProps, type ReactNode, useMemo, useState } from "react"
 
 import { Badge } from "src/components/ui/badge"
 import { buttonVariants } from "src/components/ui/button"
@@ -42,9 +38,6 @@ import { InviteMemberDialog } from "./invite-member-dialog"
 import { OrganizationInvitationRow } from "./organization-invitation-row"
 import { OrganizationInvitationRowSkeleton } from "./organization-invitation-row-skeleton"
 import { OrganizationInvitationsEmpty } from "./organization-invitations-empty"
-import type { ComponentProps, ReactNode } from "react";
-import type { OrganizationAuthClient } from "@better-auth-ui/react";
-import type { OrganizationLocalization } from "@better-auth-ui/core/plugins"
 
 type SortDirection = "ascending" | "descending"
 
@@ -96,8 +89,8 @@ export function OrganizationInvitations({
   }, [search, invitations, roleFilter, statusFilter])
 
   const sortedInvitations = useMemo(() => {
-    if (!sortDescriptor) {return filteredInvitations}
-    if (!filteredInvitations) {return filteredInvitations}
+    if (!sortDescriptor) return filteredInvitations
+    if (!filteredInvitations) return filteredInvitations
 
     return [...filteredInvitations].sort((a, b) => {
       const col = sortDescriptor.column as keyof typeof a
@@ -143,7 +136,7 @@ export function OrganizationInvitations({
             <InputGroupInput
               type="search"
               value={search}
-              onChange={(e) => { setSearch(e.target.value); }}
+              onChange={(e) => setSearch(e.target.value)}
               aria-label={organizationLocalization.search}
               placeholder={organizationLocalization.search}
               disabled={isPending}
@@ -227,7 +220,7 @@ export function OrganizationInvitations({
                   type="button"
                   aria-label={organizationLocalization.clear}
                   className="inline-flex cursor-pointer items-center text-muted-foreground hover:text-foreground"
-                  onClick={() => { setRoleFilter("all"); }}
+                  onClick={() => setRoleFilter("all")}
                 >
                   <X className="size-3" />
                 </button>
@@ -244,7 +237,7 @@ export function OrganizationInvitations({
                   type="button"
                   aria-label={organizationLocalization.clear}
                   className="inline-flex cursor-pointer items-center text-muted-foreground hover:text-foreground"
-                  onClick={() => { setStatusFilter("all"); }}
+                  onClick={() => setStatusFilter("all")}
                 >
                   <X className="size-3" />
                 </button>
@@ -263,7 +256,7 @@ export function OrganizationInvitations({
                       ? sortDescriptor.direction
                       : undefined
                   }
-                  onClick={() => { toggleSort("email"); }}
+                  onClick={() => toggleSort("email")}
                 >
                   {localization.auth.email}
                 </SortableTableHead>
@@ -274,7 +267,7 @@ export function OrganizationInvitations({
                       ? sortDescriptor.direction
                       : undefined
                   }
-                  onClick={() => { toggleSort("createdAt"); }}
+                  onClick={() => toggleSort("createdAt")}
                 >
                   {organizationLocalization.invitedAt}
                 </SortableTableHead>
@@ -285,7 +278,7 @@ export function OrganizationInvitations({
                       ? sortDescriptor.direction
                       : undefined
                   }
-                  onClick={() => { toggleSort("role"); }}
+                  onClick={() => toggleSort("role")}
                 >
                   {organizationLocalization.role}
                 </SortableTableHead>
@@ -296,7 +289,7 @@ export function OrganizationInvitations({
                       ? sortDescriptor.direction
                       : undefined
                   }
-                  onClick={() => { toggleSort("status"); }}
+                  onClick={() => toggleSort("status")}
                 >
                   {organizationLocalization.status}
                 </SortableTableHead>
@@ -314,7 +307,7 @@ export function OrganizationInvitations({
                 <TableRow>
                   <TableCell colSpan={5}>
                     <OrganizationInvitationsEmpty
-                      onInvitePress={() => { setInviteOpen(true); }}
+                      onInvitePress={() => setInviteOpen(true)}
                     />
                   </TableCell>
                 </TableRow>

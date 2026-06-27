@@ -1,12 +1,10 @@
-"use client"
-
 import {
-
+  type PasskeyAuthClient,
   useAuth,
   useAuthPlugin,
   useDeletePasskey
 } from "@better-auth-ui/react"
-import { FingerprintIcon as Fingerprint } from "@phosphor-icons/react"
+import { Fingerprint } from "lucide-react"
 
 import {
   AlertDialog,
@@ -24,7 +22,6 @@ import { Input } from "src/components/ui/input"
 import { Label } from "src/components/ui/label"
 import { Spinner } from "src/components/ui/spinner"
 import { passkeyPlugin } from "src/lib/auth/passkey-plugin"
-import type { PasskeyAuthClient } from "@better-auth-ui/react";
 
 export type ListedPasskey = {
   id: string
@@ -52,7 +49,7 @@ export function DeletePasskeyDialog({
   const { mutate: deletePasskey, isPending: isDeleting } = useDeletePasskey(
     authClient as PasskeyAuthClient,
     {
-      onSuccess: () => { onOpenChange(false); }
+      onSuccess: () => onOpenChange(false)
     }
   )
 
@@ -90,7 +87,7 @@ export function DeletePasskeyDialog({
             type="button"
             variant="destructive"
             disabled={isDeleting}
-            onClick={() => { deletePasskey({ id: passkey.id }); }}
+            onClick={() => deletePasskey({ id: passkey.id })}
           >
             {isDeleting && <Spinner />}
 

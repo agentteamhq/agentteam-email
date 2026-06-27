@@ -3,7 +3,7 @@
 import { authMutationKeys } from "@better-auth-ui/core"
 import { useAuth, useFetchOptions, useSignInEmail } from "@better-auth-ui/react"
 import { useIsMutating } from "@tanstack/react-query"
-import {  useState } from "react"
+import { type SyntheticEvent, useState } from "react"
 
 import { Button } from "src/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "src/components/ui/card"
@@ -19,9 +19,7 @@ import { Input } from "src/components/ui/input"
 import { Label } from "src/components/ui/label"
 import { Spinner } from "src/components/ui/spinner"
 import { cn } from "src/lib/utils"
-import { ProviderButtons  } from "./provider-buttons"
-import type { SyntheticEvent } from "react";
-import type { SocialLayout } from "./provider-buttons";
+import { ProviderButtons, type SocialLayout } from "./provider-buttons"
 
 export type SignInProps = {
   className?: string
@@ -66,7 +64,7 @@ export function SignIn({
         setPassword("")
 
         if (error.error?.code === "EMAIL_NOT_VERIFIED") {
-          globalThis.sessionStorage.setItem("better-auth-ui.verify-email", email)
+          sessionStorage.setItem("better-auth-ui.verify-email", email)
           navigate({
             to: `${basePaths.auth}/${viewPaths.auth.verifyEmail}`
           })
@@ -74,7 +72,7 @@ export function SignIn({
 
         resetFetchOptions()
       },
-      onSuccess: () => { navigate({ to: redirectTo }); }
+      onSuccess: () => navigate({ to: redirectTo })
     }
   )
 
@@ -86,8 +84,8 @@ export function SignIn({
   })
   const isPending = signInMutating + signUpMutating > 0
 
-  const Captcha = plugins.find((plugin) =>
-    Boolean(plugin.captchaComponent)
+  const Captcha = plugins.find(
+    (plugin) => plugin.captchaComponent
   )?.captchaComponent
 
   const [fieldErrors, setFieldErrors] = useState<{

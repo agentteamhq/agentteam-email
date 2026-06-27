@@ -1,6 +1,6 @@
 import { getEmailProviderLink } from "@better-auth-ui/core"
 import { useAuth } from "@better-auth-ui/react"
-import { ArrowSquareOutIcon as SquareArrowOutUpRight } from "@phosphor-icons/react"
+import { SquareArrowOutUpRight } from "lucide-react"
 
 import { buttonVariants } from "src/components/ui/button"
 import { cn } from "src/lib/utils"
@@ -27,7 +27,7 @@ export function OpenEmailButton({ email, className }: OpenEmailButtonProps) {
   const { localization } = useAuth()
 
   const provider = getEmailProviderLink(email)
-  if (!provider) {return null}
+  if (!provider) return null
 
   return (
     <a

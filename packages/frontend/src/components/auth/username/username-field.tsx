@@ -1,14 +1,13 @@
-"use client"
-
 import {
-
+  type UsernameAuthClient,
   useAuth,
   useAuthPlugin,
   useIsUsernameAvailable
 } from "@better-auth-ui/react"
 import { useDebouncer } from "@tanstack/react-pacer"
-import { CheckIcon as Check, XIcon as X } from "@phosphor-icons/react"
+import { Check, X } from "lucide-react"
 import { useState } from "react"
+import type { AdditionalFieldProps } from "src/components/auth/additional-field"
 import { Field, FieldError } from "src/components/ui/field"
 import {
   InputGroup,
@@ -18,8 +17,6 @@ import {
 import { Label } from "src/components/ui/label"
 import { Spinner } from "src/components/ui/spinner"
 import { usernamePlugin } from "src/lib/auth/username-plugin"
-import type { UsernameAuthClient } from "@better-auth-ui/react";
-import type { AdditionalFieldProps } from "src/components/auth/additional-field"
 
 /**
  * Renderer for the `username` additional field. Owns availability checking,
@@ -102,7 +99,7 @@ export function UsernameField({
           required={field.required}
           readOnly={field.readOnly}
           value={value}
-          onChange={(e) => { handleChange(e.target.value); }}
+          onChange={(e) => handleChange(e.target.value)}
           onInvalid={(e) => {
             e.preventDefault()
             const el = e.target as HTMLInputElement

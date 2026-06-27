@@ -1,15 +1,13 @@
-import {  authMutationKeys } from "@better-auth-ui/core"
+"use client"
+
+import { type AuthView, authMutationKeys } from "@better-auth-ui/core"
 import { useAuth, useAuthPlugin } from "@better-auth-ui/react"
 import { useIsMutating } from "@tanstack/react-query"
-import {
-  LockIcon as Lock,
-  EnvelopeIcon as Mail
-} from "@phosphor-icons/react"
+import { Lock, Mail } from "lucide-react"
 
 import { buttonVariants } from "src/components/ui/button"
 import { magicLinkPlugin } from "src/lib/auth/magic-link-plugin"
 import { cn } from "src/lib/utils"
-import type { AuthView } from "@better-auth-ui/core";
 
 export type MagicLinkButtonProps = {
   /** @remarks `AuthView` */
@@ -42,7 +40,7 @@ export function MagicLinkButton({ view }: MagicLinkButtonProps) {
   // With password auth disabled there's nowhere to switch to, so hide it.
   // (Other views — e.g. a phone-number plugin's surface — still get a
   // "Continue with Magic Link" link.)
-  if (isMagicLinkView && !emailAndPassword?.enabled) {return null}
+  if (isMagicLinkView && !emailAndPassword?.enabled) return null
 
   return (
     <Link
@@ -50,7 +48,7 @@ export function MagicLinkButton({ view }: MagicLinkButtonProps) {
       aria-disabled={isPending || undefined}
       tabIndex={isPending ? -1 : undefined}
       onClick={(event) => {
-        if (isPending) {event.preventDefault()}
+        if (isPending) event.preventDefault()
       }}
       className={cn(
         buttonVariants({ variant: "outline" }),

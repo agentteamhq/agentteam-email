@@ -1,18 +1,17 @@
 "use client"
 
 import {
-
+  type UsernameAuthClient,
   useAuth,
   useSession
 } from "@better-auth-ui/react"
-import { UserIcon as User2 } from "@phosphor-icons/react"
+import type { User } from "better-auth"
+import { User2 } from "lucide-react"
+import type { ReactNode } from "react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "src/components/ui/avatar"
 import { Skeleton } from "src/components/ui/skeleton"
 import { cn } from "src/lib/utils"
-import type { ReactNode } from "react"
-import type { UsernameAuthClient } from "@better-auth-ui/react";
-import type { User } from "better-auth"
 
 export type UserAvatarProps = {
   className?: string

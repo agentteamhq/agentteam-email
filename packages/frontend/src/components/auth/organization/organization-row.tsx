@@ -1,19 +1,18 @@
 "use client"
 
 import {
-
+  type OrganizationAuthClient,
   useAuth,
   useAuthPlugin,
   useSetActiveOrganization
 } from "@better-auth-ui/react"
-import { GearSixIcon as SettingsIcon } from "@phosphor-icons/react"
+import type { Organization } from "better-auth/client"
+import { Settings as SettingsIcon } from "lucide-react"
 
 import { Button } from "src/components/ui/button"
 import { Spinner } from "src/components/ui/spinner"
 import { organizationPlugin } from "src/lib/auth/organization-plugin"
 import { OrganizationView } from "./organization-view"
-import type { OrganizationAuthClient } from "@better-auth-ui/react";
-import type { Organization } from "better-auth/client"
 
 export type OrganizationRowProps = {
   organization: Organization

@@ -1,5 +1,5 @@
 import {
-
+  type OrganizationAuthClient,
   useAuth,
   useAuthPlugin,
   useListOrganizations
@@ -14,7 +14,6 @@ import { CreateOrganizationDialog } from "./create-organization-dialog"
 import { OrganizationRow } from "./organization-row"
 import { OrganizationViewSkeleton } from "./organization-view-skeleton"
 import { OrganizationsEmpty } from "./organizations-empty"
-import type { OrganizationAuthClient } from "@better-auth-ui/react";
 
 export type OrganizationsProps = {
   className?: string
@@ -48,7 +47,7 @@ export function Organizations({ className }: OrganizationsProps) {
               className="shrink-0"
               size="sm"
               disabled={organizationsPending}
-              onClick={() => { setCreateOpen(true); }}
+              onClick={() => setCreateOpen(true)}
             >
               {organizationLocalization.createOrganization}
             </Button>
@@ -61,7 +60,7 @@ export function Organizations({ className }: OrganizationsProps) {
                   <OrganizationViewSkeleton />
                 </div>
               ) : !organizations?.length ? (
-                <OrganizationsEmpty onCreatePress={() => { setCreateOpen(true); }} />
+                <OrganizationsEmpty onCreatePress={() => setCreateOpen(true)} />
               ) : (
                 organizations.map((organization, index) => (
                   <div key={organization.id}>

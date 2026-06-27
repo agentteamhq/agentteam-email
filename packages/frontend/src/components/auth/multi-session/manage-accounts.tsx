@@ -1,5 +1,5 @@
 import {
-
+  type MultiSessionAuthClient,
   useAuth,
   useAuthPlugin,
   useListDeviceSessions,
@@ -11,7 +11,6 @@ import { Separator } from "src/components/ui/separator"
 import { multiSessionPlugin } from "src/lib/auth/multi-session-plugin"
 import { cn } from "src/lib/utils"
 import { ManageAccount } from "./manage-account"
-import type { MultiSessionAuthClient } from "@better-auth-ui/react";
 
 export type ManageAccountsProps = {
   className?: string

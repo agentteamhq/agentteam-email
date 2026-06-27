@@ -1,19 +1,19 @@
 "use client"
 
 import {
-
+  type MultiSessionAuthClient,
   useAuth,
   useSession,
   useSetActiveSession
 } from "@better-auth-ui/react"
 import {
-  CaretUpDownIcon as ChevronsUpDown,
-  SignInIcon as LogIn,
-  SignOutIcon as LogOut,
-  GearIcon as Settings,
-  UserCirclePlusIcon as UserPlus2
-} from "@phosphor-icons/react"
-import {   isValidElement } from "react"
+  ChevronsUpDown,
+  LogIn,
+  LogOut,
+  Settings,
+  UserPlus2
+} from "lucide-react"
+import { isValidElement, type ReactElement, type ReactNode } from "react"
 
 import { buttonVariants } from "src/components/ui/button"
 import {
@@ -28,8 +28,6 @@ import {
 import { cn } from "src/lib/utils"
 import { UserAvatar } from "./user-avatar"
 import { UserView } from "./user-view"
-import type { ReactElement, ReactNode } from "react";
-import type { MultiSessionAuthClient } from "@better-auth-ui/react";
 
 /** Auth states a `UserButton` link can be visible in. */
 export type UserButtonLinkVisibility =
@@ -77,14 +75,14 @@ function renderUserLink(
   navigate: (options: { to: string; replace?: boolean }) => void,
   fallbackKey: string
 ): ReactNode {
-  if (isValidElement(link)) {return link}
+  if (isValidElement(link)) return link
 
   const { label, href, icon, variant } = link
   return (
     <DropdownMenuItem
       key={fallbackKey}
       variant={variant}
-      onClick={() => { navigate({ to: href }); }}
+      onClick={() => navigate({ to: href })}
     >
       {icon}
       {label}
@@ -127,8 +125,8 @@ export function UserButton({
   const userLinks = links?.flatMap((link, index) => {
     if (!isValidElement(link)) {
       const visibility = link.visibility ?? "always"
-      if (visibility === "authenticated" && !session) {return []}
-      if (visibility === "unauthenticated" && session) {return []}
+      if (visibility === "authenticated" && !session) return []
+      if (visibility === "unauthenticated" && session) return []
     }
     return [
       renderUserLink(link, navigate, `user-button-link-${index.toString()}`)
@@ -154,7 +152,7 @@ export function UserButton({
         ) : (
           <>
             {session || sessionPending || settingActiveSession ? (
-              <UserView isPending={settingActiveSession} />
+              <UserView isPending={!!settingActiveSession} />
             ) : (
               <>
                 <UserAvatar />
@@ -194,9 +192,9 @@ export function UserButton({
             {!hideSettings && (
               <DropdownMenuItem
                 onClick={() =>
-                  { navigate({
+                  navigate({
                     to: `${basePaths.settings}/${viewPaths.settings.account}`
-                  }); }
+                  })
                 }
               >
                 <Settings className="text-muted-foreground" />
@@ -215,9 +213,9 @@ export function UserButton({
 
             <DropdownMenuItem
               onClick={() =>
-                { navigate({
+                navigate({
                   to: `${basePaths.auth}/${viewPaths.auth.signOut}`
-                }); }
+                })
               }
             >
               <LogOut className="text-muted-foreground" />
@@ -231,9 +229,9 @@ export function UserButton({
 
             <DropdownMenuItem
               onClick={() =>
-                { navigate({
+                navigate({
                   to: `${basePaths.auth}/${viewPaths.auth.signIn}`
-                }); }
+                })
               }
             >
               <LogIn className="text-muted-foreground" />
@@ -243,9 +241,9 @@ export function UserButton({
 
             <DropdownMenuItem
               onClick={() =>
-                { navigate({
+                navigate({
                   to: `${basePaths.auth}/${viewPaths.auth.signUp}`
-                }); }
+                })
               }
             >
               <UserPlus2 className="text-muted-foreground" />

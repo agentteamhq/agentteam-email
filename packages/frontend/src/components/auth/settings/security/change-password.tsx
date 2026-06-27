@@ -6,8 +6,8 @@ import {
   useRequestPasswordReset,
   useSession
 } from "@better-auth-ui/react"
-import { EyeIcon as Eye, EyeSlashIcon as EyeOff } from "@phosphor-icons/react"
-import {  useState } from "react"
+import { Eye, EyeOff } from "lucide-react"
+import { type SyntheticEvent, useState } from "react"
 import { toast } from "sonner"
 
 import { Button } from "src/components/ui/button"
@@ -24,7 +24,6 @@ import { Label } from "src/components/ui/label"
 import { Skeleton } from "src/components/ui/skeleton"
 import { Spinner } from "src/components/ui/spinner"
 import { cn } from "src/lib/utils"
-import type { SyntheticEvent } from "react";
 
 export type ChangePasswordProps = {
   className?: string
@@ -79,11 +78,11 @@ function SetPassword({ className }: { className?: string }) {
   )
 
   const Captcha = plugins.find(
-    (plugin) => Boolean(plugin.captchaComponent)
+    (plugin) => plugin.captchaComponent
   )?.captchaComponent
 
   const handleSetPassword = () => {
-    if (!session) {return}
+    if (!session) return
 
     requestPasswordReset({ email: session.user.email, fetchOptions })
   }
@@ -281,7 +280,7 @@ function ChangePasswordForm({
                           : localization.auth.showPassword
                       }
                       onClick={() =>
-                        { setIsNewPasswordVisible(!isNewPasswordVisible); }
+                        setIsNewPasswordVisible(!isNewPasswordVisible)
                       }
                       disabled={isPending}
                     >
@@ -346,7 +345,7 @@ function ChangePasswordForm({
                             : localization.auth.showPassword
                         }
                         onClick={() =>
-                          { setIsConfirmPasswordVisible(!isConfirmPasswordVisible); }
+                          setIsConfirmPasswordVisible(!isConfirmPasswordVisible)
                         }
                         disabled={isPending}
                       >

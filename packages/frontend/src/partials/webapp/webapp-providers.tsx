@@ -36,7 +36,7 @@ export function WebappProviders(props: PropsWithChildren<WebappProvidersProps>) 
           }}
         >
           <ThemeProvider
-            attribute='class'
+            attribute='data-theme'
             defaultTheme='system'
             disableTransitionOnChange
             enableSystem

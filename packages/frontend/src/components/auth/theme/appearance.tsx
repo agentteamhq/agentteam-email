@@ -6,12 +6,8 @@ import {
   ThemePreviewSystem,
   useAuthPlugin
 } from "@better-auth-ui/react"
-import {
-  MonitorIcon as Monitor,
-  MoonIcon as Moon,
-  SunIcon as Sun
-} from "@phosphor-icons/react"
-import { useSyncExternalStore } from "react"
+import { Monitor, Moon, Sun } from "lucide-react"
+import { useEffect, useState } from "react"
 
 import { Card, CardContent } from "src/components/ui/card"
 import {
@@ -42,7 +38,8 @@ export function Appearance({ className }: AppearanceProps) {
   const { useTheme, localization } = useAuthPlugin(themePlugin)
   const { theme, setTheme, themes = [] } = useTheme()
 
-  const isMounted = useSyncExternalStore(subscribeToMount, mountedSnapshot, serverSnapshot)
+  const [isMounted, setIsMounted] = useState(false)
+  useEffect(() => setIsMounted(true), [])
 
   return (
     <div>
@@ -124,16 +121,4 @@ export function Appearance({ className }: AppearanceProps) {
       </Card>
     </div>
   )
-}
-
-function subscribeToMount() {
-  return () => {}
-}
-
-function mountedSnapshot() {
-  return true
-}
-
-function serverSnapshot() {
-  return false
 }

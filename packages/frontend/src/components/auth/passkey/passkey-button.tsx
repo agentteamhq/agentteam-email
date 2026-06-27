@@ -1,21 +1,17 @@
-"use client"
-
-import {  authMutationKeys } from "@better-auth-ui/core"
+import { type AuthView, authMutationKeys } from "@better-auth-ui/core"
 import {
-
+  type PasskeyAuthClient,
   useAuth,
   useAuthPlugin,
   useSignInPasskey
 } from "@better-auth-ui/react"
 import { useIsMutating } from "@tanstack/react-query"
-import { FingerprintIcon as Fingerprint } from "@phosphor-icons/react"
+import { Fingerprint } from "lucide-react"
 
 import { Button } from "src/components/ui/button"
 import { Spinner } from "src/components/ui/spinner"
 import { passkeyPlugin } from "src/lib/auth/passkey-plugin"
 import { cn } from "src/lib/utils"
-import type { PasskeyAuthClient } from "@better-auth-ui/react";
-import type { AuthView } from "@better-auth-ui/core";
 
 export type PasskeyButtonProps = {
   /** @remarks `AuthView` */
@@ -36,7 +32,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
   const { mutate: signInPasskey, isPending: passkeyPending } = useSignInPasskey(
     authClient as PasskeyAuthClient,
     {
-      onSuccess: () => { navigate({ to: redirectTo }); }
+      onSuccess: () => navigate({ to: redirectTo })
     }
   )
 
@@ -49,7 +45,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
   const isPending = signInMutating + signUpMutating > 0
 
   // Passkey sign-in isn't relevant on the sign-up flow.
-  if (view === "signUp") {return null}
+  if (view === "signUp") return null
 
   return (
     <Button
@@ -57,7 +53,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
       variant="outline"
       disabled={isPending}
       className={cn("w-full", isPending && "pointer-events-none opacity-50")}
-      onClick={() => { signInPasskey(); }}
+      onClick={() => signInPasskey()}
     >
       {passkeyPending ? <Spinner /> : <Fingerprint />}
       {localization.auth.continueWith.replace(

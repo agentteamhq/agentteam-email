@@ -1,5 +1,3 @@
-"use client"
-
 import { useAuth, useSignOut } from "@better-auth-ui/react"
 import { useEffect, useRef } from "react"
 import { Spinner } from "src/components/ui/spinner"
@@ -26,16 +24,16 @@ export function SignOut({ className }: SignOutProps) {
       })
     },
     onSuccess: () =>
-      { navigate({
+      navigate({
         to: `${basePaths.auth}/${viewPaths.auth.signIn}`,
         replace: true
-      }); }
+      })
   })
 
   const hasSignedOut = useRef(false)
 
   useEffect(() => {
-    if (hasSignedOut.current) {return}
+    if (hasSignedOut.current) return
     hasSignedOut.current = true
 
     signOut()

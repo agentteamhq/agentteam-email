@@ -1,9 +1,7 @@
 import {
-  AuthProvider as AuthProviderPrimitive
-
+  AuthProvider as AuthProviderPrimitive,
+  type AuthProviderProps
 } from "@better-auth-ui/react"
-import { ErrorToaster } from "./error-toaster"
-import type { AuthProviderProps } from "@better-auth-ui/react";
 import type {
   ComponentPropsWithoutRef,
   ComponentType,
@@ -11,6 +9,7 @@ import type {
   ReactNode
 } from "react"
 
+import { ErrorToaster } from "./error-toaster"
 
 declare module "@better-auth-ui/core" {
   interface AuthConfig {

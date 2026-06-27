@@ -1,8 +1,9 @@
 import '../src/styles.css'
 
 import { RouterContextProvider } from '@tanstack/react-router'
-import type { Preview } from '@storybook/react'
+import type { Decorator, Preview } from '@storybook/react'
 import { withThemeByDataAttribute } from '@storybook/addon-themes'
+import { ThemeProvider } from 'next-themes'
 import type { ReactNode } from 'react'
 
 import { createFrontendRouter } from '../src/router'
@@ -20,13 +21,34 @@ function RouterStoryProvider({ children }: { children: ReactNode }) {
   )
 }
 
-const preview: Preview = {
-  decorators: [
-    (Story) => (
+type StorybookTheme = 'light' | 'dark'
+
+function resolveStorybookTheme(value: unknown): StorybookTheme {
+  return value === 'dark' ? 'dark' : 'light'
+}
+
+const withStorybookProviders: Decorator = (Story, context) => {
+  const forcedTheme = resolveStorybookTheme(context.globals.theme)
+
+  return (
+    <ThemeProvider
+      attribute='data-theme'
+      defaultTheme={forcedTheme}
+      disableTransitionOnChange
+      enableSystem={false}
+      forcedTheme={forcedTheme}
+      themes={['light', 'dark']}
+    >
       <RouterStoryProvider>
         <Story />
       </RouterStoryProvider>
-    ),
+    </ThemeProvider>
+  )
+}
+
+const preview: Preview = {
+  decorators: [
+    withStorybookProviders,
     withThemeByDataAttribute({
       themes: {
         light: 'light',

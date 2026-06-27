@@ -1,4 +1,3 @@
-/* eslint-disable no-restricted-syntax */
 import {
   Body,
   Button,
@@ -10,20 +9,19 @@ import {
   Img,
   Link,
   Preview,
+  pixelBasedPreset,
   Section,
   Tailwind,
-  Text,
-  pixelBasedPreset
+  Text
 } from "@react-email/components"
+import type { ReactNode } from "react"
 
 import { cn } from "../../../lib/utils"
 import {
-
-
+  type EmailClassNames,
+  type EmailColors,
   EmailStyles
 } from "./email-styles"
-import type { EmailClassNames, EmailColors } from "./email-styles";
-import type { ReactNode } from "react"
 
 const magicLinkEmailLocalization = {
   SIGN_IN_TO_APP_NAME: "Sign in to {appName}",

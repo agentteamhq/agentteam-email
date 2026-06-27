@@ -1,5 +1,5 @@
 import { useAuth, useAuthPlugin, useSession } from "@better-auth-ui/react"
-import { ArrowsLeftRightIcon as ArrowLeftRight } from "@phosphor-icons/react"
+import { ArrowLeftRight } from "lucide-react"
 
 import {
   DropdownMenuSub,

@@ -6,8 +6,8 @@ import {
   useListAccounts
 } from "@better-auth-ui/react"
 import { useQueryClient } from "@tanstack/react-query"
-import { WarningIcon as TriangleAlert } from "@phosphor-icons/react"
-import {  useState } from "react"
+import { TriangleAlert } from "lucide-react"
+import { type SyntheticEvent, useState } from "react"
 import { toast } from "sonner"
 import {
   AlertDialog,
@@ -28,7 +28,6 @@ import { Label } from "src/components/ui/label"
 import { Spinner } from "src/components/ui/spinner"
 import { deleteUserPlugin } from "src/lib/auth/delete-user-plugin"
 import { cn } from "src/lib/utils"
-import type { SyntheticEvent } from "react";
 
 export type DeleteAccountProps = {
   className?: string
@@ -64,7 +63,7 @@ export function DeleteAccount({ className }: DeleteAccountProps) {
     setPassword("")
   }
 
-  const handleSubmit = (e: SyntheticEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault()
 
     const params = {
@@ -142,7 +141,7 @@ export function DeleteAccount({ className }: DeleteAccountProps) {
                     autoComplete="current-password"
                     placeholder={localization.auth.passwordPlaceholder}
                     value={password}
-                    onChange={(e) => { setPassword(e.target.value); }}
+                    onChange={(e) => setPassword(e.target.value)}
                     disabled={isPending}
                     required
                   />

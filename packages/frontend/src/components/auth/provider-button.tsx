@@ -1,11 +1,11 @@
 import { authMutationKeys, getProviderName } from "@better-auth-ui/core"
 import { providerIcons, useAuth, useSignInSocial } from "@better-auth-ui/react"
 import { useIsMutating } from "@tanstack/react-query"
-import { Button } from "src/components/ui/button"
-import { Spinner } from "src/components/ui/spinner"
 import type { SocialProvider } from "better-auth/social-providers"
 import type { ComponentProps } from "react"
 
+import { Button } from "src/components/ui/button"
+import { Spinner } from "src/components/ui/spinner"
 
 export type ProviderButtonProps = {
   provider: SocialProvider
@@ -46,7 +46,7 @@ export function ProviderButton({
       type="button"
       variant={variant}
       disabled={isPending}
-      onClick={() => { signInSocial({ provider, callbackURL }); }}
+      onClick={() => signInSocial({ provider, callbackURL })}
       {...props}
       aria-label={getProviderName(provider)}
     >

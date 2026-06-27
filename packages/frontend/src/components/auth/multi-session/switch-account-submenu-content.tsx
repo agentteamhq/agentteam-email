@@ -1,16 +1,13 @@
 "use client"
 
 import {
-
+  type MultiSessionAuthClient,
   useAuth,
   useAuthPlugin,
   useListDeviceSessions,
   useSession
 } from "@better-auth-ui/react"
-import {
-  CheckIcon as Check,
-  PlusCircleIcon as CirclePlus
-} from "@phosphor-icons/react"
+import { Check, CirclePlus } from "lucide-react"
 import { UserView } from "src/components/auth/user/user-view"
 import {
   DropdownMenuItem,
@@ -19,7 +16,6 @@ import {
 } from "src/components/ui/dropdown-menu"
 import { multiSessionPlugin } from "src/lib/auth/multi-session-plugin"
 import { SwitchAccountSubmenuItem } from "./switch-account-submenu-item"
-import type { MultiSessionAuthClient } from "@better-auth-ui/react";
 
 /**
  * Render the submenu content for switching between multiple authenticated sessions.
@@ -62,7 +58,7 @@ export function SwitchAccountSubmenuContent() {
 
       <DropdownMenuItem
         onClick={() =>
-          { navigate({ to: `${basePaths.auth}/${viewPaths.auth.signIn}` }); }
+          navigate({ to: `${basePaths.auth}/${viewPaths.auth.signIn}` })
         }
       >
         <CirclePlus className="text-muted-foreground" />

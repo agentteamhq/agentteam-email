@@ -5,6 +5,15 @@
 - Frontend browser and interaction validation can use `pnpm playwright-cli`
   commands from the repository root.
 
+## Registry-Owned UI
+
+Agents must not manually edit registry-owned UI files:
+`src/components/ui/**`, `src/hooks/use-mobile.ts`, `src/lib/utils.ts`,
+`src/components/auth/**`, and `src/lib/auth/**`.
+
+Change app behavior outside those paths. Registry files may change only through
+their owning CLI or generated workflow with explicit current-task approval.
+
 ## Storybook
 
 Storybook stories must render canonical product components only.

@@ -1,13 +1,14 @@
 "use client"
 
 import {
-
+  type OrganizationAuthClient,
   useAuth,
   useAuthPlugin,
   useCancelInvitation,
   useHasPermission
 } from "@better-auth-ui/react"
-import { XIcon as X } from "@phosphor-icons/react"
+import type { Invitation } from "better-auth/client"
+import { X } from "lucide-react"
 
 import { Badge } from "src/components/ui/badge"
 import { Button } from "src/components/ui/button"
@@ -16,8 +17,6 @@ import { TableCell, TableRow } from "src/components/ui/table"
 import { organizationPlugin } from "src/lib/auth/organization-plugin"
 import { cn } from "src/lib/utils"
 import { OrganizationInvitationRowSkeleton } from "./organization-invitation-row-skeleton"
-import type { OrganizationAuthClient } from "@better-auth-ui/react";
-import type { Invitation } from "better-auth/client"
 
 export type OrganizationInvitationRowProps = {
   invitation: Invitation
@@ -76,7 +75,7 @@ export function OrganizationInvitationRow({
           variant="secondary"
           className={cn(statusBadgeClasses[invitation.status])}
         >
-          {statusLabel}
+          {String(statusLabel)}
         </Badge>
       </TableCell>
 
@@ -88,7 +87,7 @@ export function OrganizationInvitationRow({
               variant="outline"
               className="size-8 text-destructive"
               disabled={cancelPending}
-              onClick={() => { cancelInvitation({ invitationId: invitation.id }); }}
+              onClick={() => cancelInvitation({ invitationId: invitation.id })}
               aria-label={organizationLocalization.cancelInvitation}
             >
               {cancelPending ? <Spinner /> : <X />}

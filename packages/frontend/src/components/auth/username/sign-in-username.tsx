@@ -1,6 +1,8 @@
+"use client"
+
 import { authMutationKeys } from "@better-auth-ui/core"
 import {
-
+  type UsernameAuthClient,
   useAuth,
   useAuthPlugin,
   useFetchOptions,
@@ -8,10 +10,10 @@ import {
   useSignInUsername
 } from "@better-auth-ui/react"
 import { useIsMutating } from "@tanstack/react-query"
-import {  useState } from "react"
+import { type SyntheticEvent, useState } from "react"
 import {
-  ProviderButtons
-
+  ProviderButtons,
+  type SocialLayout
 } from "src/components/auth/provider-buttons"
 import { Button } from "src/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "src/components/ui/card"
@@ -28,9 +30,6 @@ import { Label } from "src/components/ui/label"
 import { Spinner } from "src/components/ui/spinner"
 import { usernamePlugin } from "src/lib/auth/username-plugin"
 import { cn } from "src/lib/utils"
-import type { SocialLayout } from "src/components/auth/provider-buttons";
-import type { SyntheticEvent } from "react";
-import type { UsernameAuthClient } from "@better-auth-ui/react";
 
 export type SignInUsernameProps = {
   className?: string
@@ -77,7 +76,7 @@ export function SignInUsername({
         setPassword("")
 
         if (error.error?.code === "EMAIL_NOT_VERIFIED") {
-          globalThis.sessionStorage.setItem("better-auth-ui.verify-email", email)
+          sessionStorage.setItem("better-auth-ui.verify-email", email)
           navigate({
             to: `${basePaths.auth}/${viewPaths.auth.verifyEmail}`
           })
@@ -86,7 +85,7 @@ export function SignInUsername({
         resetFetchOptions()
       },
       onSuccess: () => {
-        globalThis.sessionStorage.removeItem("better-auth-ui.verify-email")
+        sessionStorage.removeItem("better-auth-ui.verify-email")
         navigate({ to: redirectTo })
       }
     })
@@ -97,7 +96,7 @@ export function SignInUsername({
         setPassword("")
 
         if (error.error?.code === "EMAIL_NOT_VERIFIED") {
-          globalThis.sessionStorage.removeItem("better-auth-ui.verify-email")
+          sessionStorage.removeItem("better-auth-ui.verify-email")
 
           navigate({
             to: `${basePaths.auth}/${viewPaths.auth.verifyEmail}`
@@ -107,7 +106,7 @@ export function SignInUsername({
         resetFetchOptions()
       },
       onSuccess: () => {
-        globalThis.sessionStorage.removeItem("better-auth-ui.verify-email")
+        sessionStorage.removeItem("better-auth-ui.verify-email")
         navigate({ to: redirectTo })
       }
     })
@@ -122,7 +121,7 @@ export function SignInUsername({
   const isSignInPending = isSignInEmailPending || isSignInUsernamePending
 
   const Captcha = plugins.find(
-    (plugin) => Boolean(plugin.captchaComponent)
+    (plugin) => plugin.captchaComponent
   )?.captchaComponent
 
   const [fieldErrors, setFieldErrors] = useState<{

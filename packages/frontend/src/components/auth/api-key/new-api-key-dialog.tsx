@@ -1,11 +1,5 @@
-"use client"
-
 import { useAuth, useAuthPlugin } from "@better-auth-ui/react"
-import {
-  CheckIcon as Check,
-  CopyIcon as Copy,
-  KeyIcon as Key
-} from "@phosphor-icons/react"
+import { Check, Copy, Key } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
 
@@ -45,22 +39,16 @@ export function NewApiKeyDialog({
 
   const [copied, setCopied] = useState(false)
 
-  const copySecretKey = () => {
-    if (!secretKey) {
-      return
-    }
+  const copySecretKey = async () => {
+    if (!secretKey) return
 
-    globalThis.navigator.clipboard
-      .writeText(secretKey)
-      .then(() => {
-        setCopied(true)
-        globalThis.setTimeout(() => {
-          setCopied(false)
-        }, 1500)
-      })
-      .catch((error: unknown) => {
-        toast.error(error instanceof Error ? error.message : String(error))
-      })
+    try {
+      await navigator.clipboard.writeText(secretKey)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    }
   }
 
   return (

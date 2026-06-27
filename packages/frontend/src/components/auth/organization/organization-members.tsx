@@ -1,7 +1,7 @@
 "use client"
 
 import {
-
+  type OrganizationAuthClient,
   useActiveOrganization,
   useAuth,
   useAuthPlugin,
@@ -9,13 +9,9 @@ import {
   useListOrganizationMembers,
   useSession
 } from "@better-auth-ui/react"
-import {
-  CaretUpIcon as ChevronUp,
-  FunnelIcon as Filter,
-  MagnifyingGlassIcon as Search,
-  XIcon as X
-} from "@phosphor-icons/react"
-import {   useMemo, useState } from "react"
+import type { Member } from "better-auth/client"
+import { ChevronUp, Filter, Search, X } from "lucide-react"
+import { type ComponentProps, type ReactNode, useMemo, useState } from "react"
 
 import { Badge } from "src/components/ui/badge"
 import { Button, buttonVariants } from "src/components/ui/button"
@@ -44,9 +40,6 @@ import { cn } from "src/lib/utils"
 import { InviteMemberDialog } from "./invite-member-dialog"
 import { OrganizationMemberRow } from "./organization-member-row"
 import { OrganizationMemberRowSkeleton } from "./organization-member-row-skeleton"
-import type { ComponentProps, ReactNode } from "react";
-import type { OrganizationAuthClient } from "@better-auth-ui/react";
-import type { Member } from "better-auth/client"
 
 type SortDirection = "ascending" | "descending"
 
@@ -110,8 +103,8 @@ export function OrganizationMembers({
   }, [search, membersData?.members, roleFilter])
 
   const sortedMembers = useMemo(() => {
-    if (!sortDescriptor) {return filteredMembers}
-    if (!filteredMembers) {return filteredMembers}
+    if (!sortDescriptor) return filteredMembers
+    if (!filteredMembers) return filteredMembers
 
     return [...filteredMembers].sort((a, b) => {
       const col = sortDescriptor.column as keyof Member | "user"
@@ -158,7 +151,7 @@ export function OrganizationMembers({
           className="shrink-0"
           size="sm"
           disabled={isPending}
-          onClick={() => { setInviteOpen(true); }}
+          onClick={() => setInviteOpen(true)}
         >
           {organizationLocalization.inviteMember}
         </Button>
@@ -170,7 +163,7 @@ export function OrganizationMembers({
             <InputGroupInput
               type="search"
               value={search}
-              onChange={(e) => { setSearch(e.target.value); }}
+              onChange={(e) => setSearch(e.target.value)}
               aria-label={organizationLocalization.search}
               placeholder={organizationLocalization.search}
               disabled={isPending}
@@ -220,7 +213,7 @@ export function OrganizationMembers({
               type="button"
               aria-label={organizationLocalization.clear}
               className="inline-flex cursor-pointer items-center text-muted-foreground hover:text-foreground"
-              onClick={() => { setRoleFilter("all"); }}
+              onClick={() => setRoleFilter("all")}
             >
               <X className="size-3" />
             </button>
@@ -237,7 +230,7 @@ export function OrganizationMembers({
                       ? sortDescriptor.direction
                       : undefined
                   }
-                  onClick={() => { toggleSort("user"); }}
+                  onClick={() => toggleSort("user")}
                 >
                   {organizationLocalization.member}
                 </SortableTableHead>
@@ -248,7 +241,7 @@ export function OrganizationMembers({
                       ? sortDescriptor.direction
                       : undefined
                   }
-                  onClick={() => { toggleSort("role"); }}
+                  onClick={() => toggleSort("role")}
                 >
                   {organizationLocalization.role}
                 </SortableTableHead>
