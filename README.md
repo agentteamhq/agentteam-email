@@ -30,7 +30,7 @@ operator-owned deployment.
   and integration setup.
 - Inbound mail capture through Cloudflare Email Routing and a Cloudflare Email
   Worker.
-- Raw message and metadata archival in R2-compatible storage.
+- Raw message and metadata archival in Cloudflare R2 storage.
 - Internal replay from archive storage through Haraka into WildDuck.
 - Outbound delivery through ZoneMTA and the Mail Control Service relay path.
 - Provider feedback and DSN handling for active sender domains.
@@ -47,8 +47,9 @@ All other services are internal:
 
 - `apps/mail-control-service` coordinates domain provisioning, inbound replay,
   outbound relay handling, feedback processing, and status.
-- `apps/cloudflare-email-worker` receives Cloudflare Email Routing events and
-  writes archive bundles before sending signed worker notifications.
+- `packages/cloudflare-email-worker` provides the Cloudflare Email Routing
+  Worker source that writes archive bundles before sending signed worker
+  notifications.
 - WildDuck, Haraka, ZoneMTA, Rspamd, MongoDB, Redis, and archive storage provide
   the mail runtime.
 

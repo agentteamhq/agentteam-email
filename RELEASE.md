@@ -75,28 +75,28 @@ source files do not carry release version bumps for those bundles.
 The discoverable at-email CLI skill is committed under `skills/at-email-cli` for
 skills.sh, Hermes taps, LobeHub-style GitHub indexing, and ClawHub publishing.
 It is the only committed skill source. Container builds copy it directly, and
-host GoReleaser builds stage it into `apps/at-email-cli/SKILL.md` with
+host GoReleaser builds stage it into `apps/at-email-cli/tmp/SKILL.md` with
 `mise run //apps/at-email-cli:skills:stage` before compilation.
 
 ## Compose
 
-Compose uses `latest` unless `AGENTTEAM_EMAIL_VERSION` is set:
+Compose uses `latest` unless `AT_EMAIL_ADMIN_VERSION` is set:
 
 ```yaml
-image: ghcr.io/agentteamhq/agentteam-email/atemail-mail-control-service:${AGENTTEAM_EMAIL_VERSION:-latest}
-image: ghcr.io/agentteamhq/agentteam-email/atemail-web-server:${AGENTTEAM_EMAIL_VERSION:-latest}
+image: ghcr.io/agentteamhq/agentteam-email/atemail-mail-control-service:${AT_EMAIL_ADMIN_VERSION:-latest}
+image: ghcr.io/agentteamhq/agentteam-email/atemail-web-server:${AT_EMAIL_ADMIN_VERSION:-latest}
 ```
 
 Pin a release with:
 
 ```bash
-AGENTTEAM_EMAIL_VERSION=X.Y.Z docker compose up -d
+AT_EMAIL_ADMIN_VERSION=X.Y.Z docker compose up -d
 ```
 
 Track the latest RC image set with:
 
 ```bash
-AGENTTEAM_EMAIL_VERSION=next docker compose up -d
+AT_EMAIL_ADMIN_VERSION=next docker compose up -d
 ```
 
 Use `next` only for RC validation. Production installs should pin an exact

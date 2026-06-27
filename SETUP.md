@@ -11,6 +11,7 @@ cd "$repo_root"
 cp .env.example .env
 mise install
 pnpm install
+pnpm clean
 ```
 
 The main checkout should use:
@@ -239,8 +240,8 @@ Claude Code and Codex plugin bundles, validates the generated manifests and
 skill copies, and packs the release tarballs.
 
 `skills:check` validates the canonical root skill under `skills/at-email-cli`,
-checks any generated app-local staged copy when present, and confirms that
-`skills.sh.json` lists the skill for marketplace/tap discovery.
+and confirms that `skills.sh.json` lists the skill for marketplace/tap
+discovery.
 
 ### Helm Chart
 
@@ -272,8 +273,18 @@ required environment values change. Use the Compose CLI for your container
 engine:
 
 ```bash
-podman-compose --env-file .env.example -f compose.yaml config
-docker compose --env-file .env.example -f compose.yaml config
+podman-compose --env-file docs/examples/compose/.env.example -f compose.yaml config
+docker compose --env-file docs/examples/compose/.env.example -f compose.yaml config
+AT_EMAIL_ADMIN_APP_MONGODB_URI=mongodb://external-mongodb:27017/agentteam_email \
+AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI=mongodb://external-mongodb:27017/wildduck \
+AT_EMAIL_ADMIN_CONTROL_MONGODB_URI=mongodb://external-mongodb:27017/agent_mail_control \
+AT_EMAIL_ADMIN_REDIS_URL=redis://external-redis:6379/3 \
+  podman-compose --env-file docs/examples/compose/.env.example -f compose.no-db.yaml config
+AT_EMAIL_ADMIN_APP_MONGODB_URI=mongodb://external-mongodb:27017/agentteam_email \
+AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI=mongodb://external-mongodb:27017/wildduck \
+AT_EMAIL_ADMIN_CONTROL_MONGODB_URI=mongodb://external-mongodb:27017/agent_mail_control \
+AT_EMAIL_ADMIN_REDIS_URL=redis://external-redis:6379/3 \
+  docker compose --env-file docs/examples/compose/.env.example -f compose.no-db.yaml config
 ```
 
 Run all end-to-end suites through the aggregate root task:

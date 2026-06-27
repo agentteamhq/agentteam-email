@@ -11,15 +11,12 @@ setup, boundary, and E2E gaps.
 
 ### Domain Control State
 
-- Add a Mongo-backed domain-control state store owned by the mail-control
-  service, or update the docs/chart to explicitly state the current runtime
-  state backend.
-- Make deployed runtime fail fast instead of silently using in-memory control
-  state.
-- Decide whether the Kubernetes ConfigMap backend and `configmap` status fields
-  are deprecated, retained for self-hosting, or removed.
-- Add restart tests proving domain add, modify, remove, provision apply, status,
-  and runtime registry projection survive process restart.
+- Web/Mongo owns the active-domain source of truth. Mail-control keeps only an
+  in-memory runtime projection.
+- Web startup, relevant domain/provisioning writes, and the 30-minute repair job
+  must sync the projection into mail-control.
+- Restart tests should prove the web repair path restores mail-control's active
+  projection after process restart.
 
 ### Poller Configuration Ownership
 
@@ -87,8 +84,8 @@ setup, boundary, and E2E gaps.
 
 ## Acceptance Checks
 
-- Deployed mail-control runtime uses durable control state or clearly documents
-  the chosen non-durable mode.
+- Deployed mail-control runtime receives its active-domain projection from the
+  web server and does not own a durable active-domain backend.
 - E2E artifacts are collected once per top-level invocation.
 - Worker runtime, web ingest, mail-control queue, Haraka, WildDuck, ZoneMTA, and
   fake provider boundaries are covered by full-circle tests.

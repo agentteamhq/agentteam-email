@@ -33,13 +33,13 @@ clients, and agent runtime tools, must call the web server. The web server
 authenticates the caller, authorizes the exact organization, mailbox, and
 operation, maps that authority to internal WildDuck or mail-control identities,
 and performs the internal call server-side. Public clients must not receive
-WildDuck admin credentials, WildDuck mailbox tokens, mail-control service
-tokens, or raw internal service URLs.
+WildDuck admin credentials, WildDuck mailbox tokens, or raw internal service
+URLs.
 
 The mail control service exposes an internal service API for the web server
-and trusted internal controllers. `AGENT_MAIL_CONTROL_API_TOKEN` is an internal
-service credential for that API. It is not a browser credential, user
-credential, or public API token, and it must not be exposed to clients.
+and trusted internal controllers only. That API is secured by deployment
+topology: it must stay on the internal Compose or cluster network and must not
+be exposed to browsers, public API clients, operators, or the internet.
 
 ## Web Server
 
@@ -62,8 +62,8 @@ integration state, and realized internal identifiers needed to mediate mailbox
 access. It must not store email messages, parsed message bodies, conversation
 threads, or mailbox contents as product state. WildDuck owns mailbox storage
 and message state. Archive storage owns raw boundary copies. The mail-control
-service owns queue, replay, provisioning, provenance, and safe message-view
-state needed by the mail runtime.
+service owns queue, replay, provenance, safe message-view, feedback-processing,
+and internal relay state needed by the mail runtime.
 
 Mailbox assignment state belongs at the web boundary. A user, organization,
 agent, or API client may be granted access to an assigned mailbox, but the
@@ -107,8 +107,8 @@ The internal mail runtime consists of:
 - Haraka for inbound SMTP delivery into WildDuck;
 - Rspamd for spam scoring;
 - ZoneMTA for outbound queueing, retries, and bounce generation;
-- Mail Control Service for mail-domain coordination, provisioning apply,
-  inbound replay, outbound relay handling, feedback processing, and status.
+- Mail Control Service for runtime domain projection coordination, inbound
+  replay, outbound relay handling, feedback processing, and status.
 
 The mail control service is one internal deployment with multiple internal
 runtime surfaces:
@@ -127,13 +127,19 @@ own public user authentication or browser-facing API policy.
 The web server is the public API for mail administration and message
 review. The control API is the internal service API behind that frontend.
 
-The control API owns domain-level mail coordination:
+The control API owns internal mail-runtime coordination:
 
-- desired domain state for mail-control behavior;
-- provision apply for Cloudflare routing, Worker binding, runtime registry
-  projection, and service-owned feedback setup;
+- authoritative runtime snapshot sync from web-owned domain state;
+- internal ingest enqueue from the web Worker boundary;
+- prefix-scoped Worker archive credential issuance;
+- internal send submission handoff;
 - status and readiness reporting;
 - read-only message provenance, safe view, and security evidence APIs.
+
+The control API does not own customer-domain desired state, Cloudflare Email
+Routing, or Worker deployment. The web server owns those flows through persisted
+application state and the connected user's Cloudflare OAuth grant, then sends
+mail-control the resulting runtime projection.
 
 The control API does not own ordinary mailbox primitives. User mailboxes,
 aliases, forwarding targets, filters, and mailbox tokens remain WildDuck mailbox
@@ -206,15 +212,14 @@ The web server owns customer-facing Cloudflare work:
 - hosted Worker deployment and Worker secret refresh;
 - customer-facing remediation messages.
 
-The control service owns internal mail-runtime Cloudflare coordination:
+The control service does not own customer-domain Cloudflare coordination. It
+receives the web-owned runtime projection and uses that projection for internal
+mail workflows and status.
 
-- domain desired state for mail runtime;
-- Email Routing and Worker binding steps performed by provision apply;
-- runtime registry projection and status consumed by internal mail workflows.
-
-Self-hosted operators provide their own Cloudflare account, Worker script name,
-R2-compatible archive bucket, and provider credentials through Compose or Helm
-configuration.
+Self-hosted operators configure the admin instance with Cloudflare OAuth
+credentials, archive bucket credentials, and transactional SMTP settings through
+Compose or Helm. Customer-domain Cloudflare credentials are connected in the web
+UI and are not deployment environment variables.
 
 ## Hosted Archive Target
 

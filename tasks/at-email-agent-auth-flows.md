@@ -77,5 +77,4 @@ Add or refresh E2E coverage for:
 - Personal CLI sessions appear as normal Security sessions.
 - Agent identities and grants appear in Agent Access and can be revoked.
 - Browser, CLI, and plugin clients never receive WildDuck admin credentials,
-  WildDuck mailbox tokens, mail-control service tokens, raw internal service
-  URLs, or agent private keys.
+  WildDuck mailbox tokens, raw internal service URLs, or agent private keys.

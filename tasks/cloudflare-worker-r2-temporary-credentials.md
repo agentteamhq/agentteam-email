@@ -30,10 +30,9 @@ approval under `SECURITY.md`.
 
 ### Runtime Sync Semantics
 
-- Decide whether `agentMail.runtime.sync` is a partial upsert API or a full
-  organization/domain snapshot.
-- If it is a full snapshot, disable or remove domains absent from the current
-  snapshot and add tests for removal.
+- `agentMail.runtime.sync` is the authoritative runtime snapshot from web/Mongo.
+  Mail-control removes domains absent from the current snapshot from active
+  routing.
 - Keep self-host/local single-Worker provisioner behavior clearly separate from
   hosted per-domain Worker deployment.
 
