@@ -1,11 +1,13 @@
 import { randomBytes } from 'node:crypto'
 import Cloudflare from 'cloudflare'
 import { toFile } from 'cloudflare/uploads'
+import { Webhook } from 'standardwebhooks'
 
 import { PUBLIC_VARS } from '../vars.public'
 
 import { getCloudflareApiBaseUrl } from './config'
-import { AGENT_MAIL_CLOUDFLARE_EMAIL_WORKER_SCRIPT } from './email-worker.generated'
+
+const WORKER_WEBHOOK_SECRET_PREFIX = 'whsec_'
 
 export interface CloudflareAccountSummary {
   id: string
@@ -22,12 +24,12 @@ export interface CloudflareZoneSummary {
 }
 
 export interface CloudflareProvisioningResult {
-  hmacSecret: string
+  r2BucketName: string
   r2Endpoint: string
   r2Region: string
-  r2BucketName: string
+  webhookSigningSecret: string
+  webhookSigningSecretReference: string
   workerScriptName: string
-  hmacSecretReference: string
 }
 
 export interface CloudflareWorkerArchiveCredentials {
@@ -41,6 +43,20 @@ export interface CloudflareWorkerArchiveCredentials {
   sessionToken: string
 }
 
+export interface CloudflareRawEmailInput {
+  accessToken: string
+  cloudflareAccountId: string
+  from: string
+  mimeMessage: string
+  recipients: string[]
+}
+
+export interface CloudflareEmailSendResult {
+  delivered: string[]
+  permanentBounces: string[]
+  queued: string[]
+}
+
 export interface CloudflareProvisioningInput {
   accessToken: string
   archivePrefix: string
@@ -49,9 +65,9 @@ export interface CloudflareProvisioningInput {
   connectionPublicId: string
   domainPublicId: string
   domain: string
-  hmacSecret?: string
   organizationId: string
   organizationPublicId: string
+  webhookSigningSecret?: string
   workerCredentials: CloudflareWorkerArchiveCredentials
 }
 
@@ -114,15 +130,17 @@ export async function applyCloudflareProvisioning({
   connectionPublicId,
   domainPublicId,
   domain,
-  hmacSecret: existingHmacSecret,
   organizationId,
   organizationPublicId,
+  webhookSigningSecret: existingWebhookSigningSecret,
   workerCredentials
 }: CloudflareProvisioningInput): Promise<CloudflareProvisioningResult> {
   const client = createCloudflareClient(accessToken)
   const workerScriptName = createWorkerScriptName(domain, cloudflareZoneId)
-  const hmacSecret = existingHmacSecret ?? randomBytes(32).toString('base64url')
-  const hmacSecretReference = `cloudflare-worker:${workerScriptName}:AGENTTEAM_WORKER_HMAC_SECRET`
+  const webhookSigningSecret = existingWebhookSigningSecret
+    ? requireStandardWebhookSecret(existingWebhookSigningSecret)
+    : createStandardWebhookSecret()
+  const webhookSigningSecretReference = `cloudflare-worker:${workerScriptName}:AGENTTEAM_WORKER_HMAC_SECRET`
 
   await upsertEmailWorker({
     archivePrefix,
@@ -131,9 +149,9 @@ export async function applyCloudflareProvisioning({
     connectionPublicId,
     domainPublicId,
     domain,
-    hmacSecret,
     organizationId,
     organizationPublicId,
+    webhookSigningSecret,
     workerCredentials,
     workerScriptName
   })
@@ -147,13 +165,58 @@ export async function applyCloudflareProvisioning({
   })
 
   return {
-    hmacSecret,
-    r2BucketName: workerCredentials.bucket,
     r2Endpoint: workerCredentials.endpoint,
+    r2BucketName: workerCredentials.bucket,
     r2Region: workerCredentials.region,
-    hmacSecretReference,
+    webhookSigningSecret,
+    webhookSigningSecretReference,
     workerScriptName
   }
+}
+
+export async function sendCloudflareRawEmail({
+  accessToken,
+  cloudflareAccountId,
+  from,
+  mimeMessage,
+  recipients
+}: CloudflareRawEmailInput): Promise<CloudflareEmailSendResult> {
+  const body = JSON.stringify({
+    from,
+    mime_message: mimeMessage,
+    recipients
+  })
+  const sendURL = new URL(getCloudflareApiBaseUrl())
+  sendURL.pathname = joinURLPath(
+    sendURL.pathname,
+    'accounts',
+    cloudflareAccountId,
+    'email',
+    'sending',
+    'send_raw'
+  )
+  sendURL.search = ''
+  sendURL.hash = ''
+
+  const response = await fetch(sendURL, {
+    body,
+    headers: {
+      accept: 'application/json',
+      authorization: `Bearer ${accessToken}`,
+      'content-type': 'application/json'
+    },
+    method: 'POST'
+  })
+  const payload = (await response.json().catch(() => null)) as unknown
+  const parsed = parseCloudflareEmailSendEnvelope(payload)
+
+  if (!response.ok || !parsed.success) {
+    const error = new Error('Cloudflare raw email send failed') as Error & { status?: number }
+    error.status = response.status
+    throw error
+  }
+
+  return parsed.result
 }
 
 export function sanitizeCloudflareError(error: unknown): { code: string; message: string } {
@@ -164,6 +227,39 @@ export function sanitizeCloudflareError(error: unknown): { code: string; message
     code,
     message: cloudflarePublicErrorMessage(status)
   }
+}
+
+function parseCloudflareEmailSendEnvelope(payload: unknown): {
+  success: boolean
+  result: CloudflareEmailSendResult
+} {
+  if (!payload || typeof payload !== 'object') {
+    return {
+      success: false,
+      result: { delivered: [], permanentBounces: [], queued: [] }
+    }
+  }
+  const record = payload as Record<string, unknown>
+  const result =
+    record.result && typeof record.result === 'object' ? (record.result as Record<string, unknown>) : {}
+  return {
+    success: record.success === true,
+    result: {
+      delivered: stringArray(result.delivered),
+      permanentBounces: stringArray(result.permanent_bounces),
+      queued: stringArray(result.queued)
+    }
+  }
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+}
+
+function joinURLPath(basePath: string, ...segments: string[]): string {
+  const base = basePath.replace(/\/+$/u, '')
+  const suffix = segments.map((segment) => encodeURIComponent(segment)).join('/')
+  return `${base}/${suffix}`.replace(/^\/?/u, '/')
 }
 
 function cloudflarePublicErrorMessage(status: number | null): string {
@@ -187,9 +283,9 @@ async function upsertEmailWorker({
   connectionPublicId,
   domainPublicId,
   domain,
-  hmacSecret,
   organizationId,
   organizationPublicId,
+  webhookSigningSecret,
   workerCredentials,
   workerScriptName
 }: {
@@ -199,19 +295,16 @@ async function upsertEmailWorker({
   connectionPublicId: string
   domainPublicId: string
   domain: string
-  hmacSecret: string
   organizationId: string
   organizationPublicId: string
+  webhookSigningSecret: string
   workerCredentials: CloudflareWorkerArchiveCredentials
   workerScriptName: string
 }): Promise<void> {
-  const scriptFile = await toFile(
-    new TextEncoder().encode(AGENT_MAIL_CLOUDFLARE_EMAIL_WORKER_SCRIPT),
-    'index.js',
-    {
-      type: 'application/javascript+module'
-    }
-  )
+  const emailWorkerScript = await loadEmailWorkerScript()
+  const scriptFile = await toFile(new TextEncoder().encode(emailWorkerScript), 'index.js', {
+    type: 'application/javascript+module'
+  })
 
   await client.workers.scripts.update(workerScriptName, {
     account_id: cloudflareAccountId,
@@ -241,16 +334,42 @@ async function upsertEmailWorker({
           type: 'secret_text'
         },
         { name: 'AGENTTEAM_R2_SESSION_TOKEN', text: workerCredentials.sessionToken, type: 'secret_text' },
-        { name: 'AGENTTEAM_WORKER_HMAC_SECRET', text: hmacSecret, type: 'secret_text' },
+        { name: 'AGENTTEAM_WORKER_HMAC_SECRET', text: webhookSigningSecret, type: 'secret_text' },
         {
           name: 'AGENTTEAM_INGEST_URL',
-          text: new URL('/rpc/agent-mail/ingest/v1', PUBLIC_VARS.PUBLIC_HOSTNAME).toString(),
+          text: publicURL('rpc', 'agent-mail', 'ingest', 'v1', connectionPublicId).toString(),
           type: 'plain_text'
         }
       ],
       tags: ['agentteam-email']
     }
   })
+}
+
+async function loadEmailWorkerScript(): Promise<string> {
+  // eslint-disable-next-line no-restricted-syntax -- Approved exception: Vite raw import loads the generated Worker build asset.
+  const module = await import('@main/cloudflare-email-worker/worker.mjs?raw')
+  return module.default
+}
+
+function publicURL(...pathSegments: string[]) {
+  const url = new URL(PUBLIC_VARS.PUBLIC_HOSTNAME)
+  url.pathname = pathSegments.map((segment) => encodeURIComponent(segment)).join('/')
+  url.search = ''
+  url.hash = ''
+  return url
+}
+
+function createStandardWebhookSecret(): string {
+  return `${WORKER_WEBHOOK_SECRET_PREFIX}${randomBytes(32).toString('base64')}`
+}
+
+function requireStandardWebhookSecret(value: string): string {
+  if (!value.startsWith(WORKER_WEBHOOK_SECRET_PREFIX)) {
+    throw new Error('Worker webhook signing secret must use Standard Webhooks format')
+  }
+  new Webhook(value)
+  return value
 }
 
 function createWorkerScriptName(domain: string, cloudflareZoneId: string): string {

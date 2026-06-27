@@ -2,7 +2,110 @@ import parseAddress from 'email-addresses'
 import { format } from 'date-fns'
 import { TZDate } from '@date-fns/tz'
 import { AwsClient } from 'aws4fetch'
+import { Webhook } from 'standardwebhooks'
 import { v7 as uuidv7 } from 'uuid'
+
+export interface WorkerEnvironment {
+  AGENTTEAM_ARCHIVE_PREFIX?: unknown
+  AGENTTEAM_CONNECTION_ID?: unknown
+  AGENTTEAM_DOMAIN?: unknown
+  AGENTTEAM_DOMAIN_ID?: unknown
+  AGENTTEAM_INGEST_URL?: unknown
+  AGENTTEAM_ORGANIZATION_ID?: unknown
+  AGENTTEAM_ORG_PUBLIC_ID?: unknown
+  AGENTTEAM_R2_ACCESS_KEY_ID?: unknown
+  AGENTTEAM_R2_BUCKET?: unknown
+  AGENTTEAM_R2_CREDENTIAL_EXPIRES_AT?: unknown
+  AGENTTEAM_R2_ENDPOINT?: unknown
+  AGENTTEAM_R2_SECRET_ACCESS_KEY?: unknown
+  AGENTTEAM_R2_SESSION_TOKEN?: unknown
+  AGENTTEAM_WORKER_HMAC_SECRET?: unknown
+}
+
+export interface WorkerExecutionContext {
+  waitUntil: (promise: Promise<unknown>) => void
+}
+
+export interface WorkerEmailMessage {
+  from?: unknown
+  headers: Headers
+  raw: BodyInit | Uint8Array<ArrayBuffer>
+  rawSize: unknown
+  to?: unknown
+}
+
+interface ArchivePrefixContext {
+  domain?: string
+  orgPublicId?: string
+}
+
+interface HeaderEntry {
+  index: number
+  name: string
+  name_lower: string
+  value: string
+}
+
+interface R2Credentials {
+  accessKeyId: string
+  bucket: string
+  endpoint: string
+  expiresAt: Date
+  secretAccessKey: string
+  sessionToken: string
+}
+
+interface ArchivedInboundMessage {
+  edgeKey: string
+  ingestId: string
+  manifest: InboundManifest
+  rawKey: string
+  resultKey: string
+}
+
+interface InboundManifest {
+  archive_prefix: string
+  connection_id: string
+  domain: string
+  domain_id: string
+  edge_key: string
+  organization_id: string
+  org_public_id: string
+  raw_key: string
+  raw_sha256: string
+  received_at: string
+  recipient_domain: string
+  [key: string]: unknown
+}
+
+interface BuildCloudflareEdgeEvidenceInput {
+  cloudflareZoneName: unknown
+  headerEntries?: HeaderEntry[]
+  message: WorkerEmailMessage
+  receivedAt: Date
+}
+
+interface BuildManifestInput {
+  archivePrefix: unknown
+  atmcfHeaders: Record<string, string>
+  cloudflareEdgeEvidence: unknown
+  cloudflareZoneName: unknown
+  connectionId: unknown
+  domain: unknown
+  domainId: unknown
+  edgeKey: unknown
+  envelopeFrom: unknown
+  envelopeTo: unknown
+  ingestId: unknown
+  mailbox: unknown
+  messageId: unknown
+  organizationId: unknown
+  orgPublicId: unknown
+  rawKey: unknown
+  rawSha256: unknown
+  receivedAt: Date
+  recipientDomain: unknown
+}
 
 export const WORKER_NAME = 'agent-mail-ingress'
 export const INBOUND_EDGE_SCHEMA = 'agent-mail.inbound.edge.v1'
@@ -10,7 +113,7 @@ export const CLOUDFLARE_EDGE_EVIDENCE_SCHEMA = 'agent-mail.cloudflare-edge-evide
 export const INBOUND_INGEST_NOTIFICATION_SCHEMA = 'agent-mail.inbound.ingest.v1'
 export const INBOUND_RPC_PATH = '/rpc/agent-mail/ingest/v1'
 
-const OBSERVED_AUTH_PROVENANCE_HEADERS = new Set([
+const OBSERVED_AUTH_PROVENANCE_HEADERS = new Set<string>([
   'authentication-results',
   'arc-authentication-results',
   'received-spf',
@@ -21,14 +124,14 @@ const OBSERVED_AUTH_PROVENANCE_HEADERS = new Set([
   'received'
 ])
 
-export function requireString(value, label) {
+export function requireString(value: unknown, label: string): string {
   if (typeof value !== 'string' || value.trim() === '') {
     throw new Error(`missing ${label}`)
   }
   return value.trim()
 }
 
-export function requireFiniteNumber(value, label) {
+export function requireFiniteNumber(value: unknown, label: string): number {
   const number = Number(value)
   if (!Number.isFinite(number)) {
     throw new Error(`missing ${label}`)
@@ -36,20 +139,20 @@ export function requireFiniteNumber(value, label) {
   return number
 }
 
-export function normalizeDomain(value) {
+export function normalizeDomain(value: unknown): string {
   return requireString(value, 'domain').toLowerCase()
 }
 
-export function normalizeAddress(value) {
+export function normalizeAddress(value: unknown): string {
   const parsed = parseSingleMailbox(value)
   return `${parsed.local.toLowerCase()}@${parsed.domain.toLowerCase()}`
 }
 
-export function canonicalDomainFromAddress(value) {
+export function canonicalDomainFromAddress(value: unknown): string {
   return parseSingleMailbox(value).domain.toLowerCase()
 }
 
-function parseSingleMailbox(value) {
+function parseSingleMailbox(value: unknown): { domain: string; local: string } {
   const rawValue = requireString(value, 'email address')
   const parsed = parseAddress({ input: rawValue, rfc6532: true })
   if (!parsed || !Array.isArray(parsed.addresses) || parsed.addresses.length !== 1) {
@@ -62,7 +165,7 @@ function parseSingleMailbox(value) {
   return mailbox
 }
 
-export function getHeader(headers, name) {
+export function getHeader(headers: Headers, name: string): string {
   const value = headers.get(name)
   if (typeof value !== 'string') {
     return ''
@@ -70,7 +173,7 @@ export function getHeader(headers, name) {
   return value.trim()
 }
 
-export async function readRawMessage(message) {
+export async function readRawMessage(message: WorkerEmailMessage): Promise<Uint8Array<ArrayBuffer>> {
   const buffer = await new Response(message.raw).arrayBuffer()
   const bytes = new Uint8Array(buffer)
   if (bytes.byteLength === 0) {
@@ -79,37 +182,24 @@ export async function readRawMessage(message) {
   return bytes
 }
 
-export async function sha256Hex(value) {
+export async function sha256Hex(value: Uint8Array<ArrayBuffer> | string): Promise<string> {
   const buffer = value instanceof Uint8Array ? value : new TextEncoder().encode(value)
   const digest = await crypto.subtle.digest('SHA-256', buffer)
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
-export async function hmacSha256Hex(secret, value) {
-  const encodedSecret = new TextEncoder().encode(requireString(secret, 'HMAC secret'))
-  const key = await crypto.subtle.importKey(
-    'raw',
-    encodedSecret,
-    {
-      name: 'HMAC',
-      hash: 'SHA-256'
-    },
-    false,
-    ['sign']
-  )
-  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(value))
-  return [...new Uint8Array(signature)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
-}
-
-export function generateUUIDv7(now = new Date()) {
+export function generateUUIDv7(now = new Date()): string {
   return uuidv7({ msecs: now.getTime() })
 }
 
-export function archiveDatePath(date) {
+export function archiveDatePath(date: Date): string {
   return format(new TZDate(date, 'UTC'), 'yyyy/MM/dd')
 }
 
-export function normalizeArchivePrefix(value, { orgPublicId, domain } = {}) {
+export function normalizeArchivePrefix(
+  value: unknown,
+  { orgPublicId, domain }: ArchivePrefixContext = {}
+): string {
   const prefix = requireString(value, 'archive prefix').replace(/^\/+|\/+$/g, '')
   if (prefix === '') {
     throw new Error('missing archive prefix')
@@ -142,7 +232,11 @@ export function normalizeArchivePrefix(value, { orgPublicId, domain } = {}) {
   return prefix
 }
 
-export function inboundBundleKeys(archivePrefix, date, ingestId) {
+export function inboundBundleKeys(
+  archivePrefix: unknown,
+  date: Date,
+  ingestId: unknown
+): { bundlePrefix: string; edgeKey: string; rawKey: string; resultKey: string } {
   const prefix = normalizeArchivePrefix(archivePrefix)
   const bundlePrefix = `${prefix}/${archiveDatePath(date)}/${requireString(ingestId, 'ingest id')}`
   return {
@@ -153,8 +247,9 @@ export function inboundBundleKeys(archivePrefix, date, ingestId) {
   }
 }
 
-export function normalizeIngestURL(value) {
+export function normalizeIngestURL(value: unknown, connectionId: unknown): URL {
   const rawValue = requireString(value, 'ingest URL')
+  const path = connectionIngestPath(connectionId)
   let url
   try {
     url = new URL(rawValue)
@@ -165,16 +260,20 @@ export function normalizeIngestURL(value) {
     throw new Error('ingest URL must use https')
   }
   if (url.pathname === '/') {
-    url.pathname = INBOUND_RPC_PATH
-  } else if (url.pathname !== INBOUND_RPC_PATH) {
-    throw new Error(`ingest URL path must be ${INBOUND_RPC_PATH}`)
+    url.pathname = path
+  } else if (url.pathname !== path) {
+    throw new Error(`ingest URL path must be ${path}`)
   }
   url.search = ''
   url.hash = ''
   return url
 }
 
-export function buildIngestNotification(archived) {
+function connectionIngestPath(connectionId: unknown): string {
+  return `${INBOUND_RPC_PATH}/${encodeURIComponent(requireString(connectionId, 'connection id'))}`
+}
+
+export function buildIngestNotification(archived: ArchivedInboundMessage): Record<string, string> {
   const manifest = archived?.manifest
   if (!manifest || typeof manifest !== 'object') {
     throw new Error('missing archived inbound manifest')
@@ -198,32 +297,41 @@ export function buildIngestNotification(archived) {
   }
 }
 
-export async function buildIngestRequest(archived, env, now = new Date()) {
+export async function buildIngestRequest(
+  archived: ArchivedInboundMessage,
+  env: WorkerEnvironment,
+  now = new Date()
+): Promise<{ init: RequestInit; url: URL }> {
   if (!env || typeof env !== 'object') {
     throw new Error('missing worker environment')
   }
-  const url = normalizeIngestURL(env.AGENTTEAM_INGEST_URL)
-  const timestamp = now.toISOString()
-  const body = JSON.stringify(buildIngestNotification(archived))
   const connectionId = requireString(env.AGENTTEAM_CONNECTION_ID, 'connection id')
-  const hmacSecret = requireString(env.AGENTTEAM_WORKER_HMAC_SECRET, 'Worker HMAC secret')
-  const signature = await hmacSha256Hex(hmacSecret, `${timestamp}\n${connectionId}\n${body}`)
+  const url = normalizeIngestURL(env.AGENTTEAM_INGEST_URL, connectionId)
+  const body = JSON.stringify(buildIngestNotification(archived))
+  const webhook = new Webhook(
+    requireString(env.AGENTTEAM_WORKER_HMAC_SECRET, 'Worker webhook signing secret')
+  )
+  const ingestId = requireString(archived.ingestId, 'ingest id')
   return {
     url,
     init: {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'X-Agent-Mail-Connection-Id': connectionId,
-        'X-Agent-Mail-Timestamp': timestamp,
-        'X-Agent-Mail-Signature': signature
+        'webhook-id': ingestId,
+        'webhook-timestamp': String(Math.floor(now.getTime() / 1000)),
+        'webhook-signature': webhook.sign(ingestId, now, body)
       },
       body
     }
   }
 }
 
-export async function sendIngestNotification(archived, env, fetchImpl = fetch) {
+export async function sendIngestNotification(
+  archived: ArchivedInboundMessage,
+  env: WorkerEnvironment,
+  fetchImpl: typeof fetch = fetch
+): Promise<void> {
   const request = await buildIngestRequest(archived, env)
   const response = await fetchImpl(request.url, request.init)
   if (!response.ok) {
@@ -231,10 +339,10 @@ export async function sendIngestNotification(archived, env, fetchImpl = fetch) {
   }
 }
 
-export function buildATMCFHeaders(message, receivedAt) {
+export function buildATMCFHeaders(message: WorkerEmailMessage, receivedAt: Date): Record<string, string> {
   const envelopeFrom =
     typeof message.from === 'string' && message.from.trim() !== '' ? message.from.trim() : '<>'
-  const headers = {
+  const headers: Record<string, string> = {
     'X-ATMCF-Edge-Action': 'worker',
     'X-ATMCF-Edge-Status': 'received',
     'X-ATMCF-Edge-Envelope-From': envelopeFrom,
@@ -251,12 +359,12 @@ export function buildATMCFHeaders(message, receivedAt) {
   return headers
 }
 
-export function snapshotMessageHeaders(headers) {
+export function snapshotMessageHeaders(headers: Headers): HeaderEntry[] {
   if (!headers || typeof headers.entries !== 'function') {
     throw new Error('missing message.headers')
   }
 
-  const entries = []
+  const entries: HeaderEntry[] = []
   let index = 0
   for (const [name, value] of headers.entries()) {
     const headerName = requireString(name, 'header name')
@@ -271,7 +379,7 @@ export function snapshotMessageHeaders(headers) {
   return entries
 }
 
-function observedAuthProvenanceHeaders(headerEntries) {
+function observedAuthProvenanceHeaders(headerEntries: HeaderEntry[]): HeaderEntry[] {
   return headerEntries.filter(
     (entry) => OBSERVED_AUTH_PROVENANCE_HEADERS.has(entry.name_lower) || entry.name_lower.startsWith('x-cf-')
   )
@@ -282,7 +390,7 @@ export function buildCloudflareEdgeEvidence({
   receivedAt,
   cloudflareZoneName,
   headerEntries = snapshotMessageHeaders(message.headers)
-}) {
+}: BuildCloudflareEdgeEvidenceInput): Record<string, unknown> {
   return {
     schema: CLOUDFLARE_EDGE_EVIDENCE_SCHEMA,
     source: 'cloudflare-worker-forwardable-email-message',
@@ -323,8 +431,8 @@ export function buildManifest({
   messageId,
   atmcfHeaders,
   cloudflareEdgeEvidence
-}) {
-  const manifest = {
+}: BuildManifestInput): InboundManifest {
+  const manifest: InboundManifest = {
     schema: INBOUND_EDGE_SCHEMA,
     ingest_id: requireString(ingestId, 'ingest id'),
     organization_id: requireString(organizationId, 'organization id'),
@@ -354,7 +462,7 @@ export function buildManifest({
   return manifest
 }
 
-export function temporaryR2CredentialsFromEnv(env, now = new Date()) {
+export function temporaryR2CredentialsFromEnv(env: WorkerEnvironment, now = new Date()): R2Credentials {
   if (!env || typeof env !== 'object') {
     throw new Error('missing worker environment')
   }
@@ -379,7 +487,7 @@ export function temporaryR2CredentialsFromEnv(env, now = new Date()) {
   }
 }
 
-export function buildR2ObjectURL(credentials, key) {
+export function buildR2ObjectURL(credentials: R2Credentials, key: unknown): URL {
   const url = new URL(requireString(credentials.endpoint, 'R2 endpoint'))
   if (url.protocol !== 'https:') {
     throw new Error('R2 endpoint must use https')
@@ -396,7 +504,13 @@ export function buildR2ObjectURL(credentials, key) {
   return url
 }
 
-export async function putR2Object(credentials, key, value, contentType, fetchImpl = fetch) {
+export async function putR2Object(
+  credentials: R2Credentials,
+  key: string,
+  value: BodyInit | Uint8Array<ArrayBuffer>,
+  contentType: unknown,
+  fetchImpl: typeof fetch = fetch
+): Promise<void> {
   const aws = new AwsClient({
     accessKeyId: credentials.accessKeyId,
     secretAccessKey: credentials.secretAccessKey,
@@ -407,7 +521,8 @@ export async function putR2Object(credentials, key, value, contentType, fetchImp
   const signedRequest = await aws.sign(buildR2ObjectURL(credentials, key), {
     method: 'PUT',
     headers: {
-      'content-type': requireString(contentType, 'content type')
+      'content-type': requireString(contentType, 'content type'),
+      'if-none-match': '*'
     },
     body: value
   })
@@ -417,7 +532,12 @@ export async function putR2Object(credentials, key, value, contentType, fetchImp
   }
 }
 
-export async function archiveInboundMessage(message, env, now = new Date(), fetchImpl = fetch) {
+export async function archiveInboundMessage(
+  message: WorkerEmailMessage,
+  env: WorkerEnvironment,
+  now = new Date(),
+  fetchImpl: typeof fetch = fetch
+): Promise<ArchivedInboundMessage> {
   if (!env || typeof env !== 'object') {
     throw new Error('missing worker environment')
   }

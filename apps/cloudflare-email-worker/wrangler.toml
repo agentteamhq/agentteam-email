@@ -1,7 +1,0 @@
-name = "agent-mail-ingress"
-main = "src/index.js"
-compatibility_date = "2026-06-19"
-workers_dev = false
-
-[[send_email]]
-name = "EMAIL"

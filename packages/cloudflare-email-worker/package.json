@@ -1,0 +1,52 @@
+{
+  "name": "@main/cloudflare-email-worker",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/src/index.d.ts",
+        "import": "./dist/worker.mjs"
+      },
+      "default": "./dist/worker.mjs"
+    },
+    "./worker.mjs": {
+      "default": "./dist/worker.mjs"
+    }
+  },
+  "sideEffects": true,
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "vite build && tsc --emitDeclarationOnly --declaration --declarationMap --noEmit false --noCheck --outDir dist && api-extractor run --local --verbose",
+    "clean": "rimraf --glob dist .turbo node_modules/.cache node_modules/.vite* .eslintcache *.tsbuildinfo",
+    "dev": "vite build --watch",
+    "format": "pnpm run lint --fix && pnpm exec prettier --write ./src ./vite.config.ts",
+    "lint": "eslint --quiet ${ESLINT_CACHE_FLAG:---cache} --concurrency ${ESLINT_CONCURRENCY:-auto} ./src ./vite.config.ts",
+    "test": "node --test",
+    "typecheck": "tsc --noEmit",
+    "typecheck:debug": "tsc --noEmit --listFiles"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@date-fns/tz": "catalog:",
+    "@types/node": "catalog:",
+    "aws4fetch": "catalog:",
+    "date-fns": "catalog:",
+    "email-addresses": "catalog:",
+    "standardwebhooks": "catalog:",
+    "uuid": "catalog:",
+    "vite": "catalog:"
+  },
+  "peerDependencies": {
+    "@date-fns/tz": "*",
+    "aws4fetch": "*",
+    "date-fns": "*",
+    "email-addresses": "*",
+    "standardwebhooks": "*",
+    "uuid": "*"
+  }
+}

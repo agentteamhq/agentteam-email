@@ -3,8 +3,9 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createHmac } from 'node:crypto'
+import { Buffer } from 'node:buffer'
 
+import { Webhook } from 'standardwebhooks'
 import {
   archiveDatePath,
   archiveInboundMessage,
@@ -17,8 +18,10 @@ import {
   normalizeArchivePrefix,
   normalizeIngestURL,
   sha256Hex
-} from '../src/lib.js'
-import worker from '../src/index.js'
+} from '../src/lib.ts'
+import worker from '../src/index.ts'
+
+const TEST_WORKER_WEBHOOK_SECRET = standardWebhookSecret('test-worker-webhook-secret')
 
 class MockR2Fetch {
   constructor() {
@@ -117,6 +120,10 @@ function captureConsole() {
       console.error = originalError
     }
   }
+}
+
+function standardWebhookSecret(value) {
+  return `whsec_${Buffer.from(value, 'utf8').toString('base64')}`
 }
 
 test('normalizeAddress lowercases and trims addresses', () => {
@@ -280,9 +287,9 @@ test('archiveInboundMessage ignores stale Analytics bindings and does not fetch 
     const result = await archiveInboundMessage(
       await buildMessage(rawBytes),
       workerEnv({
-        AGENT_MAIL_CLOUDFLARE_ANALYTICS_TOKEN: 'stale-token',
-        AGENT_MAIL_CLOUDFLARE_ZONE_ID: 'stale-zone',
-        AGENT_MAIL_CLOUDFLARE_GRAPHQL_URL: 'https://example.invalid/graphql'
+        AT_EMAIL_ADMIN_CF_ANALYTICS_TOKEN: 'stale-token',
+        AT_EMAIL_ADMIN_CF_ZONE_ID: 'stale-zone',
+        AT_EMAIL_ADMIN_CF_GRAPHQL_URL: 'https://example.invalid/graphql'
       }),
       now,
       r2.fetch
@@ -308,17 +315,17 @@ test('buildIngestRequest posts the archived bundle through the worker ingest end
     archived,
     {
       AGENTTEAM_INGEST_URL: 'mail-ingress.example.com',
-      AGENTTEAM_WORKER_HMAC_SECRET: 'test-secret',
+      AGENTTEAM_WORKER_HMAC_SECRET: TEST_WORKER_WEBHOOK_SECRET,
       AGENTTEAM_CONNECTION_ID: 'conn-public-id'
     },
     requestTime
   )
 
-  assert.equal(request.url.href, 'https://mail-ingress.example.com/rpc/agent-mail/ingest/v1')
+  assert.equal(request.url.href, 'https://mail-ingress.example.com/rpc/agent-mail/ingest/v1/conn-public-id')
   assert.equal(request.init.method, 'POST')
   assert.equal(request.init.headers['content-type'], 'application/json')
-  assert.equal(request.init.headers['X-Agent-Mail-Connection-Id'], 'conn-public-id')
-  assert.equal(request.init.headers['X-Agent-Mail-Timestamp'], '2026-04-18T12:34:58.000Z')
+  assert.equal(request.init.headers['webhook-id'], archived.ingestId)
+  assert.equal(request.init.headers['webhook-timestamp'], String(Math.floor(requestTime.getTime() / 1000)))
 
   const payload = JSON.parse(request.init.body)
   assert.equal(payload.schema, 'agent-mail.inbound.ingest.v1')
@@ -337,12 +344,10 @@ test('buildIngestRequest posts the archived bundle through the worker ingest end
   assert.equal(payload.received_at, '2026-04-18T12:34:56.000Z')
   assert.equal(payload.raw_sha256, await sha256Hex(rawBytes))
 
-  const expectedSignature = createHmac('sha256', 'test-secret')
-    .update(
-      `${request.init.headers['X-Agent-Mail-Timestamp']}\n${request.init.headers['X-Agent-Mail-Connection-Id']}\n${request.init.body}`
-    )
-    .digest('hex')
-  assert.equal(request.init.headers['X-Agent-Mail-Signature'], expectedSignature)
+  assert.equal(
+    request.init.headers['webhook-signature'],
+    new Webhook(TEST_WORKER_WEBHOOK_SECRET).sign(archived.ingestId, requestTime, request.init.body)
+  )
 })
 
 test('worker email logs only safe receive and archive fields', async () => {
@@ -354,8 +359,8 @@ test('worker email logs only safe receive and archive fields', async () => {
     await worker.email(
       await buildMessage(rawBytes),
       workerEnv({
-        AGENTTEAM_INGEST_URL: 'https://mail-ingress.example.com/rpc/agent-mail/ingest/v1',
-        AGENTTEAM_WORKER_HMAC_SECRET: 'test-worker-hmac-secret'
+        AGENTTEAM_INGEST_URL: 'https://mail-ingress.example.com/rpc/agent-mail/ingest/v1/conn-public-id',
+        AGENTTEAM_WORKER_HMAC_SECRET: TEST_WORKER_WEBHOOK_SECRET
       })
     )
   } finally {
@@ -373,7 +378,7 @@ test('worker email logs only safe receive and archive fields', async () => {
   assert.doesNotMatch(logs, /Agent@Example\.com/i)
   assert.doesNotMatch(logs, /raw\.eml|edge\.json|result\.json/)
   assert.doesNotMatch(logs, /orgs\/org_public_test/)
-  assert.doesNotMatch(logs, /test-worker-hmac-secret/)
+  assert.equal(logs.includes(TEST_WORKER_WEBHOOK_SECRET), false)
   assert.doesNotMatch(logs, /test-secret-key|test-session-token|test-access-key/)
 })
 
@@ -389,7 +394,7 @@ test('worker email failure logs only safe error metadata', async () => {
         workerEnv({
           AGENTTEAM_DOMAIN: 'other.example',
           AGENTTEAM_ARCHIVE_PREFIX: 'orgs/org_public_test/domains/other.example/mail/inbound',
-          AGENTTEAM_WORKER_HMAC_SECRET: 'test-worker-hmac-secret'
+          AGENTTEAM_WORKER_HMAC_SECRET: TEST_WORKER_WEBHOOK_SECRET
         })
       ),
       (error) => {
@@ -414,23 +419,29 @@ test('worker email failure logs only safe error metadata', async () => {
   assert.doesNotMatch(logs, /message recipient domain/i)
   assert.doesNotMatch(logs, /example\.com|other\.example/i)
   assert.doesNotMatch(logs, /\n\s*at\s/)
-  assert.doesNotMatch(logs, /test-worker-hmac-secret/)
+  assert.equal(logs.includes(TEST_WORKER_WEBHOOK_SECRET), false)
   assert.doesNotMatch(logs, /test-secret-key|test-session-token|test-access-key/)
 })
 
 test('normalizeIngestURL defaults to the RPC ingest path and rejects unrelated paths', () => {
   assert.equal(
-    normalizeIngestURL('mail-ingress.example.com').href,
-    'https://mail-ingress.example.com/rpc/agent-mail/ingest/v1'
+    normalizeIngestURL('mail-ingress.example.com', 'conn-public-id').href,
+    'https://mail-ingress.example.com/rpc/agent-mail/ingest/v1/conn-public-id'
   )
   assert.equal(
-    normalizeIngestURL('https://mail-ingress.example.com/rpc/agent-mail/ingest/v1').href,
-    'https://mail-ingress.example.com/rpc/agent-mail/ingest/v1'
+    normalizeIngestURL(
+      'https://mail-ingress.example.com/rpc/agent-mail/ingest/v1/conn-public-id',
+      'conn-public-id'
+    ).href,
+    'https://mail-ingress.example.com/rpc/agent-mail/ingest/v1/conn-public-id'
   )
-  assert.throws(() => normalizeIngestURL('https://mail-ingress.example.com/other'), /path must be/)
+  assert.throws(
+    () => normalizeIngestURL('https://mail-ingress.example.com/other', 'conn-public-id'),
+    /path must be/
+  )
 })
 
-test('buildIngestRequest requires the provisioned Worker HMAC binding', async () => {
+test('buildIngestRequest requires the provisioned Worker webhook signing binding', async () => {
   const rawBytes = await fixtureBytes('inbound.eml')
   const r2 = new MockR2Fetch()
   const now = new Date('2026-04-18T12:34:56.000Z')
@@ -445,7 +456,7 @@ test('buildIngestRequest requires the provisioned Worker HMAC binding', async ()
       },
       new Date('2026-04-18T12:34:58.000Z')
     ),
-    /missing Worker HMAC secret/
+    /missing Worker webhook signing secret/
   )
 })
 

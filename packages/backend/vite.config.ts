@@ -40,6 +40,11 @@ export default defineConfig({
           return false
         }
 
+        // Raw imports are compile-time assets and must be embedded in the backend bundle.
+        if (id.endsWith('?raw')) {
+          return false
+        }
+
         // Otherwise externalize (like 'react', 'react-dom', etc.)
         return true
       },
