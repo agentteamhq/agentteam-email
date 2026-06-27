@@ -22,13 +22,14 @@ import (
 	"agent-mail/internal/control/controlstate"
 	"agent-mail/internal/control/feedbackrouter"
 	"agent-mail/internal/control/messageprovenance"
+	"agent-mail/internal/mail/rfc822"
 	"agent-mail/internal/mail/structured"
 	"agent-mail/internal/modules/poller"
 	"agent-mail/internal/modules/smtprelay"
-	"agent-mail/internal/provisioning/cloudflareprovisioner"
-	"agent-mail/internal/provisioning/mailprovisioner"
 	"agent-mail/internal/provisioning/wildduckprovisioner"
 	"agent-mail/internal/registry/domainregistry"
+
+	"go.mongodb.org/mongo-driver/v2/x/mongo/driver/connstring"
 )
 
 type Config struct {
@@ -48,6 +49,8 @@ type runtimeDatabases struct {
 }
 
 type runtimeEndpoints struct {
+	ControlToWebBaseURL string
+	ControlToWebToken   string
 	HarakaSMTPAddress   string
 	ZoneMTADSNAddress   string
 	WildDuckAPIBaseURL  string
@@ -63,7 +66,6 @@ type Service struct {
 
 type controlRuntimeAPI struct {
 	poller        *poller.Poller
-	provisioner   *mailprovisioner.Service
 	stateStore    controlstate.Store
 	relayAddress  string
 	relayUsername string
@@ -159,27 +161,27 @@ func validateIngestNotificationMatchesRecord(notification poller.Notification, r
 }
 
 func newCloudflareWorkerArchiveCredentialIssuer() (*cloudflareWorkerArchiveCredentialIssuer, error) {
-	apiToken, err := configfile.RequireEnv("AGENT_MAIL_CLOUDFLARE_API_TOKEN")
+	apiToken, err := configfile.RequireEnv("AT_EMAIL_ADMIN_R2_API_TOKEN")
 	if err != nil {
 		return nil, err
 	}
-	accountID, err := configfile.RequireEnv("AGENT_MAIL_CLOUDFLARE_ACCOUNT_ID")
+	accountID, err := configfile.RequireEnv("AT_EMAIL_ADMIN_R2_ACCOUNT_ID")
 	if err != nil {
 		return nil, err
 	}
-	bucket, err := configfile.RequireEnv("AGENT_MAIL_R2_BUCKET")
+	bucket, err := configfile.RequireEnv("AT_EMAIL_ADMIN_R2_BUCKET")
 	if err != nil {
 		return nil, err
 	}
-	endpoint, err := configfile.RequireEnv("AGENT_MAIL_R2_ENDPOINT")
+	endpoint, err := configfile.RequireEnv("AT_EMAIL_ADMIN_R2_ENDPOINT")
 	if err != nil {
 		return nil, err
 	}
-	region, err := configfile.RequireEnv("AGENT_MAIL_R2_REGION")
+	region, err := configfile.RequireEnv("AT_EMAIL_ADMIN_R2_REGION")
 	if err != nil {
 		return nil, err
 	}
-	parentAccessKeyID, err := configfile.RequireEnv("AGENT_MAIL_R2_ACCESS_KEY_ID")
+	parentAccessKeyID, err := configfile.RequireEnv("AT_EMAIL_ADMIN_R2_ACCESS_KEY_ID")
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +198,7 @@ func newCloudflareWorkerArchiveCredentialIssuer() (*cloudflareWorkerArchiveCrede
 }
 
 func cloudflareAPIBaseURL() string {
-	apiBaseURL := strings.TrimRight(os.Getenv("AGENT_MAIL_CLOUDFLARE_API_BASE_URL"), "/")
+	apiBaseURL := strings.TrimRight(os.Getenv("AT_EMAIL_ADMIN_CF_API_BASE_URL"), "/")
 	if apiBaseURL == "" {
 		return "https://api.cloudflare.com/client/v4"
 	}
@@ -242,8 +244,11 @@ func (i *cloudflareWorkerArchiveCredentialIssuer) IssueWorkerArchiveCredentials(
 	if err != nil {
 		return controlapi.WorkerArchiveCredentialsResult{}, fmt.Errorf("marshal Cloudflare temporary credential request: %w", err)
 	}
-	url := fmt.Sprintf("%s/accounts/%s/r2/temp-access-credentials", i.apiBaseURL, url.PathEscape(i.accountID))
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(bodyBytes))
+	requestURL, err := url.JoinPath(i.apiBaseURL, "accounts", url.PathEscape(i.accountID), "r2", "temp-access-credentials")
+	if err != nil {
+		return controlapi.WorkerArchiveCredentialsResult{}, fmt.Errorf("build Cloudflare temporary credential request URL: %w", err)
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return controlapi.WorkerArchiveCredentialsResult{}, fmt.Errorf("create Cloudflare temporary credential request: %w", err)
 	}
@@ -396,25 +401,7 @@ func loopbackRelayAddress(listenAddress string) (string, string, error) {
 }
 
 func stampOutboundQueueID(raw []byte, idempotencyKey string) ([]byte, error) {
-	if len(raw) == 0 {
-		return nil, fmt.Errorf("raw message is required")
-	}
-	text := string(raw)
-	separator := "\r\n\r\n"
-	headerEnd := strings.Index(text, separator)
-	if headerEnd < 0 {
-		separator = "\n\n"
-		headerEnd = strings.Index(text, separator)
-	}
-	if headerEnd < 0 {
-		return nil, fmt.Errorf("raw message is missing a header/body separator")
-	}
-	headers := text[:headerEnd]
-	if strings.Contains(strings.ToLower(headers), "x-agent-mail-zonemta-queue-id:") {
-		return nil, fmt.Errorf("raw message must not include internal ZoneMTA queue provenance")
-	}
-	stamped := "X-Agent-Mail-ZoneMTA-Queue-ID: " + idempotencyKey + "\r\n" + text
-	return []byte(stamped), nil
+	return rfc822.AddHeaderIfAbsent(raw, "X-Agent-Mail-ZoneMTA-Queue-ID", idempotencyKey)
 }
 
 func domainFromMailbox(mailbox string) string {
@@ -426,32 +413,11 @@ func domainFromMailbox(mailbox string) string {
 }
 
 func (a *controlRuntimeAPI) SyncRuntime(ctx context.Context, params controlapi.RuntimeSyncParams, now time.Time) (controlapi.RuntimeSyncResult, error) {
-	state, err := a.provisioner.State(ctx)
+	domains, changed, err := controlstate.SyncRuntimeDomains(ctx, a.stateStore, controlstate.ProviderCloudflare, params.Domains, now)
 	if err != nil {
 		return controlapi.RuntimeSyncResult{}, err
 	}
-	known := make(map[string]struct{}, len(state.Domains))
-	for _, domain := range state.Domains {
-		known[domain.Domain] = struct{}{}
-	}
-
-	result := controlapi.RuntimeSyncResult{Domains: make([]mailprovisioner.DomainConfigResult, 0, len(params.Domains))}
-	for _, domain := range params.Domains {
-		var synced mailprovisioner.DomainConfigResult
-		if _, ok := known[strings.ToLower(strings.TrimSpace(domain.Domain))]; ok {
-			synced, err = a.provisioner.ModifyDomain(ctx, domain, now)
-		} else {
-			synced, err = a.provisioner.AddDomain(ctx, domain, now)
-		}
-		if err != nil {
-			return controlapi.RuntimeSyncResult{}, err
-		}
-		if synced.Changed {
-			result.Changed = true
-		}
-		result.Domains = append(result.Domains, synced)
-	}
-	return result, nil
+	return controlapi.RuntimeSyncResult{Domains: domains, Changed: changed}, nil
 }
 
 func Main(ctx context.Context, args []string) error {
@@ -477,18 +443,11 @@ func New(ctx context.Context, cfg Config) (*Service, error) {
 		return nil, fmt.Errorf("missing required -admin-listen-address")
 	}
 
-	adminAPIToken, err := configfile.RequireEnv("AGENT_MAIL_CONTROL_API_TOKEN")
+	wildduckAdminToken, err := configfile.RequireEnv("AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN")
 	if err != nil {
 		return nil, err
 	}
-	wildduckAdminToken, err := configfile.RequireEnv("AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN")
-	if err != nil {
-		return nil, err
-	}
-	selectedProvider, err := configfile.RequireEnv("AGENT_MAIL_OUTBOUND_PROVIDER")
-	if err != nil {
-		return nil, err
-	}
+	selectedProvider := controlstate.ProviderCloudflare
 	secrets, err := runtimeSecretsFromEnv()
 	if err != nil {
 		return nil, err
@@ -501,10 +460,11 @@ func New(ctx context.Context, cfg Config) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	stateStore, err := controlstate.NewStoreFromEnv()
-	if err != nil {
-		return nil, err
-	}
+	stateStore := controlstate.NewMemoryStore()
+	bootstrapRuntimeProjectionFromWeb(ctx, stateStore, selectedProvider, runtimeBootstrapConfig{
+		BaseURL: endpoints.ControlToWebBaseURL,
+		Token:   endpoints.ControlToWebToken,
+	})
 	runtimeSource := controlStateRuntimeSource{store: stateStore}
 	moduleConfig := canonicalModuleConfig(secrets, databases, endpoints)
 	pollerModule, err := poller.NewWithDomainSourceConfig(ctx, moduleConfig.Poller, runtimeSource)
@@ -522,12 +482,6 @@ func New(ctx context.Context, cfg Config) (*Service, error) {
 		_ = pollerModule.Close(context.Background())
 		return nil, fmt.Errorf("initialize feedback-router module: %w", err)
 	}
-	cloudflareProvisioner, err := cloudflareprovisioner.NewFromEnv(stateStore)
-	if err != nil {
-		_ = providerRelayModule.Close(context.Background())
-		_ = pollerModule.Close(context.Background())
-		return nil, fmt.Errorf("initialize Cloudflare provisioner: %w", err)
-	}
 	wildduckProvisioner, err := wildduckprovisioner.New(wildduckprovisioner.Config{
 		APIBaseURL:      moduleConfig.FeedbackRouter.WildDuck.APIBaseURL,
 		AdminToken:      wildduckAdminToken,
@@ -541,18 +495,16 @@ func New(ctx context.Context, cfg Config) (*Service, error) {
 		_ = pollerModule.Close(context.Background())
 		return nil, fmt.Errorf("initialize WildDuck feedback provisioner: %w", err)
 	}
-	messageProvenance, err := messageprovenance.NewFromRuntimeEnv(ctx, moduleConfig.FeedbackRouter.WildDuck.APIBaseURL)
+	messageProvenance, err := messageprovenance.NewFromRuntimeEnv(
+		ctx,
+		moduleConfig.FeedbackRouter.WildDuck.APIBaseURL,
+		messageprovenance.WithArchivePrefixResolver(runtimeSource),
+	)
 	if err != nil {
 		_ = providerRelayModule.Close(context.Background())
 		_ = pollerModule.Close(context.Background())
 		return nil, fmt.Errorf("initialize message provenance provider: %w", err)
 	}
-	domainProvisioner := mailprovisioner.New(
-		stateStore,
-		mailprovisioner.WithSelectedProvider(selectedProvider),
-		mailprovisioner.WithCloudflare(cloudflareProvisioner),
-		mailprovisioner.WithWildDuck(wildduckProvisioner),
-	)
 	statusProjector, err := domainregistry.NewProjector(domainregistry.ProjectedStatusConfig{
 		PollerConfig:        moduleConfig.Poller,
 		ProviderRelayConfig: moduleConfig.ProviderRelay,
@@ -564,11 +516,9 @@ func New(ctx context.Context, cfg Config) (*Service, error) {
 		return nil, fmt.Errorf("initialize domain registry projector: %w", err)
 	}
 	statusProvider := &controlStatusProvider{
-		domains:          domainProvisioner,
 		fallback:         statusProjector,
 		selectedProvider: selectedProvider,
 		stateStore:       stateStore,
-		cloudflare:       cloudflareProvisioner,
 		wildduck:         wildduckProvisioner,
 		poller:           pollerModule,
 		providerRelay:    providerRelayModule,
@@ -578,7 +528,6 @@ func New(ctx context.Context, cfg Config) (*Service, error) {
 	}
 	runtimeAPI := &controlRuntimeAPI{
 		poller:        pollerModule,
-		provisioner:   domainProvisioner,
 		stateStore:    stateStore,
 		relayAddress:  moduleConfig.ProviderRelay.ListenAddress,
 		relayUsername: moduleConfig.ProviderRelay.RelayAuth.Username,
@@ -592,8 +541,7 @@ func New(ctx context.Context, cfg Config) (*Service, error) {
 	}
 	adminAPIModule, err := controlapi.New(controlapi.Config{
 		ListenAddress: cfg.AdminListenAddress,
-		AuthToken:     adminAPIToken,
-	}, statusProvider, domainProvisioner, messageProvenance,
+	}, statusProvider, messageProvenance,
 		controlapi.WithIngestEnqueuer(runtimeAPI),
 		controlapi.WithRuntimeSyncer(runtimeAPI),
 		controlapi.WithWorkerArchiveCredentialIssuer(workerArchiveCredentialIssuer),
@@ -666,11 +614,11 @@ type moduleConfig struct {
 }
 
 func runtimeSecretsFromEnv() (runtimeSecrets, error) {
-	relayPassword, err := configfile.RequireEnv("AGENT_MAIL_ZONEMTA_RELAY_PASSWORD")
+	relayPassword, err := configfile.RequireEnv("AT_EMAIL_ADMIN_ZONEMTA_RELAY_PASSWORD")
 	if err != nil {
 		return runtimeSecrets{}, err
 	}
-	feedbackPassword, err := configfile.RequireEnv("AGENT_MAIL_FEEDBACK_MAILBOX_PASSWORD")
+	feedbackPassword, err := configfile.RequireEnv("AT_EMAIL_ADMIN_FEEDBACK_MAILBOX_PASSWORD")
 	if err != nil {
 		return runtimeSecrets{}, err
 	}
@@ -681,21 +629,21 @@ func runtimeSecretsFromEnv() (runtimeSecrets, error) {
 }
 
 func runtimeDatabasesFromEnv() (runtimeDatabases, error) {
-	wildduckMongoURI, err := configfile.RequireEnv("AGENTTEAM_EMAIL_WILDDUCK_MONGODB_URI")
+	wildduckMongoURI, err := configfile.RequireEnv("AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI")
 	if err != nil {
 		return runtimeDatabases{}, err
 	}
 	wildduckMongoDatabase, err := mongoDatabaseFromURI(wildduckMongoURI)
 	if err != nil {
-		return runtimeDatabases{}, fmt.Errorf("AGENTTEAM_EMAIL_WILDDUCK_MONGODB_URI: %w", err)
+		return runtimeDatabases{}, fmt.Errorf("AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI: %w", err)
 	}
-	controlMongoURI, err := configfile.RequireEnv("AGENTTEAM_EMAIL_CONTROL_MONGODB_URI")
+	controlMongoURI, err := configfile.RequireEnv("AT_EMAIL_ADMIN_CONTROL_MONGODB_URI")
 	if err != nil {
 		return runtimeDatabases{}, err
 	}
 	controlMongoDatabase, err := mongoDatabaseFromURI(controlMongoURI)
 	if err != nil {
-		return runtimeDatabases{}, fmt.Errorf("AGENTTEAM_EMAIL_CONTROL_MONGODB_URI: %w", err)
+		return runtimeDatabases{}, fmt.Errorf("AT_EMAIL_ADMIN_CONTROL_MONGODB_URI: %w", err)
 	}
 	return runtimeDatabases{
 		WildDuckMongoURI:      wildduckMongoURI,
@@ -706,23 +654,33 @@ func runtimeDatabasesFromEnv() (runtimeDatabases, error) {
 }
 
 func runtimeEndpointsFromEnv() (runtimeEndpoints, error) {
-	harakaSMTPAddress, err := configfile.RequireEnv("AGENT_MAIL_HARAKA_SMTP_ADDRESS")
+	controlToWebBaseURL, err := configfile.RequireEnv("AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_BASE_URL")
 	if err != nil {
 		return runtimeEndpoints{}, err
 	}
-	zoneMTADSNAddress, err := configfile.RequireEnv("AGENT_MAIL_ZONEMTA_DSN_ADDRESS")
+	controlToWebToken, err := configfile.RequireEnv("AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN")
 	if err != nil {
 		return runtimeEndpoints{}, err
 	}
-	wildDuckAPIBaseURL, err := configfile.RequireEnv("AGENT_MAIL_WILDDUCK_API_BASE_URL")
+	harakaSMTPAddress, err := configfile.RequireEnv("AT_EMAIL_ADMIN_HARAKA_SMTP_ADDRESS")
 	if err != nil {
 		return runtimeEndpoints{}, err
 	}
-	wildDuckIMAPAddress, err := configfile.RequireEnv("AGENT_MAIL_WILDDUCK_IMAP_ADDRESS")
+	zoneMTADSNAddress, err := configfile.RequireEnv("AT_EMAIL_ADMIN_ZONEMTA_DSN_ADDRESS")
+	if err != nil {
+		return runtimeEndpoints{}, err
+	}
+	wildDuckAPIBaseURL, err := configfile.RequireEnv("AT_EMAIL_ADMIN_WILDDUCK_API_BASE_URL")
+	if err != nil {
+		return runtimeEndpoints{}, err
+	}
+	wildDuckIMAPAddress, err := configfile.RequireEnv("AT_EMAIL_ADMIN_WILDDUCK_IMAP_ADDRESS")
 	if err != nil {
 		return runtimeEndpoints{}, err
 	}
 	return runtimeEndpoints{
+		ControlToWebBaseURL: controlToWebBaseURL,
+		ControlToWebToken:   controlToWebToken,
 		HarakaSMTPAddress:   harakaSMTPAddress,
 		ZoneMTADSNAddress:   zoneMTADSNAddress,
 		WildDuckAPIBaseURL:  wildDuckAPIBaseURL,
@@ -731,21 +689,14 @@ func runtimeEndpointsFromEnv() (runtimeEndpoints, error) {
 }
 
 func mongoDatabaseFromURI(value string) (string, error) {
-	parsed, err := url.Parse(value)
+	parsed, err := connstring.Parse(value)
 	if err != nil {
 		return "", fmt.Errorf("parse MongoDB URI: %w", err)
 	}
-	if parsed.Scheme != "mongodb" && parsed.Scheme != "mongodb+srv" {
-		return "", fmt.Errorf("unsupported MongoDB URI scheme %q", parsed.Scheme)
-	}
-	database := strings.Trim(parsed.Path, "/")
-	if database == "" {
+	if parsed.Database == "" {
 		return "", fmt.Errorf("missing database path")
 	}
-	if strings.Contains(database, "/") {
-		return "", fmt.Errorf("database path must contain exactly one database name")
-	}
-	return database, nil
+	return parsed.Database, nil
 }
 
 func canonicalModuleConfig(secrets runtimeSecrets, databases runtimeDatabases, endpoints runtimeEndpoints) moduleConfig {
@@ -774,7 +725,8 @@ func canonicalModuleConfig(secrets runtimeSecrets, databases runtimeDatabases, e
 	relayCfg.Hostname = helloName
 	relayCfg.RelayAuth.Username = "zonemta"
 	relayCfg.RelayAuth.Password = secrets.ZoneMTARelayPassword
-	relayCfg.Cloudflare.APIBaseURL = cloudflareAPIBaseURL()
+	relayCfg.WebServer.APIBaseURL = endpoints.ControlToWebBaseURL
+	relayCfg.WebServer.ControlToWebToken = endpoints.ControlToWebToken
 	relayCfg.LocalDelivery.SMTPAddress = endpoints.HarakaSMTPAddress
 	relayCfg.LocalDelivery.HelloName = helloName
 	relayCfg.LocalDelivery.APIBaseURL = endpoints.WildDuckAPIBaseURL
@@ -804,11 +756,9 @@ func canonicalModuleConfig(secrets runtimeSecrets, databases runtimeDatabases, e
 }
 
 type controlStatusProvider struct {
-	domains          *mailprovisioner.Service
 	fallback         *domainregistry.Projector
 	selectedProvider string
 	stateStore       controlstate.Store
-	cloudflare       *cloudflareprovisioner.Service
 	wildduck         *wildduckprovisioner.Service
 	poller           *poller.Poller
 	providerRelay    *smtprelay.Server
@@ -824,7 +774,7 @@ func (p *controlStatusProvider) Snapshot(now time.Time) (domainregistry.Snapshot
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	state, err := p.domains.State(ctx)
+	state, err := p.stateStore.State(ctx)
 	if err != nil {
 		return domainregistry.Snapshot{}, err
 	}
@@ -840,14 +790,11 @@ func (p *controlStatusProvider) Snapshot(now time.Time) (domainregistry.Snapshot
 	}
 	snapshot.Modules = p.modulesStatus(ctx)
 	snapshot.Dependencies = p.dependenciesStatus(snapshot.Dependencies)
-	snapshot = p.mergeCloudflareStatus(ctx, snapshot)
 	snapshot = p.mergeWildDuckStatus(ctx, snapshot, active)
-	snapshot.Provisioning = p.provisioningStatus(state.Domains)
 	return snapshot.WithComputedStatus(), nil
 }
 
 func (p *controlStatusProvider) controlStateStatus(ctx context.Context, state controlstate.State) domainregistry.ControlStateStatus {
-	metadata, err := controlstate.Metadata(ctx, p.stateStore)
 	status := domainregistry.ControlStateStatus{
 		Schema:       state.Schema,
 		DomainsTotal: len(state.Domains),
@@ -857,19 +804,6 @@ func (p *controlStatusProvider) controlStateStatus(ctx context.Context, state co
 		updatedAt := state.UpdatedAt.UTC()
 		status.UpdatedAt = &updatedAt
 	}
-	if err != nil {
-		status.OK = false
-		status.Issues = append(status.Issues, "control_state_metadata_failed: "+err.Error())
-		return status
-	}
-	status.Backend = metadata.Backend
-	status.Namespace = metadata.Namespace
-	status.ConfigMap = metadata.ConfigMap
-	status.Key = metadata.Key
-	status.ResourceVersion = metadata.ResourceVersion
-	status.Exists = metadata.Exists
-	status.Configured = metadata.Configured
-	status.Issues = append(status.Issues, metadata.Issues...)
 	for _, record := range state.Domains {
 		switch record.Status {
 		case controlstate.DomainStatusActive:
@@ -880,9 +814,6 @@ func (p *controlStatusProvider) controlStateStatus(ctx context.Context, state co
 			status.OK = false
 			status.Issues = append(status.Issues, "unknown_domain_status:"+record.Domain)
 		}
-	}
-	if !metadata.Configured {
-		status.OK = false
 	}
 	if state.Schema != controlstate.Schema {
 		status.OK = false
@@ -945,18 +876,22 @@ func (p *controlStatusProvider) modulesStatus(ctx context.Context) domainregistr
 
 func (p *controlStatusProvider) dependenciesStatus(existing domainregistry.DependenciesStatus) domainregistry.DependenciesStatus {
 	existing.R2 = domainregistry.DependencyStatus{
-		OK:         envConfigured("AGENT_MAIL_R2_ENDPOINT", "AGENT_MAIL_R2_BUCKET", "AGENT_MAIL_R2_ACCESS_KEY_ID", "AGENT_MAIL_R2_SECRET_ACCESS_KEY"),
-		Configured: envConfigured("AGENT_MAIL_R2_ENDPOINT", "AGENT_MAIL_R2_BUCKET", "AGENT_MAIL_R2_ACCESS_KEY_ID", "AGENT_MAIL_R2_SECRET_ACCESS_KEY"),
-		Endpoint:   os.Getenv("AGENT_MAIL_R2_ENDPOINT"),
-		Bucket:     os.Getenv("AGENT_MAIL_R2_BUCKET"),
+		OK:         envConfigured("AT_EMAIL_ADMIN_R2_ENDPOINT", "AT_EMAIL_ADMIN_R2_BUCKET", "AT_EMAIL_ADMIN_R2_ACCESS_KEY_ID", "AT_EMAIL_ADMIN_R2_SECRET_ACCESS_KEY"),
+		Configured: envConfigured("AT_EMAIL_ADMIN_R2_ENDPOINT", "AT_EMAIL_ADMIN_R2_BUCKET", "AT_EMAIL_ADMIN_R2_ACCESS_KEY_ID", "AT_EMAIL_ADMIN_R2_SECRET_ACCESS_KEY"),
+		Endpoint:   os.Getenv("AT_EMAIL_ADMIN_R2_ENDPOINT"),
+		Bucket:     os.Getenv("AT_EMAIL_ADMIN_R2_BUCKET"),
 	}
 	if !existing.R2.Configured {
 		existing.R2.Issues = append(existing.R2.Issues, "r2_config_missing")
 	}
+	existing.CloudflareAPI = domainregistry.DependencyStatus{
+		OK:         true,
+		Configured: false,
+	}
 	if existing.OutboundProvider.Provider == "" {
 		existing.OutboundProvider.Provider = p.selectedProvider
 	}
-	existing.OutboundProvider.OK = p.selectedProvider == controlstate.ProviderSES || p.selectedProvider == controlstate.ProviderCloudflare
+	existing.OutboundProvider.OK = p.selectedProvider == controlstate.ProviderCloudflare
 	existing.OutboundProvider.Configured = p.selectedProvider != ""
 	if !existing.OutboundProvider.OK {
 		existing.OutboundProvider.Issues = append(existing.OutboundProvider.Issues, "unsupported_outbound_provider")
@@ -972,55 +907,6 @@ func (p *controlStatusProvider) dependenciesStatus(existing domainregistry.Depen
 		}
 	}
 	return existing
-}
-
-func (p *controlStatusProvider) mergeCloudflareStatus(ctx context.Context, snapshot domainregistry.Snapshot) domainregistry.Snapshot {
-	if p.cloudflare == nil {
-		snapshot.Dependencies.CloudflareAPI = domainregistry.DependencyStatus{
-			OK:         false,
-			Configured: false,
-			Issues:     []string{"cloudflare_status_provider_missing"},
-		}
-		return snapshot
-	}
-	cfStatus, err := p.cloudflare.Status(ctx, cloudflareprovisioner.CloudflareStatusParams{})
-	if err != nil {
-		snapshot.Dependencies.CloudflareAPI = domainregistry.DependencyStatus{
-			OK:         false,
-			Configured: true,
-			Issues:     []string{"cloudflare_status_failed: " + err.Error()},
-		}
-		return snapshot
-	}
-	snapshot.Dependencies.CloudflareAPI = domainregistry.DependencyStatus{
-		OK:         cfStatus.OK,
-		Configured: cfStatus.Config.Configured,
-		Issues:     cfStatus.Issues,
-	}
-	for _, cloudflareDomain := range cfStatus.Domains {
-		for index := range snapshot.Domains {
-			if snapshot.Domains[index].Domain != cloudflareDomain.Domain {
-				continue
-			}
-			snapshot.Domains[index].Cloudflare.OK = cloudflareDomain.OK
-			snapshot.Domains[index].Cloudflare.ZoneName = cloudflareDomain.CloudflareZoneName
-			snapshot.Domains[index].Cloudflare.ZoneID = cloudflareDomain.ZoneID
-			snapshot.Domains[index].Cloudflare.CatchAllConfigured = cloudflareDomain.CatchAllConfigured
-			snapshot.Domains[index].Cloudflare.CatchAllEnabled = cloudflareDomain.CatchAllRule.Enabled
-			snapshot.Domains[index].Cloudflare.CatchAllRuleID = cloudflareDomain.CatchAllRule.ID
-			snapshot.Domains[index].Cloudflare.Issues = cloudflareDomain.Issues
-			snapshot.Domains[index].Cloudflare.RegularRules = ruleStatuses(cloudflareDomain.RegularRules)
-			snapshot.Domains[index].Cloudflare.LastProvisionStatus = cloudflareDomain.LastProvisionStatus
-			snapshot.Domains[index].Cloudflare.LastProvisionAt = cloudflareDomain.LastProvisionAt
-			snapshot.Domains[index].Cloudflare.LastProvisionError = cloudflareDomain.LastProvisionError
-			if len(cloudflareDomain.Issues) > 0 {
-				snapshot.Domains[index].Issues = append(snapshot.Domains[index].Issues, cloudflareDomain.Issues...)
-				snapshot.Domains[index].Status = "misconfigured"
-			}
-			break
-		}
-	}
-	return snapshot
 }
 
 func (p *controlStatusProvider) mergeWildDuckStatus(ctx context.Context, snapshot domainregistry.Snapshot, active []controlstate.DomainRecord) domainregistry.Snapshot {
@@ -1058,55 +944,6 @@ func (p *controlStatusProvider) mergeWildDuckStatus(ctx context.Context, snapsho
 		}
 	}
 	return snapshot
-}
-
-func ruleStatuses(rules []cloudflareprovisioner.RuleSummary) []domainregistry.RuleStatus {
-	statuses := make([]domainregistry.RuleStatus, 0, len(rules))
-	for _, rule := range rules {
-		statuses = append(statuses, domainregistry.RuleStatus{
-			ID:      rule.ID,
-			Name:    rule.Name,
-			Enabled: rule.Enabled,
-		})
-	}
-	return statuses
-}
-
-func (p *controlStatusProvider) provisioningStatus(records []controlstate.DomainRecord) domainregistry.ProvisioningStatus {
-	status := domainregistry.ProvisioningStatus{Status: "not_run"}
-	for _, record := range records {
-		if record.Status != controlstate.DomainStatusActive {
-			continue
-		}
-		switch record.CloudflareProvision.LastProvisionStatus {
-		case "applied":
-			status.DomainsApplied++
-		case "failed":
-			status.DomainsFailed++
-			status.Issues = append(status.Issues, "domain_failed:"+record.Domain)
-		default:
-			status.DomainsPending++
-			status.Issues = append(status.Issues, "domain_pending:"+record.Domain)
-		}
-		if record.CloudflareProvision.LastProvisionAt != nil {
-			if status.LastApplyAt == nil || record.CloudflareProvision.LastProvisionAt.After(*status.LastApplyAt) {
-				last := record.CloudflareProvision.LastProvisionAt.UTC()
-				status.LastApplyAt = &last
-			}
-		}
-		if record.CloudflareProvision.LastProvisionError != "" {
-			status.LastError = record.CloudflareProvision.LastProvisionError
-		}
-	}
-	switch {
-	case status.DomainsFailed > 0:
-		status.Status = "failed"
-	case status.DomainsPending > 0:
-		status.Status = "pending"
-	case status.DomainsApplied > 0:
-		status.Status = "applied"
-	}
-	return status
 }
 
 func envConfigured(keys ...string) bool {
@@ -1178,6 +1015,30 @@ func (s controlStateRuntimeSource) SESFeedbackReturnPath(ctx context.Context, se
 	return "", fmt.Errorf("active domain %q is not configured", senderDomain)
 }
 
+func (s controlStateRuntimeSource) ActiveDomain(ctx context.Context, domainValue string) (smtprelay.ActiveDomainContext, error) {
+	record, err := s.activeDomainRecord(ctx, domainValue)
+	if err != nil {
+		return smtprelay.ActiveDomainContext{}, err
+	}
+	return smtprelay.ActiveDomainContext{
+		OrganizationID:       record.OrganizationID,
+		OrganizationPublicID: record.OrganizationPublicID,
+		Domain:               record.Domain,
+		ArchivePrefix:        record.ArchivePrefix,
+	}, nil
+}
+
+func (s controlStateRuntimeSource) InboundArchivePrefix(ctx context.Context, recipientDomain string) (string, error) {
+	record, err := s.activeDomainRecord(ctx, recipientDomain)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(record.ArchivePrefix) == "" {
+		return "", fmt.Errorf("active domain %q is missing archive prefix", record.Domain)
+	}
+	return record.ArchivePrefix, nil
+}
+
 func (s controlStateRuntimeSource) LocalRecipientDomain(ctx context.Context, recipientDomainValue string) (bool, error) {
 	recipientDomain, err := structured.CanonicalDomain(recipientDomainValue)
 	if err != nil {
@@ -1196,6 +1057,28 @@ func (s controlStateRuntimeSource) LocalRecipientDomain(ctx context.Context, rec
 		}
 	}
 	return false, nil
+}
+
+func (s controlStateRuntimeSource) activeDomainRecord(ctx context.Context, domainValue string) (controlstate.DomainRecord, error) {
+	domain, err := structured.CanonicalDomain(domainValue)
+	if err != nil {
+		return controlstate.DomainRecord{}, fmt.Errorf("domain: %w", err)
+	}
+	if domain == "" {
+		return controlstate.DomainRecord{}, fmt.Errorf("domain is required")
+	}
+	records, err := controlstate.ActiveDomainRecords(ctx, s.store, []string{domain})
+	if err != nil {
+		return controlstate.DomainRecord{}, err
+	}
+	switch len(records) {
+	case 1:
+		return records[0], nil
+	case 0:
+		return controlstate.DomainRecord{}, fmt.Errorf("active domain %q is not configured", domain)
+	default:
+		return controlstate.DomainRecord{}, fmt.Errorf("active domain %q is not unique", domain)
+	}
 }
 
 func (s controlStateRuntimeSource) ActiveFeedbackRoutes(ctx context.Context) ([]feedbackrouter.Route, error) {

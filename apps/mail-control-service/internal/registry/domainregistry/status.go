@@ -25,7 +25,6 @@ type Snapshot struct {
 	ControlState     ControlStateStatus `json:"control_state"`
 	Modules          ModulesStatus      `json:"modules"`
 	Dependencies     DependenciesStatus `json:"dependencies"`
-	Provisioning     ProvisioningStatus `json:"provisioning"`
 	Domains          []DomainStatus     `json:"domains"`
 	SourceFiles      SourceFiles        `json:"source_files"`
 }
@@ -36,13 +35,6 @@ type SourceFiles struct {
 }
 
 type ControlStateStatus struct {
-	Backend         string     `json:"backend"`
-	Namespace       string     `json:"namespace,omitempty"`
-	ConfigMap       string     `json:"configmap,omitempty"`
-	Key             string     `json:"key,omitempty"`
-	ResourceVersion string     `json:"resource_version,omitempty"`
-	Exists          bool       `json:"exists"`
-	Configured      bool       `json:"configured"`
 	Schema          string     `json:"schema"`
 	UpdatedAt       *time.Time `json:"updated_at,omitempty"`
 	DomainsTotal    int        `json:"domains_total"`
@@ -110,16 +102,6 @@ type DependencyStatus struct {
 	Issues     []string `json:"issues,omitempty"`
 }
 
-type ProvisioningStatus struct {
-	Status         string     `json:"status"`
-	LastApplyAt    *time.Time `json:"last_apply_at,omitempty"`
-	LastError      string     `json:"last_error,omitempty"`
-	DomainsApplied int        `json:"domains_applied"`
-	DomainsPending int        `json:"domains_pending"`
-	DomainsFailed  int        `json:"domains_failed"`
-	Issues         []string   `json:"issues,omitempty"`
-}
-
 type DomainStatus struct {
 	Domain           string           `json:"domain"`
 	Status           string           `json:"status"`
@@ -133,17 +115,14 @@ type DomainStatus struct {
 }
 
 type CloudflareStatus struct {
-	OK                  bool         `json:"ok"`
-	ZoneName            string       `json:"zone_name,omitempty"`
-	ZoneID              string       `json:"zone_id,omitempty"`
-	CatchAllRuleID      string       `json:"catch_all_rule_id,omitempty"`
-	CatchAllEnabled     bool         `json:"catch_all_enabled,omitempty"`
-	CatchAllConfigured  bool         `json:"catch_all_configured,omitempty"`
-	RegularRules        []RuleStatus `json:"regular_rules,omitempty"`
-	Issues              []string     `json:"issues,omitempty"`
-	LastProvisionStatus string       `json:"last_provision_status,omitempty"`
-	LastProvisionAt     *time.Time   `json:"last_provision_at,omitempty"`
-	LastProvisionError  string       `json:"last_provision_error,omitempty"`
+	OK                 bool         `json:"ok"`
+	ZoneName           string       `json:"zone_name,omitempty"`
+	ZoneID             string       `json:"zone_id,omitempty"`
+	CatchAllRuleID     string       `json:"catch_all_rule_id,omitempty"`
+	CatchAllEnabled    bool         `json:"catch_all_enabled,omitempty"`
+	CatchAllConfigured bool         `json:"catch_all_configured,omitempty"`
+	RegularRules       []RuleStatus `json:"regular_rules,omitempty"`
+	Issues             []string     `json:"issues,omitempty"`
 }
 
 type RuleStatus struct {
@@ -351,9 +330,6 @@ func domainIssues(status DomainStatus) []string {
 	if len(status.Cloudflare.Issues) > 0 {
 		issues = append(issues, status.Cloudflare.Issues...)
 	}
-	if status.Cloudflare.LastProvisionError != "" {
-		issues = append(issues, "cloudflare_provision_failed")
-	}
 	if !status.Outbound.Configured {
 		issues = append(issues, "provider_relay_domain_missing")
 	}
@@ -409,10 +385,6 @@ func (s Snapshot) WithComputedStatus() Snapshot {
 	appendDependencyIssue("zonemta_dsn", s.Dependencies.ZoneMTADSN)
 	appendDependencyIssue("cloudflare_api", s.Dependencies.CloudflareAPI)
 	appendDependencyIssue("outbound_provider", s.Dependencies.OutboundProvider)
-	if s.Provisioning.Status != "" && s.Provisioning.Status != "applied" {
-		issues = append(issues, "provisioning_"+s.Provisioning.Status)
-		issues = append(issues, s.Provisioning.Issues...)
-	}
 	if s.ControlState.DomainsActive == 0 {
 		issues = append(issues, "no_active_domains")
 	}

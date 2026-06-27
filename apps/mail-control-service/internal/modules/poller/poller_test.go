@@ -33,9 +33,9 @@ func TestValidateConfigRequiresExactlyTwoRetries(t *testing.T) {
 func TestDecodeManifestAcceptsCloudflareEdgeEvidence(t *testing.T) {
 	ingestID := mustUUIDv7(t)
 	receivedAt := time.Date(2026, 6, 17, 20, 0, 0, 0, time.UTC)
-	bundle, err := r2archive.InboundBundleKeys("example.com", receivedAt, ingestID)
+	bundle, err := r2archive.OrganizationInboundBundleKeys("org_pub_123", "example.com", receivedAt, ingestID)
 	if err != nil {
-		t.Fatalf("InboundBundleKeys returned error: %v", err)
+		t.Fatalf("OrganizationInboundBundleKeys returned error: %v", err)
 	}
 	data, err := json.Marshal(map[string]any{
 		"schema":               r2archive.InboundEdgeSchema,
@@ -57,10 +57,6 @@ func TestDecodeManifestAcceptsCloudflareEdgeEvidence(t *testing.T) {
 				"envelope_to": "agent@example.com",
 			},
 		},
-		"cloudflare_routing_activity": map[string]any{
-			"schema": "agent-mail.cloudflare-routing-activity.v1",
-			"match":  map[string]any{"status": "not_found", "count": 0},
-		},
 	})
 	if err != nil {
 		t.Fatalf("Marshal manifest fixture: %v", err)
@@ -75,9 +71,6 @@ func TestDecodeManifestAcceptsCloudflareEdgeEvidence(t *testing.T) {
 	}
 	if !strings.Contains(string(manifest.CloudflareEdgeEvidence), "worker_message_fields") {
 		t.Fatalf("CloudflareEdgeEvidence missing worker fields: %s", manifest.CloudflareEdgeEvidence)
-	}
-	if !strings.Contains(string(manifest.CloudflareRoutingActivity), "not_found") {
-		t.Fatalf("CloudflareRoutingActivity was not retained: %s", manifest.CloudflareRoutingActivity)
 	}
 }
 
@@ -157,7 +150,7 @@ func TestSweepDomainFollowsR2ContinuationPages(t *testing.T) {
 	second := mustInboundBundle(t, "example.com", mustUUIDv7(t))
 	sweepStart := first.UTCDate
 	sweepEnd := first.UTCDate.AddDate(0, 0, 1).Add(-time.Nanosecond)
-	prefix, err := r2archive.InboundDailyPrefix("example.com", first.UTCDate)
+	prefix, err := r2archive.OrganizationInboundDailyPrefix("org_pub_123", "example.com", first.UTCDate)
 	if err != nil {
 		t.Fatalf("build daily prefix: %v", err)
 	}
@@ -190,7 +183,7 @@ func TestSweepDomainFollowsR2ContinuationPages(t *testing.T) {
 	}
 	p := &Poller{r2: r2, state: state}
 
-	if err := p.sweepDomain(ctx, Domain{Name: "example.com"}, sweepStart, sweepEnd); err != nil {
+	if err := p.sweepDomain(ctx, Domain{Name: "example.com", ArchivePrefix: first.ArchivePrefix}, sweepStart, sweepEnd); err != nil {
 		t.Fatalf("sweepDomain returned error: %v", err)
 	}
 
@@ -406,7 +399,7 @@ func mustInboundBundle(t *testing.T, domain string, ingestID string) r2archive.I
 	if err != nil {
 		t.Fatalf("decode uuidv7 time: %v", err)
 	}
-	bundle, err := r2archive.InboundBundleKeys(domain, createdAt, ingestID)
+	bundle, err := r2archive.OrganizationInboundBundleKeys("org_pub_123", domain, createdAt, ingestID)
 	if err != nil {
 		t.Fatalf("build inbound bundle: %v", err)
 	}

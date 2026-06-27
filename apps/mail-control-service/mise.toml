@@ -29,8 +29,8 @@ description = "Build the Mail Control Service container image"
 dir = "{{config_root}}"
 run = '''
 : "${WT:?missing WT}"
-image_tag="${AGENTTEAM_EMAIL_KIND_IMAGE_TAG:-stage}"
-image_repository="${AGENTTEAM_EMAIL_KIND_MAIL_CONTROL_SERVICE_IMAGE_REPOSITORY:-atemail.${WT}.mail-control-service}"
+image_tag="${AT_EMAIL_ADMIN_KIND_IMAGE_TAG:-stage}"
+image_repository="${AT_EMAIL_ADMIN_KIND_MAIL_CONTROL_SERVICE_IMAGE_REPOSITORY:-atemail.${WT}.mail-control-service}"
 "${CONTAINER_ENGINE}" build \
   -f Containerfile \
   -t "${image_repository}:${image_tag}" \

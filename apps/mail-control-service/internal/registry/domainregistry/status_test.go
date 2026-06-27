@@ -41,7 +41,7 @@ func testRelayConfig() smtprelay.Config {
 	return smtprelay.Config{}
 }
 
-func TestStatusesFromControlStateReportsCloudflarePrimitivePending(t *testing.T) {
+func TestStatusesFromControlStateReportsRuntimeProjectedCloudflareZone(t *testing.T) {
 	statuses := StatusesFromControlState([]controlstate.DomainRecord{
 		{
 			Status:               controlstate.DomainStatusActive,
@@ -56,10 +56,13 @@ func TestStatusesFromControlStateReportsCloudflarePrimitivePending(t *testing.T)
 	if len(statuses) != 1 {
 		t.Fatalf("len(statuses) = %d, want 1", len(statuses))
 	}
-	if statuses[0].Status != "misconfigured" {
-		t.Fatalf("status = %q, want misconfigured", statuses[0].Status)
+	if statuses[0].Status != "ready" {
+		t.Fatalf("status = %q, want ready", statuses[0].Status)
 	}
-	if len(statuses[0].Issues) != 1 || statuses[0].Issues[0] != "cloudflare_provision_not_run" {
+	if len(statuses[0].Issues) != 0 {
 		t.Fatalf("issues = %#v", statuses[0].Issues)
+	}
+	if !statuses[0].Cloudflare.OK || statuses[0].Cloudflare.ZoneName != "example.com" {
+		t.Fatalf("cloudflare status = %#v", statuses[0].Cloudflare)
 	}
 }

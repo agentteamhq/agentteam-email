@@ -126,9 +126,6 @@ type Manifest struct {
 	MessageID              string            `json:"message_id,omitempty"`
 	ATMCFHeaders           map[string]string `json:"atmcf_headers"`
 	CloudflareEdgeEvidence json.RawMessage   `json:"cloudflare_edge_evidence,omitempty"`
-	// Compatibility only: older Worker deploys may have written this additive
-	// key. Security verdicts come from verified archived raw EML headers instead.
-	CloudflareRoutingActivity json.RawMessage `json:"cloudflare_routing_activity,omitempty"`
 }
 
 type Receipt struct {
@@ -292,27 +289,27 @@ func newPoller(ctx context.Context, cfg Config, source DomainSource) (*Poller, e
 		return nil, err
 	}
 
-	r2KeyID, err := configfile.RequireEnv("AGENT_MAIL_R2_ACCESS_KEY_ID")
+	r2KeyID, err := configfile.RequireEnv("AT_EMAIL_ADMIN_R2_ACCESS_KEY_ID")
 	if err != nil {
 		return nil, err
 	}
-	r2Secret, err := configfile.RequireEnv("AGENT_MAIL_R2_SECRET_ACCESS_KEY")
+	r2Secret, err := configfile.RequireEnv("AT_EMAIL_ADMIN_R2_SECRET_ACCESS_KEY")
 	if err != nil {
 		return nil, err
 	}
-	r2Endpoint, err := configfile.RequireEnv("AGENT_MAIL_R2_ENDPOINT")
+	r2Endpoint, err := configfile.RequireEnv("AT_EMAIL_ADMIN_R2_ENDPOINT")
 	if err != nil {
 		return nil, err
 	}
-	r2Region, err := configfile.RequireEnv("AGENT_MAIL_R2_REGION")
+	r2Region, err := configfile.RequireEnv("AT_EMAIL_ADMIN_R2_REGION")
 	if err != nil {
 		return nil, err
 	}
-	r2Bucket, err := configfile.RequireEnv("AGENT_MAIL_R2_BUCKET")
+	r2Bucket, err := configfile.RequireEnv("AT_EMAIL_ADMIN_R2_BUCKET")
 	if err != nil {
 		return nil, err
 	}
-	accessToken, err := configfile.RequireEnv("AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN")
+	accessToken, err := configfile.RequireEnv("AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN")
 	if err != nil {
 		return nil, err
 	}
@@ -571,14 +568,7 @@ func (p *Poller) sweep(ctx context.Context, now time.Time) error {
 
 func (p *Poller) activeDomains(ctx context.Context) ([]Domain, error) {
 	if p.domainSource == nil {
-		domains := make([]Domain, 0, len(p.cfg.Domains))
-		for _, domain := range p.cfg.Domains {
-			domains = append(domains, Domain{
-				Name:            domain,
-				FeedbackAddress: p.cfg.DSNFeedbackByDomain[domain],
-			})
-		}
-		return domains, nil
+		return nil, fmt.Errorf("poller domain source is required for org-prefixed archive prefixes")
 	}
 	domains, err := p.domainSource.ActivePollerDomains(ctx)
 	if err != nil {
@@ -589,23 +579,14 @@ func (p *Poller) activeDomains(ctx context.Context) ([]Domain, error) {
 
 func (p *Poller) sweepDomain(ctx context.Context, domain Domain, sweepStart time.Time, sweepEnd time.Time) error {
 	for date := utcDate(sweepStart); !date.After(utcDate(sweepEnd)); date = date.AddDate(0, 0, 1) {
-		prefix := ""
-		if domain.ArchivePrefix != "" {
-			parsed, err := r2archive.ParseInboundArchivePrefix(domain.ArchivePrefix)
-			if err != nil {
-				return err
-			}
-			if parsed.RecipientDomain != domain.Name {
-				return fmt.Errorf("archive_prefix domain %q does not match active domain %q", parsed.RecipientDomain, domain.Name)
-			}
-			prefix = path.Join(domain.ArchivePrefix, utcDate(date).Format("2006/01/02")) + "/"
-		} else {
-			var err error
-			prefix, err = r2archive.InboundDailyPrefix(domain.Name, date)
-			if err != nil {
-				return err
-			}
+		parsed, err := r2archive.ParseInboundArchivePrefix(domain.ArchivePrefix)
+		if err != nil {
+			return fmt.Errorf("active domain archive_prefix: %w", err)
 		}
+		if parsed.RecipientDomain != domain.Name {
+			return fmt.Errorf("archive_prefix domain %q does not match active domain %q", parsed.RecipientDomain, domain.Name)
+		}
+		prefix := path.Join(domain.ArchivePrefix, utcDate(date).Format("2006/01/02")) + "/"
 		var continuation *string
 		for {
 			listResult, err := p.r2.List(ctx, prefix, continuation)
@@ -636,7 +617,7 @@ func (p *Poller) discoverEdgeKey(ctx context.Context, edgeKey string, domain Dom
 	if err != nil {
 		return err
 	}
-	if domain.ArchivePrefix != "" && bundle.ArchivePrefix != domain.ArchivePrefix {
+	if bundle.ArchivePrefix != domain.ArchivePrefix {
 		return fmt.Errorf("edge key archive_prefix %q does not match active domain archive_prefix %q", bundle.ArchivePrefix, domain.ArchivePrefix)
 	}
 	if bundle.RecipientDomain != domain.Name {
@@ -944,7 +925,7 @@ func (p *Poller) ensureDSNRaw(ctx context.Context, state dsnState, manifest Mani
 		if err != nil {
 			return nil, "", err
 		}
-		return raw, "<" + state.MessageID + ">", nil
+		return raw, rfc822.FormatMessageID(state.MessageID), nil
 	}
 
 	built, err := dsn.BuildFailureMessage(dsn.FailureMessage{

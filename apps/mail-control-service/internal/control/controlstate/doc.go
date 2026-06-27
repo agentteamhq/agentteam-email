@@ -1,7 +1,7 @@
-// Package controlstate owns Agent Mail control-plane state access.
+// Package controlstate owns Agent Mail active-domain runtime projection state.
 //
-// This package is for Kubernetes-native active-domain control state: desired
-// hashes, realized primitive bindings, and primitive status. It does not store
-// ordinary mailbox desired state and does not replace the poller Mongo
-// queue/state store owned by internal/modules/poller.
+// The web server and MongoDB are the authoritative source. Mail-control keeps
+// this projection in memory for routing, replay, relay, feedback, and status.
+// It does not store ordinary mailbox desired state and does not replace the
+// poller Mongo queue/state store owned by internal/modules/poller.
 package controlstate

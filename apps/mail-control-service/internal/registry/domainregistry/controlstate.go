@@ -40,22 +40,9 @@ func StatusesFromControlState(records []controlstate.DomainRecord, selectedProvi
 				},
 			},
 			Cloudflare: CloudflareStatus{
-				OK:                  record.CloudflareProvision.LastProvisionStatus == "applied" && record.CloudflareProvision.LastProvisionError == "",
-				ZoneName:            record.CloudflareZoneName,
-				ZoneID:              record.CloudflareProvision.ZoneID,
-				CatchAllRuleID:      record.CloudflareProvision.CatchAllRuleID,
-				CatchAllEnabled:     record.CloudflareProvision.CatchAllEnabled,
-				CatchAllConfigured:  record.CloudflareProvision.CatchAllEnabled,
-				LastProvisionStatus: record.CloudflareProvision.LastProvisionStatus,
-				LastProvisionAt:     record.CloudflareProvision.LastProvisionAt,
-				LastProvisionError:  record.CloudflareProvision.LastProvisionError,
+				OK:       record.CloudflareZoneName != "",
+				ZoneName: record.CloudflareZoneName,
 			},
-		}
-		if record.AuthoritativeRouting && record.CloudflareProvision.LastProvisionAt == nil {
-			status.Issues = append(status.Issues, "cloudflare_provision_not_run")
-		}
-		if record.CloudflareProvision.LastProvisionError != "" {
-			status.Issues = append(status.Issues, "cloudflare_provision_failed")
 		}
 		if record.Outbound.Provider != selectedProvider {
 			status.Issues = append(status.Issues, "selected_provider_mismatch")

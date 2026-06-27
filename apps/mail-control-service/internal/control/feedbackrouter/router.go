@@ -129,7 +129,7 @@ func newRouter(cfg Config, source RouteSource) (*Router, error) {
 	if err != nil {
 		return nil, err
 	}
-	adminToken, err := configfile.RequireEnv("AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN")
+	adminToken, err := configfile.RequireEnv("AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN")
 	if err != nil {
 		return nil, err
 	}
@@ -839,7 +839,11 @@ func (c *wildDuckAdmin) resolveAddress(ctx context.Context, address string) (str
 	var result struct {
 		User string `json:"user"`
 	}
-	if err := c.doJSON(ctx, http.MethodGet, "/addresses/resolve/"+url.PathEscape(address), nil, &result); err != nil {
+	path, err := wildDuckAdminPath("addresses", "resolve", address)
+	if err != nil {
+		return "", err
+	}
+	if err := c.doJSON(ctx, http.MethodGet, path, nil, &result); err != nil {
 		return "", err
 	}
 	if result.User == "" {
@@ -852,7 +856,11 @@ func (c *wildDuckAdmin) resolveUser(ctx context.Context, username string) (strin
 	var result struct {
 		ID string `json:"id"`
 	}
-	if err := c.doJSON(ctx, http.MethodGet, "/users/resolve/"+url.PathEscape(username), nil, &result); err != nil {
+	path, err := wildDuckAdminPath("users", "resolve", username)
+	if err != nil {
+		return "", err
+	}
+	if err := c.doJSON(ctx, http.MethodGet, path, nil, &result); err != nil {
 		return "", err
 	}
 	if result.ID == "" {
@@ -877,7 +885,11 @@ func (c *wildDuckAdmin) createUser(ctx context.Context, cfg wildDuckUserConfig) 
 	} else {
 		payload["address"] = cfg.Address
 	}
-	if err := c.doJSON(ctx, http.MethodPost, "/users", payload, &result); err != nil {
+	path, err := wildDuckAdminPath("users")
+	if err != nil {
+		return "", err
+	}
+	if err := c.doJSON(ctx, http.MethodPost, path, payload, &result); err != nil {
 		return "", err
 	}
 	if result.ID == "" {
@@ -893,7 +905,11 @@ func (c *wildDuckAdmin) updateUser(ctx context.Context, userID string, cfg wildD
 		"spamLevel":   cfg.SpamLevel,
 		"allowUnsafe": true,
 	}
-	return c.doJSON(ctx, http.MethodPut, "/users/"+url.PathEscape(userID), payload, nil)
+	path, err := wildDuckAdminPath("users", userID)
+	if err != nil {
+		return err
+	}
+	return c.doJSON(ctx, http.MethodPut, path, payload, nil)
 }
 
 func (c *wildDuckAdmin) doJSON(ctx context.Context, method string, path string, requestBody any, responseBody any) error {
@@ -906,7 +922,11 @@ func (c *wildDuckAdmin) doJSON(ctx context.Context, method string, path string, 
 		body = bytes.NewReader(encoded)
 	}
 
-	request, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
+	requestURL, err := c.requestURL(path)
+	if err != nil {
+		return err
+	}
+	request, err := http.NewRequestWithContext(ctx, method, requestURL, body)
 	if err != nil {
 		return fmt.Errorf("build wildduck request %s %s: %w", method, path, err)
 	}
@@ -946,4 +966,20 @@ func (c *wildDuckAdmin) doJSON(ctx context.Context, method string, path string, 
 		return fmt.Errorf("decode wildduck response %s %s: %w", method, path, err)
 	}
 	return nil
+}
+
+func (c *wildDuckAdmin) requestURL(requestPath string) (string, error) {
+	requestURL, err := url.JoinPath(c.baseURL, strings.TrimPrefix(requestPath, "/"))
+	if err != nil {
+		return "", fmt.Errorf("build wildduck URL %s: %w", requestPath, err)
+	}
+	return requestURL, nil
+}
+
+func wildDuckAdminPath(elements ...string) (string, error) {
+	escaped := make([]string, 0, len(elements))
+	for _, element := range elements {
+		escaped = append(escaped, url.PathEscape(element))
+	}
+	return url.JoinPath("/", escaped...)
 }

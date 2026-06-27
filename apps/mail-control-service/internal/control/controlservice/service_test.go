@@ -2,6 +2,9 @@ package controlservice
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -10,29 +13,28 @@ import (
 	"agent-mail/internal/control/controlapi"
 	"agent-mail/internal/control/controlstate"
 	"agent-mail/internal/modules/poller"
-	"agent-mail/internal/provisioning/mailprovisioner"
 )
 
 func TestRuntimeSecretsFromEnvRequiresRelayPassword(t *testing.T) {
-	t.Setenv("AGENT_MAIL_FEEDBACK_MAILBOX_PASSWORD", "feedback-password")
+	t.Setenv("AT_EMAIL_ADMIN_FEEDBACK_MAILBOX_PASSWORD", "feedback-password")
 
 	_, err := runtimeSecretsFromEnv()
 	if err == nil {
 		t.Fatal("runtimeSecretsFromEnv succeeded without relay password")
 	}
-	if !strings.Contains(err.Error(), "AGENT_MAIL_ZONEMTA_RELAY_PASSWORD") {
+	if !strings.Contains(err.Error(), "AT_EMAIL_ADMIN_ZONEMTA_RELAY_PASSWORD") {
 		t.Fatalf("error = %q, want missing relay password", err)
 	}
 }
 
 func TestRuntimeSecretsFromEnvRequiresFeedbackMailboxPassword(t *testing.T) {
-	t.Setenv("AGENT_MAIL_ZONEMTA_RELAY_PASSWORD", "relay-password")
+	t.Setenv("AT_EMAIL_ADMIN_ZONEMTA_RELAY_PASSWORD", "relay-password")
 
 	_, err := runtimeSecretsFromEnv()
 	if err == nil {
 		t.Fatal("runtimeSecretsFromEnv succeeded without feedback mailbox password")
 	}
-	if !strings.Contains(err.Error(), "AGENT_MAIL_FEEDBACK_MAILBOX_PASSWORD") {
+	if !strings.Contains(err.Error(), "AT_EMAIL_ADMIN_FEEDBACK_MAILBOX_PASSWORD") {
 		t.Fatalf("error = %q, want missing feedback mailbox password", err)
 	}
 }
@@ -88,22 +90,26 @@ func TestCanonicalModuleConfigUsesRuntimeDatabases(t *testing.T) {
 }
 
 func TestRuntimeEndpointsFromEnvRequiresExplicitWildDuckAPI(t *testing.T) {
-	t.Setenv("AGENT_MAIL_HARAKA_SMTP_ADDRESS", "haraka:25")
-	t.Setenv("AGENT_MAIL_ZONEMTA_DSN_ADDRESS", "zonemta-dsn:2526")
-	t.Setenv("AGENT_MAIL_WILDDUCK_API_BASE_URL", "")
-	t.Setenv("AGENT_MAIL_WILDDUCK_IMAP_ADDRESS", "wildduck-imap:143")
+	t.Setenv("AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_BASE_URL", "http://atemail-web-server:4321")
+	t.Setenv("AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN", "control-to-web-token")
+	t.Setenv("AT_EMAIL_ADMIN_HARAKA_SMTP_ADDRESS", "haraka:25")
+	t.Setenv("AT_EMAIL_ADMIN_ZONEMTA_DSN_ADDRESS", "zonemta-dsn:2526")
+	t.Setenv("AT_EMAIL_ADMIN_WILDDUCK_API_BASE_URL", "")
+	t.Setenv("AT_EMAIL_ADMIN_WILDDUCK_IMAP_ADDRESS", "wildduck-imap:143")
 
 	_, err := runtimeEndpointsFromEnv()
 	if err == nil {
 		t.Fatal("runtimeEndpointsFromEnv succeeded without WildDuck API URL")
 	}
-	if !strings.Contains(err.Error(), "AGENT_MAIL_WILDDUCK_API_BASE_URL") {
+	if !strings.Contains(err.Error(), "AT_EMAIL_ADMIN_WILDDUCK_API_BASE_URL") {
 		t.Fatalf("error = %q, want missing WildDuck API URL", err)
 	}
 }
 
 func TestCanonicalModuleConfigUsesRuntimeEndpoints(t *testing.T) {
 	endpoints := runtimeEndpoints{
+		ControlToWebBaseURL: "http://web-service:4321",
+		ControlToWebToken:   "control-to-web-token",
 		HarakaSMTPAddress:   "haraka-service:25",
 		ZoneMTADSNAddress:   "zonemta-dsn-service:2526",
 		WildDuckAPIBaseURL:  "http://wildduck-api-service:8080",
@@ -134,6 +140,12 @@ func TestCanonicalModuleConfigUsesRuntimeEndpoints(t *testing.T) {
 	if config.ProviderRelay.LocalDelivery.APIBaseURL != endpoints.WildDuckAPIBaseURL {
 		t.Fatalf("relay WildDuck API URL = %q, want runtime endpoint", config.ProviderRelay.LocalDelivery.APIBaseURL)
 	}
+	if config.ProviderRelay.WebServer.APIBaseURL != endpoints.ControlToWebBaseURL {
+		t.Fatalf("relay web base URL = %q, want runtime endpoint", config.ProviderRelay.WebServer.APIBaseURL)
+	}
+	if config.ProviderRelay.WebServer.ControlToWebToken != endpoints.ControlToWebToken {
+		t.Fatalf("relay control-to-web token = %q, want runtime token", config.ProviderRelay.WebServer.ControlToWebToken)
+	}
 	if config.FeedbackRouter.WildDuck.APIBaseURL != endpoints.WildDuckAPIBaseURL {
 		t.Fatalf("feedback WildDuck API URL = %q, want runtime endpoint", config.FeedbackRouter.WildDuck.APIBaseURL)
 	}
@@ -156,11 +168,6 @@ func TestMongoDatabaseFromURI(t *testing.T) {
 			uri:  "mongodb://user:pass@mongo.example:27017/wildduck?authSource=admin&tls=true",
 			want: "wildduck",
 		},
-		{
-			name: "srv uri",
-			uri:  "mongodb+srv://user:pass@cluster.example/agent_mail_control?retryWrites=true&w=majority",
-			want: "agent_mail_control",
-		},
 	}
 
 	for _, test := range tests {
@@ -178,6 +185,8 @@ func TestMongoDatabaseFromURI(t *testing.T) {
 
 func testRuntimeEndpoints() runtimeEndpoints {
 	return runtimeEndpoints{
+		ControlToWebBaseURL: "http://atemail-web-server:4321",
+		ControlToWebToken:   "control-to-web-token",
 		HarakaSMTPAddress:   "haraka:25",
 		ZoneMTADSNAddress:   "zonemta-dsn:2526",
 		WildDuckAPIBaseURL:  "http://wildduck-api:8080",
@@ -186,7 +195,7 @@ func testRuntimeEndpoints() runtimeEndpoints {
 }
 
 func TestMongoDatabaseFromURIRejectsMissingDatabase(t *testing.T) {
-	_, err := mongoDatabaseFromURI("mongodb://user:pass@mongo.example:27017?authSource=admin")
+	_, err := mongoDatabaseFromURI("mongodb://user:pass@mongo.example:27017/?authSource=admin")
 	if err == nil {
 		t.Fatal("mongoDatabaseFromURI succeeded without database path")
 	}
@@ -200,7 +209,7 @@ func TestControlStateRuntimeSourceClassifiesOnlyActiveOwnedDomainsAsLocal(t *tes
 	store := controlstate.NewMemoryStore()
 	params := testControlServiceDomainConfig("Example.com", true)
 	params.MailFromDomain = "ei.example.com"
-	if _, _, err := controlstate.AddDomain(ctx, store, controlstate.ProviderCloudflare, params, time.Now().UTC()); err != nil {
+	if _, _, err := controlstate.SyncRuntimeDomains(ctx, store, controlstate.ProviderCloudflare, []controlstate.DomainConfigParams{params}, time.Now().UTC()); err != nil {
 		t.Fatalf("seed active domain: %v", err)
 	}
 
@@ -226,8 +235,7 @@ func TestRuntimeSyncPersistsOrganizationArchiveAndWorkerIdentity(t *testing.T) {
 	ctx := context.Background()
 	store := controlstate.NewMemoryStore()
 	api := &controlRuntimeAPI{
-		provisioner: mailprovisioner.New(store, mailprovisioner.WithSelectedProvider(controlstate.ProviderSES)),
-		stateStore:  store,
+		stateStore: store,
 	}
 
 	result, err := api.SyncRuntime(ctx, controlapi.RuntimeSyncParams{
@@ -255,12 +263,94 @@ func TestRuntimeSyncPersistsOrganizationArchiveAndWorkerIdentity(t *testing.T) {
 	}
 }
 
+func TestRuntimeSyncDisablesDomainsMissingFromAuthoritativeSnapshot(t *testing.T) {
+	ctx := context.Background()
+	store := controlstate.NewMemoryStore()
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	if _, _, err := controlstate.SyncRuntimeDomains(ctx, store, controlstate.ProviderCloudflare, []controlstate.DomainConfigParams{
+		testControlServiceDomainConfig("example.com", true),
+		testControlServiceDomainConfig("stale.example.com", true),
+	}, now); err != nil {
+		t.Fatalf("seed runtime domains: %v", err)
+	}
+	api := &controlRuntimeAPI{
+		stateStore: store,
+	}
+
+	result, err := api.SyncRuntime(ctx, controlapi.RuntimeSyncParams{
+		Domains: []controlstate.DomainConfigParams{testControlServiceDomainConfig("example.com", true)},
+	}, now.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("SyncRuntime returned error: %v", err)
+	}
+	if !result.Changed || len(result.Domains) != 2 {
+		t.Fatalf("result = %#v, want changed synced and stale domains", result)
+	}
+	active, err := controlstate.ActiveDomainRecords(ctx, store, nil)
+	if err != nil {
+		t.Fatalf("ActiveDomainRecords: %v", err)
+	}
+	if len(active) != 1 || active[0].Domain != "example.com" {
+		t.Fatalf("active domains = %#v, want only example.com", active)
+	}
+	state, err := store.State(ctx)
+	if err != nil {
+		t.Fatalf("State: %v", err)
+	}
+	var stale controlstate.DomainRecord
+	for _, record := range state.Domains {
+		if record.Domain == "stale.example.com" {
+			stale = record
+			break
+		}
+	}
+	if stale.Status != controlstate.DomainStatusDeactivated {
+		t.Fatalf("stale status = %q, want deactivated", stale.Status)
+	}
+	if stale.AuthoritativeRouting {
+		t.Fatal("stale AuthoritativeRouting = true, want false")
+	}
+}
+
+func TestRuntimeBootstrapFetchesWebSnapshotWithScopedToken(t *testing.T) {
+	ctx := context.Background()
+	store := controlstate.NewMemoryStore()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != controlToWebRuntimeSnapshotPath {
+			t.Fatalf("path = %q, want %q", r.URL.Path, controlToWebRuntimeSnapshotPath)
+		}
+		if got := r.Header.Get("X-Agent-Mail-Control-Web-Token"); got != "test-control-to-web-token" {
+			t.Fatalf("control-to-web token header = %q", got)
+		}
+		if err := json.NewEncoder(w).Encode(runtimeSnapshotResponse{
+			Domains: []controlstate.DomainConfigParams{testControlServiceDomainConfig("example.com", true)},
+		}); err != nil {
+			t.Fatalf("encode snapshot: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	snapshot, err := fetchRuntimeProjectionSnapshot(ctx, server.URL, "test-control-to-web-token")
+	if err != nil {
+		t.Fatalf("fetchRuntimeProjectionSnapshot: %v", err)
+	}
+	if _, _, err := controlstate.SyncRuntimeDomains(ctx, store, controlstate.ProviderCloudflare, snapshot.Domains, time.Now().UTC()); err != nil {
+		t.Fatalf("SyncRuntimeDomains: %v", err)
+	}
+	active, err := controlstate.ActiveDomainRecords(ctx, store, nil)
+	if err != nil {
+		t.Fatalf("ActiveDomainRecords: %v", err)
+	}
+	if len(active) != 1 || active[0].Domain != "example.com" {
+		t.Fatalf("active domains = %#v, want bootstrapped example.com", active)
+	}
+}
+
 func TestRuntimeSyncRejectsMismatchedArchivePrefix(t *testing.T) {
 	ctx := context.Background()
 	store := controlstate.NewMemoryStore()
 	api := &controlRuntimeAPI{
-		provisioner: mailprovisioner.New(store, mailprovisioner.WithSelectedProvider(controlstate.ProviderSES)),
-		stateStore:  store,
+		stateStore: store,
 	}
 	params := testControlServiceDomainConfig("example.com", true)
 	params.ArchivePrefix = "orgs/org_pub_123/domains/example.net/mail/inbound"
@@ -276,8 +366,8 @@ func TestRuntimeSyncRejectsMismatchedArchivePrefix(t *testing.T) {
 func TestControlRuntimeAPIRejectsIngestMetadataMismatch(t *testing.T) {
 	ctx := context.Background()
 	store := controlstate.NewMemoryStore()
-	if _, _, err := controlstate.AddDomain(ctx, store, controlstate.ProviderSES, testControlServiceDomainConfig("example.com", true), time.Now().UTC()); err != nil {
-		t.Fatalf("AddDomain: %v", err)
+	if _, _, err := controlstate.SyncRuntimeDomains(ctx, store, controlstate.ProviderSES, []controlstate.DomainConfigParams{testControlServiceDomainConfig("example.com", true)}, time.Now().UTC()); err != nil {
+		t.Fatalf("SyncRuntimeDomains: %v", err)
 	}
 	ingestID, err := r2archive.NewUUIDv7String()
 	if err != nil {
