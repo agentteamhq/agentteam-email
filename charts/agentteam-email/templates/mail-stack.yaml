@@ -73,9 +73,9 @@ spec:
               containerPort: 10143
           env:
             - name: APPCONF_api_accessToken
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN") | nindent 14 }}
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN") | nindent 14 }}
             - name: APPCONF_api_accessControl_secret
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_WILDDUCK_ACCESS_CONTROL_SECRET") | nindent 14 }}
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_WILDDUCK_ACCESS_CONTROL_SECRET") | nindent 14 }}
           {{- with .Values.extraEnv.wildduck }}
 {{ toYaml . | nindent 12 }}
           {{- end }}

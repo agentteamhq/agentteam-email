@@ -11,8 +11,8 @@ webServer:
     value: '<base64url-32-byte-key>'
 
 controlApi:
-  token:
-    value: '<random-control-token>'
+  controlToWebToken:
+    value: '<random-control-to-web-token>'
 
 wildduck:
   adminAccessToken:
@@ -28,32 +28,45 @@ mailRuntime:
   feedbackMailboxPassword:
     value: '<random-feedback-mailbox-password>'
 
-objectStorage:
-  endpoint:
-    value: 'https://<account-id>.r2.cloudflarestorage.com'
-  region:
-    value: auto
-  bucket:
-    value: company-agent-mail-archive
-  accessKeyId:
-    value: '<r2-access-key>'
-  secretAccessKey:
-    value: '<r2-secret-key>'
-
-cloudflare:
-  apiBaseUrl: https://api.cloudflare.com/client/v4
-  accountId:
-    value: '<cloudflare-account-id>'
-  apiToken:
-    value: '<cloudflare-token>'
-  worker:
-    scriptName: agent-mail-ingress
-    archiveBucket:
-      value: company-agent-mail-archive
-
-outbound:
-  provider:
-    value: cloudflare
+admin:
+  cloudflare:
+    oauth:
+      clientId:
+        value: '<cloudflare-oauth-client-id>'
+      clientSecret:
+        value: '<cloudflare-oauth-client-secret>'
+    r2:
+      accountId:
+        value: '<cloudflare-account-id>'
+      apiToken:
+        value: '<r2-api-token>'
+      endpoint:
+        value: 'https://<account-id>.r2.cloudflarestorage.com'
+      region:
+        value: auto
+      bucket:
+        value: company-agent-mail-archive
+      accessKeyId:
+        value: '<r2-access-key>'
+      secretAccessKey:
+        value: '<r2-secret-key>'
+  smtp:
+    address:
+      value: ''
+    port:
+      value: '1025'
+    secureTls:
+      value: 'false'
+    username:
+      value: ''
+    password:
+      value: ''
+    fromEmail:
+      value: ''
+    replyToEmail:
+      value: ''
+    sendAsEmail:
+      value: ''
 
 ingress:
   enabled: true

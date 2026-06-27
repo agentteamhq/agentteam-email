@@ -50,6 +50,97 @@
   "$schema": "https://json-schema.org/draft-07/schema#",
   "additionalProperties": true,
   "properties": {
+    "admin": {
+      "properties": {
+        "cloudflare": {
+          "properties": {
+            "apiBaseUrl": { "minLength": 1, "type": "string" },
+            "oauth": {
+              "properties": {
+                "authorizationUrl": { "$ref": "#/$defs/valueSource" },
+                "clientId": { "$ref": "#/$defs/valueSource" },
+                "clientSecret": { "$ref": "#/$defs/valueSource" },
+                "issuer": { "$ref": "#/$defs/valueSource" },
+                "revokeUrl": { "$ref": "#/$defs/valueSource" },
+                "scopes": { "$ref": "#/$defs/valueSource" },
+                "tokenUrl": { "$ref": "#/$defs/valueSource" },
+                "userInfoUrl": { "$ref": "#/$defs/valueSource" }
+              },
+              "type": "object"
+            },
+            "r2": {
+              "properties": {
+                "accessKeyId": { "$ref": "#/$defs/valueSource" },
+                "accountId": { "$ref": "#/$defs/valueSource" },
+                "apiToken": { "$ref": "#/$defs/valueSource" },
+                "bucket": { "$ref": "#/$defs/valueSource" },
+                "endpoint": { "$ref": "#/$defs/valueSource" },
+                "region": { "$ref": "#/$defs/valueSource" },
+                "secretAccessKey": { "$ref": "#/$defs/valueSource" }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "smtp": {
+          "properties": {
+            "address": { "$ref": "#/$defs/valueSource" },
+            "fromEmail": { "$ref": "#/$defs/valueSource" },
+            "password": { "$ref": "#/$defs/valueSource" },
+            "port": { "$ref": "#/$defs/valueSource" },
+            "replyToEmail": { "$ref": "#/$defs/valueSource" },
+            "secureTls": { "$ref": "#/$defs/valueSource" },
+            "sendAsEmail": { "$ref": "#/$defs/valueSource" },
+            "username": { "$ref": "#/$defs/valueSource" }
+          },
+          "type": "object"
+        },
+        "socialAuth": {
+          "properties": {
+            "google": {
+              "properties": {
+                "clientId": { "$ref": "#/$defs/valueSource" },
+                "clientSecret": { "$ref": "#/$defs/valueSource" }
+              },
+              "type": "object"
+            },
+            "linkedin": {
+              "properties": {
+                "clientId": { "$ref": "#/$defs/valueSource" },
+                "clientSecret": { "$ref": "#/$defs/valueSource" }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "stripe": {
+          "properties": {
+            "publishableKey": { "$ref": "#/$defs/valueSource" },
+            "secretKey": { "$ref": "#/$defs/valueSource" }
+          },
+          "type": "object"
+        },
+        "trial": {
+          "properties": {
+            "admissionToken": { "$ref": "#/$defs/valueSource" },
+            "capabilities": { "$ref": "#/$defs/valueSource" },
+            "claimIntentTtlSeconds": { "$ref": "#/$defs/valueSource" },
+            "dailySendLimit": { "$ref": "#/$defs/valueSource" },
+            "domain": { "$ref": "#/$defs/valueSource" },
+            "enabled": { "$ref": "#/$defs/valueSource" },
+            "mailboxLifetimeSeconds": { "$ref": "#/$defs/valueSource" },
+            "mailboxLocalPrefix": { "$ref": "#/$defs/valueSource" },
+            "maxActive": { "$ref": "#/$defs/valueSource" },
+            "organizationId": { "$ref": "#/$defs/valueSource" },
+            "totalSendLimit": { "$ref": "#/$defs/valueSource" }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "affinity": { "type": "object" },
     "bundledConfig": {
       "properties": {
@@ -57,25 +148,10 @@
       },
       "type": "object"
     },
-    "cloudflare": {
-      "properties": {
-        "accountId": { "$ref": "#/$defs/valueSource" },
-        "apiBaseUrl": { "minLength": 1, "type": "string" },
-        "apiToken": { "$ref": "#/$defs/valueSource" },
-        "worker": {
-          "properties": {
-            "archiveBucket": { "$ref": "#/$defs/valueSource" },
-            "scriptName": { "minLength": 1, "type": "string" }
-          },
-          "type": "object"
-        }
-      },
-      "type": "object"
-    },
     "containerSecurityContext": { "type": "object" },
     "controlApi": {
       "properties": {
-        "token": { "$ref": "#/$defs/valueSource" }
+        "controlToWebToken": { "$ref": "#/$defs/valueSource" }
       },
       "type": "object"
     },
@@ -106,11 +182,19 @@
       "type": "object"
     },
     "ingress": { "type": "object" },
+    "mailControlService": { "type": "object" },
     "mailRuntime": {
       "properties": {
         "feedbackMailboxPassword": { "$ref": "#/$defs/valueSource" },
         "loopSecret": { "$ref": "#/$defs/valueSource" },
         "zonemtaRelayPassword": { "$ref": "#/$defs/valueSource" }
+      },
+      "type": "object"
+    },
+    "mongodb": {
+      "properties": {
+        "maxIncomingConnections": { "minimum": 1, "type": "integer" },
+        "replicaSetName": { "minLength": 1, "type": "string" }
       },
       "type": "object"
     },
@@ -123,30 +207,7 @@
       },
       "type": "object"
     },
-    "mongodb": {
-      "properties": {
-        "maxIncomingConnections": { "minimum": 1, "type": "integer" },
-        "replicaSetName": { "minLength": 1, "type": "string" }
-      },
-      "type": "object"
-    },
     "nodeSelector": { "type": "object" },
-    "objectStorage": {
-      "properties": {
-        "accessKeyId": { "$ref": "#/$defs/valueSource" },
-        "bucket": { "$ref": "#/$defs/valueSource" },
-        "endpoint": { "$ref": "#/$defs/valueSource" },
-        "region": { "$ref": "#/$defs/valueSource" },
-        "secretAccessKey": { "$ref": "#/$defs/valueSource" }
-      },
-      "type": "object"
-    },
-    "outbound": {
-      "properties": {
-        "provider": { "$ref": "#/$defs/valueSource" }
-      },
-      "type": "object"
-    },
     "persistence": {
       "properties": {
         "enabled": { "type": "boolean" },
@@ -162,20 +223,13 @@
     "publicHostname": { "minLength": 1, "type": "string" },
     "resources": { "type": "object" },
     "service": { "type": "object" },
-    "ses": {
-      "properties": {
-        "accessKeyId": { "$ref": "#/$defs/valueSource" },
-        "region": { "$ref": "#/$defs/valueSource" },
-        "secretAccessKey": { "$ref": "#/$defs/valueSource" }
-      },
-      "type": "object"
-    },
     "tolerations": { "type": "array" },
     "webServer": {
       "properties": {
         "authSecret": { "$ref": "#/$defs/valueSource" },
         "databaseMaxPoolSize": { "minimum": 1, "type": "integer" },
-        "encryptionKey": { "$ref": "#/$defs/valueSource" }
+        "encryptionKey": { "$ref": "#/$defs/valueSource" },
+        "tmpDir": { "$ref": "#/$defs/valueSource" }
       },
       "type": "object"
     },

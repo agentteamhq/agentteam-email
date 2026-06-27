@@ -7,13 +7,18 @@ import { resolveEnvironment } from './resolve-environment'
 
 const log = debug('app:env')
 
+const optionalNonEmptyString = z.preprocess(
+  (value) => (value === '' ? undefined : value),
+  z.string().min(1).optional()
+)
+
 const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
     PUBLIC_DEBUG: z.string().optional(),
     PUBLIC_HOSTNAME: z.string(),
-    PUBLIC_GOOGLE_CLIENT_ID: z.string().optional(),
-    PUBLIC_LINKEDIN_CLIENT_ID: z.string().optional()
+    PUBLIC_GOOGLE_CLIENT_ID: optionalNonEmptyString,
+    PUBLIC_LINKEDIN_CLIENT_ID: optionalNonEmptyString
   })
   .transform((parsed) => {
     // Force DEV, PROD, TEST based on NODE_ENV:

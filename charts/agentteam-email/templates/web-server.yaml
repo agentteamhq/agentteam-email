@@ -77,14 +77,79 @@ spec:
 {{- include "agentteam-email.envFor" (dict "root" . "name" "BETTER_AUTH_SECRET") | nindent 14 }}
             - name: ENCRYPT_SECRET_KEY
 {{- include "agentteam-email.envFor" (dict "root" . "name" "ENCRYPT_SECRET_KEY") | nindent 14 }}
-            - name: AGENT_MAIL_CONTROL_API_BASE_URL
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_CONTROL_API_BASE_URL") | nindent 14 }}
-            - name: AGENT_MAIL_CONTROL_API_TOKEN
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_CONTROL_API_TOKEN") | nindent 14 }}
-            - name: AGENT_MAIL_WILDDUCK_API_BASE_URL
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_WILDDUCK_API_BASE_URL") | nindent 14 }}
-            - name: AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_CONTROL_API_BASE_URL
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_CONTROL_API_BASE_URL") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_WILDDUCK_API_BASE_URL
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_WILDDUCK_API_BASE_URL") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_TRIAL_ENABLED
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_TRIAL_ENABLED") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_TRIAL_ORGANIZATION_ID
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_TRIAL_ORGANIZATION_ID") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_TRIAL_DOMAIN
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_TRIAL_DOMAIN") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_TRIAL_ADMISSION_TOKEN
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_TRIAL_ADMISSION_TOKEN") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_TRIAL_CAPABILITIES
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_TRIAL_CAPABILITIES") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_TRIAL_CLAIM_INTENT_TTL_SECONDS
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_TRIAL_CLAIM_INTENT_TTL_SECONDS") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_TRIAL_DAILY_SEND_LIMIT
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_TRIAL_DAILY_SEND_LIMIT") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_TRIAL_MAILBOX_LIFETIME_SECONDS
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_TRIAL_MAILBOX_LIFETIME_SECONDS") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_TRIAL_MAILBOX_LOCAL_PREFIX
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_TRIAL_MAILBOX_LOCAL_PREFIX") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_TRIAL_MAX_ACTIVE
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_TRIAL_MAX_ACTIVE") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_TRIAL_TOTAL_SEND_LIMIT
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_TRIAL_TOTAL_SEND_LIMIT") | nindent 14 }}
+            - name: CLOUDFLARE_API_BASE_URL
+{{- include "agentteam-email.envFor" (dict "root" . "name" "CLOUDFLARE_API_BASE_URL") | nindent 14 }}
+            - name: CLOUDFLARE_OAUTH_AUTHORIZATION_URL
+{{- include "agentteam-email.envFor" (dict "root" . "name" "CLOUDFLARE_OAUTH_AUTHORIZATION_URL") | nindent 14 }}
+{{ include "agentteam-email.webOauthEnv" . | nindent 12 }}
+            - name: CLOUDFLARE_OAUTH_ISSUER
+{{- include "agentteam-email.envFor" (dict "root" . "name" "CLOUDFLARE_OAUTH_ISSUER") | nindent 14 }}
+            - name: CLOUDFLARE_OAUTH_REVOKE_URL
+{{- include "agentteam-email.envFor" (dict "root" . "name" "CLOUDFLARE_OAUTH_REVOKE_URL") | nindent 14 }}
+            - name: CLOUDFLARE_OAUTH_SCOPES
+{{- include "agentteam-email.envFor" (dict "root" . "name" "CLOUDFLARE_OAUTH_SCOPES") | nindent 14 }}
+            - name: CLOUDFLARE_OAUTH_TOKEN_URL
+{{- include "agentteam-email.envFor" (dict "root" . "name" "CLOUDFLARE_OAUTH_TOKEN_URL") | nindent 14 }}
+            - name: CLOUDFLARE_OAUTH_USERINFO_URL
+{{- include "agentteam-email.envFor" (dict "root" . "name" "CLOUDFLARE_OAUTH_USERINFO_URL") | nindent 14 }}
+            - name: PUBLIC_GOOGLE_CLIENT_ID
+{{- include "agentteam-email.envFor" (dict "root" . "name" "PUBLIC_GOOGLE_CLIENT_ID") | nindent 14 }}
+            - name: GOOGLE_CLIENT_SECRET
+{{- include "agentteam-email.envFor" (dict "root" . "name" "GOOGLE_CLIENT_SECRET") | nindent 14 }}
+            - name: PUBLIC_LINKEDIN_CLIENT_ID
+{{- include "agentteam-email.envFor" (dict "root" . "name" "PUBLIC_LINKEDIN_CLIENT_ID") | nindent 14 }}
+            - name: LINKEDIN_CLIENT_SECRET
+{{- include "agentteam-email.envFor" (dict "root" . "name" "LINKEDIN_CLIENT_SECRET") | nindent 14 }}
+            - name: STRIPE_PUBLISHABLE_KEY
+{{- include "agentteam-email.envFor" (dict "root" . "name" "STRIPE_PUBLISHABLE_KEY") | nindent 14 }}
+            - name: STRIPE_SECRET_KEY
+{{- include "agentteam-email.envFor" (dict "root" . "name" "STRIPE_SECRET_KEY") | nindent 14 }}
+            - name: SMTP_ADDRESS
+{{- include "agentteam-email.envFor" (dict "root" . "name" "SMTP_ADDRESS") | nindent 14 }}
+            - name: SMTP_FROM_EMAIL
+{{- include "agentteam-email.envFor" (dict "root" . "name" "SMTP_FROM_EMAIL") | nindent 14 }}
+            - name: SMTP_PASSWORD
+{{- include "agentteam-email.envFor" (dict "root" . "name" "SMTP_PASSWORD") | nindent 14 }}
+            - name: SMTP_PORT
+{{- include "agentteam-email.envFor" (dict "root" . "name" "SMTP_PORT") | nindent 14 }}
+            - name: SMTP_REPLY_TO_EMAIL
+{{- include "agentteam-email.envFor" (dict "root" . "name" "SMTP_REPLY_TO_EMAIL") | nindent 14 }}
+            - name: SMTP_SECURE_TLS
+{{- include "agentteam-email.envFor" (dict "root" . "name" "SMTP_SECURE_TLS") | nindent 14 }}
+            - name: SMTP_SEND_AS_EMAIL
+{{- include "agentteam-email.envFor" (dict "root" . "name" "SMTP_SEND_AS_EMAIL") | nindent 14 }}
+            - name: SMTP_USERNAME
+{{- include "agentteam-email.envFor" (dict "root" . "name" "SMTP_USERNAME") | nindent 14 }}
           {{- with .Values.extraEnv.webServer }}
 {{ toYaml . | nindent 12 }}
           {{- end }}

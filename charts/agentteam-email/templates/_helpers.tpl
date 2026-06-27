@@ -80,6 +80,13 @@ value: {{ required (printf "%s.value or %s.valueFrom is required" $name $name) $
 {{- end }}
 {{- end -}}
 
+{{- define "agentteam-email.webOauthEnv" -}}
+- name: CLOUDFLARE_OAUTH_CLIENT_ID
+{{- include "agentteam-email.envFor" (dict "root" . "name" "CLOUDFLARE_OAUTH_CLIENT_ID") | nindent 2 }}
+- name: CLOUDFLARE_OAUTH_CLIENT_SECRET
+{{- include "agentteam-email.envFor" (dict "root" . "name" "CLOUDFLARE_OAUTH_CLIENT_SECRET") | nindent 2 }}
+{{- end -}}
+
 {{- define "agentteam-email.requiredBundledConfigValue" -}}
 {{- $source := default dict .source -}}
 {{- $name := .name -}}
@@ -131,32 +138,38 @@ emptyDir: {}
 {{- define "agentteam-email.envFor" -}}
 {{- $root := .root -}}
 {{- $name := .name -}}
-{{- if eq $name "AGENT_MAIL_R2_ENDPOINT" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.objectStorage.endpoint "name" "objectStorage.endpoint") -}}
-{{- else if eq $name "AGENT_MAIL_R2_REGION" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.objectStorage.region) -}}
-{{- else if eq $name "AGENT_MAIL_R2_BUCKET" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.objectStorage.bucket "name" "objectStorage.bucket") -}}
-{{- else if eq $name "AGENT_MAIL_R2_ACCESS_KEY_ID" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.objectStorage.accessKeyId "name" "objectStorage.accessKeyId") -}}
-{{- else if eq $name "AGENT_MAIL_R2_SECRET_ACCESS_KEY" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.objectStorage.secretAccessKey "name" "objectStorage.secretAccessKey") -}}
-{{- else if eq $name "AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.wildduck.adminAccessToken "name" "wildduck.adminAccessToken") -}}
-{{- else if eq $name "AGENT_MAIL_WILDDUCK_ACCESS_CONTROL_SECRET" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.wildduck.accessControlSecret "name" "wildduck.accessControlSecret") -}}
-{{- else if eq $name "AGENT_MAIL_WILDDUCK_API_BASE_URL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (printf "http://%s:8080" $root.Values.names.wildduckApi))) -}}
-{{- else if eq $name "AGENT_MAIL_WILDDUCK_IMAP_ADDRESS" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (printf "%s:143" $root.Values.names.wildduckImap))) -}}
-{{- else if eq $name "AGENT_MAIL_HARAKA_SMTP_ADDRESS" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (printf "%s:25" $root.Values.names.haraka))) -}}
-{{- else if eq $name "AGENT_MAIL_ZONEMTA_DSN_ADDRESS" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (printf "%s:2526" $root.Values.names.zonemtaDsn))) -}}
-{{- else if eq $name "AGENT_MAIL_ZONEMTA_RELAY_PASSWORD" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.mailRuntime.zonemtaRelayPassword "name" "mailRuntime.zonemtaRelayPassword") -}}
-{{- else if eq $name "AGENT_MAIL_FEEDBACK_MAILBOX_PASSWORD" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.mailRuntime.feedbackMailboxPassword "name" "mailRuntime.feedbackMailboxPassword") -}}
-{{- else if eq $name "AGENT_MAIL_OUTBOUND_PROVIDER" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.outbound.provider) -}}
-{{- else if eq $name "AGENT_MAIL_CONTROL_API_BASE_URL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (printf "http://%s:8081" $root.Values.names.mailControlService))) -}}
-{{- else if eq $name "AGENT_MAIL_CONTROL_API_TOKEN" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.controlApi.token "name" "controlApi.token") -}}
-{{- else if eq $name "AGENT_MAIL_CLOUDFLARE_API_BASE_URL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" $root.Values.cloudflare.apiBaseUrl)) -}}
-{{- else if eq $name "AGENT_MAIL_CLOUDFLARE_ACCOUNT_ID" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.cloudflare.accountId "name" "cloudflare.accountId") -}}
-{{- else if eq $name "AGENT_MAIL_CLOUDFLARE_WORKER_SCRIPT_NAME" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" $root.Values.cloudflare.worker.scriptName)) -}}
-{{- else if eq $name "AGENT_MAIL_CLOUDFLARE_WORKER_ARCHIVE_BUCKET" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.cloudflare.worker.archiveBucket "name" "cloudflare.worker.archiveBucket") -}}
-{{- else if eq $name "AGENT_MAIL_CLOUDFLARE_API_TOKEN" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.cloudflare.apiToken "name" "cloudflare.apiToken") -}}
-{{- else if eq $name "AGENT_MAIL_AWS_REGION" -}}{{ if eq $root.Values.outbound.provider.value "ses" }}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.ses.region "name" "ses.region") }}{{ else }}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.ses.region) }}{{ end -}}
-{{- else if eq $name "AGENT_MAIL_AWS_ACCESS_KEY_ID" -}}{{ if eq $root.Values.outbound.provider.value "ses" }}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.ses.accessKeyId "name" "ses.accessKeyId") }}{{ else }}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.ses.accessKeyId) }}{{ end -}}
-{{- else if eq $name "AGENT_MAIL_AWS_SECRET_ACCESS_KEY" -}}{{ if eq $root.Values.outbound.provider.value "ses" }}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.ses.secretAccessKey "name" "ses.secretAccessKey") }}{{ else }}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.ses.secretAccessKey) }}{{ end -}}
-{{- else if eq $name "AGENTTEAM_EMAIL_WILDDUCK_MONGODB_URI" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (include "agentteam-email.mongodbUri" (dict "root" $root "database" "wildduck" "options" "maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000")))) -}}
-{{- else if eq $name "AGENTTEAM_EMAIL_CONTROL_MONGODB_URI" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (include "agentteam-email.mongodbUri" (dict "root" $root "database" "agent_mail_control" "options" "maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000")))) -}}
+{{- if eq $name "AT_EMAIL_ADMIN_CF_API_BASE_URL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" $root.Values.admin.cloudflare.apiBaseUrl)) -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_R2_ACCOUNT_ID" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.admin.cloudflare.r2.accountId "name" "admin.cloudflare.r2.accountId") -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_R2_API_TOKEN" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.admin.cloudflare.r2.apiToken "name" "admin.cloudflare.r2.apiToken") -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_R2_ENDPOINT" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.admin.cloudflare.r2.endpoint "name" "admin.cloudflare.r2.endpoint") -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_R2_REGION" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.cloudflare.r2.region) -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_R2_BUCKET" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.admin.cloudflare.r2.bucket "name" "admin.cloudflare.r2.bucket") -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_R2_ACCESS_KEY_ID" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.admin.cloudflare.r2.accessKeyId "name" "admin.cloudflare.r2.accessKeyId") -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_R2_SECRET_ACCESS_KEY" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.admin.cloudflare.r2.secretAccessKey "name" "admin.cloudflare.r2.secretAccessKey") -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.wildduck.adminAccessToken "name" "wildduck.adminAccessToken") -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_WILDDUCK_ACCESS_CONTROL_SECRET" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.wildduck.accessControlSecret "name" "wildduck.accessControlSecret") -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_WILDDUCK_API_BASE_URL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (printf "http://%s:8080" $root.Values.names.wildduckApi))) -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_WILDDUCK_IMAP_ADDRESS" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (printf "%s:143" $root.Values.names.wildduckImap))) -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_HARAKA_SMTP_ADDRESS" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (printf "%s:25" $root.Values.names.haraka))) -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_ZONEMTA_DSN_ADDRESS" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (printf "%s:2526" $root.Values.names.zonemtaDsn))) -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_ZONEMTA_RELAY_PASSWORD" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.mailRuntime.zonemtaRelayPassword "name" "mailRuntime.zonemtaRelayPassword") -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_FEEDBACK_MAILBOX_PASSWORD" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.mailRuntime.feedbackMailboxPassword "name" "mailRuntime.feedbackMailboxPassword") -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_CONTROL_API_BASE_URL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (printf "http://%s:8081" $root.Values.names.mailControlService))) -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_BASE_URL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (printf "http://%s:%v" $root.Values.names.webServer $root.Values.service.webServer.port))) -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.controlApi.controlToWebToken "name" "controlApi.controlToWebToken") -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (include "agentteam-email.mongodbUri" (dict "root" $root "database" "wildduck" "options" "maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000")))) -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_CONTROL_MONGODB_URI" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (include "agentteam-email.mongodbUri" (dict "root" $root "database" "agent_mail_control" "options" "maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000")))) -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_TRIAL_ENABLED" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.trial.enabled) -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_TRIAL_ORGANIZATION_ID" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.trial.organizationId) -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_TRIAL_DOMAIN" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.trial.domain) -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_TRIAL_ADMISSION_TOKEN" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.trial.admissionToken) -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_TRIAL_CAPABILITIES" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.trial.capabilities) -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_TRIAL_CLAIM_INTENT_TTL_SECONDS" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.trial.claimIntentTtlSeconds) -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_TRIAL_DAILY_SEND_LIMIT" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.trial.dailySendLimit) -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_TRIAL_MAILBOX_LIFETIME_SECONDS" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.trial.mailboxLifetimeSeconds) -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_TRIAL_MAILBOX_LOCAL_PREFIX" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.trial.mailboxLocalPrefix) -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_TRIAL_MAX_ACTIVE" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.trial.maxActive) -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_TRIAL_TOTAL_SEND_LIMIT" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.trial.totalSendLimit) -}}
 {{- else if eq $name "NODE_ENV" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" "production")) -}}
 {{- else if eq $name "PORT" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" "4321")) -}}
 {{- else if eq $name "FRONTEND_HOST" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" "0.0.0.0")) -}}
@@ -165,9 +178,32 @@ emptyDir: {}
 {{- else if eq $name "MONGODB_URI" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (include "agentteam-email.mongodbUri" (dict "root" $root "database" "agentteam_email")))) -}}
 {{- else if eq $name "MONGODB_DATABASE" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" "agentteam_email")) -}}
 {{- else if eq $name "DATABASE_MAX_POOL_SIZE" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" $root.Values.webServer.databaseMaxPoolSize)) -}}
-{{- else if eq $name "TMP_DIR" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" "/tmp/agentteam-email")) -}}
+{{- else if eq $name "TMP_DIR" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.webServer.tmpDir) -}}
 {{- else if eq $name "BETTER_AUTH_SECRET" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.webServer.authSecret "name" "webServer.authSecret") -}}
 {{- else if eq $name "ENCRYPT_SECRET_KEY" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.webServer.encryptionKey "name" "webServer.encryptionKey") -}}
+{{- else if eq $name "CLOUDFLARE_API_BASE_URL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" $root.Values.admin.cloudflare.apiBaseUrl)) -}}
+{{- else if eq $name "CLOUDFLARE_OAUTH_AUTHORIZATION_URL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.cloudflare.oauth.authorizationUrl) -}}
+{{- else if eq $name "CLOUDFLARE_OAUTH_CLIENT_ID" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.admin.cloudflare.oauth.clientId "name" "admin.cloudflare.oauth.clientId") -}}
+{{- else if eq $name "CLOUDFLARE_OAUTH_CLIENT_SECRET" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.admin.cloudflare.oauth.clientSecret "name" "admin.cloudflare.oauth.clientSecret") -}}
+{{- else if eq $name "CLOUDFLARE_OAUTH_ISSUER" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.cloudflare.oauth.issuer) -}}
+{{- else if eq $name "CLOUDFLARE_OAUTH_REVOKE_URL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.cloudflare.oauth.revokeUrl) -}}
+{{- else if eq $name "CLOUDFLARE_OAUTH_SCOPES" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.cloudflare.oauth.scopes) -}}
+{{- else if eq $name "CLOUDFLARE_OAUTH_TOKEN_URL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.cloudflare.oauth.tokenUrl) -}}
+{{- else if eq $name "CLOUDFLARE_OAUTH_USERINFO_URL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.cloudflare.oauth.userInfoUrl) -}}
+{{- else if eq $name "PUBLIC_GOOGLE_CLIENT_ID" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.socialAuth.google.clientId) -}}
+{{- else if eq $name "GOOGLE_CLIENT_SECRET" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.socialAuth.google.clientSecret) -}}
+{{- else if eq $name "PUBLIC_LINKEDIN_CLIENT_ID" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.socialAuth.linkedin.clientId) -}}
+{{- else if eq $name "LINKEDIN_CLIENT_SECRET" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.socialAuth.linkedin.clientSecret) -}}
+{{- else if eq $name "STRIPE_PUBLISHABLE_KEY" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.stripe.publishableKey) -}}
+{{- else if eq $name "STRIPE_SECRET_KEY" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.stripe.secretKey) -}}
+{{- else if eq $name "SMTP_ADDRESS" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.smtp.address) -}}
+{{- else if eq $name "SMTP_FROM_EMAIL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.smtp.fromEmail) -}}
+{{- else if eq $name "SMTP_PASSWORD" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.smtp.password) -}}
+{{- else if eq $name "SMTP_PORT" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.smtp.port) -}}
+{{- else if eq $name "SMTP_REPLY_TO_EMAIL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.smtp.replyToEmail) -}}
+{{- else if eq $name "SMTP_SECURE_TLS" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.smtp.secureTls) -}}
+{{- else if eq $name "SMTP_SEND_AS_EMAIL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.smtp.sendAsEmail) -}}
+{{- else if eq $name "SMTP_USERNAME" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.smtp.username) -}}
 {{- else -}}{{ fail (printf "unsupported environment variable %s" $name) }}
 {{- end }}
 {{- end -}}

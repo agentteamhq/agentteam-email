@@ -68,56 +68,44 @@ spec:
             - name: smtp
               containerPort: 2587
           env:
-            - name: AGENTTEAM_EMAIL_WILDDUCK_MONGODB_URI
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENTTEAM_EMAIL_WILDDUCK_MONGODB_URI") | nindent 14 }}
-            - name: AGENTTEAM_EMAIL_CONTROL_MONGODB_URI
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENTTEAM_EMAIL_CONTROL_MONGODB_URI") | nindent 14 }}
-            - name: AGENT_MAIL_R2_ENDPOINT
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_R2_ENDPOINT") | nindent 14 }}
-            - name: AGENT_MAIL_R2_REGION
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_R2_REGION") | nindent 14 }}
-            - name: AGENT_MAIL_R2_BUCKET
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_R2_BUCKET") | nindent 14 }}
-            - name: AGENT_MAIL_R2_ACCESS_KEY_ID
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_R2_ACCESS_KEY_ID") | nindent 14 }}
-            - name: AGENT_MAIL_R2_SECRET_ACCESS_KEY
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_R2_SECRET_ACCESS_KEY") | nindent 14 }}
-            - name: AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN") | nindent 14 }}
-            - name: AGENT_MAIL_WILDDUCK_API_BASE_URL
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_WILDDUCK_API_BASE_URL") | nindent 14 }}
-            - name: AGENT_MAIL_WILDDUCK_IMAP_ADDRESS
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_WILDDUCK_IMAP_ADDRESS") | nindent 14 }}
-            - name: AGENT_MAIL_HARAKA_SMTP_ADDRESS
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_HARAKA_SMTP_ADDRESS") | nindent 14 }}
-            - name: AGENT_MAIL_ZONEMTA_DSN_ADDRESS
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_ZONEMTA_DSN_ADDRESS") | nindent 14 }}
-            - name: AGENT_MAIL_ZONEMTA_RELAY_PASSWORD
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_ZONEMTA_RELAY_PASSWORD") | nindent 14 }}
-            - name: AGENT_MAIL_FEEDBACK_MAILBOX_PASSWORD
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_FEEDBACK_MAILBOX_PASSWORD") | nindent 14 }}
-            - name: AGENT_MAIL_OUTBOUND_PROVIDER
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_OUTBOUND_PROVIDER") | nindent 14 }}
-            - name: AGENT_MAIL_CONTROL_API_TOKEN
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_CONTROL_API_TOKEN") | nindent 14 }}
-            - name: AGENT_MAIL_CLOUDFLARE_API_BASE_URL
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_CLOUDFLARE_API_BASE_URL") | nindent 14 }}
-            - name: AGENT_MAIL_CLOUDFLARE_ACCOUNT_ID
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_CLOUDFLARE_ACCOUNT_ID") | nindent 14 }}
-            - name: AGENT_MAIL_CLOUDFLARE_WORKER_SCRIPT_NAME
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_CLOUDFLARE_WORKER_SCRIPT_NAME") | nindent 14 }}
-            - name: AGENT_MAIL_CLOUDFLARE_WORKER_ARCHIVE_BUCKET
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_CLOUDFLARE_WORKER_ARCHIVE_BUCKET") | nindent 14 }}
-            - name: AGENT_MAIL_CLOUDFLARE_API_TOKEN
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_CLOUDFLARE_API_TOKEN") | nindent 14 }}
-            {{- if eq .Values.outbound.provider.value "ses" }}
-            - name: AGENT_MAIL_AWS_REGION
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_AWS_REGION") | nindent 14 }}
-            - name: AGENT_MAIL_AWS_ACCESS_KEY_ID
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_AWS_ACCESS_KEY_ID") | nindent 14 }}
-            - name: AGENT_MAIL_AWS_SECRET_ACCESS_KEY
-{{- include "agentteam-email.envFor" (dict "root" . "name" "AGENT_MAIL_AWS_SECRET_ACCESS_KEY") | nindent 14 }}
-            {{- end }}
+            - name: AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_CONTROL_MONGODB_URI
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_CONTROL_MONGODB_URI") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_CF_API_BASE_URL
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_CF_API_BASE_URL") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_R2_ACCOUNT_ID
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_R2_ACCOUNT_ID") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_R2_API_TOKEN
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_R2_API_TOKEN") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_R2_ENDPOINT
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_R2_ENDPOINT") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_R2_REGION
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_R2_REGION") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_R2_BUCKET
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_R2_BUCKET") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_R2_ACCESS_KEY_ID
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_R2_ACCESS_KEY_ID") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_R2_SECRET_ACCESS_KEY
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_R2_SECRET_ACCESS_KEY") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_WILDDUCK_API_BASE_URL
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_WILDDUCK_API_BASE_URL") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_WILDDUCK_IMAP_ADDRESS
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_WILDDUCK_IMAP_ADDRESS") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_HARAKA_SMTP_ADDRESS
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_HARAKA_SMTP_ADDRESS") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_ZONEMTA_DSN_ADDRESS
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_ZONEMTA_DSN_ADDRESS") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_ZONEMTA_RELAY_PASSWORD
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_ZONEMTA_RELAY_PASSWORD") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_FEEDBACK_MAILBOX_PASSWORD
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_FEEDBACK_MAILBOX_PASSWORD") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_BASE_URL
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_BASE_URL") | nindent 14 }}
+            - name: AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN
+{{- include "agentteam-email.envFor" (dict "root" . "name" "AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN") | nindent 14 }}
           {{- with .Values.extraEnv.mailControlService }}
 {{ toYaml . | nindent 12 }}
           {{- end }}

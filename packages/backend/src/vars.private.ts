@@ -6,14 +6,6 @@ import { z } from 'zod'
 import { PUBLIC_VARS } from './vars.public'
 import { resolveEnvironment } from './resolve-environment'
 
-const parseStringToNumber = (value: string) => {
-  const port = parseInt(value, 10)
-  if (isNaN(port)) {
-    throw new Error(`Invalid: "${value}" is not a number.`)
-  }
-  return port
-}
-
 const optionalStringToBoolean = (name: string) => {
   return (val: unknown): boolean => {
     if (val === null || val === undefined || val === '') {
@@ -92,72 +84,70 @@ const optionalNonNegativeInteger = (name: string) =>
 
 // Define your environment schema.
 const envSchema = z.object({
-  BETTER_AUTH_SECRET: z.string().optional(),
+  BETTER_AUTH_SECRET: optionalNonEmptyString,
   ENCRYPT_SECRET_KEY: optionalBase64Url32ByteSecret,
   E2E_TEST_SUPPORT_ENABLED: z
     .preprocess(optionalStringToBoolean('E2E_TEST_SUPPORT_ENABLED'), z.boolean())
     .default(false),
   E2E_TEST_SUPPORT_TOKEN: optionalNonEmptyString,
 
-  GITHUB_CLIENT_SECRET: z.string().optional(),
-  GOOGLE_CLIENT_SECRET: z.string().optional(),
-  LINKEDIN_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: optionalNonEmptyString,
+  LINKEDIN_CLIENT_SECRET: optionalNonEmptyString,
 
   CLOUDFLARE_API_BASE_URL: optionalNonEmptyString,
   CLOUDFLARE_OAUTH_AUTHORIZATION_URL: optionalNonEmptyString,
   CLOUDFLARE_OAUTH_CLIENT_ID: optionalNonEmptyString,
-  CLOUDFLARE_OAUTH_CLIENT_SECRET: optionalNonEmptyString,
   CLOUDFLARE_OAUTH_ISSUER: optionalNonEmptyString,
   CLOUDFLARE_OAUTH_REVOKE_URL: optionalNonEmptyString,
   CLOUDFLARE_OAUTH_SCOPES: optionalNonEmptyString,
   CLOUDFLARE_OAUTH_TOKEN_URL: optionalNonEmptyString,
   CLOUDFLARE_OAUTH_USERINFO_URL: optionalNonEmptyString,
-  AGENT_MAIL_CONTROL_API_BASE_URL: optionalNonEmptyString,
-  AGENT_MAIL_CONTROL_API_TOKEN: optionalNonEmptyString,
-  AGENT_MAIL_WILDDUCK_API_BASE_URL: optionalNonEmptyString,
-  AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN: optionalNonEmptyString,
-  AGENT_MAIL_TRIAL_CAPABILITIES: z
+  AT_EMAIL_ADMIN_CONTROL_API_BASE_URL: optionalNonEmptyString,
+  AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN: optionalNonEmptyString,
+  AT_EMAIL_ADMIN_WILDDUCK_API_BASE_URL: optionalNonEmptyString,
+  AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN: optionalNonEmptyString,
+  AT_EMAIL_ADMIN_TRIAL_CAPABILITIES: z
     .string()
     .default(
       'email.status,email.message.list,email.message.read,email.message.search,email.message.create_draft,email.message.send,email.message.reply'
     ),
-  AGENT_MAIL_TRIAL_CLAIM_INTENT_TTL_SECONDS: optionalPositiveInteger(
-    'AGENT_MAIL_TRIAL_CLAIM_INTENT_TTL_SECONDS'
+  AT_EMAIL_ADMIN_TRIAL_CLAIM_INTENT_TTL_SECONDS: optionalPositiveInteger(
+    'AT_EMAIL_ADMIN_TRIAL_CLAIM_INTENT_TTL_SECONDS'
   ).default(60 * 60 * 24),
-  AGENT_MAIL_TRIAL_DAILY_SEND_LIMIT: optionalNonNegativeInteger('AGENT_MAIL_TRIAL_DAILY_SEND_LIMIT').default(
-    10
-  ),
-  AGENT_MAIL_TRIAL_ENABLED: z
-    .preprocess(optionalStringToBoolean('AGENT_MAIL_TRIAL_ENABLED'), z.boolean())
+  AT_EMAIL_ADMIN_TRIAL_DAILY_SEND_LIMIT: optionalNonNegativeInteger(
+    'AT_EMAIL_ADMIN_TRIAL_DAILY_SEND_LIMIT'
+  ).default(10),
+  AT_EMAIL_ADMIN_TRIAL_ENABLED: z
+    .preprocess(optionalStringToBoolean('AT_EMAIL_ADMIN_TRIAL_ENABLED'), z.boolean())
     .default(false),
-  AGENT_MAIL_TRIAL_DOMAIN: optionalNonEmptyString,
-  AGENT_MAIL_TRIAL_MAILBOX_LIFETIME_SECONDS: optionalPositiveInteger(
-    'AGENT_MAIL_TRIAL_MAILBOX_LIFETIME_SECONDS'
+  AT_EMAIL_ADMIN_TRIAL_DOMAIN: optionalNonEmptyString,
+  AT_EMAIL_ADMIN_TRIAL_MAILBOX_LIFETIME_SECONDS: optionalPositiveInteger(
+    'AT_EMAIL_ADMIN_TRIAL_MAILBOX_LIFETIME_SECONDS'
   ).default(60 * 60 * 24 * 7),
-  AGENT_MAIL_TRIAL_ADMISSION_TOKEN: optionalNonEmptyString,
-  AGENT_MAIL_TRIAL_MAILBOX_LOCAL_PREFIX: z.string().min(1).default('trial'),
-  AGENT_MAIL_TRIAL_MAX_ACTIVE: optionalPositiveInteger('AGENT_MAIL_TRIAL_MAX_ACTIVE').default(25),
-  AGENT_MAIL_TRIAL_ORGANIZATION_ID: optionalNonEmptyString,
-  AGENT_MAIL_TRIAL_TOTAL_SEND_LIMIT: optionalNonNegativeInteger('AGENT_MAIL_TRIAL_TOTAL_SEND_LIMIT').default(
-    50
-  ),
+  AT_EMAIL_ADMIN_TRIAL_ADMISSION_TOKEN: optionalNonEmptyString,
+  AT_EMAIL_ADMIN_TRIAL_MAILBOX_LOCAL_PREFIX: z.string().min(1).default('trial'),
+  AT_EMAIL_ADMIN_TRIAL_MAX_ACTIVE: optionalPositiveInteger('AT_EMAIL_ADMIN_TRIAL_MAX_ACTIVE').default(25),
+  AT_EMAIL_ADMIN_TRIAL_ORGANIZATION_ID: optionalNonEmptyString,
+  AT_EMAIL_ADMIN_TRIAL_TOTAL_SEND_LIMIT: optionalNonNegativeInteger(
+    'AT_EMAIL_ADMIN_TRIAL_TOTAL_SEND_LIMIT'
+  ).default(50),
 
   DATABASE_MAX_POOL_SIZE: optionalPositiveInteger('DATABASE_MAX_POOL_SIZE').default(8),
   DATABASE_URL: z.string().min(1),
 
   DEBUG: z.string().optional(),
 
-  STRIPE_PUBLISHABLE_KEY: z.string().optional(),
-  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_PUBLISHABLE_KEY: optionalNonEmptyString,
+  STRIPE_SECRET_KEY: optionalNonEmptyString,
 
-  SMTP_ADDRESS: z.string().optional(),
-  SMTP_FROM_EMAIL: z.string().optional(),
-  SMTP_PASSWORD: z.string().optional(),
-  SMTP_PORT: z.string().default('1025').transform(parseStringToNumber),
-  SMTP_REPLY_TO_EMAIL: z.string().optional(),
+  SMTP_ADDRESS: optionalNonEmptyString,
+  SMTP_FROM_EMAIL: optionalNonEmptyString,
+  SMTP_PASSWORD: optionalNonEmptyString,
+  SMTP_PORT: optionalPositiveInteger('SMTP_PORT').default(1025),
+  SMTP_REPLY_TO_EMAIL: optionalNonEmptyString,
   SMTP_SECURE_TLS: z.preprocess(optionalStringToBoolean('SMTP_SECURE_TLS'), z.boolean()).default(false),
-  SMTP_SEND_AS_EMAIL: z.string().optional(),
-  SMTP_USERNAME: z.string().optional(),
+  SMTP_SEND_AS_EMAIL: optionalNonEmptyString,
+  SMTP_USERNAME: optionalNonEmptyString,
 
   TMP_DIR: z.string().default('tmp').optional()
 })
@@ -166,6 +156,10 @@ export const PRIVATE_VARS = resolveEnvironment(envSchema)
 
 if (PUBLIC_VARS.PROD && !PRIVATE_VARS.ENCRYPT_SECRET_KEY) {
   throw new Error('ENCRYPT_SECRET_KEY is required in production')
+}
+
+if (PUBLIC_VARS.PROD && !PRIVATE_VARS.BETTER_AUTH_SECRET) {
+  throw new Error('BETTER_AUTH_SECRET is required in production')
 }
 
 if (PRIVATE_VARS.DEBUG) {

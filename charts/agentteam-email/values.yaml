@@ -64,13 +64,17 @@ webServer:
   authSecret: {}
   encryptionKey: {}
   databaseMaxPoolSize: 8
+  tmpDir:
+    value: /tmp/agentteam-email
+
+mailControlService: {}
 
 mongodb:
   maxIncomingConnections: 128
   replicaSetName: rs0
 
 controlApi:
-  token: {}
+  controlToWebToken: {}
 
 wildduck:
   adminAccessToken: {}
@@ -81,27 +85,89 @@ mailRuntime:
   zonemtaRelayPassword: {}
   feedbackMailboxPassword: {}
 
-objectStorage:
-  endpoint: {}
-  region:
-    value: auto
-  bucket: {}
-  accessKeyId: {}
-  secretAccessKey: {}
-
-cloudflare:
-  apiBaseUrl: https://api.cloudflare.com/client/v4
-  accountId: {}
-  apiToken: {}
-  worker:
-    scriptName: agent-mail-ingress
-    archiveBucket: {}
-
-outbound:
-  provider:
-    value: cloudflare
-
-ses: {}
+admin:
+  cloudflare:
+    apiBaseUrl: https://api.cloudflare.com/client/v4
+    oauth:
+      authorizationUrl:
+        value: ''
+      clientId: {}
+      clientSecret: {}
+      issuer:
+        value: ''
+      revokeUrl:
+        value: ''
+      scopes:
+        value: ''
+      tokenUrl:
+        value: ''
+      userInfoUrl:
+        value: ''
+    r2:
+      accountId: {}
+      apiToken: {}
+      endpoint: {}
+      region:
+        value: auto
+      bucket: {}
+      accessKeyId: {}
+      secretAccessKey: {}
+  socialAuth:
+    google:
+      clientId:
+        value: ''
+      clientSecret:
+        value: ''
+    linkedin:
+      clientId:
+        value: ''
+      clientSecret:
+        value: ''
+  stripe:
+    publishableKey:
+      value: ''
+    secretKey:
+      value: ''
+  smtp:
+    address:
+      value: ''
+    fromEmail:
+      value: ''
+    password:
+      value: ''
+    port:
+      value: '1025'
+    replyToEmail:
+      value: ''
+    secureTls:
+      value: 'false'
+    sendAsEmail:
+      value: ''
+    username:
+      value: ''
+  trial:
+    enabled:
+      value: 'false'
+    organizationId:
+      value: ''
+    domain:
+      value: ''
+    admissionToken:
+      value: ''
+    capabilities:
+      value: email.status,email.message.list,email.message.read,email.message.search,email.message.create_draft,email.message.send,email.message.reply
+    claimIntentTtlSeconds:
+      value: '86400'
+    dailySendLimit:
+      value: '10'
+    mailboxLifetimeSeconds:
+      value: '604800'
+    mailboxLocalPrefix:
+      value: trial
+    maxActive:
+      value: '25'
+    totalSendLimit:
+      value: '50'
 
 bundledConfig:
   enabled: true

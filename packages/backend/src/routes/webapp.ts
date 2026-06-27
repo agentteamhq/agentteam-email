@@ -1,6 +1,7 @@
 import { deleteAllCookies, readFlashCookie, routeSetCookieHeaders } from '@main/common'
 
 import { getUser } from '../auth/get-user'
+import { globals } from '../globals'
 import { getCustomerStripeStatus } from '../payments/get-customer-status'
 import { isDelayedData } from '../payments/is-delayed-data'
 
@@ -11,8 +12,23 @@ export { handleStripeRedirect } from './webapp/stripe'
 
 export type WebappRouteUser = Awaited<ReturnType<typeof getUser>>
 
+const ADMIN_ROUTE_PATH = '/admin/' as const
+const ADMIN_SETUP_ROUTE_PATH = '/admin/setup/' as const
+const DASHBOARD_ROUTE_PATH = '/dashboard/' as const
+const SIGNIN_ROUTE_PATH = '/signin/' as const
+
+export interface AppRouteGateState {
+  redirectTo: typeof ADMIN_SETUP_ROUTE_PATH
+  setupRequired: boolean
+}
+
 export interface HomeRouteState {
-  redirectTo: '/dashboard/' | '/signin/'
+  redirectTo:
+    | typeof ADMIN_ROUTE_PATH
+    | typeof ADMIN_SETUP_ROUTE_PATH
+    | typeof DASHBOARD_ROUTE_PATH
+    | typeof SIGNIN_ROUTE_PATH
+  setupRequired: boolean
   user: WebappRouteUser
 }
 
@@ -20,6 +36,7 @@ export interface AuthRouteState {
   flash: string | null
   redirectTo: string
   shouldRedirectToDashboard: boolean
+  shouldRedirectToSetup: boolean
   user: WebappRouteUser
 }
 
@@ -28,6 +45,7 @@ export interface SettingsRouteState {
   redirectTo: string
   setCookieHeaders: Array<string>
   shouldRedirectToSignIn: boolean
+  shouldRedirectToSetup: boolean
   user: WebappRouteUser
 }
 
@@ -49,11 +67,42 @@ export interface SignOutRouteState {
   setCookieHeaders: Array<string>
 }
 
+export interface AdminRouteState {
+  redirectTo: typeof ADMIN_SETUP_ROUTE_PATH
+  setupRequired: boolean
+  shouldNotFound: boolean
+  user: WebappRouteUser
+}
+
+export interface AdminSetupRouteState {
+  redirectTo: typeof ADMIN_ROUTE_PATH
+  setupRequired: boolean
+  shouldNotFound: boolean
+  shouldRedirectToAdmin: boolean
+  user: WebappRouteUser
+}
+
+export async function loadAppRouteGate(_request: Request): Promise<AppRouteGateState> {
+  return {
+    redirectTo: ADMIN_SETUP_ROUTE_PATH,
+    setupRequired: await isAdminSetupRequired()
+  }
+}
+
 export async function loadHomeRoute(request: Request): Promise<HomeRouteState> {
+  if (await isAdminSetupRequired()) {
+    return {
+      redirectTo: ADMIN_SETUP_ROUTE_PATH,
+      setupRequired: true,
+      user: null
+    }
+  }
+
   const user = await getUser(request.headers)
 
   return {
-    redirectTo: user ? '/dashboard/' : '/signin/',
+    redirectTo: user ? (isAdminUser(user) ? ADMIN_ROUTE_PATH : DASHBOARD_ROUTE_PATH) : SIGNIN_ROUTE_PATH,
+    setupRequired: false,
     user
   }
 }
@@ -64,48 +113,96 @@ export async function loadDashboardRoute(request: Request): Promise<SettingsRout
 
 export async function loadSignInRoute(request: Request): Promise<AuthRouteState> {
   const url = new URL(request.url)
-  const redirectTo = readInternalRedirect(url.searchParams.get('redirect'), '/dashboard/')
+  const redirectTo = readInternalRedirect(url.searchParams.get('redirect'), '/')
   const resetSuccess = url.searchParams.get('reset_success') === '1'
+  const setupRequired = await isAdminSetupRequired()
+
+  if (setupRequired) {
+    return {
+      flash: null,
+      redirectTo: ADMIN_SETUP_ROUTE_PATH,
+      shouldRedirectToDashboard: true,
+      shouldRedirectToSetup: true,
+      user: null
+    }
+  }
+
   const user = await getUser(request.headers)
 
   return {
     flash: resetSuccess ? 'Your password has been reset. Please sign in with your new password.' : null,
     redirectTo,
     shouldRedirectToDashboard: Boolean(user),
+    shouldRedirectToSetup: false,
     user
   }
 }
 
 export async function loadSignUpRoute(request: Request): Promise<AuthRouteState> {
+  if (await isAdminSetupRequired()) {
+    return {
+      flash: null,
+      redirectTo: ADMIN_SETUP_ROUTE_PATH,
+      shouldRedirectToDashboard: true,
+      shouldRedirectToSetup: true,
+      user: null
+    }
+  }
+
   const user = await getUser(request.headers)
 
   return {
     flash: null,
-    redirectTo: '/dashboard/',
+    redirectTo: '/',
     shouldRedirectToDashboard: Boolean(user),
+    shouldRedirectToSetup: false,
     user
   }
 }
 
-export async function loadPublicAuthRoute(_request: Request): Promise<AuthRouteState> {
+export async function loadPublicAuthRoute(request: Request): Promise<AuthRouteState> {
+  if (await isAdminSetupRequired()) {
+    return {
+      flash: null,
+      redirectTo: ADMIN_SETUP_ROUTE_PATH,
+      shouldRedirectToDashboard: true,
+      shouldRedirectToSetup: true,
+      user: null
+    }
+  }
+
+  const user = await getUser(request.headers)
+
   return {
     flash: null,
-    redirectTo: '/dashboard/',
-    shouldRedirectToDashboard: false,
-    user: null
+    redirectTo: '/',
+    shouldRedirectToDashboard: Boolean(user),
+    shouldRedirectToSetup: false,
+    user
   }
 }
 
 export async function loadSignOutRoute(_request: Request): Promise<SignOutRouteState> {
   return {
-    redirectTo: '/signin/',
+    redirectTo: SIGNIN_ROUTE_PATH,
     setCookieHeaders: deleteAllCookies()
   }
 }
 
 export async function loadSettingsRoute(request: Request): Promise<SettingsRouteState> {
+  if (await isAdminSetupRequired()) {
+    return {
+      flash: null,
+      redirectTo: ADMIN_SETUP_ROUTE_PATH,
+      setCookieHeaders: [],
+      shouldRedirectToSignIn: false,
+      shouldRedirectToSetup: true,
+      user: null
+    }
+  }
+
   const url = new URL(request.url)
-  const redirectTo = readInternalRedirect(url.searchParams.get('redirect'), '/signin/')
+  const redirectTo = readInternalRedirect(url.searchParams.get('redirect'), SIGNIN_ROUTE_PATH)
   const user = await getUser(request.headers)
 
   if (!user) {
@@ -114,6 +211,7 @@ export async function loadSettingsRoute(request: Request): Promise<SettingsRoute
       redirectTo,
       setCookieHeaders: [],
       shouldRedirectToSignIn: true,
+      shouldRedirectToSetup: false,
       user
     }
   }
@@ -125,11 +223,24 @@ export async function loadSettingsRoute(request: Request): Promise<SettingsRoute
     redirectTo,
     setCookieHeaders: flashCookie.setCookieHeaders,
     shouldRedirectToSignIn: false,
+    shouldRedirectToSetup: false,
     user
   }
 }
 
 export async function loadDeviceRoute(request: Request): Promise<DeviceRouteState> {
+  if (await isAdminSetupRequired()) {
+    return {
+      flash: null,
+      redirectTo: ADMIN_SETUP_ROUTE_PATH,
+      setCookieHeaders: [],
+      shouldRedirectToSignIn: false,
+      shouldRedirectToSetup: true,
+      user: null,
+      userCode: null
+    }
+  }
+
   const url = new URL(request.url)
   const redirectTo = `${url.pathname}${url.search}${url.hash}`
   const userCode = normalizeDeviceUserCode(url.searchParams.get('user_code'))
@@ -141,6 +252,7 @@ export async function loadDeviceRoute(request: Request): Promise<DeviceRouteStat
       redirectTo,
       setCookieHeaders: [],
       shouldRedirectToSignIn: true,
+      shouldRedirectToSetup: false,
       user,
       userCode
     }
@@ -153,8 +265,52 @@ export async function loadDeviceRoute(request: Request): Promise<DeviceRouteStat
     redirectTo,
     setCookieHeaders: flashCookie.setCookieHeaders,
     shouldRedirectToSignIn: false,
+    shouldRedirectToSetup: false,
     user,
     userCode
+  }
+}
+
+export async function loadAdminRoute(request: Request): Promise<AdminRouteState> {
+  if (await isAdminSetupRequired()) {
+    return {
+      redirectTo: ADMIN_SETUP_ROUTE_PATH,
+      setupRequired: true,
+      shouldNotFound: false,
+      user: null
+    }
+  }
+
+  const user = await getUser(request.headers)
+
+  return {
+    redirectTo: ADMIN_SETUP_ROUTE_PATH,
+    setupRequired: false,
+    shouldNotFound: !isAdminUser(user),
+    user
+  }
+}
+
+export async function loadAdminSetupRoute(request: Request): Promise<AdminSetupRouteState> {
+  if (await isAdminSetupRequired()) {
+    return {
+      redirectTo: ADMIN_ROUTE_PATH,
+      setupRequired: true,
+      shouldNotFound: false,
+      shouldRedirectToAdmin: false,
+      user: null
+    }
+  }
+
+  const user = await getUser(request.headers)
+  const isAdmin = isAdminUser(user)
+
+  return {
+    redirectTo: ADMIN_ROUTE_PATH,
+    setupRequired: false,
+    shouldNotFound: !isAdmin,
+    shouldRedirectToAdmin: isAdmin,
+    user
   }
 }
 
@@ -214,6 +370,16 @@ function readInternalRedirect(value: string | null, fallback: string): string {
   } catch {
     return fallback
   }
+}
+
+async function isAdminSetupRequired(): Promise<boolean> {
+  const { db } = await globals()
+  const adminUserCount = await db.models.user.countDocuments({ role: 'admin' }).exec()
+  return adminUserCount === 0
+}
+
+function isAdminUser(user: WebappRouteUser): boolean {
+  return user?.role === 'admin'
 }
 
 function normalizeDeviceUserCode(value: string | null): string | null {
