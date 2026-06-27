@@ -1,0 +1,43 @@
+[tasks.build]
+description = "Build the Cloudflare OAuth prod probe container"
+run = "bash scripts/build.sh"
+
+[tasks.test]
+description = "Run Cloudflare OAuth prod probe unit tests"
+run = "go test ./..."
+
+[tasks.start]
+description = "Start the Cloudflare OAuth prod probe with Cloudflare Tunnel"
+run = "bash scripts/start.sh"
+
+[tasks.stop]
+description = "Stop the Cloudflare OAuth prod probe containers"
+run = "bash scripts/stop.sh"
+
+[tasks.submit]
+description = "Submit the current Cloudflare OAuth prod probe run directory"
+run = "bash scripts/submit-artifacts.sh"
+
+[tasks.logs]
+description = "Tail Cloudflare OAuth prod probe logs"
+run = "bash scripts/logs.sh"
+
+[tasks.status]
+description = "Show Cloudflare OAuth prod probe container status"
+run = "bash scripts/status.sh"
+
+[tasks.offline-refresh]
+description = "Validate persisted Cloudflare OAuth refresh-token rotation and non-sending Email Sending auth"
+run = "bash scripts/offline-refresh.sh"
+
+[tasks.validate-email-sending]
+description = "Run gated real Cloudflare Email Sending send and send_raw validation with the persisted OAuth refresh token"
+run = "bash scripts/validate-email-sending.sh"
+
+[tasks.diagnose-oauth-start]
+description = "Capture sanitized diagnostics for the Cloudflare OAuth start redirect"
+run = "bash scripts/diagnose-oauth-start.sh"
+
+[tasks.inspect-oauth-client]
+description = "Inspect the configured Cloudflare OAuth client record through the owning account API"
+run = "bash scripts/inspect-oauth-client.sh"

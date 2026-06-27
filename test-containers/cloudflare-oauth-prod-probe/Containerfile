@@ -1,0 +1,21 @@
+FROM docker.io/library/golang:1.26.4 AS build
+
+WORKDIR /src
+
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+
+COPY go.mod go.sum ./
+COPY cmd ./cmd
+
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldflags='-s -w' -o /out/cloudflare-oauth-prod-probe ./cmd/cloudflare-oauth-prod-probe
+
+FROM docker.io/library/alpine:3.23.4
+
+RUN adduser -D -H -u 65532 appuser
+
+USER appuser
+
+COPY --from=build /out/cloudflare-oauth-prod-probe /usr/local/bin/cloudflare-oauth-prod-probe
+
+ENTRYPOINT ["/usr/local/bin/cloudflare-oauth-prod-probe"]
