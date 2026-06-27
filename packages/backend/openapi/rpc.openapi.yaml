@@ -17,6 +17,184 @@ paths:
   /rpc/health:
     get:
       operationId: getRpcHealth
+  /rpc/agent-mail/ingest/v1/{connectionPublicId}:
+    get:
+      parameters:
+        - name: connectionPublicId
+          in: path
+          required: true
+          schema:
+            type: string
+      operationId: allRpcAgent-mailIngestV1ByConnectionPublicId
+    post:
+      parameters:
+        - name: connectionPublicId
+          in: path
+          required: true
+          schema:
+            type: string
+      operationId: allRpcAgent-mailIngestV1ByConnectionPublicId
+    put:
+      parameters:
+        - name: connectionPublicId
+          in: path
+          required: true
+          schema:
+            type: string
+      operationId: allRpcAgent-mailIngestV1ByConnectionPublicId
+    delete:
+      parameters:
+        - name: connectionPublicId
+          in: path
+          required: true
+          schema:
+            type: string
+      operationId: allRpcAgent-mailIngestV1ByConnectionPublicId
+    patch:
+      parameters:
+        - name: connectionPublicId
+          in: path
+          required: true
+          schema:
+            type: string
+      operationId: allRpcAgent-mailIngestV1ByConnectionPublicId
+    head:
+      parameters:
+        - name: connectionPublicId
+          in: path
+          required: true
+          schema:
+            type: string
+      operationId: allRpcAgent-mailIngestV1ByConnectionPublicId
+    options:
+      parameters:
+        - name: connectionPublicId
+          in: path
+          required: true
+          schema:
+            type: string
+      operationId: allRpcAgent-mailIngestV1ByConnectionPublicId
+    trace:
+      parameters:
+        - name: connectionPublicId
+          in: path
+          required: true
+          schema:
+            type: string
+      operationId: allRpcAgent-mailIngestV1ByConnectionPublicId
+  /rpc/internal/agent-mail/runtime/snapshot:
+    get:
+      operationId: getRpcInternalAgent-mailRuntimeSnapshot
+  /rpc/internal/agent-mail/cloudflare/send-raw:
+    post:
+      operationId: postRpcInternalAgent-mailCloudflareSend-raw
+  /rpc/admin/setup/first-admin:
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - confirmPassword
+                - email
+                - password
+              properties:
+                confirmPassword:
+                  minLength: 1
+                  type: string
+                email:
+                  format: email
+                  minLength: 1
+                  type: string
+                name:
+                  minLength: 1
+                  type: string
+                password:
+                  maxLength: 128
+                  minLength: 8
+                  type: string
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - confirmPassword
+                - email
+                - password
+              properties:
+                confirmPassword:
+                  minLength: 1
+                  type: string
+                email:
+                  format: email
+                  minLength: 1
+                  type: string
+                name:
+                  minLength: 1
+                  type: string
+                password:
+                  maxLength: 128
+                  minLength: 8
+                  type: string
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - confirmPassword
+                - email
+                - password
+              properties:
+                confirmPassword:
+                  minLength: 1
+                  type: string
+                email:
+                  format: email
+                  minLength: 1
+                  type: string
+                name:
+                  minLength: 1
+                  type: string
+                password:
+                  maxLength: 128
+                  minLength: 8
+                  type: string
+      responses:
+        "200":
+          description: Response for status 200
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - redirectTo
+                properties:
+                  redirectTo:
+                    const: /signin/
+                    type: string
+        "400":
+          description: Response for status 400
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+        "409":
+          description: Response for status 409
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+      operationId: postRpcAdminSetupFirst-admin
   /rpc/agent-access/:
     get:
       responses:
@@ -12038,16 +12216,12 @@ paths:
                     required:
                       - issues
                     properties:
-                      configured:
-                        type: boolean
                       domainsActive:
                         type: number
                       domainsDisabled:
                         type: number
                       domainsTotal:
                         type: number
-                      exists:
-                        type: boolean
                       issues:
                         type: array
                         items:
@@ -12096,10 +12270,6 @@ paths:
                               type: array
                               items:
                                 type: string
-                            lastProvisionAt:
-                              type: string
-                            lastProvisionStatus:
-                              type: string
                             ok:
                               type: boolean
                         domain:
@@ -12182,25 +12352,6 @@ paths:
                                 type: number
                   ok:
                     type: boolean
-                  provisioning:
-                    type: object
-                    required:
-                      - issues
-                    properties:
-                      domainsApplied:
-                        type: number
-                      domainsFailed:
-                        type: number
-                      domainsPending:
-                        type: number
-                      issues:
-                        type: array
-                        items:
-                          type: string
-                      lastApplyAt:
-                        type: string
-                      status:
-                        type: string
                   selectedProvider:
                     type: string
                   status:
