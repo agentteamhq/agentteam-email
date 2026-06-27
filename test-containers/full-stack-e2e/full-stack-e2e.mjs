@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { appendFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
@@ -6,6 +6,7 @@ import path from 'node:path'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { parseAllDocuments } from 'yaml'
+import { AwsClient } from 'aws4fetch'
 import { v7 as uuidv7 } from 'uuid'
 
 const suiteRoot = path.dirname(fileURLToPath(import.meta.url))
@@ -26,23 +27,23 @@ const imagesDir = path.join(runDir, 'images')
 const kubeconfigPath = path.join(runDir, 'kubeconfig')
 const harnessLogPath = path.join(logsDir, 'harness.log')
 const valuesFile = path.join(suiteRoot, 'values-full-stack.yaml')
-const imageTag = process.env.AGENTTEAM_EMAIL_KIND_IMAGE_TAG || 'stage'
+const imageTag = process.env.AT_EMAIL_ADMIN_KIND_IMAGE_TAG || 'stage'
 const configuredMailControlServiceImageRepository =
-  process.env.AGENTTEAM_EMAIL_KIND_MAIL_CONTROL_SERVICE_IMAGE_REPOSITORY ||
+  process.env.AT_EMAIL_ADMIN_KIND_MAIL_CONTROL_SERVICE_IMAGE_REPOSITORY ||
   `atemail.${wt}.mail-control-service`
 const configuredWebServerImageRepository =
-  process.env.AGENTTEAM_EMAIL_KIND_WEB_SERVER_IMAGE_REPOSITORY || `atemail.${wt}.web-server`
+  process.env.AT_EMAIL_ADMIN_KIND_WEB_SERVER_IMAGE_REPOSITORY || `atemail.${wt}.web-server`
 const mailControlServiceImageRepository = kindLocalRepository(configuredMailControlServiceImageRepository)
 const webServerImageRepository = kindLocalRepository(configuredWebServerImageRepository)
 const mailControlServiceImage = `${mailControlServiceImageRepository}:${imageTag}`
 const webServerImage = `${webServerImageRepository}:${imageTag}`
-const clusterName = process.env.AGENTTEAM_EMAIL_FULL_STACK_KIND_CLUSTER || `atemail-${wt}-full-stack-e2e`
-const namespace = process.env.AGENTTEAM_EMAIL_FULL_STACK_NAMESPACE || `atemail-${wt}-full-stack`
-const releaseName = process.env.AGENTTEAM_EMAIL_FULL_STACK_RELEASE || `atemail-${wt}-full-stack`
-const keepCluster = process.env.AGENTTEAM_EMAIL_FULL_STACK_KEEP_CLUSTER === '1'
+const clusterName = process.env.AT_EMAIL_ADMIN_FULL_STACK_KIND_CLUSTER || `atemail-${wt}-full-stack-e2e`
+const namespace = process.env.AT_EMAIL_ADMIN_FULL_STACK_NAMESPACE || `atemail-${wt}-full-stack`
+const releaseName = process.env.AT_EMAIL_ADMIN_FULL_STACK_RELEASE || `atemail-${wt}-full-stack`
+const keepCluster = process.env.AT_EMAIL_ADMIN_FULL_STACK_KEEP_CLUSTER === '1'
 const minioImage =
-  process.env.AGENTTEAM_EMAIL_SMOKE_MINIO_IMAGE || 'docker.io/minio/minio:RELEASE.2025-09-07T16-13-09Z'
-const mailpitImage = process.env.AGENTTEAM_EMAIL_DEV_MAILPIT_IMAGE || 'docker.io/axllent/mailpit:v1.30.1'
+  process.env.AT_EMAIL_ADMIN_SMOKE_MINIO_IMAGE || 'docker.io/minio/minio:RELEASE.2025-09-07T16-13-09Z'
+const mailpitImage = process.env.AT_EMAIL_ADMIN_DEV_MAILPIT_IMAGE || 'docker.io/axllent/mailpit:v1.30.1'
 const supportToken = 'full-stack-e2e-support-token'
 const trialAdmissionToken = 'full-stack-e2e-trial-admission-token'
 const testPassword = `FullStackE2E-${randomBytes(12).toString('base64url')}!1`
@@ -55,7 +56,13 @@ const minioAccessKey = 'full-stack-e2e-minio'
 const minioSecretKey = 'full-stack-e2e-minio-secret'
 const archiveBucket = 'full-stack-e2e-archive'
 const s3Region = 'us-east-1'
-const workerNotificationHmacSecret = 'full-stack-e2e-worker-notification-hmac-secret'
+const workerNotificationWebhookSigningSecret = 'whsec_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+const s3Client = new AwsClient({
+  accessKeyId: minioAccessKey,
+  secretAccessKey: minioSecretKey,
+  service: 's3',
+  region: s3Region
+})
 
 let createdCluster = false
 const portForwardProcesses = []
@@ -181,7 +188,7 @@ if (failed.length > 0) {
 
 async function setupCluster() {
   await log('phase setup: render Helm chart')
-  const webPort = await choosePort(Number(process.env.AGENTTEAM_EMAIL_FULL_STACK_WEB_PORT || '23200'))
+  const webPort = await choosePort(Number(process.env.AT_EMAIL_ADMIN_FULL_STACK_WEB_PORT || '23200'))
   runtime.webBaseUrl = `http://127.0.0.1:${webPort}`
   const renderedManifestPath = path.join(renderedDir, 'agentteam-email.yaml')
   const helmValueArgs = [
@@ -255,7 +262,7 @@ async function setupCluster() {
     await rolloutStatus(deployment, 180)
   }
 
-  const minioPort = await choosePort(Number(process.env.AGENTTEAM_EMAIL_FULL_STACK_MINIO_PORT || '23201'))
+  const minioPort = await choosePort(Number(process.env.AT_EMAIL_ADMIN_FULL_STACK_MINIO_PORT || '23201'))
   runtime.minioBaseUrl = `http://127.0.0.1:${minioPort}`
   await startPortForward('minio', 'service/minio', `${minioPort}:9000`)
   await waitForHttpOk(`${runtime.minioBaseUrl}/minio/health/ready`, 'minio health')
@@ -527,7 +534,7 @@ async function checkPublicWebDoesNotExposeInternalApis() {
   const internalPaths = [
     '/healthz',
     '/rpc/agentMail.status.get',
-    '/rpc/agentMail.domains.apply',
+    '/rpc/internal/agent-mail/runtime/snapshot',
     '/rpc/agentMail.message.provenance.get',
     '/wildduck/users',
     '/zonemta/api',
@@ -607,10 +614,10 @@ async function checkWebServerControlApiWiring() {
   ])
   const envNames = readContainerEnvNames(deployment, 'web-server')
   const missing = [
-    'AGENT_MAIL_CONTROL_API_BASE_URL',
-    'AGENT_MAIL_CONTROL_API_TOKEN',
-    'AGENT_MAIL_WILDDUCK_API_BASE_URL',
-    'AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN'
+    'AT_EMAIL_ADMIN_CONTROL_API_BASE_URL',
+    'AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN',
+    'AT_EMAIL_ADMIN_WILDDUCK_API_BASE_URL',
+    'AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN'
   ].filter((name) => !envNames.has(name))
   assert(
     missing.length === 0,
@@ -632,15 +639,16 @@ async function checkMailControlKubernetesServiceNames() {
   const env = readContainerEnvMap(deployment, 'mail-control-service')
   const envNames = new Set(env.keys())
   const requiredRuntimeEnv = [
-    'AGENTTEAM_EMAIL_CONTROL_MONGODB_URI',
-    'AGENT_MAIL_CONTROL_API_TOKEN',
-    'AGENT_MAIL_CLOUDFLARE_API_BASE_URL',
-    'AGENT_MAIL_CLOUDFLARE_API_TOKEN',
-    'AGENT_MAIL_R2_BUCKET',
-    'AGENT_MAIL_HARAKA_SMTP_ADDRESS',
-    'AGENT_MAIL_ZONEMTA_DSN_ADDRESS',
-    'AGENT_MAIL_WILDDUCK_API_BASE_URL',
-    'AGENT_MAIL_WILDDUCK_IMAP_ADDRESS'
+    'AT_EMAIL_ADMIN_CONTROL_MONGODB_URI',
+    'AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_BASE_URL',
+    'AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN',
+    'AT_EMAIL_ADMIN_CF_API_BASE_URL',
+    'AT_EMAIL_ADMIN_R2_API_TOKEN',
+    'AT_EMAIL_ADMIN_R2_BUCKET',
+    'AT_EMAIL_ADMIN_HARAKA_SMTP_ADDRESS',
+    'AT_EMAIL_ADMIN_ZONEMTA_DSN_ADDRESS',
+    'AT_EMAIL_ADMIN_WILDDUCK_API_BASE_URL',
+    'AT_EMAIL_ADMIN_WILDDUCK_IMAP_ADDRESS'
   ]
   const missing = requiredRuntimeEnv.filter((name) => !envNames.has(name))
   assert(
@@ -660,10 +668,10 @@ async function checkMailControlKubernetesServiceNames() {
     'mail-control probes must target the internal control API health endpoint'
   )
   const expectedEndpoints = {
-    AGENT_MAIL_HARAKA_SMTP_ADDRESS: 'haraka:25',
-    AGENT_MAIL_ZONEMTA_DSN_ADDRESS: 'zonemta-dsn:2526',
-    AGENT_MAIL_WILDDUCK_API_BASE_URL: 'http://wildduck-api:8080',
-    AGENT_MAIL_WILDDUCK_IMAP_ADDRESS: 'wildduck-imap:143'
+    AT_EMAIL_ADMIN_HARAKA_SMTP_ADDRESS: 'haraka:25',
+    AT_EMAIL_ADMIN_ZONEMTA_DSN_ADDRESS: 'zonemta-dsn:2526',
+    AT_EMAIL_ADMIN_WILDDUCK_API_BASE_URL: 'http://wildduck-api:8080',
+    AT_EMAIL_ADMIN_WILDDUCK_IMAP_ADDRESS: 'wildduck-imap:143'
   }
   for (const [name, value] of Object.entries(expectedEndpoints)) {
     assert(env.get(name)?.value === value, `${name} = ${JSON.stringify(env.get(name))}, want ${value}`)
@@ -786,10 +794,10 @@ async function checkSecretNonDisclosureThroughWeb() {
   const targets = ['/', '/rpc/health']
   const forbidden = [
     supportToken,
-    'full-stack-e2e-control-api-token',
+    'full-stack-e2e-control-to-web-token',
     minioSecretKey,
     'full-stack-e2e-cloudflare-api-token',
-    workerNotificationHmacSecret,
+    workerNotificationWebhookSigningSecret,
     'full-stack-e2e-wildduck-admin-token',
     'full-stack-e2e-zonemta-relay-password'
   ]
@@ -1662,11 +1670,7 @@ async function checkAtEmailAgentConnectFreshSignupApprovalAuthorizesMailOperatio
     cookieHeader: session.cookieHeader,
     logName: 'at-email-agent-connect-signup',
     organizationId: session.organizationId,
-    stderrFile: path.join(
-      scenariosDir,
-      'phase-3-inbound-mail',
-      'at-email-agent-connect-signup-pending.json'
-    ),
+    stderrFile: path.join(scenariosDir, 'phase-3-inbound-mail', 'at-email-agent-connect-signup-pending.json'),
     stdoutFile: path.join(scenariosDir, 'phase-3-inbound-mail', 'at-email-agent-connect-signup.json')
   })
 
@@ -1685,11 +1689,7 @@ async function checkAtEmailAgentConnectFreshSignupApprovalAuthorizesMailOperatio
     },
     logName: 'at-email-agent-connect-signup-status',
     returnStdout: true,
-    stdoutFile: path.join(
-      scenariosDir,
-      'phase-3-inbound-mail',
-      'at-email-agent-connect-signup-status.json'
-    )
+    stdoutFile: path.join(scenariosDir, 'phase-3-inbound-mail', 'at-email-agent-connect-signup-status.json')
   })
   assertNoInternalCredentialMaterial(statusStdout, 'at-email signup agent connect status output')
   const status = parseJson(statusStdout)
@@ -1749,11 +1749,7 @@ async function checkAtEmailAgentTrialSendsWithinLimitsThenClaimAuthorizesPostCla
       },
       logName: 'at-email-agent-trial-send-pre-claim',
       returnStdout: true,
-      stdoutFile: path.join(
-        scenariosDir,
-        'phase-3-inbound-mail',
-        'at-email-agent-trial-send-pre-claim.json'
-      )
+      stdoutFile: path.join(scenariosDir, 'phase-3-inbound-mail', 'at-email-agent-trial-send-pre-claim.json')
     }
   )
   assertNoInternalCredentialMaterial(preClaimSend, 'at-email trial pre-claim send output')
@@ -1770,7 +1766,10 @@ async function checkAtEmailAgentTrialSendsWithinLimitsThenClaimAuthorizesPostCla
     }
   )
   const previewBodyText = await preview.text()
-  assert(preview.status === 200, `trial claim preview returned ${preview.status}: ${bodySnippet(previewBodyText)}`)
+  assert(
+    preview.status === 200,
+    `trial claim preview returned ${preview.status}: ${bodySnippet(previewBodyText)}`
+  )
   const previewBody = parseJson(previewBodyText)
   assert(previewBody.trial_id === trialResult.trial_id, 'trial claim preview did not match started trial')
   assert(previewBody.mailbox?.address === accountId, 'trial claim preview did not show the trial mailbox')
@@ -1785,7 +1784,10 @@ async function checkAtEmailAgentTrialSendsWithinLimitsThenClaimAuthorizesPostCla
       cookie: runtime.cookieHeader
     }
   )
-  assert(claim.status === 200, `trial claim decision returned ${claim.status}: ${bodySnippet(claim.bodyText)}`)
+  assert(
+    claim.status === 200,
+    `trial claim decision returned ${claim.status}: ${bodySnippet(claim.bodyText)}`
+  )
   const claimBody = parseJson(claim.bodyText)
   assert(claimBody.success === true, 'trial claim decision did not return success')
   assert(claimBody.claim?.status === 'approved', `trial claim status = ${claimBody.claim?.status}`)
@@ -1810,11 +1812,7 @@ async function checkAtEmailAgentTrialSendsWithinLimitsThenClaimAuthorizesPostCla
       },
       logName: 'at-email-agent-trial-send-post-claim',
       returnStdout: true,
-      stdoutFile: path.join(
-        scenariosDir,
-        'phase-3-inbound-mail',
-        'at-email-agent-trial-send-post-claim.json'
-      )
+      stdoutFile: path.join(scenariosDir, 'phase-3-inbound-mail', 'at-email-agent-trial-send-post-claim.json')
     }
   )
   assertNoInternalCredentialMaterial(postClaimSend, 'at-email trial post-claim send output')
@@ -2040,9 +2038,10 @@ async function checkMissingSignatureRejectedByWebIngest() {
 }
 
 async function checkMalformedSignatureRejectedByWebIngest() {
+  const notification = testNotification('example.test', `${runtime.ingestId}-malformed-signature`)
   const response = await postIngestNotification(
-    testNotification('example.test', `${runtime.ingestId}-malformed-signature`),
-    'not-a-hex-signature'
+    notification,
+    webhookHeaders(notification.ingest_id, 'not-a-standardwebhooks-signature')
   )
   assert(
     [400, 401, 403].includes(response.status),
@@ -2055,9 +2054,8 @@ async function checkUppercaseSignatureRejectedByWebIngest() {
   const notification = testNotification('example.test', `${runtime.ingestId}-uppercase-signature`)
   const bodyText = JSON.stringify(notification)
   const worker = requireWorker('example.test')
-  const signed = await signWorkerNotification(worker, bodyText, new Date().toISOString())
-  const response = await postIngestNotification(notification, signed.signature.toUpperCase(), {
-    timestamp: signed.timestamp,
+  const signed = await signWorkerNotification(worker, bodyText, notification.ingest_id, new Date())
+  const response = await postIngestNotification(notification, uppercaseHeaderValues(signed.headers), {
     worker
   })
   assert(
@@ -2068,9 +2066,10 @@ async function checkUppercaseSignatureRejectedByWebIngest() {
 }
 
 async function checkBadSignatureRejectedByWebIngest() {
+  const notification = testNotification('example.test', `${runtime.ingestId}-bad-signature`)
   const response = await postIngestNotification(
-    testNotification('example.test', `${runtime.ingestId}-bad-signature`),
-    '0'.repeat(64)
+    notification,
+    webhookHeaders(notification.ingest_id, 'v1,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=')
   )
   assert(
     [400, 401, 403].includes(response.status),
@@ -2181,10 +2180,10 @@ async function checkRestartRecoveryContract() {
     }
   )
   assert(
-    body.controlState?.configured === true && body.modules?.poller?.configured === true,
-    'restart recovery did not expose durable control state and poller configuration'
+    Number(body.controlState?.domainsActive ?? 0) > 0 && body.modules?.poller?.configured === true,
+    'restart recovery did not expose restored runtime projection and poller configuration'
   )
-  return 'queued mail work survives mail-control restart'
+  return 'queued mail work survives mail-control restart and runtime projection repair'
 }
 
 async function checkCrossDomainPrefixIsolation() {
@@ -2251,81 +2250,13 @@ async function s3GetObject(key) {
 async function s3Fetch({ body = '', contentType, key, method }) {
   const url = new URL(`${runtime.minioBaseUrl}/${archiveBucket}${key ? `/${key}` : ''}`)
   const payload = typeof body === 'string' || Buffer.isBuffer(body) ? body : ''
-  const headers = signS3Request({
-    body: payload,
-    contentType,
-    method,
-    url
-  })
-  return fetch(url, {
+  const headers = contentType ? { 'content-type': contentType } : {}
+  const signedRequest = await s3Client.sign(url, {
     body: method === 'GET' || method === 'HEAD' ? undefined : payload,
     headers,
     method
   })
-}
-
-function signS3Request({ body, contentType, method, url }) {
-  const now = new Date()
-  const amzDate = now
-    .toISOString()
-    .replaceAll(/[-:]/g, '')
-    .replace(/\.\d{3}Z$/u, 'Z')
-  const dateStamp = amzDate.slice(0, 8)
-  const payloadHash = sha256Hex(body || '')
-  const headers = {
-    host: url.host,
-    'x-amz-content-sha256': payloadHash,
-    'x-amz-date': amzDate
-  }
-  if (contentType) {
-    headers['content-type'] = contentType
-  }
-  const signedHeaderNames = Object.keys(headers).sort()
-  const canonicalHeaders = signedHeaderNames.map((name) => `${name}:${headers[name]}\n`).join('')
-  const canonicalRequest = [
-    method,
-    canonicalUri(url.pathname),
-    canonicalQuery(url.searchParams),
-    canonicalHeaders,
-    signedHeaderNames.join(';'),
-    payloadHash
-  ].join('\n')
-  const credentialScope = `${dateStamp}/${s3Region}/s3/aws4_request`
-  const stringToSign = ['AWS4-HMAC-SHA256', amzDate, credentialScope, sha256Hex(canonicalRequest)].join('\n')
-  const signature = hmacHex(signingKey(dateStamp), stringToSign)
-  return {
-    ...headers,
-    authorization: `AWS4-HMAC-SHA256 Credential=${minioAccessKey}/${credentialScope}, SignedHeaders=${signedHeaderNames.join(';')}, Signature=${signature}`
-  }
-}
-
-function signingKey(dateStamp) {
-  const kDate = hmacBuffer(`AWS4${minioSecretKey}`, dateStamp)
-  const kRegion = hmacBuffer(kDate, s3Region)
-  const kService = hmacBuffer(kRegion, 's3')
-  return hmacBuffer(kService, 'aws4_request')
-}
-
-function canonicalUri(pathname) {
-  return pathname
-    .split('/')
-    .map((part) => encodeURIComponent(decodeURIComponent(part)).replaceAll('%2F', '/'))
-    .join('/')
-}
-
-function canonicalQuery(searchParams) {
-  return [...searchParams.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
-    .join('&')
-}
-
-function hmacBuffer(key, value) {
-  return createHmac('sha256', key).update(value).digest()
-}
-
-function hmacHex(key, value) {
-  return createHmac('sha256', key).update(value).digest('hex')
+  return fetch(signedRequest)
 }
 
 function sha256Hex(value) {
@@ -2388,12 +2319,13 @@ function testNotification(domain, ingestId, options = {}) {
   }
 }
 
-async function signWorkerNotification(worker, bodyText, timestamp) {
+async function signWorkerNotification(worker, bodyText, webhookId, timestamp) {
   const signed = await fetchClusterJson('http://fake-cloudflare:8080/__sign-worker-notification', {
     body: JSON.stringify({
       bodyText,
       domain: worker.domain,
-      timestamp
+      timestamp: String(Math.floor(timestamp.getTime() / 1000)),
+      webhookId
     }),
     headers: {
       'content-type': 'application/json'
@@ -2405,6 +2337,7 @@ async function signWorkerNotification(worker, bodyText, timestamp) {
     `fake Cloudflare signer returned connection ${signed.connectionId} for ${worker.domain}, expected ${worker.connectionId}`
   )
   return {
+    headers: signed.headers,
     signature: signed.signature,
     timestamp: signed.timestamp
   }
@@ -2702,32 +2635,42 @@ async function seedWildDuckWebmailScenario() {
 async function postSignedIngestNotification(notification, options = {}) {
   const bodyText = JSON.stringify(notification)
   const worker = options.worker ?? requireWorker(notification.recipient_domain)
-  const signed = await signWorkerNotification(worker, bodyText, new Date().toISOString())
-  return postIngestNotification(notification, signed.signature, { timestamp: signed.timestamp, worker })
+  const signed = await signWorkerNotification(worker, bodyText, notification.ingest_id, new Date())
+  return postIngestNotification(notification, signed.headers, { worker })
 }
 
-async function postIngestNotification(notification, signature, options = {}) {
+async function postIngestNotification(notification, webhookHeaderValues = {}, options = {}) {
   const bodyText = JSON.stringify(notification)
   const worker = options.worker ?? requireWorker(notification.recipient_domain || 'example.test')
-  const timestamp = options.timestamp ?? new Date().toISOString()
   const headers = {
     'content-type': 'application/json',
-    'x-agent-mail-connection-id': worker.connectionId,
-    'x-agent-mail-timestamp': timestamp
+    ...webhookHeaderValues
   }
-  if (signature !== undefined) {
-    headers['x-agent-mail-signature'] = signature
-  }
-  const raw = await fetch(`${runtime.webBaseUrl}/rpc/agent-mail/ingest/v1`, {
-    body: bodyText,
-    headers,
-    method: 'POST'
-  })
+  const raw = await fetch(
+    `${runtime.webBaseUrl}/rpc/agent-mail/ingest/v1/${encodeURIComponent(worker.connectionId)}`,
+    {
+      body: bodyText,
+      headers,
+      method: 'POST'
+    }
+  )
   return {
     bodyText: await raw.text(),
     raw,
     status: raw.status
   }
+}
+
+function webhookHeaders(webhookId, signature, timestamp = new Date()) {
+  return {
+    'webhook-id': webhookId,
+    'webhook-signature': signature,
+    'webhook-timestamp': String(Math.floor(timestamp.getTime() / 1000))
+  }
+}
+
+function uppercaseHeaderValues(headers) {
+  return Object.fromEntries(Object.entries(headers).map(([key, value]) => [key, String(value).toUpperCase()]))
 }
 
 async function fetchClusterJson(url, init = {}) {
@@ -3018,13 +2961,7 @@ async function runAtEmailAgentConnectWithWebApproval({
   }
 }
 
-async function runAtEmailAgentTrial({
-  agentName,
-  cliConfigDir,
-  cliWorkdir,
-  logName,
-  stdoutFile
-}) {
+async function runAtEmailAgentTrial({ agentName, cliConfigDir, cliWorkdir, logName, stdoutFile }) {
   const command = 'bash'
   const args = [
     '-lc',
@@ -3441,7 +3378,7 @@ function assertNoInternalCredentialMaterial(value, target) {
     'wildduck-api',
     'x-access-token',
     'full-stack-e2e-wildduck-admin-token',
-    'full-stack-e2e-control-api-token'
+    'full-stack-e2e-control-to-web-token'
   ]) {
     assert(!text.includes(forbidden), `${target} leaked internal credential material: ${forbidden}`)
   }
@@ -3481,14 +3418,14 @@ function redactText(value) {
     [repoRoot, '<repo-root>'],
     [supportToken, '<redacted-support-token>'],
     [trialAdmissionToken, '<redacted-trial-admission-token>'],
-    ['full-stack-e2e-control-api-token', '<redacted-control-api-token>'],
+    ['full-stack-e2e-control-to-web-token', '<redacted-control-to-web-token>'],
     ['ZnVsbC1zdGFjay1lMmUtZW5jcnlwdGlvbi1rZXktMzI', '<redacted-encryption-key>'],
     [minioAccessKey, '<redacted-minio-access-key>'],
     [minioSecretKey, '<redacted-minio-secret-key>'],
     ['full-stack-e2e-cloudflare-api-token', '<redacted-cloudflare-api-token>'],
     ['full-stack-e2e-cloudflare-oauth-token', '<redacted-cloudflare-oauth-token>'],
     ['full-stack-e2e-cloudflare-refresh-token', '<redacted-cloudflare-refresh-token>'],
-    [workerNotificationHmacSecret, '<redacted-worker-notification-hmac-secret>'],
+    [workerNotificationWebhookSigningSecret, '<redacted-worker-notification-webhook-signing-secret>'],
     ['full-stack-e2e-wildduck-admin-token', '<redacted-wildduck-admin-token>'],
     ['full-stack-e2e-wildduck-access-control-secret', '<redacted-wildduck-access-control-secret>'],
     ['full-stack-e2e-zonemta-relay-password', '<redacted-zonemta-relay-password>'],
@@ -3651,9 +3588,9 @@ spec:
           env:
             - name: PORT
               value: "8788"
-            - name: FAKE_CLOUDFLARE_OAUTH_EMAIL
+            - name: FAKE_AT_EMAIL_ADMIN_CF_OAUTH_EMAIL
               value: ${JSON.stringify(fakeCloudflareOAuthEmail)}
-            - name: FAKE_CLOUDFLARE_OAUTH_SUB
+            - name: FAKE_AT_EMAIL_ADMIN_CF_OAUTH_SUB
               value: ${JSON.stringify(fakeCloudflareOAuthSubject)}
           ports:
             - name: http

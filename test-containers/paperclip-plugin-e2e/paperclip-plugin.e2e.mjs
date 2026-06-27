@@ -68,7 +68,7 @@ async function assertDirectory(targetPath, label) {
 }
 
 async function runOptionalRealInstall() {
-  if (process.env.AGENTTEAM_EMAIL_REAL_PAPERCLIP_INSTALL !== '1') {
+  if (process.env.AT_EMAIL_ADMIN_REAL_PAPERCLIP_INSTALL !== '1') {
     return
   }
 

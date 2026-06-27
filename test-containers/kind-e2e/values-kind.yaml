@@ -21,8 +21,8 @@ webServer:
     value: a2luZC1lMmUtZW5jcnlwdGlvbi1rZXktMzItYnl0ZSE
 
 controlApi:
-  token:
-    value: kind-e2e-control-api-token
+  controlToWebToken:
+    value: kind-e2e-control-to-web-token
 
 wildduck:
   adminAccessToken:
@@ -38,25 +38,27 @@ mailRuntime:
   feedbackMailboxPassword:
     value: kind-e2e-feedback-mailbox-password
 
-objectStorage:
-  endpoint:
-    value: https://kind-e2e-r2.invalid
-  bucket:
-    value: kind-e2e-archive
-  accessKeyId:
-    value: kind-e2e-r2-access-key
-  secretAccessKey:
-    value: kind-e2e-r2-secret-key
-
-cloudflare:
-  accountId:
-    value: kind-e2e-cloudflare-account-id
-  apiToken:
-    value: kind-e2e-cloudflare-api-token
-  worker:
-    scriptName: kind-e2e-agent-mail-ingress
-    archiveBucket:
-      value: kind-e2e-archive
+admin:
+  cloudflare:
+    apiBaseUrl: https://api.cloudflare.com/client/v4
+    oauth:
+      clientId:
+        value: kind-e2e-cloudflare-oauth-client-id
+      clientSecret:
+        value: kind-e2e-cloudflare-oauth-client-secret
+    r2:
+      accountId:
+        value: kind-e2e-cloudflare-account-id
+      apiToken:
+        value: kind-e2e-cloudflare-api-token
+      endpoint:
+        value: https://kind-e2e-r2.invalid
+      bucket:
+        value: kind-e2e-archive
+      accessKeyId:
+        value: kind-e2e-r2-access-key
+      secretAccessKey:
+        value: kind-e2e-r2-secret-key
 
 ingress:
   enabled: false

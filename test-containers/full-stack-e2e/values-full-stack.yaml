@@ -21,8 +21,8 @@ webServer:
     value: ZnVsbC1zdGFjay1lMmUtZW5jcnlwdGlvbi1rZXktMzI
 
 controlApi:
-  token:
-    value: full-stack-e2e-control-api-token
+  controlToWebToken:
+    value: full-stack-e2e-control-to-web-token
 
 wildduck:
   adminAccessToken:
@@ -38,28 +38,38 @@ mailRuntime:
   feedbackMailboxPassword:
     value: full-stack-e2e-feedback-mailbox-password
 
-objectStorage:
-  endpoint:
-    value: http://minio:9000
-  region:
-    value: us-east-1
-  bucket:
-    value: full-stack-e2e-archive
-  accessKeyId:
-    value: full-stack-e2e-minio
-  secretAccessKey:
-    value: full-stack-e2e-minio-secret
-
-cloudflare:
-  apiBaseUrl: http://fake-cloudflare:8080/client/v4
-  accountId:
-    value: full-stack-e2e-cloudflare-account-id
-  apiToken:
-    value: full-stack-e2e-cloudflare-api-token
-  worker:
-    scriptName: full-stack-e2e-agent-mail-ingress
-    archiveBucket:
-      value: full-stack-e2e-archive
+admin:
+  cloudflare:
+    apiBaseUrl: http://fake-cloudflare:8080/client/v4
+    oauth:
+      clientId:
+        value: full-stack-e2e-cloudflare-client
+      clientSecret:
+        value: full-stack-e2e-cloudflare-client-secret
+    r2:
+      accountId:
+        value: full-stack-e2e-cloudflare-account-id
+      apiToken:
+        value: full-stack-e2e-cloudflare-api-token
+      endpoint:
+        value: http://minio:9000
+      region:
+        value: us-east-1
+      bucket:
+        value: full-stack-e2e-archive
+      accessKeyId:
+        value: full-stack-e2e-minio
+      secretAccessKey:
+        value: full-stack-e2e-minio-secret
+  smtp:
+    address:
+      value: mailpit
+    port:
+      value: '1025'
+    fromEmail:
+      value: noreply@example.test
+    replyToEmail:
+      value: support@example.test
 
 ingress:
   enabled: false
@@ -80,14 +90,6 @@ extraEnv:
       value: 'true'
     - name: E2E_TEST_SUPPORT_TOKEN
       value: full-stack-e2e-support-token
-    - name: SMTP_ADDRESS
-      value: mailpit
-    - name: SMTP_PORT
-      value: '1025'
-    - name: SMTP_FROM_EMAIL
-      value: noreply@example.test
-    - name: SMTP_REPLY_TO_EMAIL
-      value: support@example.test
     - name: CLOUDFLARE_API_BASE_URL
       value: http://fake-cloudflare:8080/client/v4
     - name: CLOUDFLARE_OAUTH_CLIENT_ID
@@ -104,17 +106,17 @@ extraEnv:
       value: http://fake-cloudflare:8080/oauth2/revoke
     - name: CLOUDFLARE_OAUTH_ISSUER
       value: http://fake-cloudflare:8080
-    - name: AGENT_MAIL_TRIAL_ENABLED
+    - name: AT_EMAIL_ADMIN_TRIAL_ENABLED
       value: 'true'
-    - name: AGENT_MAIL_TRIAL_ORGANIZATION_ID
+    - name: AT_EMAIL_ADMIN_TRIAL_ORGANIZATION_ID
       value: '01960000-0000-7000-8000-00000000e2e1'
-    - name: AGENT_MAIL_TRIAL_DOMAIN
+    - name: AT_EMAIL_ADMIN_TRIAL_DOMAIN
       value: trial.example.test
-    - name: AGENT_MAIL_TRIAL_ADMISSION_TOKEN
+    - name: AT_EMAIL_ADMIN_TRIAL_ADMISSION_TOKEN
       value: full-stack-e2e-trial-admission-token
-    - name: AGENT_MAIL_TRIAL_CAPABILITIES
+    - name: AT_EMAIL_ADMIN_TRIAL_CAPABILITIES
       value: email.message.send
-    - name: AGENT_MAIL_TRIAL_DAILY_SEND_LIMIT
+    - name: AT_EMAIL_ADMIN_TRIAL_DAILY_SEND_LIMIT
       value: '5'
-    - name: AGENT_MAIL_TRIAL_TOTAL_SEND_LIMIT
+    - name: AT_EMAIL_ADMIN_TRIAL_TOTAL_SEND_LIMIT
       value: '10'

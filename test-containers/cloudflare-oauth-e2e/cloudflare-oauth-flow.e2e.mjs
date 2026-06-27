@@ -8,21 +8,29 @@ const runId = process.env.TEST_RUN_ID || new Date().toISOString().replaceAll(/[-
 const runDir = path.resolve(process.env.TEST_RUN_DIR || path.join(packageDir, 'tmp', `run-${runId}`))
 const reportsDir = path.join(runDir, 'reports')
 const logsDir = path.join(runDir, 'logs')
-const hostPort = Number(process.env.AGENTTEAM_EMAIL_CLOUDFLARE_FAKE_OAUTH_HOST_PORT || '18788')
+const hostPort = Number(process.env.AT_EMAIL_ADMIN_CLOUDFLARE_FAKE_OAUTH_HOST_PORT || '18788')
 const baseUrl = `http://127.0.0.1:${hostPort}`
 const redirectUri = `${baseUrl}/test/callback`
 const clientId = 'agentteam-email-cloudflare-test'
 const clientSecret = 'agentteam-email-cloudflare-secret'
 const cloudflareScopes = [
-  'openid',
-  'email',
-  'profile',
-  'offline_access',
-  'zone.read',
-  'dns.write',
-  'email-routing-rules.write',
+  'workers-r2.read',
+  'workers-r2.write',
+  'workers-scripts.read',
   'workers-scripts.write',
-  'workers-r2-storage.write'
+  'dns.read',
+  'dns.write',
+  'zone.read',
+  'cloud-email-security.read',
+  'email-routing-address.read',
+  'email-routing-address.write',
+  'email-routing-rule.read',
+  'email-routing-rule.write',
+  'email-routing-suppression.read',
+  'email-security-dmarcreports.read',
+  'email-sending.read',
+  'email-sending.write',
+  'offline_access'
 ]
 const logs = [
   `[cloudflare-oauth-e2e] runDir=${runDir}`,

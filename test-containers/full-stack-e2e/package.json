@@ -8,6 +8,9 @@
     "test": "node ./full-stack-e2e.mjs"
   },
   "dependencies": {
+    "aws4fetch": "catalog:",
+    "content-type": "catalog:",
+    "standardwebhooks": "catalog:",
     "uuid": "catalog:"
   }
 }

@@ -9,7 +9,7 @@ const clientSecret = process.env.OAUTH_CLIENT_SECRET || 'agentteam-email-cloudfl
 const redirectUris = splitList(process.env.OAUTH_REDIRECT_URIS || process.env.OAUTH_REDIRECT_URI)
 const cloudflareScopes = splitList(
   process.env.CLOUDFLARE_OAUTH_SCOPES ||
-    'openid email profile offline_access zone.read dns.write email-routing-rules.write workers-scripts.write workers-r2-storage.write'
+    'workers-r2.read workers-r2.write workers-scripts.read workers-scripts.write dns.read dns.write zone.read cloud-email-security.read email-routing-address.read email-routing-address.write email-routing-rule.read email-routing-rule.write email-routing-suppression.read email-security-dmarcreports.read email-sending.read email-sending.write offline_access'
 )
 const grantedUser = {
   accountId: 'cloudflare-user-1',

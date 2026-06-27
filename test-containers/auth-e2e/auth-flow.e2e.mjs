@@ -24,14 +24,14 @@ const mailpitHttpUrl = normalizeBaseUrl(process.env.MAILPIT_HTTP_URL || 'http://
 const appBaseUrl = normalizeBaseUrl(publicHostname)
 const appOrigin = new URL(appBaseUrl).origin
 const testEmail =
-  process.env.AGENTTEAM_EMAIL_AUTH_E2E_EMAIL ||
+  process.env.AT_EMAIL_ADMIN_AUTH_E2E_EMAIL ||
   `auth-e2e-${Date.now()}-${crypto.randomBytes(4).toString('hex')}@example.test`
 const testPassword =
-  process.env.AGENTTEAM_EMAIL_AUTH_E2E_PASSWORD || `AuthE2E-${crypto.randomBytes(12).toString('base64url')}!1`
+  process.env.AT_EMAIL_ADMIN_AUTH_E2E_PASSWORD || `AuthE2E-${crypto.randomBytes(12).toString('base64url')}!1`
 const testName = 'Auth E2E User'
 const testUsername =
-  process.env.AGENTTEAM_EMAIL_AUTH_E2E_USERNAME || `authe2e${crypto.randomBytes(6).toString('hex')}`
-const headless = process.env.AGENTTEAM_EMAIL_AUTH_E2E_HEADLESS !== 'false'
+  process.env.AT_EMAIL_ADMIN_AUTH_E2E_USERNAME || `authe2e${crypto.randomBytes(6).toString('hex')}`
+const headless = process.env.AT_EMAIL_ADMIN_AUTH_E2E_HEADLESS !== 'false'
 
 const logs = [
   `[auth-e2e] runDir=${runDir}`,
@@ -468,7 +468,7 @@ function requireEnv(name) {
 }
 
 function resolveDatabaseUrl() {
-  const configuredUrl = process.env.AGENTTEAM_EMAIL_DEV_DATABASE_URL || process.env.MONGODB_URI || process.env.DATABASE_URL
+  const configuredUrl = process.env.AT_EMAIL_ADMIN_DEV_DATABASE_URL || process.env.MONGODB_URI || process.env.DATABASE_URL
   if (!configuredUrl) {
     return 'mongodb://localhost:27017/agentteam_email'
   }

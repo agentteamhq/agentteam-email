@@ -1,9 +1,12 @@
-import { createHash, createHmac } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import http from 'node:http'
+import { Webhook } from 'standardwebhooks'
+
+import { parse as parseContentType } from 'content-type'
 
 const port = Number(process.env.PORT || '8788')
-const oauthEmail = process.env.FAKE_CLOUDFLARE_OAUTH_EMAIL || 'cloudflare-user@example.test'
-const oauthSubject = process.env.FAKE_CLOUDFLARE_OAUTH_SUB || 'cloudflare-user-1'
+const oauthEmail = process.env.AT_EMAIL_ADMIN_FAKE_CF_OAUTH_EMAIL || 'cloudflare-user@example.test'
+const oauthSubject = process.env.AT_EMAIL_ADMIN_FAKE_CF_OAUTH_SUB || 'cloudflare-user-1'
 const account = {
   id: 'cf-account-1',
   name: 'Full Stack E2E Account',
@@ -344,23 +347,24 @@ function handleWorkerNotificationSigning(response, body) {
   const input = parseJsonBody(body)
   const domain = readString(input, 'domain')
   const bodyText = readString(input, 'bodyText')
-  const timestamp = readString(input, 'timestamp') || new Date().toISOString()
+  const timestamp = Number(readString(input, 'timestamp') || Math.floor(Date.now() / 1000))
+  const webhookId = readString(input, 'webhookId')
   const worker = [...state.workerRuntimeBindings.values()].find((candidate) => candidate.domain === domain)
-  if (!worker || !bodyText || !worker.hmacSecret || !worker.connectionId) {
+  if (!worker || !bodyText || !worker.webhookSigningSecret || !worker.connectionId || !webhookId) {
     sendJson(response, 404, { error: 'worker_not_found' })
     return
   }
-  const signature = createHmac('sha256', worker.hmacSecret)
-    .update(timestamp)
-    .update('\n')
-    .update(worker.connectionId)
-    .update('\n')
-    .update(bodyText)
-    .digest('hex')
+  const timestampDate = new Date(timestamp * 1000)
+  const signature = new Webhook(worker.webhookSigningSecret).sign(webhookId, timestampDate, bodyText)
   sendJson(response, 200, {
     connectionId: worker.connectionId,
+    headers: {
+      'webhook-id': webhookId,
+      'webhook-signature': signature,
+      'webhook-timestamp': String(timestamp)
+    },
     signature,
-    timestamp
+    timestamp: String(timestamp)
   })
 }
 
@@ -419,14 +423,14 @@ function parseJsonBody(body) {
 }
 
 async function parseWorkerUpload(request, body) {
-  const contentType = request.headers['content-type']
-  if (typeof contentType !== 'string' || !contentType.toLowerCase().startsWith('multipart/form-data')) {
+  const contentType = requestContentType(request.headers['content-type'])
+  if (contentType?.type !== 'multipart/form-data' || !contentType.parameters.boundary) {
     return { files: [], metadata: null }
   }
 
   const formData = await new Request('http://fake-cloudflare.test/worker-upload', {
     body,
-    headers: { 'content-type': contentType },
+    headers: { 'content-type': contentType.header },
     method: request.method || 'POST'
   }).formData()
   const metadata = await parseJsonFormValue(formData.get('metadata'))
@@ -498,13 +502,23 @@ function recordRequest(request, url, body) {
 }
 
 function safeBodySummary(request, body) {
-  const contentType =
-    typeof request.headers['content-type'] === 'string' ? request.headers['content-type'].toLowerCase() : ''
+  const contentType = requestContentType(request.headers['content-type'])
   const text = body.toString('utf8')
   return {
-    contentType,
+    contentType: contentType?.type ?? '',
     forbiddenInternalHeaders: internalProviderHeaders.filter((header) => text.includes(header)),
-    jsonKeys: contentType.includes('application/json') ? topLevelJsonKeys(body) : []
+    jsonKeys: contentType?.type === 'application/json' ? topLevelJsonKeys(body) : []
+  }
+}
+
+function requestContentType(header) {
+  if (typeof header !== 'string') {
+    return null
+  }
+  try {
+    return { ...parseContentType(header), header }
+  } catch {
+    return null
   }
 }
 
@@ -536,7 +550,7 @@ function workerRuntimeBindings(metadata) {
   return {
     connectionId: bindings.AGENTTEAM_CONNECTION_ID || '',
     domain: bindings.AGENTTEAM_DOMAIN || '',
-    hmacSecret: bindings.AGENTTEAM_WORKER_HMAC_SECRET || ''
+    webhookSigningSecret: bindings.AGENTTEAM_WORKER_HMAC_SECRET || ''
   }
 }
 

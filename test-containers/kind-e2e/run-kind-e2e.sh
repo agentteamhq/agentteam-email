@@ -8,9 +8,9 @@ suite_root="${repo_root}/test-containers/kind-e2e"
 run_id="${TEST_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 run_dir="${TEST_RUN_DIR:-${suite_root}/tmp/run-${run_id}}"
 kubeconfig="${run_dir}/kubeconfig"
-image_tag="${AGENTTEAM_EMAIL_KIND_IMAGE_TAG:-stage}"
-configured_mail_control_service_image_repository="${AGENTTEAM_EMAIL_KIND_MAIL_CONTROL_SERVICE_IMAGE_REPOSITORY:-atemail.${WT}.mail-control-service}"
-configured_web_server_image_repository="${AGENTTEAM_EMAIL_KIND_WEB_SERVER_IMAGE_REPOSITORY:-atemail.${WT}.web-server}"
+image_tag="${AT_EMAIL_ADMIN_KIND_IMAGE_TAG:-stage}"
+configured_mail_control_service_image_repository="${AT_EMAIL_ADMIN_KIND_MAIL_CONTROL_SERVICE_IMAGE_REPOSITORY:-atemail.${WT}.mail-control-service}"
+configured_web_server_image_repository="${AT_EMAIL_ADMIN_KIND_WEB_SERVER_IMAGE_REPOSITORY:-atemail.${WT}.web-server}"
 kind_local_repository() {
   case "$1" in
     */*) printf '%s\n' "$1" ;;
@@ -21,11 +21,11 @@ mail_control_service_image_repository="$(kind_local_repository "${configured_mai
 web_server_image_repository="$(kind_local_repository "${configured_web_server_image_repository}")"
 mail_control_service_image="${mail_control_service_image_repository}:${image_tag}"
 web_server_image="${web_server_image_repository}:${image_tag}"
-cluster_name="${AGENTTEAM_EMAIL_KIND_CLUSTER:-atemail-${WT}-e2e}"
-namespace="${AGENTTEAM_EMAIL_KIND_NAMESPACE:-atemail-${WT}}"
-release_name="${AGENTTEAM_EMAIL_KIND_RELEASE:-atemail-${WT}}"
-web_server_port="${AGENTTEAM_EMAIL_KIND_WEB_SERVER_PORT:-23100}"
-keep_cluster="${AGENTTEAM_EMAIL_KIND_E2E_KEEP_CLUSTER:-0}"
+cluster_name="${AT_EMAIL_ADMIN_KIND_CLUSTER:-atemail-${WT}-e2e}"
+namespace="${AT_EMAIL_ADMIN_KIND_NAMESPACE:-atemail-${WT}}"
+release_name="${AT_EMAIL_ADMIN_KIND_RELEASE:-atemail-${WT}}"
+web_server_port="${AT_EMAIL_ADMIN_KIND_WEB_SERVER_PORT:-23100}"
+keep_cluster="${AT_EMAIL_ADMIN_KIND_E2E_KEEP_CLUSTER:-0}"
 created_cluster=0
 helm_value_args=(
   --set-string "namespace.name=${namespace}"
