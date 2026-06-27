@@ -1,0 +1,7 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Go module checksums are public dependency integrity metadata."
+paths = ['''(^|/)go\.sum$''']
+regexes = ['''^.*\sh1:[A-Za-z0-9+/=]+$''']

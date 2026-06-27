@@ -20,7 +20,6 @@
   "ignorePaths": [
     "**/.git/**",
     "**/.turbo/**",
-    "**/.nodecc/**",
     "**/.eslintcache",
     "**/.vite*/**",
     "**/*.tsbuildinfo",

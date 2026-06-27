@@ -7,14 +7,14 @@ cd "${repo_root}"
 
 database_url="${MONGODB_URI:-${DATABASE_URL:-mongodb://localhost:27017/agentteam_email}}"
 database_name="${MONGODB_DATABASE:-}"
-container_name="${AGENTTEAM_EMAIL_DEV_MONGO_CONTAINER_NAME:-agentteam-email-mongo}"
-data_dir="${AGENTTEAM_EMAIL_DEV_MONGO_DATA_DIR:-${HOME}/.local/share/agentteam-email/mongo}"
-image="${AGENTTEAM_EMAIL_DEV_MONGO_IMAGE:-}"
+container_name="${AT_EMAIL_ADMIN_DEV_MONGO_CONTAINER_NAME:-agentteam-email-mongo}"
+data_dir="${AT_EMAIL_ADMIN_DEV_MONGO_DATA_DIR:-${HOME}/.local/share/agentteam-email/mongo}"
+image="${AT_EMAIL_ADMIN_DEV_MONGO_IMAGE:-}"
 if [[ -z "${image}" ]]; then
   image="$(
     node -e "
       const text = require('node:fs').readFileSync('mise.toml', 'utf8')
-      const match = text.match(/^AGENTTEAM_EMAIL_DEV_MONGO_IMAGE\\s*=\\s*\"([^\"]+)\"/m)
+      const match = text.match(/^AT_EMAIL_ADMIN_DEV_MONGO_IMAGE\\s*=\\s*\"([^\"]+)\"/m)
       if (!match) process.exit(1)
       console.log(match[1])
     "
@@ -35,11 +35,22 @@ container_exists() {
 }
 
 mongo_host() {
-  node -e "const url = new URL(process.argv[1]); console.log(url.hostname)" "${database_url}"
+  node -e "
+    const { ConnectionString } = require('mongodb-connection-string-url')
+    const uri = new ConnectionString(process.argv[1])
+    const host = uri.hosts[0] ?? ''
+    console.log(host.startsWith('[') ? host.slice(1, host.indexOf(']')) : host.split(':')[0])
+  " "${database_url}"
 }
 
 mongo_port() {
-  node -e "const url = new URL(process.argv[1]); console.log(url.port || '27017')" "${database_url}"
+  node -e "
+    const { ConnectionString } = require('mongodb-connection-string-url')
+    const uri = new ConnectionString(process.argv[1])
+    const host = uri.hosts[0] ?? ''
+    const match = host.match(/^\\[[^\\]]+\\]:(\\d+)$|^[^:]+:(\\d+)$/)
+    console.log(match?.[1] ?? match?.[2] ?? '27017')
+  " "${database_url}"
 }
 
 mongo_database() {
@@ -48,7 +59,11 @@ mongo_database() {
     return
   fi
 
-  node -e "const url = new URL(process.argv[1]); console.log(url.pathname.replace(/^\\/+/, '').split('/')[0] || 'agentteam_email')" "${database_url}"
+  node -e "
+    const { ConnectionString } = require('mongodb-connection-string-url')
+    const uri = new ConnectionString(process.argv[1])
+    console.log(uri.pathname.replace(/^\\/+/, '') || 'agentteam_email')
+  " "${database_url}"
 }
 
 require_local_url() {

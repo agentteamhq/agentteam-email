@@ -36,6 +36,14 @@ that root, and write only the repository-root-relative path.
 Standard, protocol, common-format, and syntax-governed functionality must use
 purpose-built structured APIs from well-supported canonical packages.
 
+This applies to all repository code and workflows, including application code,
+tests, scripts, probes, diagnostics, harnesses, generators, containers, and
+tooling.
+
+Agents must not hand-roll behavior covered by this rule. If the required package
+is unavailable, agents must stop and request approval to add it or request an
+explicit exception.
+
 ## Type Ownership
 
 Agents must preserve strict types from their owning source instead of redefining

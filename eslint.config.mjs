@@ -201,6 +201,11 @@ export default defineConfig([
 
       // Auto-generated
       '**/_*',
+      '**/src/components/ui/**',
+      '**/src/hooks/use-mobile.ts',
+      '**/src/lib/utils.ts',
+      '**/src/components/auth/**',
+      '**/src/lib/auth/**',
 
       '**/*.stories.ts',
       // Non-TS files

@@ -18,7 +18,9 @@
     "BUILD_REACT_PROFILER",
     "BUILD_ANALYZE_BUNDLE",
     "ANALYZE_ROLLUP",
-    "AGENTTEAM_EMAIL_*",
+    "CLOUDFLARE_API_BASE_URL",
+    "CLOUDFLARE_OAUTH_*",
+    "AT_EMAIL_ADMIN_*",
     "AT_EMAIL_*",
     "DOCKER_HOST",
     "TESTCONTAINERS_HOST_OVERRIDE",
@@ -46,9 +48,6 @@
     },
     "format": {
       "dependsOn": ["^build"],
-      "outputs": []
-    },
-    "generated:check": {
       "outputs": []
     },
     "lint": {

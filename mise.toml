@@ -27,7 +27,6 @@ config_roots = [
   "docs",
   "charts",
   "apps/at-email-cli",
-  "apps/cloudflare-email-worker",
   "apps/mail-control-service",
   "apps/mail-control-service/test-containers/*",
   "apps/web-server",
@@ -38,11 +37,11 @@ config_roots = [
 CONTAINER_ENGINE = "podman"
 _.file = ".env"
 # renovate: datasource=docker depName=docker.io/library/mongo versioning=docker
-AGENTTEAM_EMAIL_DEV_MONGO_IMAGE = "docker.io/library/mongo:8.2.7"
+AT_EMAIL_ADMIN_DEV_MONGO_IMAGE = "docker.io/library/mongo:8.2.7"
 # renovate: datasource=docker depName=docker.io/axllent/mailpit versioning=docker
-AGENTTEAM_EMAIL_DEV_MAILPIT_IMAGE = "docker.io/axllent/mailpit:v1.30.1"
+AT_EMAIL_ADMIN_DEV_MAILPIT_IMAGE = "docker.io/axllent/mailpit:v1.30.1"
 # renovate: datasource=docker depName=docker.io/minio/minio versioning=docker
-AGENTTEAM_EMAIL_SMOKE_MINIO_IMAGE = "docker.io/minio/minio:RELEASE.2025-09-07T16-13-09Z"
+AT_EMAIL_ADMIN_SMOKE_MINIO_IMAGE = "docker.io/minio/minio:RELEASE.2025-09-07T16-13-09Z"
 
 [tasks."clean:tmp"]
 description = "Remove contents of tmp/ directories under the workspace root"
@@ -98,6 +97,19 @@ git ls-files -z --cached --others --exclude-standard \
 description = "Lint GitHub Actions workflows"
 run = "actionlint"
 
+[tasks."leaks:check"]
+description = "Scan the committed HEAD tree with gitleaks. Set GITLEAKS_LOG_OPTS to scan a custom Git range."
+run = '''
+if [[ -n "${GITLEAKS_LOG_OPTS:-}" ]]; then
+  exec gitleaks git . --redact --log-opts="${GITLEAKS_LOG_OPTS}"
+fi
+
+scan_dir="$(mktemp -d)"
+trap 'rm -rf "${scan_dir}"' EXIT
+git archive --format=tar HEAD | tar -x -C "${scan_dir}"
+exec gitleaks dir "${scan_dir}" --redact --config "${PWD}/.gitleaks.toml"
+'''
+
 [tasks.test]
 description = "Run repo unit tests"
 run = [
@@ -107,11 +119,7 @@ run = [
 
 [tasks.typegen]
 description = "Regenerate committed service-boundary contracts"
-depends = ["typegen:cloudflare-email-worker", "typegen:rpc-openapi"]
-
-[tasks."typegen:cloudflare-email-worker"]
-description = "Regenerate the checked-in Cloudflare Email Worker backend bundle"
-run = "pnpm --filter agent-mail-cloudflare-worker run generate:backend-bundle"
+depends = ["typegen:rpc-openapi"]
 
 [tasks."typegen:rpc-openapi"]
 description = "Regenerate the committed RPC OpenAPI schema"
@@ -240,7 +248,7 @@ mkdir -p ~/.local/share/agentteam-email/mailpit
   -p 8025:8025 \
   -p 1025:1025 \
   -v ~/.local/share/agentteam-email/mailpit:/data:Z \
-  "${AGENTTEAM_EMAIL_DEV_MAILPIT_IMAGE}"
+  "${AT_EMAIL_ADMIN_DEV_MAILPIT_IMAGE}"
 echo "Mailpit started - Web UI: http://localhost:8025 | SMTP: localhost:1025"
 """
 

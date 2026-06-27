@@ -1,0 +1,8 @@
+# Generated shadcn/ui registry files.
+**/src/components/ui/**
+**/src/hooks/use-mobile.ts
+**/src/lib/utils.ts
+
+# Generated Better Auth UI registry files.
+**/src/components/auth/**
+**/src/lib/auth/**
