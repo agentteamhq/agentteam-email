@@ -4,11 +4,14 @@ import { Elysia } from 'elysia'
 
 import { globals } from '../globals'
 import { handleAgentMailIngestRequest } from '../agent-mail/ingest'
+import { handleAgentMailRuntimeSnapshotRequest } from '../agent-mail/runtime-projection'
 import { isValidAgentMailCapabilityRequestBody } from '../auth/agent-auth-config'
+import { handleCloudflareControlSendRawRequest } from '../cloudflare/internal-send'
 import { rewritePublicOAuthMetadataResponse } from '../auth/oauth-metadata'
 import { PUBLIC_VARS } from '../vars.public'
 
 import { PRIVATE_VARS } from '../vars.private'
+import adminSetup from './admin-setup'
 import agentAccess from './agent-access'
 import cloudflare from './cloudflare'
 import debugRoute from './debug'
@@ -39,6 +42,8 @@ const AGENT_AUTH_BEARER_CREDENTIAL_PATHS = new Set([
 ])
 
 const internalRpcApp = new Elysia({ name: 'rpc-internal', prefix: '/internal' })
+  .get('/agent-mail/runtime/snapshot', ({ request }) => handleAgentMailRuntimeSnapshotRequest(request))
+  .post('/agent-mail/cloudflare/send-raw', ({ request }) => handleCloudflareControlSendRawRequest(request))
 
 if (PUBLIC_VARS.DEV) {
   internalRpcApp.use(debugRoute).use(test)
@@ -61,7 +66,9 @@ export const backendRpcApp = new Elysia({ name: 'rpc', prefix: '/rpc', normalize
     await globals()
     return status(HttpStatusCode.Ok, { message: 'Backend is healthy' })
   })
-  .all('/agent-mail/ingest/v1', ({ request }) => handleAgentMailIngestRequest(request))
+  .all('/agent-mail/ingest/v1/:connectionPublicId', ({ params, request }) =>
+    handleAgentMailIngestRequest(request, params.connectionPublicId)
+  )
   .get('/auth/api/.well-known/oauth-authorization-server', async ({ request }) => {
     const { auth } = await globals()
     return rewritePublicOAuthMetadataResponse(await auth.handler(request))
@@ -89,6 +96,7 @@ export const backendRpcApp = new Elysia({ name: 'rpc', prefix: '/rpc', normalize
   })
   // Mount route modules
   .use(internalRpcApp)
+  .use(adminSetup)
   .use(agentAccess)
   .use(cloudflare)
   .use(mail)

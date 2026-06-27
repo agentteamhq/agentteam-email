@@ -608,7 +608,6 @@ export function createGlobalAuth(db: Database): GlobalAuth {
         allowDifferentEmails: true,
         trustedProviders: [
           ...(typeof PRIVATE_VARS.GOOGLE_CLIENT_SECRET === 'string' ? ['google'] : []),
-          ...(typeof PRIVATE_VARS.GITHUB_CLIENT_SECRET === 'string' ? ['github'] : []),
           ...(typeof PRIVATE_VARS.LINKEDIN_CLIENT_SECRET === 'string' ? ['linkedin'] : []),
           ...(isCloudflareOAuthConfigured() ? [CLOUDFLARE_OAUTH_PROVIDER_ID] : [])
         ]
@@ -708,16 +707,6 @@ export function createGlobalAuth(db: Database): GlobalAuth {
       }
     },
     socialProviders: {
-      // ...(typeof PUBLIC_VARS.PUBLIC_GITHUB_CLIENT_ID === 'string' &&
-      // typeof PRIVATE_VARS.GITHUB_CLIENT_SECRET === 'string'
-      //   ? {
-      //       github: {
-      //         enabled: true,
-      //         clientId: PUBLIC_VARS.PUBLIC_GITHUB_CLIENT_ID,
-      //         clientSecret: PRIVATE_VARS.GITHUB_CLIENT_SECRET
-      //       }
-      //     }
-      //   : {}),
       ...(typeof PUBLIC_VARS.PUBLIC_GOOGLE_CLIENT_ID === 'string' &&
       typeof PRIVATE_VARS.GOOGLE_CLIENT_SECRET === 'string'
         ? {
