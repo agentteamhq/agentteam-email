@@ -128,7 +128,7 @@ ensure_volume "${go_mod_cache_volume}"
 ensure_volume "${go_build_cache_volume}"
 
 extra_runner_env=()
-for key in AGENTTEAM_EMAIL_DEV_MONGO_IMAGE AGENTTEAM_EMAIL_SMOKE_MINIO_IMAGE EXTRA_SCENARIO_IMAGE GOPROXY; do
+for key in AT_EMAIL_ADMIN_DEV_MONGO_IMAGE AT_EMAIL_ADMIN_SMOKE_MINIO_IMAGE EXTRA_SCENARIO_IMAGE GOPROXY; do
   if [ -n "${!key:-}" ]; then
     extra_runner_env+=(--env "${key}=${!key}")
   fi

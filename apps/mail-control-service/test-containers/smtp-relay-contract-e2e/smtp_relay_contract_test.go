@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/smtp"
-	"net/textproto"
 	"os"
 	"regexp"
 	"strings"
@@ -30,6 +29,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/smithy-go"
+	messagetextproto "github.com/emersion/go-message/textproto"
+	gosmtp "github.com/emersion/go-smtp"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -40,12 +41,12 @@ func TestSMTPRelayProviderContracts(t *testing.T) {
 	defer cancel()
 
 	suite := newRelaySuite(t, ctx)
-	fakeCloudflare := newFakeCloudflare(t)
-	defer fakeCloudflare.Close()
+	fakeWeb := newFakeWeb(t)
+	defer fakeWeb.Close()
 
 	t.Run("unauthenticated MAIL FROM is rejected before archive mutation", func(t *testing.T) {
 		server := suite.startRelay(t, relayScenarioConfig{
-			CloudflareURL: fakeCloudflare.URL(),
+			WebURL: fakeWeb.URL(),
 		})
 		err := smtpWithoutAuthMail(server.addr, "agent@example.com")
 		if err == nil {
@@ -55,11 +56,11 @@ func TestSMTPRelayProviderContracts(t *testing.T) {
 	})
 
 	t.Run("external provider send archives relay provider payload and terminal result", func(t *testing.T) {
-		fakeCloudflare.Enqueue(fakeCloudflareResponse{
+		fakeWeb.Enqueue(fakeWebResponse{
 			Delivered: []string{"recipient@example.net"},
 		})
 		server := suite.startRelay(t, relayScenarioConfig{
-			CloudflareURL: fakeCloudflare.URL(),
+			WebURL: fakeWeb.URL(),
 		})
 
 		raw := providerRelayMessage("provider-accepted-queue", "agent@example.com", "recipient@example.net", "Provider Accepted", []string{
@@ -96,27 +97,27 @@ func TestSMTPRelayProviderContracts(t *testing.T) {
 
 		providerPayload := suite.objectBytes(t, receipt.ProviderPayloadKey)
 		var payload struct {
-			Headers map[string]string `json:"headers"`
+			MIMEMessage string `json:"mime_message"`
 		}
 		if err := json.Unmarshal(providerPayload, &payload); err != nil {
 			t.Fatalf("decode provider payload: %v\n%s", err, string(providerPayload))
 		}
-		if payload.Headers["X-Custom-Trace"] != "keep-provider-trace" {
-			t.Fatalf("provider payload did not preserve allowed custom header: %#v", payload.Headers)
+		if !strings.Contains(payload.MIMEMessage, "X-Custom-Trace: keep-provider-trace") {
+			t.Fatalf("provider payload did not preserve allowed custom header:\n%s", payload.MIMEMessage)
 		}
 		for _, forbidden := range []string{"X-ATM-Ingest-ID", "X-ATMCF-Edge-Status", "X-Zone-Loop", "X-Agent-Mail-ZoneMTA-Queue-ID"} {
-			if _, ok := payload.Headers[forbidden]; ok {
-				t.Fatalf("provider payload leaked forbidden header %s: %#v", forbidden, payload.Headers)
+			if strings.Contains(payload.MIMEMessage, forbidden+":") {
+				t.Fatalf("provider payload leaked forbidden header %s:\n%s", forbidden, payload.MIMEMessage)
 			}
 		}
 	})
 
 	t.Run("provider permanent failure writes provider_failed result", func(t *testing.T) {
-		fakeCloudflare.Enqueue(fakeCloudflareResponse{
+		fakeWeb.Enqueue(fakeWebResponse{
 			PermanentBounces: []string{"recipient@example.net"},
 		})
 		server := suite.startRelay(t, relayScenarioConfig{
-			CloudflareURL: fakeCloudflare.URL(),
+			WebURL: fakeWeb.URL(),
 		})
 
 		raw := providerRelayMessage("provider-failed-queue", "agent@example.com", "recipient@example.net", "Provider Failed", nil)
@@ -143,25 +144,25 @@ func TestSMTPRelayLocalRoutingContracts(t *testing.T) {
 	defer cancel()
 
 	suite := newRelaySuite(t, ctx)
-	fakeCloudflare := newFakeCloudflare(t)
-	defer fakeCloudflare.Close()
+	fakeWeb := newFakeWeb(t)
+	defer fakeWeb.Close()
 
 	t.Run("all-local recipient routes internally without provider call", func(t *testing.T) {
 		local := suite.newLocalRouteFixture(t, "local-route-delivered")
 		server := suite.startRelay(t, relayScenarioConfig{
-			CloudflareURL: fakeCloudflare.URL(),
-			Local:         local,
+			WebURL: fakeWeb.URL(),
+			Local:  local,
 		})
 		sourceIngestID := newUUIDv7(t)
 		raw := localRouteMessage(local.queueID, sourceIngestID, "sender@example.net", local.sourceMailbox, local.targetMailbox, "Local Route Delivered")
 
-		beforeCloudflareCalls := len(fakeCloudflare.Calls())
+		beforeWebCalls := len(fakeWeb.Calls())
 		if err := smtpSubmit(server.addr, relayUsername, relayPassword, "srs@source.example.test", []string{local.targetMailbox}, raw); err != nil {
 			t.Fatalf("local route SMTP submit returned error: %v", err)
 		}
 
-		if calls := fakeCloudflare.Calls(); len(calls) != beforeCloudflareCalls {
-			t.Fatalf("cloudflare calls = %d, want unchanged %d for local route", len(calls), beforeCloudflareCalls)
+		if calls := fakeWeb.Calls(); len(calls) != beforeWebCalls {
+			t.Fatalf("web send calls = %d, want unchanged %d for local route", len(calls), beforeWebCalls)
 		}
 		receipt := suite.waitForOutboundReceipt(t, local.sourceDomain, local.queueID, "local_routed")
 		if receipt.RouteType != "local" || receipt.Provider != "local" {
@@ -205,8 +206,8 @@ func TestSMTPRelayLocalRoutingContracts(t *testing.T) {
 	t.Run("null replay sender becomes null local delivery reverse path", func(t *testing.T) {
 		local := suite.newLocalRouteFixture(t, "local-route-null-sender")
 		server := suite.startRelay(t, relayScenarioConfig{
-			CloudflareURL: fakeCloudflare.URL(),
-			Local:         local,
+			WebURL: fakeWeb.URL(),
+			Local:  local,
 		})
 		sourceIngestID := newUUIDv7(t)
 		raw := localRouteMessage(local.queueID, sourceIngestID, "<>", local.sourceMailbox, local.targetMailbox, "Local Route Null Sender")
@@ -231,8 +232,8 @@ func TestSMTPRelayLocalRoutingContracts(t *testing.T) {
 	t.Run("existing local-route proof is reused without duplicate local delivery", func(t *testing.T) {
 		local := suite.newLocalRouteFixture(t, "local-route-existing-proof")
 		server := suite.startRelay(t, relayScenarioConfig{
-			CloudflareURL: fakeCloudflare.URL(),
-			Local:         local,
+			WebURL: fakeWeb.URL(),
+			Local:  local,
 		})
 		sourceIngestID := newUUIDv7(t)
 		messageID := "<existing-local-route@" + local.sourceDomain + ">"
@@ -259,8 +260,9 @@ func TestSMTPRelayLocalRoutingContracts(t *testing.T) {
 }
 
 const (
-	relayUsername = "zonemta"
-	relayPassword = "agent-mail-zonemta-relay"
+	relayUsername     = "zonemta"
+	relayPassword     = "agent-mail-zonemta-relay"
+	controlToWebToken = "relay-control-to-web-token"
 )
 
 type relaySuite struct {
@@ -307,14 +309,11 @@ func newRelaySuite(t *testing.T, ctx context.Context) *relaySuite {
 		_ = mongoClient.Disconnect(context.Background())
 	})
 
-	t.Setenv("AGENT_MAIL_R2_ENDPOINT", minio.Endpoint)
-	t.Setenv("AGENT_MAIL_R2_REGION", minio.Region)
-	t.Setenv("AGENT_MAIL_R2_BUCKET", minio.Bucket)
-	t.Setenv("AGENT_MAIL_R2_ACCESS_KEY_ID", minio.AccessKeyID)
-	t.Setenv("AGENT_MAIL_R2_SECRET_ACCESS_KEY", minio.SecretAccessKey)
-	t.Setenv("AGENT_MAIL_OUTBOUND_PROVIDER", "cloudflare")
-	t.Setenv("AGENT_MAIL_CLOUDFLARE_API_TOKEN", "relay-cloudflare-token")
-	t.Setenv("AGENT_MAIL_CLOUDFLARE_ACCOUNT_ID", "relay-account")
+	t.Setenv("AT_EMAIL_ADMIN_R2_ENDPOINT", minio.Endpoint)
+	t.Setenv("AT_EMAIL_ADMIN_R2_REGION", minio.Region)
+	t.Setenv("AT_EMAIL_ADMIN_R2_BUCKET", minio.Bucket)
+	t.Setenv("AT_EMAIL_ADMIN_R2_ACCESS_KEY_ID", minio.AccessKeyID)
+	t.Setenv("AT_EMAIL_ADMIN_R2_SECRET_ACCESS_KEY", minio.SecretAccessKey)
 
 	return &relaySuite{
 		ctx:      ctx,
@@ -327,8 +326,8 @@ func newRelaySuite(t *testing.T, ctx context.Context) *relaySuite {
 }
 
 type relayScenarioConfig struct {
-	CloudflareURL string
-	Local         *localRouteFixture
+	WebURL string
+	Local  *localRouteFixture
 }
 
 type runningRelay struct {
@@ -347,7 +346,8 @@ func (s *relaySuite) startRelay(t *testing.T, scenario relayScenarioConfig) runn
 			Password: relayPassword,
 		},
 	}
-	cfg.Cloudflare.APIBaseURL = scenario.CloudflareURL
+	cfg.WebServer.APIBaseURL = scenario.WebURL
+	cfg.WebServer.ControlToWebToken = controlToWebToken
 	cfg.Delivery.Domains = []smtprelay.DeliveryDomain{
 		{
 			Name: "example.com",
@@ -356,10 +356,19 @@ func (s *relaySuite) startRelay(t *testing.T, scenario relayScenarioConfig) runn
 			},
 		},
 	}
-	resolver := relayResolver{}
+	resolver := relayResolver{
+		activeDomains: map[string]smtprelay.ActiveDomainContext{
+			"example.com": {
+				OrganizationID:       "org-123",
+				OrganizationPublicID: "org_pub_123",
+				Domain:               "example.com",
+				ArchivePrefix:        "orgs/org_pub_123/domains/example.com/mail/inbound",
+			},
+		},
+	}
 	if scenario.Local != nil {
 		local := scenario.Local
-		t.Setenv("AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN", local.wildduckToken)
+		t.Setenv("AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN", local.wildduckToken)
 		cfg.LocalDelivery.SMTPAddress = local.smtp.Addr()
 		cfg.LocalDelivery.HelloName = "mail-control-relay.test"
 		cfg.LocalDelivery.APIBaseURL = local.wildduck.URL
@@ -372,6 +381,18 @@ func (s *relaySuite) startRelay(t *testing.T, scenario relayScenarioConfig) runn
 		resolver.localDomains = map[string]struct{}{
 			local.sourceDomain: {},
 			local.targetDomain: {},
+		}
+		resolver.activeDomains[local.sourceDomain] = smtprelay.ActiveDomainContext{
+			OrganizationID:       "org-source",
+			OrganizationPublicID: "org_pub_source",
+			Domain:               local.sourceDomain,
+			ArchivePrefix:        "orgs/org_pub_source/domains/" + local.sourceDomain + "/mail/inbound",
+		}
+		resolver.activeDomains[local.targetDomain] = smtprelay.ActiveDomainContext{
+			OrganizationID:       "org-target",
+			OrganizationPublicID: "org_pub_target",
+			Domain:               local.targetDomain,
+			ArchivePrefix:        "orgs/org_pub_target/domains/" + local.targetDomain + "/mail/inbound",
 		}
 	}
 
@@ -540,11 +561,20 @@ func (f *localRouteFixture) seedExistingRouteProof(t *testing.T, routeID string,
 }
 
 type relayResolver struct {
-	localDomains map[string]struct{}
+	activeDomains map[string]smtprelay.ActiveDomainContext
+	localDomains  map[string]struct{}
 }
 
 func (r relayResolver) SESFeedbackReturnPath(_ context.Context, senderDomain string) (string, error) {
 	return "bounces@" + senderDomain, nil
+}
+
+func (r relayResolver) ActiveDomain(_ context.Context, domain string) (smtprelay.ActiveDomainContext, error) {
+	active, ok := r.activeDomains[domain]
+	if !ok {
+		return smtprelay.ActiveDomainContext{}, fmt.Errorf("active domain %q is not configured", domain)
+	}
+	return active, nil
 }
 
 func (r relayResolver) LocalRecipientDomain(_ context.Context, recipientDomain string) (bool, error) {
@@ -552,62 +582,71 @@ func (r relayResolver) LocalRecipientDomain(_ context.Context, recipientDomain s
 	return ok, nil
 }
 
-type fakeCloudflare struct {
+type fakeWeb struct {
 	t         *testing.T
 	server    *httptest.Server
 	mu        sync.Mutex
-	responses []fakeCloudflareResponse
-	calls     []fakeCloudflareCall
+	responses []fakeWebResponse
+	calls     []fakeWebCall
 }
 
-type fakeCloudflareResponse struct {
+type fakeWebResponse struct {
 	Delivered        []string
 	Queued           []string
 	PermanentBounces []string
 }
 
-type fakeCloudflareCall struct {
+type fakeWebCall struct {
 	Path string
 	Body []byte
 }
 
-func newFakeCloudflare(t *testing.T) *fakeCloudflare {
+func newFakeWeb(t *testing.T) *fakeWeb {
 	t.Helper()
-	fake := &fakeCloudflare{t: t}
+	fake := &fakeWeb{t: t}
 	fake.server = httptest.NewServer(http.HandlerFunc(fake.handle))
 	return fake
 }
 
-func (f *fakeCloudflare) URL() string {
+func (f *fakeWeb) URL() string {
 	return f.server.URL
 }
 
-func (f *fakeCloudflare) Close() {
+func (f *fakeWeb) Close() {
 	f.server.Close()
 }
 
-func (f *fakeCloudflare) Enqueue(response fakeCloudflareResponse) {
+func (f *fakeWeb) Enqueue(response fakeWebResponse) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.responses = append(f.responses, response)
 }
 
-func (f *fakeCloudflare) Calls() []fakeCloudflareCall {
+func (f *fakeWeb) Calls() []fakeWebCall {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	calls := make([]fakeCloudflareCall, len(f.calls))
+	calls := make([]fakeWebCall, len(f.calls))
 	copy(calls, f.calls)
 	return calls
 }
 
-func (f *fakeCloudflare) handle(w http.ResponseWriter, r *http.Request) {
+func (f *fakeWeb) handle(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		f.t.Fatalf("read fake Cloudflare request: %v", err)
+		f.t.Fatalf("read fake web request: %v", err)
+	}
+	if r.Method != http.MethodPost || r.URL.Path != "/rpc/internal/agent-mail/cloudflare/send-raw" {
+		http.NotFound(w, r)
+		return
+	}
+	if r.Header.Get("X-Agent-Mail-Control-Web-Token") != controlToWebToken {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"message":"Unauthorized"}`))
+		return
 	}
 	f.mu.Lock()
-	f.calls = append(f.calls, fakeCloudflareCall{Path: r.URL.Path, Body: append([]byte(nil), body...)})
-	response := fakeCloudflareResponse{}
+	f.calls = append(f.calls, fakeWebCall{Path: r.URL.Path, Body: append([]byte(nil), body...)})
+	response := fakeWebResponse{}
 	if len(f.responses) > 0 {
 		response = f.responses[0]
 		f.responses = f.responses[1:]
@@ -616,30 +655,24 @@ func (f *fakeCloudflare) handle(w http.ResponseWriter, r *http.Request) {
 
 	if response.Delivered == nil && response.Queued == nil && response.PermanentBounces == nil {
 		var payload struct {
-			To         []string `json:"to"`
-			CC         []string `json:"cc"`
-			BCC        []string `json:"bcc"`
 			Recipients []string `json:"recipients"`
 		}
 		_ = json.Unmarshal(body, &payload)
-		response.Delivered = append(append(append([]string{}, payload.To...), payload.CC...), payload.BCC...)
-		response.Delivered = append(response.Delivered, payload.Recipients...)
+		response.Delivered = append([]string{}, payload.Recipients...)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"success": true,
-		"result": map[string]any{
-			"delivered":         response.Delivered,
-			"queued":            response.Queued,
-			"permanent_bounces": response.PermanentBounces,
-		},
+		"delivered":         response.Delivered,
+		"queued":            response.Queued,
+		"permanent_bounces": response.PermanentBounces,
 	})
 }
 
 type relayLocalSMTPServer struct {
 	t          *testing.T
 	listener   net.Listener
+	smtp       *gosmtp.Server
 	messages   *mongo.Collection
 	userID     bson.ObjectID
 	mailboxID  bson.ObjectID
@@ -668,6 +701,11 @@ func newRelayLocalSMTPServer(t *testing.T, messages *mongo.Collection, userID bs
 		mailboxID: mailboxID,
 		done:      make(chan struct{}),
 	}
+	smtpServer := gosmtp.NewServer(relayLocalSMTPBackend{server: server})
+	smtpServer.Domain = "local-relay-smtp.test"
+	smtpServer.ReadTimeout = 10 * time.Second
+	smtpServer.WriteTimeout = 10 * time.Second
+	server.smtp = smtpServer
 	go server.serve()
 	return server
 }
@@ -677,7 +715,7 @@ func (s *relayLocalSMTPServer) Addr() string {
 }
 
 func (s *relayLocalSMTPServer) Close() {
-	_ = s.listener.Close()
+	_ = s.smtp.Close()
 	<-s.done
 }
 
@@ -691,76 +729,63 @@ func (s *relayLocalSMTPServer) Deliveries() []relaySMTPDelivery {
 
 func (s *relayLocalSMTPServer) serve() {
 	defer close(s.done)
-	for {
-		conn, err := s.listener.Accept()
-		if err != nil {
-			return
-		}
-		go s.handleConn(conn)
+	if err := s.smtp.Serve(s.listener); err != nil && !errors.Is(err, gosmtp.ErrServerClosed) {
+		s.t.Errorf("local relay SMTP stopped with error: %v", err)
 	}
 }
 
-func (s *relayLocalSMTPServer) handleConn(conn net.Conn) {
-	defer conn.Close()
-	reader := textproto.NewReader(bufio.NewReader(conn))
-	bufferedWriter := bufio.NewWriter(conn)
-	writer := textproto.NewWriter(bufferedWriter)
-	send := func(format string, args ...any) {
-		_ = writer.PrintfLine(format, args...)
-		_ = bufferedWriter.Flush()
-	}
-	send("220 local relay smtp ready")
+type relayLocalSMTPBackend struct {
+	server *relayLocalSMTPServer
+}
 
-	var mailFrom string
-	var rcptTo []string
-	for {
-		line, err := reader.ReadLine()
-		if err != nil {
-			return
-		}
-		upper := strings.ToUpper(line)
-		switch {
-		case strings.HasPrefix(upper, "HELO ") || strings.HasPrefix(upper, "EHLO "):
-			send("250 local relay smtp")
-		case strings.HasPrefix(upper, "MAIL FROM:"):
-			mailFrom = cleanSMTPPath(line[len("MAIL FROM:"):])
-			send("250 ok")
-		case strings.HasPrefix(upper, "RCPT TO:"):
-			rcptTo = append(rcptTo, cleanSMTPPath(line[len("RCPT TO:"):]))
-			send("250 ok")
-		case upper == "DATA":
-			send("354 end with dot")
-			raw, err := readSMTPData(reader)
-			if err != nil {
-				send("451 read failed")
-				return
-			}
-			if err := s.recordDelivery(context.Background(), mailFrom, rcptTo, raw); err != nil {
-				send("451 delivery failed")
-				return
-			}
-			send("250 queued")
-		case upper == "QUIT":
-			send("221 bye")
-			return
-		case upper == "RSET":
-			mailFrom = ""
-			rcptTo = nil
-			send("250 reset")
-		default:
-			send("250 ok")
-		}
+func (b relayLocalSMTPBackend) NewSession(*gosmtp.Conn) (gosmtp.Session, error) {
+	return &relayLocalSMTPSession{server: b.server}, nil
+}
+
+type relayLocalSMTPSession struct {
+	server   *relayLocalSMTPServer
+	mailFrom string
+	rcptTo   []string
+}
+
+func (s *relayLocalSMTPSession) Mail(from string, _ *gosmtp.MailOptions) error {
+	s.mailFrom = from
+	return nil
+}
+
+func (s *relayLocalSMTPSession) Rcpt(to string, _ *gosmtp.RcptOptions) error {
+	s.rcptTo = append(s.rcptTo, to)
+	return nil
+}
+
+func (s *relayLocalSMTPSession) Data(reader io.Reader) error {
+	raw, err := io.ReadAll(reader)
+	if err != nil {
+		return err
 	}
+	return s.server.recordDelivery(context.Background(), s.mailFrom, s.rcptTo, raw)
+}
+
+func (s *relayLocalSMTPSession) Reset() {
+	s.mailFrom = ""
+	s.rcptTo = nil
+}
+
+func (s *relayLocalSMTPSession) Logout() error {
+	return nil
 }
 
 func (s *relayLocalSMTPServer) recordDelivery(ctx context.Context, mailFrom string, rcptTo []string, raw []byte) error {
-	headers := rawHeaderLines(raw)
+	headers, err := rawHeaderLines(raw)
+	if err != nil {
+		return err
+	}
 	headerValues := make(bson.A, 0, len(headers))
 	for _, header := range headers {
 		headerValues = append(headerValues, header)
 	}
 	messageID := bson.NewObjectID()
-	_, err := s.messages.InsertOne(ctx, bson.D{
+	_, err = s.messages.InsertOne(ctx, bson.D{
 		{"_id", messageID},
 		{"user", s.userID},
 		{"mailbox", s.mailboxID},
@@ -783,7 +808,7 @@ func (s *relayLocalSMTPServer) recordDelivery(ctx context.Context, mailFrom stri
 
 func startRelayMongo(t *testing.T, ctx context.Context, run gotestingcontainer.RunArtifacts, network *gotestingcontainer.DockerNetwork) string {
 	t.Helper()
-	image := envDefault("AGENTTEAM_EMAIL_DEV_MONGO_IMAGE", "docker.io/library/mongo:8.2.7")
+	image := envDefault("AT_EMAIL_ADMIN_DEV_MONGO_IMAGE", "docker.io/library/mongo:8.2.7")
 	container := run.StartContainer(t, ctx, gotestingcontainer.ContainerRequest{
 		Name:           "mongodb",
 		Image:          image,
@@ -799,7 +824,7 @@ func startRelayMongo(t *testing.T, ctx context.Context, run gotestingcontainer.R
 
 func startRelayMinIO(t *testing.T, ctx context.Context, run gotestingcontainer.RunArtifacts, network *gotestingcontainer.DockerNetwork) relayMinIO {
 	t.Helper()
-	image := envDefault("AGENTTEAM_EMAIL_SMOKE_MINIO_IMAGE", "docker.io/minio/minio:RELEASE.2025-09-07T16-13-09Z")
+	image := envDefault("AT_EMAIL_ADMIN_SMOKE_MINIO_IMAGE", "docker.io/minio/minio:RELEASE.2025-09-07T16-13-09Z")
 	service := relayMinIO{
 		Region:          "us-east-1",
 		Bucket:          "mail-relay-contract-" + relayRunSlug(),
@@ -997,67 +1022,34 @@ func localRouteMessageWithMessageID(queueID string, sourceIngestID string, repla
 	return []byte(strings.Join(lines, "\r\n"))
 }
 
-func readSMTPData(reader *textproto.Reader) ([]byte, error) {
-	var data bytes.Buffer
-	for {
-		line, err := reader.ReadLine()
+func rawHeaderLines(raw []byte) ([]string, error) {
+	header, err := parsedMessageHeader(raw)
+	if err != nil {
+		return nil, err
+	}
+	fields := header.Fields()
+	headers := make([]string, 0, fields.Len())
+	for fields.Next() {
+		rawField, err := fields.Raw()
 		if err != nil {
-			return nil, err
+			headers = append(headers, fields.Key()+": "+fields.Value())
+			continue
 		}
-		if line == "." {
-			return data.Bytes(), nil
-		}
-		if strings.HasPrefix(line, "..") {
-			line = line[1:]
-		}
-		data.WriteString(line)
-		data.WriteString("\r\n")
+		headers = append(headers, strings.TrimRight(string(rawField), "\r\n"))
 	}
-}
-
-func cleanSMTPPath(value string) string {
-	cleaned := strings.TrimSpace(value)
-	if start := strings.Index(cleaned, "<"); start >= 0 {
-		if end := strings.Index(cleaned[start+1:], ">"); end >= 0 {
-			return cleaned[start+1 : start+1+end]
-		}
-	}
-	fields := strings.Fields(cleaned)
-	if len(fields) == 0 {
-		return ""
-	}
-	return fields[0]
-}
-
-func rawHeaderLines(raw []byte) []string {
-	text := strings.ReplaceAll(string(raw), "\r\n", "\n")
-	lines := strings.Split(text, "\n")
-	headers := make([]string, 0, len(lines))
-	for _, line := range lines {
-		if strings.TrimSpace(line) == "" {
-			break
-		}
-		headers = append(headers, strings.TrimRight(line, "\r"))
-	}
-	return headers
+	return headers, nil
 }
 
 func messageHasHeader(raw []byte, name string, value string) bool {
-	targetName := strings.ToLower(name)
-	targetValue := strings.TrimSpace(value)
-	for _, line := range strings.Split(string(raw), "\r\n") {
-		if line == "" {
-			return false
-		}
-		headerName, headerValue, ok := strings.Cut(line, ":")
-		if !ok {
-			continue
-		}
-		if strings.ToLower(strings.TrimSpace(headerName)) == targetName && strings.TrimSpace(headerValue) == targetValue {
-			return true
-		}
+	header, err := parsedMessageHeader(raw)
+	if err != nil {
+		return false
 	}
-	return false
+	return strings.TrimSpace(header.Get(name)) == strings.TrimSpace(value)
+}
+
+func parsedMessageHeader(raw []byte) (messagetextproto.Header, error) {
+	return messagetextproto.ReadHeader(bufio.NewReader(bytes.NewReader(raw)))
 }
 
 func freeRelayAddress(t *testing.T) string {

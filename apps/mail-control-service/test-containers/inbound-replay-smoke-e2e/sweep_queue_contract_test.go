@@ -328,11 +328,11 @@ func sweepContractNewSuite(t *testing.T, ctx context.Context) *sweepContractSuit
 		t.Fatalf("create sweep contract bucket: %v", err)
 	}
 
-	t.Setenv("AGENT_MAIL_R2_ENDPOINT", minio.Endpoint)
-	t.Setenv("AGENT_MAIL_R2_REGION", minio.Region)
-	t.Setenv("AGENT_MAIL_R2_BUCKET", minio.Bucket)
-	t.Setenv("AGENT_MAIL_R2_ACCESS_KEY_ID", minio.AccessKeyID)
-	t.Setenv("AGENT_MAIL_R2_SECRET_ACCESS_KEY", minio.SecretAccessKey)
+	t.Setenv("AT_EMAIL_ADMIN_R2_ENDPOINT", minio.Endpoint)
+	t.Setenv("AT_EMAIL_ADMIN_R2_REGION", minio.Region)
+	t.Setenv("AT_EMAIL_ADMIN_R2_BUCKET", minio.Bucket)
+	t.Setenv("AT_EMAIL_ADMIN_R2_ACCESS_KEY_ID", minio.AccessKeyID)
+	t.Setenv("AT_EMAIL_ADMIN_R2_SECRET_ACCESS_KEY", minio.SecretAccessKey)
 
 	archive, err := r2archive.New(ctx, r2archive.Config{
 		Endpoint: minio.Endpoint,
@@ -390,7 +390,7 @@ func (s *sweepContractSuite) newScenario(t *testing.T, name string, opts sweepCo
 	mailbox := "agent@" + domain
 	wildduckAccessToken := randomSmokeToken(t, "wildduck")
 
-	t.Setenv("AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN", wildduckAccessToken)
+	t.Setenv("AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN", wildduckAccessToken)
 	wdServer := sweepContractWildDuckServer(t, wildduckAccessToken, userID.Hex(), mailbox)
 	t.Cleanup(wdServer.Close)
 

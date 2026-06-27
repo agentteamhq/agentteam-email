@@ -10,10 +10,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"net/textproto"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -31,6 +31,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/smithy-go"
+	messagetextproto "github.com/emersion/go-message/textproto"
+	gosmtp "github.com/emersion/go-smtp"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -130,14 +132,14 @@ func TestInboundReplaySmoke(t *testing.T) {
 		t.Fatalf("create smoke bucket: %v", err)
 	}
 
-	t.Setenv("AGENT_MAIL_R2_ENDPOINT", minio.Endpoint)
-	t.Setenv("AGENT_MAIL_R2_REGION", minio.Region)
-	t.Setenv("AGENT_MAIL_R2_BUCKET", minio.Bucket)
-	t.Setenv("AGENT_MAIL_R2_ACCESS_KEY_ID", minio.AccessKeyID)
-	t.Setenv("AGENT_MAIL_R2_SECRET_ACCESS_KEY", minio.SecretAccessKey)
+	t.Setenv("AT_EMAIL_ADMIN_R2_ENDPOINT", minio.Endpoint)
+	t.Setenv("AT_EMAIL_ADMIN_R2_REGION", minio.Region)
+	t.Setenv("AT_EMAIL_ADMIN_R2_BUCKET", minio.Bucket)
+	t.Setenv("AT_EMAIL_ADMIN_R2_ACCESS_KEY_ID", minio.AccessKeyID)
+	t.Setenv("AT_EMAIL_ADMIN_R2_SECRET_ACCESS_KEY", minio.SecretAccessKey)
 
 	wildduckAccessToken := randomSmokeToken(t, "wildduck")
-	t.Setenv("AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN", wildduckAccessToken)
+	t.Setenv("AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN", wildduckAccessToken)
 
 	wildduckDB := "wildduck_" + smokeRunID()
 	controlDB := "agent_mail_control_" + smokeRunID()
@@ -327,7 +329,7 @@ type smokeMinIO struct {
 
 func startSmokeMongo(t *testing.T, ctx context.Context, run gotestingcontainer.RunArtifacts, network *gotestingcontainer.DockerNetwork) string {
 	t.Helper()
-	image := envDefault("AGENTTEAM_EMAIL_DEV_MONGO_IMAGE", "docker.io/library/mongo:8.2.7")
+	image := envDefault("AT_EMAIL_ADMIN_DEV_MONGO_IMAGE", "docker.io/library/mongo:8.2.7")
 	container := run.StartContainer(t, ctx, gotestingcontainer.ContainerRequest{
 		Name:           "mongodb",
 		Image:          image,
@@ -343,7 +345,7 @@ func startSmokeMongo(t *testing.T, ctx context.Context, run gotestingcontainer.R
 
 func startSmokeMinIO(t *testing.T, ctx context.Context, run gotestingcontainer.RunArtifacts, network *gotestingcontainer.DockerNetwork) smokeMinIO {
 	t.Helper()
-	image := envDefault("AGENTTEAM_EMAIL_SMOKE_MINIO_IMAGE", "docker.io/minio/minio:RELEASE.2025-09-07T16-13-09Z")
+	image := envDefault("AT_EMAIL_ADMIN_SMOKE_MINIO_IMAGE", "docker.io/minio/minio:RELEASE.2025-09-07T16-13-09Z")
 	service := smokeMinIO{
 		Region:          "us-east-1",
 		Bucket:          "mail-control-smoke-" + smokeRunSlug(),
@@ -442,6 +444,7 @@ func newSmokeWildDuckServer(t *testing.T, expectedAccessToken string, userID str
 type smokeSMTPServer struct {
 	t          *testing.T
 	listener   net.Listener
+	smtp       *gosmtp.Server
 	messages   *mongo.Collection
 	userID     bson.ObjectID
 	mailboxID  bson.ObjectID
@@ -470,6 +473,11 @@ func newSmokeSMTPServer(t *testing.T, messages *mongo.Collection, userID bson.Ob
 		mailboxID: mailboxID,
 		done:      make(chan struct{}),
 	}
+	smtpServer := gosmtp.NewServer(smokeSMTPBackend{recorder: server})
+	smtpServer.Domain = "smoke-smtp.test"
+	smtpServer.ReadTimeout = 10 * time.Second
+	smtpServer.WriteTimeout = 10 * time.Second
+	server.smtp = smtpServer
 	go server.serve()
 	return server
 }
@@ -479,7 +487,7 @@ func (s *smokeSMTPServer) Addr() string {
 }
 
 func (s *smokeSMTPServer) Close() {
-	_ = s.listener.Close()
+	_ = s.smtp.Close()
 	<-s.done
 }
 
@@ -493,65 +501,8 @@ func (s *smokeSMTPServer) Deliveries() []smokeSMTPDelivery {
 
 func (s *smokeSMTPServer) serve() {
 	defer close(s.done)
-	for {
-		conn, err := s.listener.Accept()
-		if err != nil {
-			return
-		}
-		go s.handleConn(conn)
-	}
-}
-
-func (s *smokeSMTPServer) handleConn(conn net.Conn) {
-	defer conn.Close()
-	reader := textproto.NewReader(bufio.NewReader(conn))
-	bufferedWriter := bufio.NewWriter(conn)
-	writer := textproto.NewWriter(bufferedWriter)
-	send := func(format string, args ...any) {
-		_ = writer.PrintfLine(format, args...)
-		_ = bufferedWriter.Flush()
-	}
-	send("220 smoke smtp ready")
-
-	var mailFrom string
-	var rcptTo []string
-	for {
-		line, err := reader.ReadLine()
-		if err != nil {
-			return
-		}
-		upper := strings.ToUpper(line)
-		switch {
-		case strings.HasPrefix(upper, "HELO ") || strings.HasPrefix(upper, "EHLO "):
-			send("250 smoke smtp")
-		case strings.HasPrefix(upper, "MAIL FROM:"):
-			mailFrom = cleanSMTPPath(line[len("MAIL FROM:"):])
-			send("250 ok")
-		case strings.HasPrefix(upper, "RCPT TO:"):
-			rcptTo = append(rcptTo, cleanSMTPPath(line[len("RCPT TO:"):]))
-			send("250 ok")
-		case upper == "DATA":
-			send("354 end with dot")
-			raw, err := readSMTPData(reader)
-			if err != nil {
-				send("451 read failed")
-				return
-			}
-			if err := s.recordDelivery(context.Background(), mailFrom, rcptTo, raw); err != nil {
-				send("451 delivery failed")
-				return
-			}
-			send("250 queued")
-		case upper == "QUIT":
-			send("221 bye")
-			return
-		case upper == "RSET":
-			mailFrom = ""
-			rcptTo = nil
-			send("250 reset")
-		default:
-			send("250 ok")
-		}
+	if err := s.smtp.Serve(s.listener); err != nil && !errors.Is(err, gosmtp.ErrServerClosed) {
+		s.t.Errorf("smoke SMTP stopped with error: %v", err)
 	}
 }
 
@@ -582,64 +533,65 @@ func (s *smokeSMTPServer) recordDelivery(ctx context.Context, mailFrom string, r
 	return nil
 }
 
-func readSMTPData(reader *textproto.Reader) ([]byte, error) {
-	var data bytes.Buffer
-	for {
-		line, err := reader.ReadLine()
-		if err != nil {
-			return nil, err
-		}
-		if line == "." {
-			return data.Bytes(), nil
-		}
-		if strings.HasPrefix(line, "..") {
-			line = line[1:]
-		}
-		data.WriteString(line)
-		data.WriteString("\r\n")
-	}
+type smokeSMTPRecorder interface {
+	recordDelivery(context.Context, string, []string, []byte) error
 }
 
-func cleanSMTPPath(value string) string {
-	cleaned := strings.TrimSpace(value)
-	if start := strings.Index(cleaned, "<"); start >= 0 {
-		if end := strings.Index(cleaned[start+1:], ">"); end >= 0 {
-			return cleaned[start+1 : start+1+end]
-		}
-	}
-	fields := strings.Fields(cleaned)
-	if len(fields) == 0 {
-		return ""
-	}
-	return fields[0]
+type smokeSMTPBackend struct {
+	recorder smokeSMTPRecorder
 }
 
-var smokeIngestIDPattern = regexp.MustCompile(`(?im)^X-ATM-Ingest-ID:\s*([0-9a-f-]+)\s*$`)
+func (b smokeSMTPBackend) NewSession(*gosmtp.Conn) (gosmtp.Session, error) {
+	return &smokeSMTPSession{recorder: b.recorder}, nil
+}
+
+type smokeSMTPSession struct {
+	recorder smokeSMTPRecorder
+	mailFrom string
+	rcptTo   []string
+}
+
+func (s *smokeSMTPSession) Mail(from string, _ *gosmtp.MailOptions) error {
+	s.mailFrom = from
+	return nil
+}
+
+func (s *smokeSMTPSession) Rcpt(to string, _ *gosmtp.RcptOptions) error {
+	s.rcptTo = append(s.rcptTo, to)
+	return nil
+}
+
+func (s *smokeSMTPSession) Data(reader io.Reader) error {
+	raw, err := io.ReadAll(reader)
+	if err != nil {
+		return err
+	}
+	return s.recorder.recordDelivery(context.Background(), s.mailFrom, s.rcptTo, raw)
+}
+
+func (s *smokeSMTPSession) Reset() {
+	s.mailFrom = ""
+	s.rcptTo = nil
+}
+
+func (s *smokeSMTPSession) Logout() error {
+	return nil
+}
 
 func extractSmokeIngestID(raw []byte) string {
-	match := smokeIngestIDPattern.FindSubmatch(raw)
-	if len(match) != 2 {
-		return ""
-	}
-	return string(match[1])
+	return messageHeaderValue(raw, "X-ATM-Ingest-ID")
 }
 
 func messageHasHeader(raw []byte, name string, value string) bool {
-	targetName := strings.ToLower(name)
-	targetValue := strings.TrimSpace(value)
-	for _, line := range strings.Split(string(raw), "\r\n") {
-		if line == "" {
-			return false
-		}
-		headerName, headerValue, ok := strings.Cut(line, ":")
-		if !ok {
-			continue
-		}
-		if strings.ToLower(strings.TrimSpace(headerName)) == targetName && strings.TrimSpace(headerValue) == targetValue {
-			return true
-		}
+	return messageHeaderValue(raw, name) == strings.TrimSpace(value)
+}
+
+func messageHeaderValue(raw []byte, name string) string {
+	header, err := messagetextproto.ReadHeader(bufio.NewReader(bytes.NewReader(raw)))
+	if err != nil {
+		return ""
 	}
-	return false
+	return strings.TrimSpace(header.Get(name))
 }
 
 func enqueueSmokeNotification(ctx context.Context, p *poller.Poller, notification poller.Notification) error {

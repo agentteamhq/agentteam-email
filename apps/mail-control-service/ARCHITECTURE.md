@@ -18,10 +18,10 @@ The mail runtime consists of:
 - WildDuck for IMAP and HTTP API.
 - Haraka for canonical inbound SMTP delivery into WildDuck.
 - ZoneMTA for canonical outbound queueing, retries, and bounce generation.
-- Mail Control Service for live provisioning, runtime domain registry
-  coordination, control/status APIs, inbound replay/reconciliation, internal
-  ingest enqueue handling, the internal SMTP relay listener, outbound
-  provider handling, and feedback processing.
+- Mail Control Service for runtime domain registry coordination,
+  control/status APIs, inbound replay/reconciliation, internal ingest enqueue
+  handling, the internal SMTP relay listener, outbound provider handling, and
+  feedback processing.
 - Internal ZoneMTA-only SMTP relay listener for Cloudflare Email Sending, SES,
   and active local-domain routing. ZoneMTA reaches this listener through the
   Mail Control Service endpoint.
@@ -40,9 +40,9 @@ runtime surfaces:
 
 The internal control API runs on its own listener and exposes OpenAPI at
 `/openapi.json` and `/openapi.yaml`. Status reports top-level readiness, issue
-strings, control-state storage, module health, dependency health, provisioning
-summary, selected outbound provider, and per-domain
-Cloudflare/WildDuck feedback readiness to trusted internal callers.
+strings, runtime projection health, module health, dependency health, selected
+outbound provider, and per-domain WildDuck feedback readiness to trusted
+internal callers.
 
 ## Control Service Contract
 
@@ -55,10 +55,6 @@ The internal Huma control API service contract is:
 
 - `GET /healthz`
 - `POST /rpc/agentMail.status.get`
-- `POST /rpc/agentMail.domain.add`
-- `POST /rpc/agentMail.domain.modify`
-- `POST /rpc/agentMail.domain.remove`
-- `POST /rpc/agentMail.provision.apply`
 - `POST /rpc/agentMail.runtime.sync`
 - `POST /rpc/agentMail.ingest.enqueue`
 - `POST /rpc/agentMail.worker.archiveCredentials.issue`
@@ -68,24 +64,20 @@ The internal Huma control API service contract is:
 - `POST /rpc/agentMail.message.security.get`
 - OpenAPI schema publication at `/openapi.json` and `/openapi.yaml`
 
-Domain add/modify/remove methods update only the service-owned desired domain
-state. They do not mutate Cloudflare, WildDuck, runtime registry state, or
-provider settings by themselves.
+`agentMail.runtime.sync` is the authoritative snapshot handoff from web-owned
+application state into the Mail Control Service runtime projection. The web
+server calls it after authenticated Cloudflare/domain provisioning changes,
+during web startup, and every 30 minutes as a repair sync. The snapshot carries
+organization identity, the service-owned archive prefix, and Worker deployment
+identifiers so replay, relay, feedback, and status operate from the same
+active-domain view without granting mail-control access to the web app
+database. Mail-control stores this projection only in memory; domains omitted
+from the snapshot are removed from active routing.
 
-`agentMail.provision.apply` reads desired domain state as its source of truth
-and performs the full apply. It updates the configured Worker, reconciles
-Cloudflare Email Routing, ensures the WildDuck service-owned feedback
-mailbox/address behavior for enabled domains, updates runtime registry/config
-projections, records applied state, logs every step, and returns structured
-changed/skipped/failed details. Cloudflare, WildDuck, registry, and Worker
-rollout work are coordinated internal steps of that one control operation.
-
-`agentMail.runtime.sync` is the transition bridge from web-owned application
-state into the Mail Control Service runtime projection. The web server calls it
-after authenticated Cloudflare/domain provisioning changes with organization
-identity, the service-owned archive prefix, and Worker deployment identifiers so
-replay, relay, feedback, and status operate from the same active-domain view
-without granting mail-control access to the web app database.
+Mail-control can also request the web server's internal runtime projection
+snapshot during startup with `AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN`. This is
+a bootstrap aid only. Web-initiated runtime sync remains the steady-state
+contract.
 
 `agentMail.ingest.enqueue` is the internal queue handoff for web-owned Worker
 ingest. The web server verifies the public Worker request, resolves the active
@@ -96,8 +88,9 @@ enqueues the bundle into the same Mongo-backed queue used by the R2 sweep.
 
 `agentMail.worker.archiveCredentials.issue` is the internal seam for
 prefix-scoped temporary Worker archive credentials. The credential issuer owns
-secret material inside mail-control and must return it only in the authenticated
-internal control API response.
+secret material inside mail-control and must return it only through the internal
+control API response. Public ingress must not route to mail-control; the web
+server is the exposed authenticated boundary.
 
 `agentMail.send.submit` reserves the internal send handoff from web to
 mail-control. Until a send executor is wired, the endpoint must fail with a
@@ -113,10 +106,10 @@ failures are API errors; callers must retry and must not create downstream work
 from incomplete provenance.
 
 `agentMail.message.view.get` is the shared read-only message view API for the
-authenticated web server and trusted internal callers. Callers provide the
+web server and trusted internal callers. Callers provide the
 same WildDuck delivery identity used by `agentMail.message.provenance.get`.
 Agent Mail fetches the mailbox-visible WildDuck message source, parses MIME with
-the service parser stack, returns text fallback and sanitized HTML, rewrites
+the service parser stack, returns text fallback and a sanitized display HTML fragment, rewrites
 allowed message links to inert link ID markers with separate external-link
 metadata, and blocks remote images by default unless an explicit
 `remoteImages: allow` display request is made. Inline images may render only
@@ -144,8 +137,9 @@ destination.
 ## Required Domain Control Configuration
 
 Agent Mail is a generic multi-domain service. The source of active-domain
-desired state is the owning application or controller plus Agent Mail
-service-owned control state, not Agent Mail repo-edited per-domain files.
+desired state is the web-owned application state, not Mail Control Service
+state, repo-edited per-domain files, deployment volumes, or environment
+variables.
 
 The owning application or controller owns company and agent intent:
 
@@ -154,19 +148,23 @@ The owning application or controller owns company and agent intent:
   primitives
 - per-agent mailbox intent when a runtime is explicitly mail-enabled
 
-Mail Control API owns only the domain-level service coordination that is
-not a WildDuck mailbox primitive:
+The web server owns customer-domain coordination:
 
 - Cloudflare Email Routing catch-all state for each active domain.
-- Cloudflare Worker binding/config needed by the configured Worker.
+- Cloudflare Worker deployment and binding/config through the connected user's
+  Cloudflare OAuth grant.
+- The MongoDB records that define active domains and runtime projection inputs.
+
+Mail Control API owns only internal runtime coordination that is not a WildDuck
+mailbox primitive:
+
 - Service-owned structural feedback setup required by bounces and provider
   feedback for each active domain. The feedback address is derived by Agent
   Mail; callers do not configure it.
-- Runtime domain registry projection consumed by the Mail Control Service inbound
-  replay, internal SMTP relay, feedback processing, and admin/reporting
-  surfaces.
-- Per-domain mail-from config used by the selected outbound provider when the
-  provider requires it.
+- Runtime domain registry projection consumed by inbound replay, internal SMTP
+  relay, feedback processing, and status surfaces.
+- Per-domain mail-from config supplied by the web-owned runtime projection and
+  used by the selected outbound provider when the provider requires it.
 
 Mail Control API does not own normal mailbox provisioning. The owning
 application or controller uses the WildDuck admin API directly for ordinary
@@ -175,12 +173,12 @@ mailbox-scoped tokens, then records the realized WildDuck IDs and credentials in
 its own state. Agent Mail must not wrap those WildDuck primitives in a parallel
 control API or store their desired state.
 
-The same API surface must expose read-only admin/reporting endpoints for the
-authenticated web server and trusted internal controllers. Reporting
-endpoints show desired state, applied state, realized Cloudflare bindings,
-service-owned feedback setup, active domains, readiness, drift, and last errors.
-They must not require callers to read deployment storage, reconciler Mongo
-state, WildDuck admin metadata, or Cloudflare state directly.
+The same API surface must expose read-only status/reporting endpoints for the
+web server and trusted internal controllers. Reporting endpoints show the current
+runtime projection, service-owned feedback setup, active
+domains, readiness, drift, and local dependency errors. They must not require
+callers to read deployment storage, reconciler Mongo state, WildDuck admin
+metadata, or Cloudflare state directly.
 
 The same Control API surface owns shared message view and security behavior for
 authenticated mailbox access. Web server callers must use the Control API message
@@ -188,7 +186,7 @@ view/security operations for rendering decisions, link warnings, remote image
 blocking, source labeling, and authentication evidence. They must not duplicate
 sanitizer or auth-evidence logic in separate clients.
 
-The desired domain record is intentionally small:
+The synced runtime domain record is intentionally small:
 
 ```json
 {
@@ -205,57 +203,47 @@ When set, it must be the exact domain or a subdomain of that domain, such as
 The MAIL FROM domain does not create a separate active Agent Mail recipient or
 sender domain.
 
-The selected outbound provider is not a domain API field. It is selected by
-`AGENT_MAIL_OUTBOUND_PROVIDER`. The feedback address is not a domain API field.
-Provision apply derives and ensures the required service-owned feedback setup
-for the domain.
+User-domain outbound behavior is not selected by operator environment variables.
+Domain mail behavior is derived from web-owned domain state and the connected
+Cloudflare OAuth grant. The feedback address is not caller-configured;
+mail-control derives and ensures the required service-owned feedback setup for
+each active domain in the runtime projection.
 
-The Mail Control API stores operational apply state, realized
-bindings, leases, errors, and desired/applied hashes in service-owned state. It
-does not make repo-tracked YAML/JSON files or deployment environment variables
-the live source of domain truth.
-
-Service-owned control state is owned by the control service and exposed through
-the Control API. The domain control model does not use repo-edited domain files
-as the live source of truth. The replay/reconciliation queue and retry store is
-the `agent_mail_control` MongoDB database.
+Mail-control stores the runtime projection only in memory. It does not make
+repo-tracked YAML/JSON files or deployment environment variables the live source
+of domain truth. The replay/reconciliation queue and retry store is the
+`agent_mail_control` MongoDB database.
 
 The projected domain registry is the runtime read model. It is generated from
-enabled domain control state and read by the Mail Control Service runtime modules
+web-owned domain state and read by the Mail Control Service runtime modules
 that need domain policy, including the internal SMTP relay, inbound
-replay/reconciliation, feedback processing, and admin/status reporting.
+replay/reconciliation, feedback processing, and status reporting.
 
 The required domain lifecycle is:
 
-1. The owning application or controller records desired company domain state.
-2. The owning application or controller calls domain add, modify, or remove to
-   update Agent Mail's service-owned desired domain state.
-3. The owning application or controller calls `agentMail.provision.apply`.
-4. provision apply diffs desired state against applied state and mutates only
-   changed attributes.
-5. provision apply records applied state and last errors, then updates the
-   runtime domain registry projection.
-6. runtime modules consume the registry and fail closed when a sender or
-   recipient domain is not enabled.
-7. status reports desired state, applied state, drift, readiness, changed
-   steps, and last errors without requiring callers to inspect deployment
-   storage, R2, WildDuck admin metadata, reconciler Mongo state, or Cloudflare
-   directly.
+1. The web server records authenticated domain state in MongoDB.
+2. The web server provisions Cloudflare Worker routing through the connected
+   user's Cloudflare OAuth grant.
+3. The web server sends `agentMail.runtime.sync` with the full current domain
+   projection after startup, provisioning, disconnect, and scheduled repair.
+4. Runtime modules consume the in-memory projection and fail closed when a
+   sender or recipient domain is not active.
+5. Status reports the current runtime projection and local dependency readiness
+   without treating mail-control as the domain policy source of truth.
 
 The runtime domain registry supplies the configured Cloudflare Email Routing
 domains, outbound delivery domains, inbound replay domains, DSN domains, and
 feedback sender/address lists used by the control service. Repo-tracked domain
 lists are test fixtures only. New production domain additions, modifications,
-disables, and removals must flow through Control API state and provision apply.
+disables, and removals must flow through the web server, then into mail-control
+through the authoritative runtime snapshot.
 
 Do not store controller-owned domain desired state in an Agent Mail deployment
-volume. Agent Mail operational state such as realized bindings, idempotency
-hashes, leases, blocked items, retries, and sweep cursors belongs in
-service-owned control state surfaces including the `agent_mail_control` MongoDB
-database. Desired company and runtime mailbox configuration belongs in the
-owning application or controller and, for ordinary mailbox primitives, WildDuck.
-Runtime domain projection belongs in generated deployment state derived by Agent
-Mail from API-applied active-domain state.
+volume. Agent Mail operational state such as idempotency hashes, leases,
+blocked items, retries, and sweep cursors belongs in service-owned operational
+surfaces including the `agent_mail_control` MongoDB database. Desired company
+and runtime mailbox configuration belongs in the web application and, for
+ordinary mailbox primitives, WildDuck.
 
 Every provider-bound outbound submission is bound to the sender domain. The
 internal SMTP relay must resolve the sender domain from the structured
@@ -281,30 +269,32 @@ domains use the same outbound provider account.
 
 ## Cloudflare Boundary
 
-There is one configured Cloudflare Email Worker per deployment. Every Agent Mail
-domain and subdomain must route to that Worker. Cloudflare provisioning is an
-internal step of `agentMail.provision.apply`. The web server or owning
-internal controller updates desired domain state, then calls provision apply
-once. Cloudflare status is reported through `agentMail.status.get`.
+Cloudflare user-domain Worker provisioning is owned by the web server and uses
+the connected user's Cloudflare OAuth grant. Mail-control does not provision or
+status-check Cloudflare routes with admin Cloudflare credentials. Mail-control
+only receives the resulting active runtime domain projection.
 
-The R2 bucket is a pre-existing deployment dependency. Provisioning must bind
-the Worker to the configured bucket name. It must not create, delete, or
-preflight-check the bucket.
+The R2 bucket is a pre-existing deployment dependency. Web-owned Worker
+provisioning binds the Worker to the configured bucket name. It must not
+create, delete, or preflight-check the bucket.
 
-Worker deployment tasks own Worker bundle deployment. Email Routing additions,
-disables, removals, and status checks are coordinated through Control API
-provision apply/status.
+The Cloudflare Email Worker app owns the Worker source and bundle build. The
+web server deploys and binds that Worker for customer domains through the
+connected user's Cloudflare OAuth grant. Email Routing additions, disables,
+removals, and status checks are coordinated by the web server through that
+grant.
 
 The Worker derives archive recipient domains from the envelope recipient. It
 must not bind a single domain or zone name as runtime configuration.
 
 ## Worker Notification Ingest
 
-After the Worker commits `edge.json`, it must attempt one signed HTTPS
-notification to the web server at `/rpc/agent-mail/ingest/v1`. That notification
-carries only bundle metadata, `X-Agent-Mail-Connection-Id`,
-`X-Agent-Mail-Timestamp`, and `X-Agent-Mail-Signature`; it never carries raw
-mail bytes. The web server verifies the deployment-owned Worker HMAC and calls
+After the Worker commits `edge.json`, it must attempt one Standard
+Webhooks-signed HTTPS notification to the web server at
+`/rpc/agent-mail/ingest/v1/{connectionPublicId}`. That notification carries
+only bundle metadata and Standard Webhooks `webhook-id`, `webhook-timestamp`,
+and `webhook-signature` headers; it never carries raw mail bytes. The web
+server verifies the deployment-owned Worker webhook signing secret and calls
 internal `agentMail.ingest.enqueue`. Accepted notifications upsert the committed
 bundle into the same Mongo-backed queue used by the R2 sweep and wake the same
 replay loop that leases due work and replays mail through Haraka.
@@ -314,15 +304,15 @@ failure is logged and not retried by the Worker. Archive success is unchanged
 because the R2 sweep is the authoritative recovery path for missed
 notifications, temporary ingress outages, DNS issues, and web ingest outages.
 
-The Worker ingest public URL is derived from the public web origin. Product
-Cloudflare provisioning binds the Worker to the ingest URL, public connection
-identifier, and deployment-owned Worker HMAC secret. Operator-owned ingress
-must be running and forwarding the Worker ingest route to the web server before
-Worker notification delivery can be considered live.
+The Worker ingest public URL is derived from the public web origin and public
+connection identifier. Product Cloudflare provisioning binds the Worker to the
+ingest URL and deployment-owned Worker webhook signing secret. Operator-owned
+ingress must be running and forwarding the Worker ingest route to the web server
+before Worker notification delivery can be considered live.
 
-The Worker deployment task is the mutating task for Worker deployment and
-Cloudflare setup. Per-domain Email Routing desired state is managed through
-Control API provision apply. The Worker status task is read-only.
+The web server is the mutating boundary for customer-domain Worker deployment
+and Cloudflare Email Routing setup. Worker source/build tasks do not own
+per-domain desired state.
 
 ## Inbound Archive and Reconciliation
 
@@ -334,11 +324,11 @@ The short form is:
 
 1. Worker writes exact `raw.eml`.
 2. Worker writes `edge.json` as the inbound commit marker.
-3. Worker sends one HMAC-signed worker notification through the configured
+3. Worker sends one Standard Webhooks-signed worker notification through the configured
    Worker ingest URL.
-4. The web server accepts signed `POST /rpc/agent-mail/ingest/v1` notifications,
-   resolves the active org/domain Worker deployment, and calls internal
-   `agentMail.ingest.enqueue`.
+4. The web server accepts signed `POST /rpc/agent-mail/ingest/v1/{connectionPublicId}`
+   notifications, resolves the active org/domain Worker deployment, and calls
+   internal `agentMail.ingest.enqueue`.
 5. Mail-control validates the org, archive prefix, domain, and Worker metadata,
    then upserts the bundle into Mongo and wakes the normal due-work processing
    loop.
@@ -351,11 +341,11 @@ The short form is:
    missed by an earlier pass.
 
 Internal SMTP relay local routing may also create target-side inbound records
-under `mail/inbound/<target_domain>/...` with `edge.json`. These records must
-use a local-route edge schema, not the Worker edge schema. The reconciler must
-classify inbound `edge.json` objects by schema and enqueue only Worker-origin
-edges for replay; local-route edges are already-delivered archive/provenance
-records.
+under `orgs/<org_public_id>/domains/<target_domain>/mail/inbound/...` with
+`edge.json`. These records must use a local-route edge schema, not the Worker
+edge schema. The reconciler must classify inbound `edge.json` objects by schema
+and enqueue only Worker-origin edges for replay; local-route edges are
+already-delivered archive/provenance records.
 
 The reconciler's `agent_mail_control` MongoDB database is service-owned
 operational state. It is the durable store for retries, leases, blocked items,
@@ -402,9 +392,10 @@ not a null reverse path. Therefore SES DSN sends use the service-owned
 per-domain feedback mailbox, such as `bounces@<sender-domain>`, as the
 provider-bound `Return-Path` and record
 `provider_reverse_path_mode: "provider_feedback_fallback"`. Cloudflare Email
-Sending also does not expose a provider API field for true `MAIL FROM:<>`; at
-that boundary Agent Mail uses the service-owned per-domain feedback mailbox and
-records `provider_reverse_path_mode: "api_from_fallback"`.
+Sending also does not expose a provider API field for true `MAIL FROM:<>`; the
+relay calls the web server's internal Cloudflare raw-send endpoint, the web
+server sends through the connected user's Cloudflare OAuth grant, and the relay
+records `provider_reverse_path_mode: "cloudflare_send_raw_from"`.
 
 The generated `dsn.eml` must be a complete bounce-style notice: the human
 portion is a multipart alternative text/HTML report, the machine portion carries
@@ -434,6 +425,10 @@ The internal SMTP relay:
 - For provider-bound recipients, builds a sanitized provider-bound payload.
 - For provider-bound recipients, writes provider payload as `provider.eml` for
   SES or `provider.json` for Cloudflare Email Sending.
+- For Cloudflare provider-bound recipients, calls the web server's internal
+  raw-send endpoint with `AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN`; the web
+  server validates the active domain and sends with the connected user's
+  Cloudflare OAuth grant.
 - For all-local active Agent Mail recipients, builds a local delivery payload
   from the relay-received message, stamps internal local-route provenance
   headers, and delivers those exact local-delivery bytes back to
@@ -516,12 +511,12 @@ Any topology is valid only when these contracts hold:
 - multi-domain e2e tests prove that two domains do not share or fall back to the
   wrong provider identity, archive domain, or feedback address.
 
-## Provisioned Service State
+## Runtime Service State
 
-Active domains, Cloudflare routing, per-domain mail-from config, runtime
-registry projection, and the service-owned feedback mailbox/address topology
-must converge through Control API provision apply, repo-owned deployment, or
-explicitly documented deployment-owned components.
+Active domains, Cloudflare routing, and per-domain mail-from config converge in
+web-owned application state and the connected user's Cloudflare account. The
+Mail Control Service receives only the resulting runtime registry projection
+and keeps it in memory.
 
 The feedback mailbox/address is service-owned state because unknown-recipient
 DSNs and provider feedback require a structural sender-domain address such as
@@ -529,11 +524,11 @@ DSNs and provider feedback require a structural sender-domain address such as
 users, aliases, forwarded addresses, filters, or mailbox tokens Mail Control API
 state.
 
-When provision apply enables a domain, it must ensure the structural feedback
-address exists in WildDuck. It may attach that address to a shared
-service-owned feedback mailbox or a per-domain service-owned mailbox, but the
-choice is internal and must be idempotent. Domain remove is a soft disable and
-must not delete mailbox data.
+When a domain appears in the active runtime projection, mail-control ensures the
+structural feedback address exists in WildDuck. It may attach that address to a
+shared service-owned feedback mailbox or a per-domain service-owned mailbox,
+but the choice is internal and must be idempotent. Removing a domain from the
+projection disables runtime routing and must not delete mailbox data.
 
 The feedback mailbox credential is also service-owned operational state for the
 control service feedback workflow to read that mailbox. It is the only mailbox

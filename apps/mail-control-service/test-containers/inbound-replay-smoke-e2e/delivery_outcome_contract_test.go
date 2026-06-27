@@ -2,13 +2,14 @@ package smoke
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"net/textproto"
 	"net/url"
 	"strings"
 	"sync"
@@ -18,6 +19,9 @@ import (
 	"agent-mail/internal/archive/r2archive"
 	"agent-mail/internal/modules/poller"
 
+	"github.com/emersion/go-message"
+	messagetextproto "github.com/emersion/go-message/textproto"
+	gosmtp "github.com/emersion/go-smtp"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
@@ -69,14 +73,23 @@ func TestInboundReplayDeliveryOutcomeContracts(t *testing.T) {
 		}
 
 		dsnRaw := scenario.objectBytes(t, bundle.Bundle.DSNKey)
-		for _, want := range []string{
-			"Content-Type: multipart/report",
-			"Final-Recipient: rfc822; " + scenario.mailbox,
-			"Diagnostic-Code: smtp; 550 5.1.1 No such user",
-		} {
-			if !strings.Contains(string(dsnRaw), want) {
-				t.Fatalf("dsn raw missing %q:\n%s", want, string(dsnRaw))
-			}
+		dsnEntity, err := message.Read(bytes.NewReader(dsnRaw))
+		if err != nil {
+			t.Fatalf("parse dsn raw: %v\n%s", err, string(dsnRaw))
+		}
+		contentType, params, err := dsnEntity.Header.ContentType()
+		if err != nil {
+			t.Fatalf("parse dsn Content-Type: %v\n%s", err, string(dsnRaw))
+		}
+		if contentType != "multipart/report" || params["report-type"] != "delivery-status" {
+			t.Fatalf("dsn Content-Type = %q params %#v, want multipart/report delivery-status", contentType, params)
+		}
+		statusHeader := dsnDeliveryStatusRecipientHeader(t, dsnEntity)
+		if got := statusHeader.Get("Final-Recipient"); got != "rfc822; "+scenario.mailbox {
+			t.Fatalf("dsn Final-Recipient = %q, want rfc822; %s", got, scenario.mailbox)
+		}
+		if got := statusHeader.Get("Diagnostic-Code"); got != "smtp; 550 5.1.1 No such user" {
+			t.Fatalf("dsn Diagnostic-Code = %q, want smtp; 550 5.1.1 No such user", got)
 		}
 		if !messageHasHeader(dsnRaw, "X-Agent-Mail-DSN-Source-Ingest-ID", bundle.IngestID) {
 			t.Fatalf("dsn raw missing source ingest id header %q:\n%s", bundle.IngestID, string(dsnRaw))
@@ -245,7 +258,7 @@ func newInboundOutcomeScenario(t *testing.T, suite *sweepContractSuite, name str
 		}
 	}
 	wildduckAccessToken := randomSmokeToken(t, "wildduck")
-	t.Setenv("AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN", wildduckAccessToken)
+	t.Setenv("AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN", wildduckAccessToken)
 	wdServer := newInboundOutcomeWildDuckServer(t, wildduckAccessToken, wildduck)
 	t.Cleanup(wdServer.Close)
 
@@ -516,9 +529,46 @@ func newInboundOutcomeWildDuckServer(t *testing.T, expectedAccessToken string, d
 	}))
 }
 
+func dsnDeliveryStatusRecipientHeader(t *testing.T, entity *message.Entity) messagetextproto.Header {
+	t.Helper()
+
+	multipartReader := entity.MultipartReader()
+	if multipartReader == nil {
+		t.Fatal("dsn raw is not multipart")
+	}
+	for {
+		part, err := multipartReader.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("read dsn multipart part: %v", err)
+		}
+		partType, _, err := part.Header.ContentType()
+		if err != nil {
+			t.Fatalf("parse dsn part Content-Type: %v", err)
+		}
+		if partType != "message/delivery-status" {
+			continue
+		}
+		reader := bufio.NewReader(part.Body)
+		if _, err := messagetextproto.ReadHeader(reader); err != nil {
+			t.Fatalf("parse dsn per-message status fields: %v", err)
+		}
+		recipientHeader, err := messagetextproto.ReadHeader(reader)
+		if err != nil {
+			t.Fatalf("parse dsn per-recipient status fields: %v", err)
+		}
+		return recipientHeader
+	}
+	t.Fatal("dsn raw missing message/delivery-status part")
+	return messagetextproto.Header{}
+}
+
 type recordingSMTPServer struct {
 	t          *testing.T
 	listener   net.Listener
+	smtp       *gosmtp.Server
 	mu         sync.Mutex
 	deliveries []smokeSMTPDelivery
 	done       chan struct{}
@@ -535,6 +585,11 @@ func newRecordingSMTPServer(t *testing.T) *recordingSMTPServer {
 		listener: listener,
 		done:     make(chan struct{}),
 	}
+	smtpServer := gosmtp.NewServer(smokeSMTPBackend{recorder: server})
+	smtpServer.Domain = "recording-smtp.test"
+	smtpServer.ReadTimeout = 10 * time.Second
+	smtpServer.WriteTimeout = 10 * time.Second
+	server.smtp = smtpServer
 	go server.serve()
 	return server
 }
@@ -544,7 +599,7 @@ func (s *recordingSMTPServer) Addr() string {
 }
 
 func (s *recordingSMTPServer) Close() {
-	_ = s.listener.Close()
+	_ = s.smtp.Close()
 	<-s.done
 }
 
@@ -558,67 +613,18 @@ func (s *recordingSMTPServer) Deliveries() []smokeSMTPDelivery {
 
 func (s *recordingSMTPServer) serve() {
 	defer close(s.done)
-	for {
-		conn, err := s.listener.Accept()
-		if err != nil {
-			return
-		}
-		go s.handleConn(conn)
+	if err := s.smtp.Serve(s.listener); err != nil && err != gosmtp.ErrServerClosed {
+		s.t.Errorf("recording SMTP stopped with error: %v", err)
 	}
 }
 
-func (s *recordingSMTPServer) handleConn(conn net.Conn) {
-	defer conn.Close()
-	reader := textproto.NewReader(bufio.NewReader(conn))
-	bufferedWriter := bufio.NewWriter(conn)
-	writer := textproto.NewWriter(bufferedWriter)
-	send := func(format string, args ...any) {
-		_ = writer.PrintfLine(format, args...)
-		_ = bufferedWriter.Flush()
-	}
-	send("220 recording smtp ready")
-
-	var mailFrom string
-	var rcptTo []string
-	for {
-		line, err := reader.ReadLine()
-		if err != nil {
-			return
-		}
-		upper := strings.ToUpper(line)
-		switch {
-		case strings.HasPrefix(upper, "HELO ") || strings.HasPrefix(upper, "EHLO "):
-			send("250 recording smtp")
-		case strings.HasPrefix(upper, "MAIL FROM:"):
-			mailFrom = cleanSMTPPath(line[len("MAIL FROM:"):])
-			send("250 ok")
-		case strings.HasPrefix(upper, "RCPT TO:"):
-			rcptTo = append(rcptTo, cleanSMTPPath(line[len("RCPT TO:"):]))
-			send("250 ok")
-		case upper == "DATA":
-			send("354 end with dot")
-			raw, err := readSMTPData(reader)
-			if err != nil {
-				send("451 read failed")
-				return
-			}
-			s.mu.Lock()
-			s.deliveries = append(s.deliveries, smokeSMTPDelivery{
-				MailFrom:   mailFrom,
-				RcptTo:     append([]string(nil), rcptTo...),
-				RawMessage: append([]byte(nil), raw...),
-			})
-			s.mu.Unlock()
-			send("250 queued")
-		case upper == "QUIT":
-			send("221 bye")
-			return
-		case upper == "RSET":
-			mailFrom = ""
-			rcptTo = nil
-			send("250 reset")
-		default:
-			send("250 ok")
-		}
-	}
+func (s *recordingSMTPServer) recordDelivery(_ context.Context, mailFrom string, rcptTo []string, raw []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.deliveries = append(s.deliveries, smokeSMTPDelivery{
+		MailFrom:   mailFrom,
+		RcptTo:     append([]string(nil), rcptTo...),
+		RawMessage: append([]byte(nil), raw...),
+	})
+	return nil
 }
