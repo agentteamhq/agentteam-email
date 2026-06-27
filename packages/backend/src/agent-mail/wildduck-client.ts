@@ -351,7 +351,7 @@ export class WildDuckClient {
   resolveAddress(address: string): Promise<WildDuckAddressResolution> {
     return this.requestJSON(
       'GET',
-      `/addresses/resolve/${encodeURIComponent(address)}`,
+      wildDuckPath('addresses', 'resolve', address),
       {},
       wildDuckAddressResolutionSchema
     )
@@ -376,13 +376,13 @@ export class WildDuckClient {
   }
 
   getUser(userId: string): Promise<WildDuckUser> {
-    return this.requestJSON('GET', `/users/${encodeURIComponent(userId)}`, {}, wildDuckUserSchema)
+    return this.requestJSON('GET', wildDuckPath('users', userId), {}, wildDuckUserSchema)
   }
 
   updateUser(userId: string, input: WildDuckUpdateUserInput): Promise<WildDuckSuccessResponse> {
     return this.requestJSON(
       'PUT',
-      `/users/${encodeURIComponent(userId)}`,
+      wildDuckPath('users', userId),
       {
         body: {
           ...(input.disabled !== undefined ? { disabled: input.disabled } : {}),
@@ -394,12 +394,7 @@ export class WildDuckClient {
   }
 
   deleteUser(userId: string): Promise<WildDuckDeleteUserResponse> {
-    return this.requestJSON(
-      'DELETE',
-      `/users/${encodeURIComponent(userId)}`,
-      {},
-      wildDuckDeleteUserResponseSchema
-    )
+    return this.requestJSON('DELETE', wildDuckPath('users', userId), {}, wildDuckDeleteUserResponseSchema)
   }
 
   createForwardedAddress(input: WildDuckForwardedAddressInput): Promise<WildDuckSuccessResponse> {
@@ -412,7 +407,7 @@ export class WildDuckClient {
   ): Promise<WildDuckSuccessResponse> {
     return this.requestJSON(
       'PUT',
-      `/addresses/forwarded/${encodeURIComponent(addressId)}`,
+      wildDuckPath('addresses', 'forwarded', addressId),
       { body: input },
       wildDuckSuccessResponseSchema
     )
@@ -421,7 +416,7 @@ export class WildDuckClient {
   deleteForwardedAddress(addressId: string): Promise<WildDuckSuccessResponse> {
     return this.requestJSON(
       'DELETE',
-      `/addresses/forwarded/${encodeURIComponent(addressId)}`,
+      wildDuckPath('addresses', 'forwarded', addressId),
       {},
       wildDuckSuccessResponseSchema
     )
@@ -430,7 +425,7 @@ export class WildDuckClient {
   listMailboxes(userId: string): Promise<WildDuckListResponse<WildDuckMailbox>> {
     return this.requestJSON(
       'GET',
-      `/users/${encodeURIComponent(userId)}/mailboxes`,
+      wildDuckPath('users', userId, 'mailboxes'),
       {
         searchParams: {
           counters: 'true',
@@ -448,7 +443,7 @@ export class WildDuckClient {
   ): Promise<WildDuckListResponse<WildDuckMessage>> {
     return this.requestJSON(
       'GET',
-      `/users/${encodeURIComponent(userId)}/mailboxes/${encodeURIComponent(mailboxId)}/messages`,
+      wildDuckPath('users', userId, 'mailboxes', mailboxId, 'messages'),
       {
         searchParams: {
           limit: String(options.limit ?? 25),
@@ -469,7 +464,7 @@ export class WildDuckClient {
   ): Promise<WildDuckListResponse<WildDuckMessage>> {
     return this.requestJSON(
       'GET',
-      `/users/${encodeURIComponent(userId)}/search`,
+      wildDuckPath('users', userId, 'search'),
       {
         searchParams: {
           limit: String(options.limit ?? 25),
@@ -491,7 +486,7 @@ export class WildDuckClient {
   ): Promise<WildDuckMessage> {
     return this.requestJSON(
       'GET',
-      `/users/${encodeURIComponent(userId)}/mailboxes/${encodeURIComponent(mailboxId)}/messages/${encodeURIComponent(messageId)}`,
+      wildDuckPath('users', userId, 'mailboxes', mailboxId, 'messages', messageId),
       {
         searchParams: {
           markAsSeen: markAsSeen ? 'true' : undefined
@@ -509,7 +504,7 @@ export class WildDuckClient {
   ): Promise<WildDuckUpdateMessageResponse> {
     return this.requestJSON(
       'PUT',
-      `/users/${encodeURIComponent(userId)}/mailboxes/${encodeURIComponent(mailboxId)}/messages/${encodeURIComponent(messageId)}`,
+      wildDuckPath('users', userId, 'mailboxes', mailboxId, 'messages', messageId),
       {
         body: input
       },
@@ -520,7 +515,7 @@ export class WildDuckClient {
   deleteMessage(userId: string, mailboxId: string, messageId: string): Promise<Record<string, unknown>> {
     return this.requestJSON(
       'DELETE',
-      `/users/${encodeURIComponent(userId)}/mailboxes/${encodeURIComponent(mailboxId)}/messages/${encodeURIComponent(messageId)}`,
+      wildDuckPath('users', userId, 'mailboxes', mailboxId, 'messages', messageId),
       {},
       wildDuckRecordSchema
     )
@@ -529,7 +524,7 @@ export class WildDuckClient {
   submitMessage(userId: string, input: WildDuckSubmitMessageInput): Promise<Record<string, unknown>> {
     return this.requestJSON(
       'POST',
-      `/users/${encodeURIComponent(userId)}/submit`,
+      wildDuckPath('users', userId, 'submit'),
       {
         body: toWildDuckSubmitPayload(input)
       },
@@ -552,7 +547,7 @@ export class WildDuckClient {
   }> {
     return this.requestJSON(
       'POST',
-      `/users/${encodeURIComponent(userId)}/mailboxes/${encodeURIComponent(mailboxId)}/messages`,
+      wildDuckPath('users', userId, 'mailboxes', mailboxId, 'messages'),
       {
         body: toWildDuckUploadPayload(input)
       },
@@ -563,7 +558,7 @@ export class WildDuckClient {
   submitDraft(userId: string, mailboxId: string, messageId: string): Promise<Record<string, unknown>> {
     return this.requestJSON(
       'POST',
-      `/users/${encodeURIComponent(userId)}/mailboxes/${encodeURIComponent(mailboxId)}/messages/${encodeURIComponent(messageId)}/submit`,
+      wildDuckPath('users', userId, 'mailboxes', mailboxId, 'messages', messageId, 'submit'),
       {},
       wildDuckRecordSchema
     )
@@ -580,7 +575,7 @@ export class WildDuckClient {
   }> {
     return this.requestJSON(
       'POST',
-      `/users/${encodeURIComponent(userId)}/mailboxes`,
+      wildDuckPath('users', userId, 'mailboxes'),
       {
         body: { path }
       },
@@ -595,7 +590,7 @@ export class WildDuckClient {
   ): Promise<Record<string, unknown>> {
     return this.requestJSON(
       'PUT',
-      `/users/${encodeURIComponent(userId)}/mailboxes/${encodeURIComponent(mailboxId)}`,
+      wildDuckPath('users', userId, 'mailboxes', mailboxId),
       {
         body: input
       },
@@ -606,7 +601,7 @@ export class WildDuckClient {
   deleteMailbox(userId: string, mailboxId: string): Promise<Record<string, unknown>> {
     return this.requestJSON(
       'DELETE',
-      `/users/${encodeURIComponent(userId)}/mailboxes/${encodeURIComponent(mailboxId)}`,
+      wildDuckPath('users', userId, 'mailboxes', mailboxId),
       {},
       wildDuckRecordSchema
     )
@@ -620,14 +615,23 @@ export class WildDuckClient {
   ): Promise<Response> {
     return this.requestResponse(
       'GET',
-      `/users/${encodeURIComponent(userId)}/mailboxes/${encodeURIComponent(mailboxId)}/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`
+      wildDuckPath(
+        'users',
+        userId,
+        'mailboxes',
+        mailboxId,
+        'messages',
+        messageId,
+        'attachments',
+        attachmentId
+      )
     )
   }
 
   fetchMessageSource(userId: string, mailboxId: string, messageId: string): Promise<Response> {
     return this.requestResponse(
       'GET',
-      `/users/${encodeURIComponent(userId)}/mailboxes/${encodeURIComponent(mailboxId)}/messages/${encodeURIComponent(messageId)}/message.eml`,
+      wildDuckPath('users', userId, 'mailboxes', mailboxId, 'messages', messageId, 'message.eml'),
       {
         accept: 'message/rfc822'
       }
@@ -693,8 +697,8 @@ export class WildDuckClient {
 }
 
 export function createWildDuckClient(fetchImplementation?: typeof fetch): WildDuckClient {
-  const baseURL = PRIVATE_VARS.AGENT_MAIL_WILDDUCK_API_BASE_URL
-  const accessToken = PRIVATE_VARS.AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN
+  const baseURL = PRIVATE_VARS.AT_EMAIL_ADMIN_WILDDUCK_API_BASE_URL
+  const accessToken = PRIVATE_VARS.AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN
 
   if (!baseURL) {
     throw new Error('Agent Mail WildDuck API base URL is not configured')
@@ -704,6 +708,12 @@ export function createWildDuckClient(fetchImplementation?: typeof fetch): WildDu
   }
 
   return new WildDuckClient(new URL(baseURL), accessToken, fetchImplementation)
+}
+
+function wildDuckPath(...segments: string[]) {
+  const pathURL = new URL('https://wildduck.invalid/')
+  pathURL.pathname = segments.map((segment) => encodeURIComponent(segment)).join('/')
+  return pathURL.pathname
 }
 
 function toWildDuckSubmitPayload(

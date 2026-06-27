@@ -238,7 +238,7 @@ type AgentMailAdminOAuthClientRecord = Pick<
   'clientId' | 'createdAt' | 'disabled' | 'name' | 'referenceId' | 'updatedAt' | 'userId'
 >
 
-const AGENT_MAIL_ADMIN_API_KEY_PROJECTION = {
+const AT_EMAIL_ADMIN_ADMIN_API_KEY_PROJECTION = {
   _id: 1,
   configId: 1,
   createdAt: 1,
@@ -250,7 +250,7 @@ const AGENT_MAIL_ADMIN_API_KEY_PROJECTION = {
   updatedAt: 1
 } as const satisfies Record<keyof AgentMailAdminApiKeyRecord, 1>
 
-const AGENT_MAIL_ADMIN_OAUTH_CLIENT_PROJECTION = {
+const AT_EMAIL_ADMIN_ADMIN_OAUTH_CLIENT_PROJECTION = {
   clientId: 1,
   createdAt: 1,
   disabled: 1,
@@ -2039,7 +2039,7 @@ async function requireGrantPrincipalForOrganization({
 }): Promise<AgentMailAdminResolvedGrantPrincipalTarget> {
   if (target.principalType === 'api_key') {
     const apiKeyId = parseApiKeyPublicId(target.principalId)
-    const apiKey = await db.models.apikey.findById(apiKeyId, AGENT_MAIL_ADMIN_API_KEY_PROJECTION).exec()
+    const apiKey = await db.models.apikey.findById(apiKeyId, AT_EMAIL_ADMIN_ADMIN_API_KEY_PROJECTION).exec()
     if (!apiKey || !apiKey.enabled || (apiKey.expiresAt instanceof Date && apiKey.expiresAt <= new Date())) {
       throw new AgentMailAdminError('Grant principal was not found', 404)
     }
@@ -2064,7 +2064,7 @@ async function requireGrantPrincipalForOrganization({
   }
 
   const oauthClient = await db.models.oauthClient
-    .findOne({ clientId: target.principalId }, AGENT_MAIL_ADMIN_OAUTH_CLIENT_PROJECTION)
+    .findOne({ clientId: target.principalId }, AT_EMAIL_ADMIN_ADMIN_OAUTH_CLIENT_PROJECTION)
     .exec()
   if (!oauthClient || oauthClient.disabled) {
     throw new AgentMailAdminError('Grant principal was not found', 404)
@@ -2607,8 +2607,8 @@ async function listAdminExternalPrincipals({
     ])
   }
   const [apiKeys, oauthClients] = await Promise.all([
-    db.models.apikey.find(apiKeyQuery, AGENT_MAIL_ADMIN_API_KEY_PROJECTION).exec(),
-    db.models.oauthClient.find(oauthClientQuery, AGENT_MAIL_ADMIN_OAUTH_CLIENT_PROJECTION).exec()
+    db.models.apikey.find(apiKeyQuery, AT_EMAIL_ADMIN_ADMIN_API_KEY_PROJECTION).exec(),
+    db.models.oauthClient.find(oauthClientQuery, AT_EMAIL_ADMIN_ADMIN_OAUTH_CLIENT_PROJECTION).exec()
   ])
 
   return [

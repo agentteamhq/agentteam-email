@@ -1,8 +1,10 @@
+import { Buffer } from 'node:buffer'
 import { createHash, randomUUID } from 'node:crypto'
 import { oauthProviderResourceClient } from '@better-auth/oauth-provider/resource-client'
 import { AgentMailCapability } from '@main/db'
 import { decodeJwt, decodeProtectedHeader, importJWK, jwtVerify } from 'jose'
 import { UUID } from 'mongodb'
+import { createTransport } from 'nodemailer'
 
 import { apiKeyConfigurations } from '../auth/api-key-config'
 import {
@@ -37,10 +39,17 @@ import type {
   OrganizationId,
   UserId
 } from '@main/db'
+
 import type { GlobalAuth } from '../auth/auth'
 import type { Auth } from 'better-auth/types'
 import type { JWK, JWTPayload } from 'jose'
 import type { QueryFilter } from 'mongoose'
+
+const rawMessageTransport = createTransport({
+  buffer: true,
+  newline: 'windows',
+  streamTransport: true
+})
 
 export class AgentMailAccessError extends Error {
   constructor(
@@ -90,15 +99,13 @@ const AGENT_AUTH_JWT_MAX_AGE_SECONDS = 60
 const AGENT_AUTH_JWT_CLOCK_TOLERANCE_SECONDS = 30
 const TRIAL_DAILY_SEND_WINDOW_MS = 24 * 60 * 60 * 1000
 const PAPERCLIP_CONTEXT_VALUE_PATTERN = /^[A-Za-z0-9._:-]{1,256}$/u
-const AGENT_MAIL_PAPERCLIP_OPERATIONS = new Set<string>(AgentMailPaperclipOperationValues)
+const AT_EMAIL_ADMIN_PAPERCLIP_OPERATIONS = new Set<string>(AgentMailPaperclipOperationValues)
 
 export interface AgentMailPublicStatus {
   controlState?: {
-    configured?: boolean
     domainsActive?: number
     domainsDisabled?: number
     domainsTotal?: number
-    exists?: boolean
     issues: string[]
     ok?: boolean
     schema?: string
@@ -117,8 +124,6 @@ export interface AgentMailPublicStatus {
       catchAllConfigured?: boolean
       catchAllEnabled?: boolean
       issues: string[]
-      lastProvisionAt?: string
-      lastProvisionStatus?: string
       ok?: boolean
     }
     domain: string
@@ -162,14 +167,6 @@ export interface AgentMailPublicStatus {
     }
   >
   ok?: boolean
-  provisioning?: {
-    domainsApplied?: number
-    domainsFailed?: number
-    domainsPending?: number
-    issues: string[]
-    lastApplyAt?: string
-    status?: string
-  }
   selectedProvider?: string
   status: string
 }
@@ -198,7 +195,6 @@ function toAgentMailPublicStatus(value: unknown): AgentMailPublicStatus {
     issues: stringArrayValue(snapshot.issues),
     modules: publicModuleStatuses(snapshot.modules),
     ok: booleanValue(snapshot.ok),
-    provisioning: publicProvisioningStatus(snapshot.provisioning),
     selectedProvider: stringValue(snapshot.selected_provider),
     status: stringValue(snapshot.status) ?? 'unknown'
   }
@@ -210,11 +206,9 @@ function publicControlStateStatus(value: unknown): AgentMailPublicStatus['contro
   }
 
   return compactObject({
-    configured: booleanValue(value.configured),
     domainsActive: numberValue(value.domains_active),
     domainsDisabled: numberValue(value.domains_disabled),
     domainsTotal: numberValue(value.domains_total),
-    exists: booleanValue(value.exists),
     issues: stringArrayValue(value.issues),
     ok: booleanValue(value.ok),
     schema: stringValue(value.schema),
@@ -282,21 +276,6 @@ function publicDependencyStatuses(value: unknown): AgentMailPublicStatus['depend
   return dependencies
 }
 
-function publicProvisioningStatus(value: unknown): AgentMailPublicStatus['provisioning'] {
-  if (!isRecord(value)) {
-    return undefined
-  }
-
-  return compactObject({
-    domainsApplied: numberValue(value.domains_applied),
-    domainsFailed: numberValue(value.domains_failed),
-    domainsPending: numberValue(value.domains_pending),
-    issues: stringArrayValue(value.issues),
-    lastApplyAt: dateStringValue(value.last_apply_at),
-    status: stringValue(value.status)
-  })
-}
-
 function publicDomainStatuses(value: unknown): AgentMailPublicStatus['domains'] {
   if (!Array.isArray(value)) {
     return []
@@ -334,8 +313,6 @@ function publicCloudflareStatus(value: unknown): AgentMailPublicStatus['domains'
     catchAllConfigured: booleanValue(value.catch_all_configured),
     catchAllEnabled: booleanValue(value.catch_all_enabled),
     issues: stringArrayValue(value.issues),
-    lastProvisionAt: dateStringValue(value.last_provision_at),
-    lastProvisionStatus: stringValue(value.last_provision_status),
     ok: booleanValue(value.ok)
   })
 }
@@ -519,7 +496,7 @@ export async function submitAgentMailOutboundFromWeb({
     domain: senderDomain,
     from,
     to: recipients[0],
-    raw: buildSimpleTextMessage({
+    raw: await buildSimpleTextMessage({
       from,
       subject: input.subject,
       text: input.text,
@@ -1309,7 +1286,7 @@ function parseAgentMailPaperclipContext(headers: Headers): AgentMailPaperclipCon
 }
 
 function isAgentMailPaperclipOperation(value: string | null): value is AgentMailPaperclipOperation {
-  return value !== null && AGENT_MAIL_PAPERCLIP_OPERATIONS.has(value)
+  return value !== null && AT_EMAIL_ADMIN_PAPERCLIP_OPERATIONS.has(value)
 }
 
 function paperclipContextHeaderValue(headers: Headers, name: string): string | null {
@@ -1480,7 +1457,7 @@ function agentCapabilityNamesForOrganization(
   return [...capabilities].sort()
 }
 
-function buildSimpleTextMessage({
+async function buildSimpleTextMessage({
   from,
   subject,
   text,
@@ -1490,18 +1467,20 @@ function buildSimpleTextMessage({
   subject: string
   text: string
   to: string
-}): string {
-  return [
-    `From: ${from}`,
-    `To: ${to}`,
-    `Subject: ${sanitizeHeaderValue(subject, 'subject')}`,
-    `Message-ID: <${randomUUID()}@agentteam.email>`,
-    'MIME-Version: 1.0',
-    'Content-Type: text/plain; charset=utf-8',
-    'Content-Transfer-Encoding: 8bit',
-    '',
-    normalizeTextBody(text)
-  ].join('\r\n')
+}): Promise<string> {
+  const info = await rawMessageTransport.sendMail({
+    disableFileAccess: true,
+    disableUrlAccess: true,
+    from,
+    newline: 'windows',
+    subject: sanitizeHeaderValue(subject, 'subject'),
+    text: normalizeTextBody(text),
+    to
+  })
+  if (!Buffer.isBuffer(info.message)) {
+    throw new Error('Nodemailer stream transport did not return a message buffer')
+  }
+  return info.message.toString('utf8')
 }
 
 function normalizeMailbox(value: string, label: string): string {

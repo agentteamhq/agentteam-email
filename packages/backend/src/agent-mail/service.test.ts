@@ -6,9 +6,11 @@ const serviceTestState = vi.hoisted(() => ({
   authGetAgentSession: vi.fn(),
   authGetSession: vi.fn(),
   authVerifyApiKey: vi.fn(),
+  cloudflareConnectionFindOne: vi.fn(),
   getAgentMailControlStatus: vi.fn(),
   memberFindOne: vi.fn(),
-  oauthVerifyAccessToken: vi.fn()
+  oauthVerifyAccessToken: vi.fn(),
+  submitAgentMailSend: vi.fn()
 }))
 
 vi.mock('../globals', () => ({
@@ -23,6 +25,9 @@ vi.mock('../globals', () => ({
       },
       db: {
         models: {
+          cloudflareConnection: {
+            findOne: serviceTestState.cloudflareConnectionFindOne
+          },
           agentMailMailboxGrant: {
             find: serviceTestState.agentMailMailboxGrantFind
           },
@@ -47,7 +52,7 @@ vi.mock('@better-auth/oauth-provider/resource-client', () => ({
 
 vi.mock('./control-client', () => ({
   getAgentMailControlStatus: serviceTestState.getAgentMailControlStatus,
-  submitAgentMailSend: vi.fn()
+  submitAgentMailSend: serviceTestState.submitAgentMailSend
 }))
 
 describe('Agent Mail service status boundary', () => {
@@ -61,9 +66,11 @@ describe('Agent Mail service status boundary', () => {
     serviceTestState.authGetAgentSession.mockReset()
     serviceTestState.authGetSession.mockReset()
     serviceTestState.authVerifyApiKey.mockReset()
+    serviceTestState.cloudflareConnectionFindOne.mockReset()
     serviceTestState.getAgentMailControlStatus.mockReset()
     serviceTestState.memberFindOne.mockReset()
     serviceTestState.oauthVerifyAccessToken.mockReset()
+    serviceTestState.submitAgentMailSend.mockReset()
 
     serviceTestState.authGetAgentSession.mockResolvedValue(null)
     serviceTestState.authGetSession.mockResolvedValue({
@@ -80,6 +87,7 @@ describe('Agent Mail service status boundary', () => {
     })
     serviceTestState.agentMailMailboxGrantFind.mockReturnValue({ exec: () => Promise.resolve([]) })
     serviceTestState.agentMailSystemGrantFind.mockReturnValue({ exec: () => Promise.resolve([]) })
+    serviceTestState.cloudflareConnectionFindOne.mockReturnValue({ exec: () => Promise.resolve(null) })
   })
 
   it('returns an allowlisted status projection without internal control payload fields', async () => {
@@ -95,13 +103,6 @@ describe('Agent Mail service status boundary', () => {
         provider_relay_config: '/private/provider-relay.yaml'
       },
       control_state: {
-        backend: 'kubernetes',
-        namespace: 'private-namespace',
-        configmap: 'private-configmap',
-        key: 'private-key',
-        resource_version: 'internal-resource-version',
-        exists: true,
-        configured: true,
         schema: 'agent-mail.control-state.v1',
         updated_at: '2026-06-23T11:59:00Z',
         domains_total: 2,
@@ -142,15 +143,6 @@ describe('Agent Mail service status boundary', () => {
           issues: ['mongodb://dependency_secret_004@mongo.internal/state']
         }
       },
-      provisioning: {
-        status: 'failed',
-        last_apply_at: '2026-06-23T11:00:00Z',
-        last_error: 'raw provider error with token',
-        domains_applied: 1,
-        domains_pending: 0,
-        domains_failed: 1,
-        issues: ['provisioning failed', 'archive_key result_secret_005 failed']
-      },
       domains: [
         {
           domain: 'example.test',
@@ -190,9 +182,6 @@ describe('Agent Mail service status boundary', () => {
             catch_all_enabled: false,
             catch_all_configured: false,
             regular_rules: [{ id: 'private-regular-rule-id', name: 'private rule', enabled: true }],
-            last_provision_status: 'failed',
-            last_provision_at: '2026-06-23T10:00:00Z',
-            last_provision_error: 'raw cloudflare error with token',
             issues: ['catch-all disabled', 'zone_id private-zone-id rule_id private-rule-id']
           }
         }
@@ -205,11 +194,9 @@ describe('Agent Mail service status boundary', () => {
 
     expect(status).toMatchObject({
       controlState: {
-        configured: true,
         domainsActive: 1,
         domainsDisabled: 1,
         domainsTotal: 2,
-        exists: true,
         issues: ['Runtime issue detected. Check server logs for details.'],
         ok: true,
         schema: 'agent-mail.control-state.v1'
@@ -227,7 +214,6 @@ describe('Agent Mail service status boundary', () => {
             catchAllConfigured: false,
             catchAllEnabled: false,
             issues: ['catch-all disabled', 'Runtime issue detected. Check server logs for details.'],
-            lastProvisionStatus: 'failed',
             ok: false
           },
           domain: 'example.test',
@@ -250,26 +236,15 @@ describe('Agent Mail service status boundary', () => {
         }
       },
       ok: false,
-      provisioning: {
-        domainsApplied: 1,
-        domainsFailed: 1,
-        domainsPending: 0,
-        issues: ['provisioning failed', 'Runtime issue detected. Check server logs for details.'],
-        status: 'failed'
-      },
       selectedProvider: 'cloudflare',
       status: 'degraded'
     })
     expect(serialized).not.toContain('source_files')
     expect(serialized).not.toContain('/private/poller.yaml')
-    expect(serialized).not.toContain('private-namespace')
-    expect(serialized).not.toContain('private-configmap')
-    expect(serialized).not.toContain('internal-resource-version')
     expect(serialized).not.toContain('secret-state-uri')
     expect(serialized).not.toContain('private-state-db')
     expect(serialized).not.toContain('https://api.cloudflare.com/client/v4')
     expect(serialized).not.toContain('private-bucket')
-    expect(serialized).not.toContain('raw provider error with token')
     expect(serialized).not.toContain('private-zone-id')
     expect(serialized).not.toContain('private-rule-id')
     expect(serialized).not.toContain('private-wildduck-user')
@@ -351,5 +326,47 @@ describe('Agent Mail service status boundary', () => {
       status: 'ok'
     })
     expect(serviceTestState.getAgentMailControlStatus).toHaveBeenCalledTimes(1)
+  })
+
+  it('submits outbound mail with a Nodemailer-generated RFC822 message', async () => {
+    expect.hasAssertions()
+    serviceTestState.cloudflareConnectionFindOne.mockReturnValue({
+      exec: () => Promise.resolve({ domain: 'example.test', status: 'active' })
+    })
+    serviceTestState.submitAgentMailSend.mockResolvedValue({
+      idempotency_key: 'queued-key',
+      status: 'submitted'
+    })
+
+    const { submitAgentMailOutboundFromWeb } = await import('./service')
+    await expect(
+      submitAgentMailOutboundFromWeb({
+        headers: new Headers(),
+        input: {
+          from: 'Support@Example.Test',
+          subject: 'Hello ✓',
+          text: 'Body ✓',
+          to: ['Recipient@Example.Net']
+        }
+      })
+    ).resolves.toStrictEqual({
+      idempotency_key: 'queued-key',
+      status: 'submitted'
+    })
+
+    expect(serviceTestState.submitAgentMailSend).toHaveBeenCalledOnce()
+    const request = serviceTestState.submitAgentMailSend.mock.calls[0]?.[0]
+    expect(request).toMatchObject({
+      domain: 'example.test',
+      from: 'support@example.test',
+      to: 'recipient@example.net'
+    })
+    expect(request.raw).toContain('From: support@example.test\r\n')
+    expect(request.raw).toContain('To: recipient@example.net\r\n')
+    expect(request.raw).toContain('Subject: =?UTF-8?')
+    expect(request.raw).toContain('Message-ID: <')
+    expect(request.raw).toContain('MIME-Version: 1.0\r\n')
+    expect(request.raw).toContain('Content-Type: text/plain; charset=utf-8\r\n')
+    expect(request.raw).toContain('Body =E2=9C=93')
   })
 })

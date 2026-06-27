@@ -164,7 +164,7 @@ async function callControlRPC<TResult>(
   params: unknown,
   parseResult: (value: unknown) => TResult | undefined
 ): Promise<TResult> {
-  const { baseUrl, token } = requireControlAPIConfig()
+  const { baseUrl } = requireControlAPIConfig()
   const id = crypto.randomUUID()
   const response = await fetch(new URL(`/rpc/${method}`, baseUrl), {
     body: JSON.stringify({
@@ -174,8 +174,7 @@ async function callControlRPC<TResult>(
       params
     }),
     headers: {
-      'content-type': 'application/json',
-      'x-agent-mail-control-token': token
+      'content-type': 'application/json'
     },
     method: 'POST'
   })
@@ -222,16 +221,14 @@ function parseControlResult<T>(schema: z.ZodType<T>): (value: unknown) => T | un
   }
 }
 
-function requireControlAPIConfig(): { baseUrl: URL; token: string } {
-  const baseUrl = PRIVATE_VARS.AGENT_MAIL_CONTROL_API_BASE_URL
-  const token = PRIVATE_VARS.AGENT_MAIL_CONTROL_API_TOKEN
+function requireControlAPIConfig(): { baseUrl: URL } {
+  const baseUrl = PRIVATE_VARS.AT_EMAIL_ADMIN_CONTROL_API_BASE_URL
 
-  if (!baseUrl || !token) {
+  if (!baseUrl) {
     throw new Error('Agent Mail control API is not configured')
   }
 
   return {
-    baseUrl: new URL(baseUrl),
-    token
+    baseUrl: new URL(baseUrl)
   }
 }

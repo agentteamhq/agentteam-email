@@ -4361,6 +4361,32 @@ describe('Agent Mail WildDuck webmail service', () => {
     expect(webmailTestState.fetchMessageSource).toHaveBeenCalledWith('wildduck-user-1', 'inbox-id', '12')
   })
 
+  it('preserves parsed safe attachment media types with parameters', async () => {
+    expect.hasAssertions()
+    webmailTestState.fetchAttachment.mockResolvedValueOnce(
+      new Response('image-body', {
+        headers: {
+          'content-length': '10',
+          'content-type': 'image/png; name="avatar.png"'
+        }
+      })
+    )
+    const { getAgentMailAttachmentForWeb } = await import('./webmail-service')
+
+    const attachment = await getAgentMailAttachmentForWeb({
+      accountId: 'support@example.test',
+      attachmentId: 'attachment-1',
+      headers: new Headers(),
+      mailboxId: 'inbox-id',
+      messageId: '12'
+    })
+
+    expect(attachment.headers.get('content-type')).toBe('image/png')
+    expect(attachment.headers.get('content-disposition')).toBe('attachment')
+    expect(attachment.headers.get('x-content-type-options')).toBe('nosniff')
+    await expect(attachment.text()).resolves.toBe('image-body')
+  })
+
   it('does not proxy or mutate same-WildDuck-user messages outside the selected address', async () => {
     expect.hasAssertions()
     webmailTestState.getMessage.mockResolvedValue({

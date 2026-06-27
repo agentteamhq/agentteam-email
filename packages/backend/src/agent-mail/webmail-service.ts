@@ -1,3 +1,4 @@
+import { parse as parseContentType } from 'content-type'
 import addressparser from 'nodemailer/lib/addressparser/index.js'
 import {
   AgentMailAbilityActionByCapability,
@@ -1168,9 +1169,7 @@ function toMessageDetail(
     messageId: stringValue(message.messageId) || undefined,
     plainText: stringValue(message.text) || stripHTML(htmlBody(message)),
     replyTo: addressList(message.replyTo),
-    sourceUrl: mailRoutePath(
-      `/accounts/${encodeURIComponent(accountId)}/mailboxes/${encodeURIComponent(mailboxId)}/messages/${encodeURIComponent(summary.id)}/source`
-    ),
+    sourceUrl: mailRoutePath('accounts', accountId, 'mailboxes', mailboxId, 'messages', summary.id, 'source'),
     to: addressList(message.to)
   }
 }
@@ -1200,7 +1199,14 @@ function toAttachmentView(
     mimetype,
     size: finiteNumber(attachment.size),
     url: mailRoutePath(
-      `/accounts/${encodeURIComponent(accountId)}/mailboxes/${encodeURIComponent(mailboxId)}/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(id)}`
+      'accounts',
+      accountId,
+      'mailboxes',
+      mailboxId,
+      'messages',
+      messageId,
+      'attachments',
+      id
     )
   }
 }
@@ -1468,8 +1474,16 @@ function safeStreamHeaders({
 }
 
 function safeAttachmentContentType(headers: Headers) {
-  const mediaType = headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() ?? ''
-  return SAFE_INLINE_ATTACHMENT_TYPES.has(mediaType) ? mediaType : 'application/octet-stream'
+  const header = headers.get('content-type')
+  if (!header) {
+    return 'application/octet-stream'
+  }
+  try {
+    const mediaType = parseContentType(header).type
+    return SAFE_INLINE_ATTACHMENT_TYPES.has(mediaType) ? mediaType : 'application/octet-stream'
+  } catch {
+    return 'application/octet-stream'
+  }
 }
 
 function requireAuthorizedMailboxAddress(
@@ -1708,8 +1722,10 @@ function isMessageAddressArray(
   return Array.isArray(value)
 }
 
-function mailRoutePath(path: string) {
-  return `/rpc/mail${path}`
+function mailRoutePath(...segments: string[]) {
+  const pathURL = new URL('https://agent-mail.invalid/')
+  pathURL.pathname = ['rpc', 'mail', ...segments].map((segment) => encodeURIComponent(segment)).join('/')
+  return pathURL.pathname
 }
 
 export function agentMailWebErrorStatus(error: unknown) {

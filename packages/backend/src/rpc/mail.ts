@@ -442,11 +442,9 @@ const mailWebWorkspaceResponseSchema = t.Object({
 const mailPublicStatusResponseSchema = t.Object({
   controlState: t.Optional(
     t.Object({
-      configured: optionalBooleanResponseSchema,
       domainsActive: optionalNumberResponseSchema,
       domainsDisabled: optionalNumberResponseSchema,
       domainsTotal: optionalNumberResponseSchema,
-      exists: optionalBooleanResponseSchema,
       issues: stringArrayResponseSchema,
       ok: optionalBooleanResponseSchema,
       schema: optionalStringResponseSchema,
@@ -468,8 +466,6 @@ const mailPublicStatusResponseSchema = t.Object({
           catchAllConfigured: optionalBooleanResponseSchema,
           catchAllEnabled: optionalBooleanResponseSchema,
           issues: stringArrayResponseSchema,
-          lastProvisionAt: optionalStringResponseSchema,
-          lastProvisionStatus: optionalStringResponseSchema,
           ok: optionalBooleanResponseSchema
         })
       ),
@@ -523,16 +519,6 @@ const mailPublicStatusResponseSchema = t.Object({
     })
   ),
   ok: optionalBooleanResponseSchema,
-  provisioning: t.Optional(
-    t.Object({
-      domainsApplied: optionalNumberResponseSchema,
-      domainsFailed: optionalNumberResponseSchema,
-      domainsPending: optionalNumberResponseSchema,
-      issues: stringArrayResponseSchema,
-      lastApplyAt: optionalStringResponseSchema,
-      status: optionalStringResponseSchema
-    })
-  ),
   selectedProvider: optionalStringResponseSchema,
   status: t.String()
 })
