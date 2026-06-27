@@ -12,11 +12,25 @@ const optionalNonEmptyString = z.preprocess(
   z.string().min(1).optional()
 )
 
+const publicHostname = z
+  .string()
+  .trim()
+  .min(1, 'PUBLIC_HOSTNAME is required')
+  .pipe(z.url('PUBLIC_HOSTNAME must be an absolute URL'))
+  .refine((value) => {
+    try {
+      const protocol = new URL(value).protocol
+      return protocol === 'http:' || protocol === 'https:'
+    } catch {
+      return true
+    }
+  }, 'PUBLIC_HOSTNAME must use http or https')
+
 const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
     PUBLIC_DEBUG: z.string().optional(),
-    PUBLIC_HOSTNAME: z.string(),
+    PUBLIC_HOSTNAME: publicHostname,
     PUBLIC_GOOGLE_CLIENT_ID: optionalNonEmptyString,
     PUBLIC_LINKEDIN_CLIENT_ID: optionalNonEmptyString
   })

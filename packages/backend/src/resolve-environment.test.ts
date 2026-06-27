@@ -76,13 +76,70 @@ describe('resolveEnvironment', () => {
     expect(PUBLIC_VARS.PUBLIC_GOOGLE_CLIENT_ID).toBeUndefined()
     expect(PUBLIC_VARS.PUBLIC_LINKEDIN_CLIENT_ID).toBeUndefined()
   })
+
+  it('requires a configured public hostname', async () => {
+    expect.hasAssertions()
+    await withPublicHostname(undefined, async () => {
+      vi.resetModules()
+
+      await expect(import('./vars.public')).rejects.toThrow('Environment validation error')
+    })
+  })
+
+  it('rejects a blank public hostname', async () => {
+    expect.hasAssertions()
+    vi.resetModules()
+    vi.stubEnv('PUBLIC_HOSTNAME', '')
+
+    await expect(import('./vars.public')).rejects.toThrow('PUBLIC_HOSTNAME is required')
+  })
+
+  it('rejects a malformed public hostname', async () => {
+    expect.hasAssertions()
+    vi.resetModules()
+    vi.stubEnv('PUBLIC_HOSTNAME', 'not-a-url')
+
+    await expect(import('./vars.public')).rejects.toThrow('PUBLIC_HOSTNAME must be an absolute URL')
+  })
+
+  it('requires an HTTP public hostname URL', async () => {
+    expect.hasAssertions()
+    vi.resetModules()
+    vi.stubEnv('PUBLIC_HOSTNAME', 'ftp://mail.example.com')
+
+    await expect(import('./vars.public')).rejects.toThrow('PUBLIC_HOSTNAME must use http or https')
+  })
 })
 
-function restoreEnvValue(env: Record<string, string | undefined>, value: string | undefined) {
+async function withPublicHostname(value: string | undefined, callback: () => Promise<void>) {
+  const importMetaEnv = import.meta.env as Record<string, string | undefined>
+  const originalImportMetaValue = importMetaEnv.PUBLIC_HOSTNAME
+  const originalProcessValue = process.env.PUBLIC_HOSTNAME
+
+  try {
+    setEnvValue(importMetaEnv, 'PUBLIC_HOSTNAME', value)
+    setEnvValue(process.env, 'PUBLIC_HOSTNAME', value)
+    await callback()
+  } finally {
+    restoreEnvValue(importMetaEnv, originalImportMetaValue, 'PUBLIC_HOSTNAME')
+    restoreEnvValue(process.env, originalProcessValue, 'PUBLIC_HOSTNAME')
+  }
+}
+
+function setEnvValue(env: Record<string, string | undefined>, envKey: string, value: string | undefined) {
   if (value === undefined) {
-    Reflect.deleteProperty(env, key)
+    Reflect.deleteProperty(env, envKey)
     return
   }
 
-  env[key] = value
+  env[envKey] = value
+}
+
+function restoreEnvValue(env: Record<string, string | undefined>, value: string | undefined, envKey = key) {
+  if (value === undefined) {
+    Reflect.deleteProperty(env, envKey)
+    return
+  }
+
+  env[envKey] = value
 }

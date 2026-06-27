@@ -10,8 +10,6 @@ ARG ANALYZE_ROLLUP=false
 ENV ANALYZE_ROLLUP=${ANALYZE_ROLLUP}
 ARG NODE_ENV=production
 ENV NODE_ENV=${NODE_ENV}
-ARG PUBLIC_HOSTNAME
-ENV PUBLIC_HOSTNAME=${PUBLIC_HOSTNAME}
 ARG TURBO_CONCURRENCY
 ENV TURBO_CONCURRENCY=${TURBO_CONCURRENCY}
 ARG ESLINT_CONCURRENCY=auto
@@ -51,7 +49,6 @@ COPY . .
 RUN pnpm install --recursive --offline --frozen-lockfile --prod=false
 
 # Build the application
-# RUN test -n "$PUBLIC_HOSTNAME"
 RUN pnpm turbo run typecheck --no-cache --output-logs=full --log-order=stream --ui=stream --summarize=false && \
   pnpm turbo run build --no-cache --output-logs=full --log-order=stream --ui=stream --summarize=false && \
   pnpm --filter-prod @main/web-server --prod deploy ./pnpmdeploy
@@ -62,7 +59,6 @@ RUN pnpm turbo run typecheck --no-cache --output-logs=full --log-order=stream --
 FROM node:24.16.0-alpine3.23 AS runtime
 
 
-ARG PUBLIC_HOSTNAME
 # Build arguments for dynamic labels
 ARG BUILD_DATE
 ARG VCS_REF
@@ -71,7 +67,6 @@ ARG PORT=4321
 ENV PORT=${PORT}
 ARG NODE_ENV=production
 ENV NODE_ENV=${NODE_ENV}
-ENV PUBLIC_HOSTNAME=${PUBLIC_HOSTNAME}
 
 LABEL "org.opencontainers.image.title"="AgentTeam Email Web Server" \
   "org.opencontainers.image.description"="Public web server for AgentTeam Email browser and API traffic" \

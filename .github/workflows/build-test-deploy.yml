@@ -13,7 +13,6 @@ env:
   DO_NOT_TRACK: 1
   ASTRO_TELEMETRY_DISABLED: 1
   BETTER_AUTH_TELEMETRY: 0
-  PUBLIC_HOSTNAME: ${{ vars.PUBLIC_HOSTNAME }}
 
 jobs:
   build_test:
@@ -80,9 +79,6 @@ jobs:
           args: check
           workdir: apps/at-email-cli
 
-      - name: Require public hostname
-        run: ': "${PUBLIC_HOSTNAME:?PUBLIC_HOSTNAME repository variable is required}"'
-
       - name: Build complete development environment image
         uses: docker/build-push-action@v6
         with:
@@ -91,8 +87,6 @@ jobs:
           target: build
           load: true
           tags: atemail-web-server:build
-          build-args: |
-            PUBLIC_HOSTNAME=${{ env.PUBLIC_HOSTNAME }}
           cache-from: |
             type=gha,scope=prod-web-server
             type=registry,ref=ghcr.io/${{ github.repository }}/atemail-web-server:latest
@@ -105,8 +99,6 @@ jobs:
           file: ./apps/web-server/Containerfile
           load: true
           tags: atemail-web-server:test
-          build-args: |
-            PUBLIC_HOSTNAME=${{ env.PUBLIC_HOSTNAME }}
           cache-from: |
             type=gha,scope=prod-web-server
             type=registry,ref=ghcr.io/${{ github.repository }}/atemail-web-server:latest
@@ -239,9 +231,6 @@ jobs:
           package-manager-cache: false
           registry-url: https://registry.npmjs.org
 
-      - name: Require public hostname
-        run: ': "${PUBLIC_HOSTNAME:?PUBLIC_HOSTNAME repository variable is required}"'
-
       - name: Declare web server docker image meta tags
         id: meta_web_server
         uses: docker/metadata-action@v5
@@ -363,7 +352,6 @@ jobs:
           labels: ${{ steps.meta_web_server.outputs.labels }}
           build-args: |
             BUILD_DATE=${{ steps.image_metadata.outputs.build_date }}
-            PUBLIC_HOSTNAME=${{ env.PUBLIC_HOSTNAME }}
             VCS_REF=${{ steps.image_metadata.outputs.vcs_ref }}
             VERSION=${{ steps.image_metadata.outputs.version }}
           cache-from: |
