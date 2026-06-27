@@ -1,0 +1,70 @@
+---
+title: 'Public ingress'
+sidebarTitle: 'Public Ingress'
+description: 'Expose only the AgentTeam Email web server through direct ingress, Cloudflare Tunnel, Tailscale Funnel, or another operator-owned proxy.'
+---
+
+The public hostname configured as `AT_EMAIL_ADMIN_PUBLIC_HOSTNAME` or Helm `publicHostname` must route to the web server. That one origin serves both the browser app and the Worker ingest endpoint:
+
+```text
+https://mail.company.example/
+https://mail.company.example/rpc/agent-mail/ingest/v1/{connectionPublicId}
+```
+
+AgentTeam Email does not require a specific ingress provider. Use the networking layer you operate.
+
+<Warning>
+  Public ingress must target only the web server. Do not route public traffic to WildDuck, Haraka, ZoneMTA,
+  Rspamd, MongoDB, Redis, or mail-control.
+</Warning>
+
+## Direct ingress
+
+Use direct ingress when your host or cluster has a public load balancer or reverse proxy. Route all paths on the public hostname to the web server:
+
+| Runtime        | Web server target                                 |
+| -------------- | ------------------------------------------------- |
+| Docker Compose | `http://<host>:23100` by default                  |
+| Helm           | `http://atemail-web-server:80` inside the cluster |
+
+## Cloudflare Tunnel
+
+Cloudflare Tunnel can route the public hostname to the web server when the host or cluster is not directly reachable. Run `cloudflared` as operator-owned infrastructure; do not add tunnel credentials to AgentTeam Email required values.
+
+Targets:
+
+```text
+Docker Compose: http://atemail-web-server:4321
+Kubernetes:     http://atemail-web-server:80
+```
+
+The tunnel route must forward every path for the public hostname to the web server. Path routing happens inside the web server.
+
+## Tailscale Funnel
+
+Tailscale Funnel can also expose the public hostname. Run Tailscale as operator-owned infrastructure and route Funnel traffic to the web server.
+
+Targets:
+
+```text
+Docker Compose: http://127.0.0.1:4321 when sharing the web server network namespace
+Kubernetes:     http://atemail-web-server:80
+```
+
+Set AgentTeam Email's public hostname to the Funnel HTTPS origin.
+
+## Verify ingress
+
+Check the browser app:
+
+```bash
+curl -i https://mail.company.example/
+```
+
+Check the ingest route:
+
+```bash
+curl -i -X POST https://mail.company.example/rpc/agent-mail/ingest/v1/test-connection-public-id
+```
+
+An unsigned ingest request must be rejected. A `401`, `403`, `405`, or `415` response confirms the public route reaches the web server. A connection error or `404` means the hostname or proxy is not routing to the web server correctly.

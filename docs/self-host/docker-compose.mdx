@@ -1,0 +1,106 @@
+---
+title: 'Deploy with Docker Compose'
+sidebarTitle: 'Docker Compose'
+description: 'Run AgentTeam Email on one host with the root Docker Compose files.'
+---
+
+Docker Compose is the supported single-host deployment path. The root `compose.yaml` runs the web server, mail control service, MongoDB, Redis, WildDuck, Haraka, Rspamd, and ZoneMTA on one Compose network. Only the web server port is published.
+
+Complete the [Self-Host Setup Guide](/self-host/setup) before starting the stack.
+
+## Create the environment file
+
+Copy the Compose example into a local `.env` file:
+
+```bash
+cp docs/examples/compose/.env.example .env
+```
+
+Populate every uncommented value. Commented entries in the example are defaulted or optional overrides; leave them unset unless you are intentionally changing the default Compose topology or enabling an optional integration.
+
+Use the [Environment Variables](/reference/environment-variables) reference for the full variable contract. The required groups for the default `compose.yaml` stack are:
+
+- public hostname and web app secrets
+- Cloudflare OAuth client ID
+- admin R2 archive bucket values
+- `AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN`
+- WildDuck admin and access-control secrets
+- mail runtime secrets
+
+`compose.yaml` defaults MongoDB, Redis, WildDuck, Haraka, ZoneMTA, and the internal control URLs to services on the Compose network.
+
+## Start the stack
+
+Run Compose from the repository root:
+
+```bash
+docker compose up -d
+docker compose ps
+```
+
+Wait for `atemail-web-server` and `atemail-mail-control-service` to report healthy before signing in.
+
+## Published service
+
+Compose publishes the web app on `AT_EMAIL_ADMIN_FRONTEND_PORT`, which defaults to `23100`:
+
+```dotenv
+AT_EMAIL_ADMIN_FRONTEND_PORT=23100
+```
+
+Route your public hostname to that web server listener. Do not publish internal service ports.
+
+## Container images
+
+First-party images are published in GHCR:
+
+```text
+ghcr.io/agentteamhq/agentteam-email/atemail-web-server
+ghcr.io/agentteamhq/agentteam-email/atemail-mail-control-service
+```
+
+Pin the image tag with:
+
+```dotenv
+AT_EMAIL_ADMIN_VERSION=0.5.0
+```
+
+Control pull behavior with:
+
+```dotenv
+AT_EMAIL_ADMIN_PULL_POLICY=always
+```
+
+## Persistent volumes
+
+The default Compose stack creates named volumes for runtime data:
+
+| Volume         | Contents                             |
+| -------------- | ------------------------------------ |
+| `mongodb-data` | MongoDB data directory               |
+| `redis-data`   | Redis persistence files              |
+| `rspamd-data`  | Rspamd learning and statistical data |
+| `haraka-queue` | Haraka inbound mail queue            |
+
+Back up these volumes before upgrades. Data remains across `docker compose down` unless you pass `--volumes`.
+
+## External databases
+
+Use `compose.no-db.yaml` when MongoDB and Redis are supplied outside the Compose stack:
+
+```bash
+docker compose -f compose.no-db.yaml up -d
+```
+
+Set all database variables explicitly:
+
+```dotenv
+AT_EMAIL_ADMIN_APP_MONGODB_URI=mongodb://user:password@mongodb.example:27017/agentteam_email?authSource=admin&tls=true
+AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI=mongodb://user:password@mongodb.example:27017/wildduck?authSource=admin&tls=true
+AT_EMAIL_ADMIN_CONTROL_MONGODB_URI=mongodb://user:password@mongodb.example:27017/agent_mail_control?authSource=admin&tls=true
+AT_EMAIL_ADMIN_REDIS_URL=rediss://:password@redis.example:6379/3
+```
+
+Each MongoDB URI must point to a distinct logical database.
+
+<Warning>Never commit `.env`. It contains secrets, credentials, and API tokens.</Warning>

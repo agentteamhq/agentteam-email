@@ -1,72 +1,43 @@
-# Self-Hosting Guides
+# Docs Maintenance
 
-These guides describe the intended public self-host interface for this mail
-stack. They are written as the target operator experience: every hostname,
-secret, image, ingress route, and Cloudflare value must be supplied by the
-self-hosting operator through explicit configuration.
+This directory is the Mintlify documentation root. Published pages are listed in
+`docs/docs.json`; repo-only notes stay excluded through `docs/.mintignore`.
 
-Public repository: `https://github.com/agentteamhq/agentteam-email`
-
-Canonical public URLs:
+Public URLs:
 
 - Website: `https://www.agentteam.email`
 - App: `https://app.agentteam.email`
 - Docs: `https://agentteamemail.mintlify.com`
 
-Guides:
+## Examples and snippets
 
-- [Cloudflare Authentication And Routing](guides/self-host/cloudflare-authentication.md)
-- [Docker Compose](guides/self-host/docker-compose.md)
-- [Helm](guides/self-host/helm.md)
-- [Tailscale Tunnel](guides/self-host/tailscale.md)
-- [Cloudflare Tunnel](guides/self-host/cloudflared.md)
+Canonical example files live under `docs/examples/`. Generated MDX snippets live
+under `docs/snippets/generated/` and must be regenerated from their source
+files:
 
-## Target Architecture
+```bash
+mise run //docs:snippets
+```
 
-The self-hosted stack has these runtime parts:
+Use generated snippets when a published page needs to render a source file, for
+example `docs/examples/self-host/email-routing.json` or
+`skills/at-email-cli/SKILL.md`. Do not maintain a second committed copy of those
+sources inside a docs page.
 
-- web server from `apps/web-server`
-- mail control service deployment `atemail-mail-control-service` from `apps/mail-control-service`
-- Cloudflare Email Worker from `apps/cloudflare-email-worker`
-- MongoDB
-- Redis
-- WildDuck
-- Haraka
-- Rspamd
-- ZoneMTA
-- R2-compatible archive storage
-- public web route `/rpc/agent-mail/ingest/v1` for Cloudflare Email Worker
-  notifications
-
-The public self-host target does not expose a separate operator UI or control
-API. Mail administration and message review belong behind the authenticated web
-app. The web server talks to the mail control service over the internal
-network. The browser talks only to the web server.
-
-## Required Operator Inputs
-
-Every self-host install must provide:
-
-- public web app URL, for example `https://mail.company.example`
-- public web app URL reachable at `/rpc/agent-mail/ingest/v1` for Worker
-  notifications, for example `https://mail.company.example/rpc/agent-mail/ingest/v1`
-- MongoDB connection URLs for the web app, WildDuck, and control databases
-- Redis URL for the mail stack
-- R2-compatible archive endpoint, bucket, access key, and secret
-- WildDuck admin access token and access-control secret
-- mail control API token
-- outbound provider selection: `cloudflare` or `ses`
-- Cloudflare account, zone, token, Worker, R2, DNS, and Email Routing settings
-- production auth and encryption secrets for the web app
-
-## Supported Setup Paths
-
-The supported simple self-host path is root `compose.yaml`. The supported
-Kubernetes path is the Helm chart in `charts/agentteam-email`. Raw Kubernetes
-manifests are not a supported interface.
-
-Published releases use the GHCR Helm OCI artifact:
+Raw example files are served from the deployed docs site at the same path below
+the docs root, for example:
 
 ```text
-oci://ghcr.io/agentteamhq/agentteam-email
+/examples/self-host/email-routing.json
+/examples/helm/values-basic.yaml
+```
+
+## Validation
+
+After changing `docs.json`, page frontmatter, links, anchors, examples, or
+generated snippets, run:
+
+```bash
+mise run //docs:validate
+mise run //docs:broken-links
 ```

@@ -1,98 +1,78 @@
 ---
-title: 'Quickstart: deploy AgentTeam Email in minutes'
+title: 'Quickstart: deploy AgentTeam Email'
 sidebarTitle: 'Quickstart'
-description: 'Get AgentTeam Email running on your own infrastructure, configure Cloudflare ingest, and verify end-to-end delivery for your first agent mailbox.'
+description: 'Get AgentTeam Email running on your own infrastructure and verify your first connected domain.'
 ---
 
-This guide walks you through the fastest path to a working AgentTeam Email deployment. You will choose a runtime target, wire up Cloudflare Email Routing, expose the web server at `PUBLIC_HOSTNAME`, supply the required secrets, and bring the stack up — all from the command line. By the end you will have a live mailbox you can send a test message to and inspect in the web admin interface.
-
-<Note>
-  **Prerequisites:** A [Cloudflare](https://cloudflare.com) account with your domain's DNS managed by
-  Cloudflare, [Docker Compose v2+](https://docs.docker.com/compose/) or a running Kubernetes cluster with
-  [Helm 3](https://helm.sh/), and sufficient Cloudflare permissions to create Email Routing rules and deploy
-  Workers.
-</Note>
+This is the shortest path to a working self-hosted AgentTeam Email instance. The full setup contract is in the [self-host setup guide](/self-host/setup); use this page as the execution path once you understand the required inputs.
 
 <Steps>
-  <Step title="Choose your deployment method">
-    AgentTeam Email supports two first-class deployment targets. **Docker Compose** is the simplest option — every service runs as a container on one host and the entire stack comes up with a single command. **Helm** deploys to any Kubernetes cluster and is the right choice when you need horizontal scaling or want to integrate with an existing cluster.
+  <Step title='Choose a runtime'>
+    Use Docker Compose for a single-host install or Helm for Kubernetes.
 
     <CardGroup cols={2}>
-      <Card title="Docker Compose" icon="docker" href="/guides/self-host/docker-compose">
-        Single-host deployment. Ideal for getting started quickly or for small self-hosted setups.
+      <Card title='Docker Compose' icon='docker' href='/self-host/docker-compose'>
+        Run the stack from the repository root with `docker compose`.
       </Card>
-      <Card title="Helm (Kubernetes)" icon="dharmachakra" href="/guides/self-host/helm">
-        Kubernetes deployment via the AgentTeam Email Helm chart. Suitable for production clusters.
+      <Card title='Helm' icon='dharmachakra' href='/self-host/helm'>
+        Install the chart from the GHCR OCI artifact.
       </Card>
     </CardGroup>
 
   </Step>
 
-  <Step title="Configure Cloudflare Email Routing and deploy the ingest Worker">
-    AgentTeam Email receives inbound messages through [Cloudflare Email Routing](https://developers.cloudflare.com/email-routing/). You need to enable Email Routing on your domain, create a catch-all routing rule that forwards to the AgentTeam ingest Worker, and deploy the Worker to your Cloudflare account.
+  <Step title='Prepare the admin instance'>
+    Configure the public hostname, admin Cloudflare OAuth app, R2 archive bucket, internal service secrets, and optional admin transactional SMTP settings described in the setup guide.
 
-    Follow the complete setup instructions, including how to scope routing rules per-agent, in the Cloudflare authentication guide.
-
-    <Card title="Cloudflare Authentication Setup" icon="cloud" href="/guides/self-host/cloudflare-authentication">
-      Enable Email Routing, deploy the ingest Worker, and bind your Cloudflare R2 bucket.
+    <Card title='Self-Host Setup' icon='server' href='/self-host/setup'>
+      Required Cloudflare, R2, secret, SMTP, and first-domain setup requirements.
     </Card>
 
   </Step>
 
-  <Step title="Expose the web server">
-    The ingest Worker needs a public route back to the AgentTeam Email web server. `PUBLIC_HOSTNAME` must reach the web app and `PUBLIC_HOSTNAME/rpc/agent-mail/ingest/v1`. If your server is not directly public, run Tailscale Funnel, Cloudflare Tunnel, or another reverse proxy as operator-owned infrastructure outside the AgentTeam Email Compose and Helm surfaces.
+  <Step title='Expose the web server'>
+    Route the configured public hostname to the web server. The same origin serves the web app and `POST /rpc/agent-mail/ingest/v1/{connectionPublicId}`.
 
-    <CardGroup cols={2}>
-      <Card title="Tailscale Example" icon="shield-halved" href="/guides/self-host/tailscale">
-        Route `PUBLIC_HOSTNAME` to the web server with Tailscale Funnel.
-      </Card>
-      <Card title="Cloudflare Tunnel Example" icon="cloud" href="/guides/self-host/cloudflared">
-        Route `PUBLIC_HOSTNAME` to the web server with `cloudflared`.
-      </Card>
-    </CardGroup>
+    <Card title='Public Ingress' icon='route' href='/self-host/public-ingress'>
+      Use direct ingress, Cloudflare Tunnel, Tailscale Funnel, or another operator-owned reverse proxy.
+    </Card>
 
   </Step>
 
-  <Step title="Set required secrets and environment variables">
-    AgentTeam Email is configured through environment variables. At minimum you need to supply credentials for your database, R2 bucket, outbound mail relay, and authentication secrets for the web application. Copy the example environment file included in the repository and fill in the required values.
-
-    <CardGroup cols={2}>
-      <Card title="Configuration Reference" icon="sliders" href="/reference/configuration">
-        Browse every configuration key, its type, default value, and whether it is required.
-      </Card>
-      <Card title="Environment Variables" icon="terminal" href="/reference/environment-variables">
-        Full list of environment variables accepted by each service in the stack.
-      </Card>
-    </CardGroup>
-
-  </Step>
-
-  <Step title="Start the stack and verify delivery">
-    Once your environment file is populated, bring the stack up and confirm every service is healthy.
+  <Step title='Start the stack'>
+    For Compose, start the containers:
 
     ```bash
-    docker compose up -d && docker compose ps
+    docker compose up -d
+    docker compose ps
     ```
 
-    All services should report a status of `running`. Open the web admin interface at the hostname you configured as `PUBLIC_HOSTNAME` in your environment file, sign in with your admin credentials, and send a test message to any agent mailbox address. The message should appear in the mailbox within a few seconds. You can also inspect the corresponding `raw.eml`, `edge.json`, and `result.json` objects in your R2 bucket to confirm archival is working.
+    For Helm, install or upgrade the release:
 
-    <Note>
-      If you are using Helm, run `kubectl get pods -n agentteam` to verify pod health, then access the web interface through the Ingress hostname you configured in `values.yaml`.
-    </Note>
+    ```bash
+    helm upgrade --install atemail oci://ghcr.io/agentteamhq/agentteam-email \
+      --namespace agentteam-email \
+      --create-namespace \
+      -f values.yaml
+    ```
+
+  </Step>
+
+  <Step title='Sign in and provision a domain'>
+    Open the configured public hostname, sign in, connect Cloudflare through the web UI, select the mail zone, and let AgentTeam Email provision DNS, Email Routing, Worker state, and archive bindings for that domain.
+
+    <Card title='Domain Provisioning' icon='cloud' href='/usage/domain-provisioning'>
+      Domain setup is a signed-in user flow, not an admin environment-variable flow.
+    </Card>
+
+  </Step>
+
+  <Step title='Validate the deployment'>
+    Check the health endpoint, verify the ingest route rejects unsigned requests, send test mail, and confirm the R2 archive objects and mailbox delivery.
+
+    <Card title='Validation' icon='check' href='/self-host/validation'>
+      Deployment checks for web, ingest, archive, inbound delivery, and outbound sending.
+    </Card>
 
   </Step>
 </Steps>
-
-<Note>
-  The public API boundary for AgentTeam Email is under active development. Interfaces, environment variable
-  names, and configuration keys may change between releases. Always refer to the
-  [repository](https://github.com/agentteamhq/agentteam-email) and its release notes for the most current
-  information before upgrading.
-</Note>
-
-## Next steps
-
-Now that your stack is running, explore these resources to go deeper.
-
-- [Architecture overview](/concepts/architecture) — learn how every component fits together, from Cloudflare Email Routing through WildDuck to your outbound relay.
-- [Configuration reference](/reference/configuration) — a complete reference for every knob you can turn to customise your deployment.

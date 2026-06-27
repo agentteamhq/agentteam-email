@@ -1,281 +1,560 @@
 ---
 title: 'Environment variables reference for AgentTeam Email'
 sidebarTitle: 'Env Variables'
-description: 'Complete reference for every environment variable accepted by AgentTeam Email, organized by functional area with example values.'
+description: 'Operator-facing Docker Compose environment variables for AgentTeam Email self-hosted deployments.'
 ---
 
-This page documents every environment variable accepted by AgentTeam Email. Use these when writing a Docker Compose `.env` file, Helm values, Kubernetes Secrets, or any other configuration surface for your deployment.
+This page documents the public Docker Compose environment variable contract. The Compose files map these `AT_EMAIL_ADMIN_*` variables into service-native container environment variables. Helm deployments use equivalent values documented in [Deploy with Helm](/self-host/helm).
+
+The default `compose.yaml` stack provides MongoDB, Redis, WildDuck, Haraka, ZoneMTA, and internal service URLs on the Compose network. Set the defaulted variables below only when you are changing that topology, using `compose.no-db.yaml`, or enabling an optional integration.
 
 <Warning>
-  Never commit secrets to version control. Variables including `BETTER_AUTH_SECRET`, `ENCRYPT_SECRET_KEY`,
-  `AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN`, `AGENT_MAIL_WILDDUCK_ACCESS_CONTROL_SECRET`,
-  `AGENT_MAIL_LOOP_SECRET`, `AGENT_MAIL_ZONEMTA_RELAY_PASSWORD`, and `AGENT_MAIL_FEEDBACK_MAILBOX_PASSWORD`
-  must be generated per environment and stored in a secrets manager or Kubernetes Secret — never in a
-  committed file.
+  Never commit secrets to version control. Every secret, token, key, and password below must be generated per
+  environment and stored in a deployment secret manager or Kubernetes Secret, not in committed files.
 </Warning>
 
-## Web app
+## Generate secret values
 
-<ParamField path="PUBLIC_HOSTNAME" type="string" required>
-  Fully-qualified public URL of your AgentTeam Email deployment. The Cloudflare Worker sends inbound mail notifications to `PUBLIC_HOSTNAME/rpc/agent-mail/ingest/v1`.
+Use a distinct value for every secret in every environment.
+
+Generate `AT_EMAIL_ADMIN_ENCRYPT_SECRET_KEY` as exactly 32 random bytes encoded with base64url:
+
+```bash
+node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"
+```
+
+Generate long random tokens or passwords for session secrets, service tokens, and internal passwords:
+
+```bash
+openssl rand -hex 32
+```
+
+Use these commands for:
+
+- `AT_EMAIL_ADMIN_BETTER_AUTH_SECRET`
+- `AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN`
+- `AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN`
+- `AT_EMAIL_ADMIN_WILDDUCK_ACCESS_CONTROL_SECRET`
+- `AT_EMAIL_ADMIN_MAIL_LOOP_SECRET`
+- `AT_EMAIL_ADMIN_ZONEMTA_RELAY_PASSWORD`
+- `AT_EMAIL_ADMIN_FEEDBACK_MAILBOX_PASSWORD`
+
+## Admin web app
+
+<ParamField path="AT_EMAIL_ADMIN_PUBLIC_HOSTNAME" type="string" required>
+  Fully-qualified public URL of your AgentTeam Email deployment. The Cloudflare Worker sends inbound mail notifications to `AT_EMAIL_ADMIN_PUBLIC_HOSTNAME/rpc/agent-mail/ingest/v1/{connectionPublicId}`.
 
 **Example:** `https://mail.company.example`
 
 </ParamField>
 
-<ParamField path="BETTER_AUTH_SECRET" type="string" required>
-  Long random string used to sign and verify authentication sessions. Generate a unique value for every environment and never reuse it.
+<ParamField path="AT_EMAIL_ADMIN_BETTER_AUTH_SECRET" type="string" required>
+  Long random string used to sign and verify authentication sessions. Generate a unique value for every environment.
 
 **Example:** `a-long-random-string-change-me`
 
 </ParamField>
 
-<ParamField path="ENCRYPT_SECRET_KEY" type="string" required>
+<ParamField path="AT_EMAIL_ADMIN_ENCRYPT_SECRET_KEY" type="string" required>
   32 random bytes encoded as base64url. Used to encrypt sensitive data stored at rest. Generate a fresh value per environment.
 
 **Example:** `AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA` _(replace with real random bytes)_
 
 </ParamField>
 
-<ParamField path="NODE_ENV" type="string">
-  Runtime mode. Set to `production` for all deployed environments.
+## Compose runtime defaults
 
-**Example:** `production`
+These values are defaulted by the Compose files. Leave them unset unless you are pinning a release, changing local port exposure, or matching host filesystem ownership.
+
+<ParamField path="AT_EMAIL_ADMIN_VERSION" type="string">
+  First-party AgentTeam Email image tag.
+
+**Default:** `latest`
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_PULL_POLICY" type="string">
+  Compose image pull policy.
+
+**Default:** `always`
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_UID" type="number">
+  Host user ID used for containers that set a runtime user.
+
+**Default:** `1000`
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_GID" type="number">
+  Host group ID used for containers that set a runtime user.
+
+**Default:** `1000`
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_FRONTEND_PORT" type="number">
+  Host port published for the web server.
+
+**Default:** `23100`
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_DATABASE_MAX_POOL_SIZE" type="number">
+  Maximum MongoDB connection pool size for the admin web app.
+
+**Default:** `8`
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_TMP_DIR" type="string">
+  Temporary directory used by the admin web app.
+
+**Default:** `/tmp/agentteam-email`
 
 </ParamField>
 
 ## Databases
 
-AgentTeam Email requires three MongoDB databases and one Redis instance. Even when sharing a single MongoDB server, each URI must point to a distinct logical database.
+AgentTeam Email requires three MongoDB databases and one Redis instance. The default `compose.yaml` stack supplies them with bundled services. Set these variables only when using `compose.no-db.yaml` or an equivalent external data-service deployment.
 
-<ParamField path="AGENTTEAM_EMAIL_APP_MONGODB_URI" type="string" required>
+Even when sharing a single MongoDB server, each URI must point to a distinct logical database.
+
+<ParamField path="AT_EMAIL_ADMIN_APP_MONGODB_URI" type="string">
   MongoDB connection URI for the main web application database.
 
 **Example:** `mongodb://user:password@mongodb.example:27017/agentteam_email?authSource=admin&tls=true`
 
 </ParamField>
 
-<ParamField path="AGENTTEAM_EMAIL_WILDDUCK_MONGODB_URI" type="string" required>
+<ParamField path="AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI" type="string">
   MongoDB connection URI for the WildDuck mail server database.
 
 **Example:** `mongodb://user:password@mongodb.example:27017/wildduck?authSource=admin&tls=true`
 
 </ParamField>
 
-<ParamField path="AGENTTEAM_EMAIL_CONTROL_MONGODB_URI" type="string" required>
-  MongoDB connection URI for the mail-control-service operational database. This must be a dedicated database (e.g. `agent_mail_control`) — it must not share collections with the WildDuck database.
+<ParamField path="AT_EMAIL_ADMIN_CONTROL_MONGODB_URI" type="string">
+  MongoDB connection URI for the mail-control-service operational database. This must be a dedicated database, such as `agent_mail_control`; it must not share collections with the WildDuck database.
 
 **Example:** `mongodb://user:password@mongodb.example:27017/agent_mail_control?authSource=admin&tls=true`
 
 </ParamField>
 
-<ParamField path="AGENTTEAM_EMAIL_REDIS_URL" type="string" required>
+<ParamField path="AT_EMAIL_ADMIN_REDIS_URL" type="string">
   Redis connection URL used by the mail stack for queuing and coordination.
 
 **Example:** `rediss://:password@redis.example:6379/3`
 
 </ParamField>
 
-## Object storage / R2
+## Cloudflare OAuth
 
-AgentTeam Email archives every message to an S3-compatible bucket. Cloudflare R2 is the reference implementation, but any S3-compatible endpoint works.
+These variables configure the admin instance's Cloudflare OAuth app. Users connect their own Cloudflare domains from the web UI through this app.
 
-<ParamField path="AGENT_MAIL_R2_ENDPOINT" type="string" required>
-  S3-compatible storage endpoint URL.
+Configure the Cloudflare OAuth client for Authorization Code with PKCE and refresh tokens. The default scope set includes `offline_access` so Better Auth can store a refresh token and refresh access over time.
+
+The default Cloudflare OAuth scopes are:
+
+| Cloudflare section | Permission                        | Scope                              |
+| ------------------ | --------------------------------- | ---------------------------------- |
+| Developer Platform | Workers R2 Storage Read           | `workers-r2.read`                  |
+| Developer Platform | Workers R2 Storage Write          | `workers-r2.write`                 |
+| Developer Platform | Workers Scripts Read              | `workers-scripts.read`             |
+| Developer Platform | Workers Scripts Write             | `workers-scripts.write`            |
+| DNS & Zones        | DNS Read                          | `dns.read`                         |
+| DNS & Zones        | DNS Write                         | `dns.write`                        |
+| DNS & Zones        | Zone Read                         | `zone.read`                        |
+| Email & Messaging  | Cloud Email Security Read         | `cloud-email-security.read`        |
+| Email & Messaging  | Email Routing Addresses Read      | `email-routing-address.read`       |
+| Email & Messaging  | Email Routing Addresses Write     | `email-routing-address.write`      |
+| Email & Messaging  | Email Routing Rules Read          | `email-routing-rule.read`          |
+| Email & Messaging  | Email Routing Rules Write         | `email-routing-rule.write`         |
+| Email & Messaging  | Email Routing Suppressions Read   | `email-routing-suppression.read`   |
+| Email & Messaging  | Email Security DMARC Reports Read | `email-security-dmarcreports.read` |
+| Email & Messaging  | Email Sending Read                | `email-sending.read`               |
+| Email & Messaging  | Email Sending Write               | `email-sending.write`              |
+| Other              | offline_access                    | `offline_access`                   |
+
+<ParamField path="AT_EMAIL_ADMIN_CF_OAUTH_CLIENT_ID" type="string" required>
+  Cloudflare OAuth client ID used by the web app.
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_CF_OAUTH_CLIENT_SECRET" type="string" required>
+  Cloudflare OAuth client secret for the admin instance's Cloudflare OAuth app.
+
+</ParamField>
+
+## Advanced Cloudflare overrides
+
+Leave these unset for normal Cloudflare OAuth and API access. The web app and mail-control service have built-in Cloudflare endpoint defaults.
+
+<ParamField path="AT_EMAIL_ADMIN_CF_API_BASE_URL" type="string">
+  Cloudflare API base URL. Override only in tests or controlled non-production environments.
+
+**Default:** `https://api.cloudflare.com/client/v4`
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_CF_OAUTH_AUTHORIZATION_URL" type="string">
+  Optional Cloudflare OAuth authorization URL override. Leave unset for normal Cloudflare OAuth.
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_CF_OAUTH_TOKEN_URL" type="string">
+  Optional Cloudflare OAuth token URL override. Leave unset for normal Cloudflare OAuth.
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_CF_OAUTH_USERINFO_URL" type="string">
+  Optional Cloudflare OAuth userinfo URL override. Leave unset for normal Cloudflare OAuth.
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_CF_OAUTH_REVOKE_URL" type="string">
+  Optional Cloudflare OAuth token revocation URL override. Leave unset for normal Cloudflare OAuth.
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_CF_OAUTH_ISSUER" type="string">
+  Optional Cloudflare OAuth issuer override.
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_CF_OAUTH_SCOPES" type="string">
+  Optional comma- or whitespace-separated Cloudflare OAuth scope override. Leave unset to use the default scopes listed above.
+
+</ParamField>
+
+## Admin R2 archive bucket
+
+AgentTeam Email archives mail to a Cloudflare R2 bucket owned by the admin instance. The archive client uses R2's S3-compatible endpoint, and Worker provisioning uses Cloudflare R2 temporary credentials.
+
+<ParamField path="AT_EMAIL_ADMIN_R2_ACCOUNT_ID" type="string" required>
+  Cloudflare account ID that owns the archive bucket.
+
+**Example:** `example-cloudflare-account-id`
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_R2_API_TOKEN" type="string" required>
+  Cloudflare token used by mail-control only to issue temporary R2 credentials for Workers. This token must not be used for user-domain Worker deployment, Email Routing, DNS, or outbound Cloudflare Email Sending.
+
+**Example:** `example-r2-api-token`
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_R2_ENDPOINT" type="string" required>
+  Cloudflare R2 S3-compatible endpoint URL.
 
 **Example:** `https://example-account-id.r2.cloudflarestorage.com`
 
 </ParamField>
 
-<ParamField path="AGENT_MAIL_R2_REGION" type="string" required>
-  Storage region identifier. Use `auto` for Cloudflare R2.
+<ParamField path="AT_EMAIL_ADMIN_R2_REGION" type="string">
+  Storage region identifier. Compose and Helm default this to `auto` for Cloudflare R2.
 
-**Example:** `auto`
+**Default:** `auto`
 
 </ParamField>
 
-<ParamField path="AGENT_MAIL_R2_BUCKET" type="string" required>
+<ParamField path="AT_EMAIL_ADMIN_R2_BUCKET" type="string" required>
   Bucket name for the mail archive.
 
 **Example:** `agent-mail-archive`
 
 </ParamField>
 
-<ParamField path="AGENT_MAIL_R2_ACCESS_KEY_ID" type="string" required>
-  Access key ID for storage authentication.
+<ParamField path="AT_EMAIL_ADMIN_R2_ACCESS_KEY_ID" type="string" required>
+  R2 S3-compatible access key ID for archive storage.
 
 **Example:** `example-r2-access-key-id`
 
 </ParamField>
 
-<ParamField path="AGENT_MAIL_R2_SECRET_ACCESS_KEY" type="string" required>
-  Secret access key for storage authentication.
+<ParamField path="AT_EMAIL_ADMIN_R2_SECRET_ACCESS_KEY" type="string" required>
+  R2 S3-compatible secret access key for archive storage.
 
 **Example:** `example-r2-secret-access-key`
 
 </ParamField>
 
-## Mail stack
+## Internal service credentials
 
-These variables configure internal service authentication and the runtime secrets that keep the mail stack operating correctly.
+These variables configure server-side service authentication. They are not browser-visible and are not user-domain credentials.
 
-<ParamField path="AGENT_MAIL_CONTROL_API_TOKEN" type="string" required>
-  Authentication token for the internal mail-control-service API. Services that call the control API must present this token.
-
-**Example:** `example-control-api-token-change-me`
+<ParamField path="AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN" type="string" required>
+  Authentication token used by mail-control-service when it calls web-server internal endpoints, including the startup runtime projection snapshot and Cloudflare raw-send callback.
 
 </ParamField>
 
-<ParamField path="AGENT_MAIL_WILDDUCK_ADMIN_ACCESS_TOKEN" type="string" required>
+<ParamField path="AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN" type="string" required>
   Admin access token for the WildDuck API. Used for mailbox provisioning and message delivery operations.
 
-**Example:** `example-wildduck-admin-token-change-me`
-
 </ParamField>
 
-<ParamField path="AGENT_MAIL_WILDDUCK_ACCESS_CONTROL_SECRET" type="string" required>
+<ParamField path="AT_EMAIL_ADMIN_WILDDUCK_ACCESS_CONTROL_SECRET" type="string" required>
   Shared secret for WildDuck access-control API calls.
 
-**Example:** `example-wildduck-access-control-secret-change-me`
-
 </ParamField>
 
-<ParamField path="AGENT_MAIL_OUTBOUND_PROVIDER" type="string" required>
-  Outbound mail provider. Accepted values are `cloudflare` and `ses`.
-
-**Example:** `cloudflare`
-
-</ParamField>
-
-<ParamField path="AGENT_MAIL_LOOP_SECRET" type="string" required>
+<ParamField path="AT_EMAIL_ADMIN_MAIL_LOOP_SECRET" type="string" required>
   Shared secret used to detect and suppress mail loop conditions between internal services.
 
-**Example:** `example-mail-loop-secret-change-me`
-
 </ParamField>
 
-<ParamField path="AGENT_MAIL_ZONEMTA_RELAY_PASSWORD" type="string" required>
+<ParamField path="AT_EMAIL_ADMIN_ZONEMTA_RELAY_PASSWORD" type="string" required>
   Password used by ZoneMTA to authenticate with the internal SMTP relay.
 
-**Example:** `example-zonemta-relay-password-change-me`
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_FEEDBACK_MAILBOX_PASSWORD" type="string" required>
+  Password for the service-owned feedback mailbox that receives bounce and DSN notifications.
 
 </ParamField>
 
-<ParamField path="AGENT_MAIL_FEEDBACK_MAILBOX_PASSWORD" type="string" required>
-  Password for the service-owned feedback mailbox that receives bounce and DSN notifications from outbound providers.
+## Advanced internal topology overrides
 
-**Example:** `example-feedback-mailbox-password-change-me`
+Leave these unset for the default Compose network. Set them only when the service names, ports, or runtime topology differ from the bundled Compose stack.
 
-</ParamField>
+<ParamField path="AT_EMAIL_ADMIN_WILDDUCK_API_BASE_URL" type="string">
+  WildDuck API base URL used by the web server and mail-control-service.
 
-## Cloudflare
-
-These variables are required when using Cloudflare Email Routing for inbound mail or when `AGENT_MAIL_OUTBOUND_PROVIDER=cloudflare`.
-
-<ParamField path="AGENT_MAIL_CLOUDFLARE_API_TOKEN" type="string" required>
-  Cloudflare API token with permissions to manage Workers, DNS records, and Email Routing for your zones.
-
-**Example:** `example-cloudflare-api-token`
+**Default:** `http://wildduck:8080`
 
 </ParamField>
 
-<ParamField path="AGENT_MAIL_CLOUDFLARE_ACCOUNT_ID" type="string" required>
-  Your Cloudflare account ID. Find it in the Cloudflare dashboard under **Account Home → Account ID**.
+<ParamField path="AT_EMAIL_ADMIN_WILDDUCK_IMAP_ADDRESS" type="string">
+  WildDuck IMAP address used by generated domain runtime configuration.
 
-**Example:** `example-cloudflare-account-id`
-
-</ParamField>
-
-<ParamField path="AGENT_MAIL_CLOUDFLARE_WORKER_SCRIPT_NAME" type="string" required>
-  The name of the Cloudflare Worker script deployed to receive inbound mail for your domains.
-
-**Example:** `agent-mail-ingress`
+**Default:** `wildduck:10143`
 
 </ParamField>
 
-<ParamField path="AGENT_MAIL_CLOUDFLARE_API_BASE_URL" type="string">
-  Base URL for the Cloudflare API. Override only in non-production or test environments.
+<ParamField path="AT_EMAIL_ADMIN_HARAKA_SMTP_ADDRESS" type="string">
+  Haraka SMTP address used by generated domain runtime configuration.
 
-**Default:** `https://api.cloudflare.com/client/v4`
-
-</ParamField>
-
-<ParamField path="AGENT_MAIL_CLOUDFLARE_WORKER_ARCHIVE_BUCKET" type="string">
-  The R2 bucket name bound to the Cloudflare Worker for direct archive writes. Usually the same value as `AGENT_MAIL_R2_BUCKET`.
-
-**Example:** `agent-mail-archive`
+**Default:** `haraka:10025`
 
 </ParamField>
 
-## Worker Ingest
+<ParamField path="AT_EMAIL_ADMIN_ZONEMTA_DSN_ADDRESS" type="string">
+  ZoneMTA DSN listener address used by generated domain runtime configuration.
 
-The Cloudflare Worker sends a HMAC-signed HTTP notification to the web server after writing each inbound message to R2.
+**Default:** `zonemta:2526`
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_BASE_URL" type="string">
+  Internal web-server base URL used by mail-control-service for web-owned runtime projection and Cloudflare raw-send callbacks.
+
+**Default:** `http://atemail-web-server:4321`
+
+</ParamField>
+
+## Optional transactional SMTP
+
+These variables configure admin-instance transactional email. They do not configure user-domain sending or receiving.
+
+<ParamField path="AT_EMAIL_ADMIN_SMTP_ADDRESS" type="string">
+  SMTP host for transactional email.
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_SMTP_PORT" type="number">
+  SMTP port.
+
+**Default:** `1025`
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_SMTP_SECURE_TLS" type="boolean">
+  Set to `true` when the SMTP provider requires TLS.
+
+**Default:** `false`
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_SMTP_USERNAME" type="string">
+  SMTP username.
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_SMTP_PASSWORD" type="string">
+  SMTP password.
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_SMTP_FROM_EMAIL" type="string">
+  Default From address for transactional email.
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_SMTP_REPLY_TO_EMAIL" type="string">
+  Optional Reply-To address.
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_SMTP_SEND_AS_EMAIL" type="string">
+  Optional SMTP envelope sender.
+
+</ParamField>
+
+## Optional admin sign-in providers
+
+These variables configure optional identity providers for the admin web app. Leave them unset to disable the provider.
+
+<ParamField path="AT_EMAIL_ADMIN_GOOGLE_CLIENT_ID" type="string">
+  Google OAuth client ID mapped into the web app as `PUBLIC_GOOGLE_CLIENT_ID`.
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_GOOGLE_CLIENT_SECRET" type="string">
+  Google OAuth client secret used only by the web server.
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_LINKEDIN_CLIENT_ID" type="string">
+  LinkedIn OAuth client ID mapped into the web app as `PUBLIC_LINKEDIN_CLIENT_ID`.
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_LINKEDIN_CLIENT_SECRET" type="string">
+  LinkedIn OAuth client secret used only by the web server.
+
+</ParamField>
+
+## Optional Stripe integration
+
+<ParamField path="AT_EMAIL_ADMIN_STRIPE_PUBLISHABLE_KEY" type="string">
+  Stripe publishable key for browser-visible Stripe flows.
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_STRIPE_SECRET_KEY" type="string">
+  Stripe secret key used only by the web server.
+
+</ParamField>
+
+## Optional agent trial policy
+
+Agent trials are disabled unless `AT_EMAIL_ADMIN_TRIAL_ENABLED=true`.
+
+<ParamField path="AT_EMAIL_ADMIN_TRIAL_ENABLED" type="boolean">
+  Enables the agent trial admission flow.
+
+**Default:** `false`
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_TRIAL_ORGANIZATION_ID" type="string">
+  Organization ID used for trial mailbox ownership.
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_TRIAL_DOMAIN" type="string">
+  Domain used for trial mailbox addresses.
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_TRIAL_ADMISSION_TOKEN" type="string">
+  Admission token required by trial agent clients.
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_TRIAL_CAPABILITIES" type="string">
+  Comma-separated capability list granted to trial agents.
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_TRIAL_CLAIM_INTENT_TTL_SECONDS" type="number">
+  Claim intent lifetime in seconds.
+
+**Default:** `86400`
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_TRIAL_DAILY_SEND_LIMIT" type="number">
+  Daily send limit for a trial mailbox.
+
+**Default:** `10`
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_TRIAL_MAILBOX_LIFETIME_SECONDS" type="number">
+  Lifetime of a trial mailbox in seconds.
+
+**Default:** `604800`
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_TRIAL_MAILBOX_LOCAL_PREFIX" type="string">
+  Local-part prefix used when creating trial mailbox addresses.
+
+**Default:** `trial`
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_TRIAL_MAX_ACTIVE" type="number">
+  Maximum active trial mailboxes.
+
+**Default:** `25`
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_TRIAL_TOTAL_SEND_LIMIT" type="number">
+  Total send limit for a trial mailbox.
+
+**Default:** `50`
+
+</ParamField>
+
+## Worker ingest
+
+The Cloudflare Worker sends a Standard Webhooks-signed HTTP notification to the web server after writing each inbound message to R2.
 
 <Note>
-  The Worker ingest URL is derived automatically from `PUBLIC_HOSTNAME` as
-  `PUBLIC_HOSTNAME/rpc/agent-mail/ingest/v1`. Self-host operators do not set a separate global ingest URL or
-  HMAC secret. Backend provisioning stores deployment-owned Worker secrets and supplies the Worker bindings
-  `AGENTTEAM_INGEST_URL` and `AGENTTEAM_WORKER_HMAC_SECRET`.
+  The Worker ingest URL is derived automatically from `AT_EMAIL_ADMIN_PUBLIC_HOSTNAME` as
+  `AT_EMAIL_ADMIN_PUBLIC_HOSTNAME/rpc/agent-mail/ingest/v1/{connectionPublicId}`. Self-host operators do not
+  set a separate global ingest URL or webhook signing secret. Backend provisioning stores deployment-owned
+  Worker secrets and supplies the Worker bindings `AGENTTEAM_INGEST_URL` and `AGENTTEAM_WORKER_HMAC_SECRET`.
 </Note>
-
-## Outbound provider — AWS SES
-
-Set these variables when `AGENT_MAIL_OUTBOUND_PROVIDER=ses`. They are not required when using the Cloudflare outbound provider.
-
-<ParamField path="AGENT_MAIL_AWS_REGION" type="string">
-  AWS region where your SES sending identity is configured.
-
-**Example:** `us-east-1`
-
-</ParamField>
-
-<ParamField path="AGENT_MAIL_AWS_ACCESS_KEY_ID" type="string">
-  AWS access key ID with SES sending permissions.
-
-**Example:** `AKIAIOSFODNN7EXAMPLE`
-
-</ParamField>
-
-<ParamField path="AGENT_MAIL_AWS_SECRET_ACCESS_KEY" type="string">
-  AWS secret access key paired with `AGENT_MAIL_AWS_ACCESS_KEY_ID`.
-
-**Example:** `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`
-
-</ParamField>
 
 ## Docker Compose specific
 
 These variables are used only by the Docker Compose deployment and have no effect in Kubernetes or other runtimes.
 
-<ParamField path="AGENTTEAM_EMAIL_VERSION" type="string">
+<ParamField path="AT_EMAIL_ADMIN_VERSION" type="string">
   Container image tag to pull for all AgentTeam Email services.
 
 **Example:** `latest`
 
 </ParamField>
 
-<ParamField path="AGENTTEAM_EMAIL_PULL_POLICY" type="string">
+<ParamField path="AT_EMAIL_ADMIN_PULL_POLICY" type="string">
   Docker image pull policy. Corresponds to the Compose `pull_policy` option.
 
 **Example:** `always`
 
 </ParamField>
 
-<ParamField path="AGENTTEAM_EMAIL_UID" type="number">
+<ParamField path="AT_EMAIL_ADMIN_UID" type="number">
   UID that container processes run as. Match this to the owner of any bind-mounted volumes.
 
 **Example:** `1000`
 
 </ParamField>
 
-<ParamField path="AGENTTEAM_EMAIL_GID" type="number">
+<ParamField path="AT_EMAIL_ADMIN_GID" type="number">
   GID that container processes run as. Match this to the group of any bind-mounted volumes.
 
 **Example:** `1000`
 
 </ParamField>
 
-<ParamField path="FRONTEND_PORT" type="number">
+<ParamField path="AT_EMAIL_ADMIN_FRONTEND_PORT" type="number">
   Host port to bind for the web application in Docker Compose. Does not affect in-container listen addresses.
 
 **Example:** `23100`

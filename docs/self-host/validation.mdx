@@ -1,0 +1,75 @@
+---
+title: 'Validate a deployment'
+sidebarTitle: 'Validation'
+description: 'Checks for web health, ingest routing, domain provisioning, archive writes, mailbox delivery, and outbound sending.'
+---
+
+Run these checks after deploying AgentTeam Email and after changing ingress, Cloudflare, R2, or runtime secrets.
+
+## Web health
+
+```bash
+curl -i https://mail.company.example/healthz
+```
+
+Expect `200 OK`. Any other response indicates a web container, load balancer, TLS, or hostname problem.
+
+## Ingest route
+
+```bash
+curl -i -X POST https://mail.company.example/rpc/agent-mail/ingest/v1/test-connection-public-id
+```
+
+An unsigned request must be rejected. A `401`, `403`, `405`, or `415` response confirms the route reaches the web server and is protected. A connection error or `404` means the public hostname is not routing to the web server path.
+
+## Sign-in
+
+Open the public hostname in a browser and sign in. The authenticated web UI must load before domain provisioning can run.
+
+## Domain provisioning
+
+From the web UI, connect Cloudflare, select a mail zone, and provision the domain. The flow must complete without copying user Cloudflare tokens into environment variables or deployment config.
+
+After provisioning, confirm that the web UI shows the domain as active.
+
+## Inbound archive
+
+Send a message to an address on the connected domain. Confirm the R2 archive bucket contains an inbound bundle:
+
+```text
+orgs/<org_public_id>/domains/<recipient_domain>/mail/inbound/YYYY/MM/DD/<ingest_id>/
+```
+
+Required files for a delivered message:
+
+```text
+raw.eml
+edge.json
+result.json
+```
+
+See [Archive Layout](/reference/archive-layout) for the object path and status contract.
+
+## Mailbox delivery
+
+Confirm the message appears in the target mailbox in the web app. If the mailbox does not exist, check for the expected failed-delivery status in `result.json`.
+
+## Outbound sending
+
+Send a message from an agent mailbox through the web app or CLI. Confirm the outbound bundle appears in R2 and that `result.json` records the final delivery result.
+
+## Runtime status
+
+For Compose:
+
+```bash
+docker compose ps
+```
+
+For Helm:
+
+```bash
+kubectl get pods -n agentteam-email
+kubectl rollout status deployment/atemail-web-server -n agentteam-email --timeout=180s
+kubectl rollout status deployment/atemail-mail-control-service -n agentteam-email --timeout=180s
+```

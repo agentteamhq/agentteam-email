@@ -1,0 +1,44 @@
+---
+title: 'Agent mailboxes'
+sidebarTitle: 'Agent Mailboxes'
+description: 'Use dedicated mailboxes for AI agents, review inbound content safely, and manage mailbox credentials.'
+---
+
+AgentTeam Email gives agents dedicated email addresses on connected domains. Each mailbox is backed by WildDuck and administered through the authenticated web app.
+
+## Mailbox model
+
+An agent mailbox has an address such as `research-agent@company.example`. Inbound mail is captured by Cloudflare, archived to R2, replayed by mail-control, and delivered into the mailbox.
+
+```text
+Cloudflare Worker -> R2 archive -> mail control service -> agent mailbox
+```
+
+Agents send mail through the authenticated web server. The web server verifies the agent identity and mailbox permission before submitting mail through the internal mail runtime.
+
+## Administration
+
+Use the web app to:
+
+- create mailbox accounts
+- assign mailbox access to agents
+- manage API keys and IMAP credentials
+- review inbound messages
+- connect and manage Cloudflare domains
+
+Public clients must use web-server-issued credentials. WildDuck admin credentials stay internal.
+
+## Message review
+
+The web app provides a safe message review surface for untrusted inbound mail:
+
+- HTML bodies are sanitized.
+- External links are rewritten to inert link IDs.
+- Remote images are blocked by default.
+- Attachments are listed separately.
+- Plain text content is available without HTML rendering.
+- SPF, DKIM, ARC, and DMARC verdicts are surfaced from the archived `edge.json` evidence.
+
+## Direct mailbox access
+
+Agents can use the [CLI and Agent Skill](/usage/cli-and-agent-skill) to operate authorized mailboxes through the web server. When direct IMAP access is required, generate mailbox credentials from the web app. Do not expose WildDuck admin credentials to agents or external clients.

@@ -1,0 +1,98 @@
+---
+title: 'Self-host security model'
+sidebarTitle: 'Security'
+description: 'Security boundaries and credential requirements for self-hosted AgentTeam Email deployments.'
+---
+
+Self-hosted AgentTeam Email has one public boundary: the authenticated web server. Every other service is internal.
+
+## Public boundary
+
+The web server accepts all external traffic:
+
+- browser sessions
+- Better Auth callbacks
+- agent and CLI API calls
+- Cloudflare OAuth callbacks
+- Cloudflare Worker ingest notifications at `POST /rpc/agent-mail/ingest/v1/{connectionPublicId}`
+
+The Worker ingest endpoint accepts only Standard Webhooks-signed Worker notifications. It is not an operator API, mail-control API, or direct mailbox API.
+
+<Warning>
+  Do not expose WildDuck, Haraka, ZoneMTA, Rspamd, MongoDB, Redis, or mail-control to the public internet.
+  Exposing those services bypasses the authenticated web boundary and creates direct access to mail storage,
+  service credentials, or internal control surfaces.
+</Warning>
+
+## Internal services
+
+| Service              | Public exposure |
+| -------------------- | --------------- |
+| Web server           | Public          |
+| Mail control service | Internal only   |
+| WildDuck             | Internal only   |
+| Haraka               | Internal only   |
+| ZoneMTA              | Internal only   |
+| Rspamd               | Internal only   |
+| MongoDB              | Internal only   |
+| Redis                | Internal only   |
+
+Compose keeps internal services on the Compose network. Helm keeps them behind cluster-internal services. Operator-owned ingress, tunnels, and reverse proxies must route only to the web server.
+
+## Credential boundaries
+
+Admin credentials configure the platform. User credentials authorize domain provisioning.
+
+| Credential                    | Owner                           | Used for                                                                                                              |
+| ----------------------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Cloudflare OAuth app client   | Admin instance                  | Lets signed-in users connect Cloudflare accounts                                                                      |
+| User Cloudflare OAuth grant   | Signed-in user                  | Provisions DNS, Email Routing, Worker scripts, bindings, and outbound Cloudflare Email Sending for that user's domain |
+| Admin R2 S3 access key        | Admin instance                  | Server-side archive reads and writes                                                                                  |
+| Admin R2 API token            | Admin instance                  | Issues prefix-scoped temporary Worker R2 credentials                                                                  |
+| Worker R2 session credentials | Generated per Worker deployment | Writes inbound archive objects for one domain prefix                                                                  |
+| Worker webhook signing secret | Generated per Worker deployment | Signs ingest notifications to the web server with Standard Webhooks                                                   |
+| Admin SMTP credentials        | Admin instance                  | Sends system transactional email only                                                                                 |
+
+User-domain setup is not an environment-variable workflow. A signed-in user connects Cloudflare through OAuth, selects a zone, and the web server uses that grant to provision domain-specific DNS, Email Routing, Worker state, and archive bindings.
+
+## Token scope requirements
+
+The Cloudflare OAuth app must request the default scopes listed in [Environment Variables](/reference/environment-variables#cloudflare-oauth).
+
+The admin R2 API token must be scoped to the Cloudflare account that owns the archive bucket and must be able to call the R2 temporary credentials API for that bucket. AgentTeam Email requests `object-read-write` temporary credentials scoped to the connected domain archive prefix.
+
+The admin R2 API token must not be reused as a user-domain Cloudflare token. User-domain DNS, Email Routing, Worker deployment, Worker R2 bindings, and outbound Cloudflare Email Sending belong to the connected user's OAuth grant.
+
+## Secret handling
+
+- Generate every secret independently per environment.
+- Store secrets in `.env`, a deployment secret manager, or Kubernetes Secrets.
+- Do not commit secrets, tokens, passwords, OAuth credentials, or R2 keys.
+- Do not log or render OAuth access tokens, raw API keys, passwords, Worker webhook signing secrets, or decrypted stored secrets.
+- Do not copy Cloudflare OAuth access tokens into browser-visible config.
+
+## Worker bindings
+
+Operators do not set Worker bindings directly in Compose or Helm. Domain provisioning generates bindings for each connected domain.
+
+Generated Worker bindings include:
+
+```text
+AGENTTEAM_ORGANIZATION_ID
+AGENTTEAM_ORG_PUBLIC_ID
+AGENTTEAM_CONNECTION_ID
+AGENTTEAM_DOMAIN_ID
+AGENTTEAM_DOMAIN
+AGENTTEAM_ARCHIVE_PREFIX
+AGENTTEAM_R2_ENDPOINT
+AGENTTEAM_R2_BUCKET
+AGENTTEAM_R2_REGION
+AGENTTEAM_R2_ACCESS_KEY_ID
+AGENTTEAM_R2_SECRET_ACCESS_KEY
+AGENTTEAM_R2_SESSION_TOKEN
+AGENTTEAM_R2_CREDENTIAL_EXPIRES_AT
+AGENTTEAM_WORKER_HMAC_SECRET
+AGENTTEAM_INGEST_URL
+```
+
+`AGENTTEAM_INGEST_URL` is derived from the public hostname, `/rpc/agent-mail/ingest/v1`, and the Worker connection public ID. `AGENTTEAM_WORKER_HMAC_SECRET` stores the deployment-owned Standard Webhooks signing secret encrypted by the web app.

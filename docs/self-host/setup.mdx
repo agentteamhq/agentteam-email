@@ -1,0 +1,125 @@
+---
+title: 'Self-host setup guide'
+sidebarTitle: 'Setup Guide'
+description: 'Canonical setup requirements for a self-hosted AgentTeam Email admin instance.'
+---
+
+This page is the canonical self-host setup contract. It documents the inputs an operator must provide to run an AgentTeam Email admin instance and then provision the first user domain.
+
+AgentTeam Email does not provision user mail domains from admin environment variables. The admin instance provides platform infrastructure: the public web app, Cloudflare OAuth app, R2 archive bucket, service secrets, and optional admin transactional SMTP. A signed-in user provisions each mail domain later through the web UI.
+
+## Setup sequence
+
+<Steps>
+  <Step title='Choose Compose or Helm'>
+    Use [Docker Compose](/self-host/docker-compose) for a single-host install. Use [Helm](/self-host/helm) for Kubernetes. Both deployment paths run the same service graph and require the same admin setup inputs.
+  </Step>
+
+  <Step title='Pick the public hostname'>
+    The public hostname must route to the web server. The same origin serves the browser app and the Worker ingest endpoint:
+
+    ```text
+    https://mail.company.example/
+    https://mail.company.example/rpc/agent-mail/ingest/v1/{connectionPublicId}
+    ```
+
+    The hosted AgentTeam Email deployment uses `https://app.agentteam.email` as this public app hostname. For a self-hosted instance, replace that with the hostname you operate.
+
+  </Step>
+
+  <Step title='Expose only the web server'>
+    The web server is the only public service. WildDuck, Haraka, ZoneMTA, Rspamd, MongoDB, Redis, and mail-control must remain internal.
+
+    If your host or cluster is not directly public, route the public hostname through operator-owned ingress such as Cloudflare Tunnel, Tailscale Funnel, or a reverse proxy. See [Public Ingress](/self-host/public-ingress).
+
+  </Step>
+
+  <Step title='Create the admin Cloudflare OAuth app'>
+    Create one Cloudflare OAuth app for the admin instance. The web app uses this OAuth app when signed-in users connect their own Cloudflare accounts and domains.
+
+    Configure the default Cloudflare OAuth scopes listed in [Environment Variables](/reference/environment-variables#cloudflare-oauth).
+
+    Configure the OAuth client for Authorization Code with PKCE and token endpoint authentication method `none`. OAuth access and refresh tokens from connected users are stored by Better Auth in the web server database and must not be copied into Compose files, Helm values, browser-visible config, logs, or docs.
+
+  </Step>
+
+  <Step title='Create the admin R2 archive bucket'>
+    Create one Cloudflare R2 bucket owned by the admin instance. AgentTeam Email uses this bucket as the durable archive for inbound and outbound mail.
+
+    The admin instance needs two R2 credential surfaces:
+
+    | Credential | Required capability |
+    | --- | --- |
+    | R2 S3-compatible access key | List, read, and write objects in the archive bucket for server-side services |
+    | R2 API token | Call the R2 temporary credentials API for the archive bucket |
+
+    The R2 API token is used only to issue prefix-scoped temporary Worker credentials. It must not be used for user-domain Worker deployment, Email Routing, DNS changes, or outbound Cloudflare Email Sending.
+
+  </Step>
+
+  <Step title='Generate internal secrets'>
+    Generate a distinct secret for every secret-valued setting in every environment.
+
+    Use a base64url-encoded 32-byte key for `AT_EMAIL_ADMIN_ENCRYPT_SECRET_KEY`:
+
+    ```bash
+    node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"
+    ```
+
+    Use long random tokens for service tokens and passwords:
+
+    ```bash
+    openssl rand -hex 32
+    ```
+
+    The complete Compose variable list is in [Environment Variables](/reference/environment-variables). Helm uses equivalent values in [Helm](/self-host/helm).
+
+  </Step>
+
+  <Step title='Configure admin transactional SMTP'>
+    Admin SMTP is only for system transactional email from the admin instance, such as account and notification mail. It is not used for mail sent from provisioned user domains.
+
+    User-domain inbound and outbound mail is configured through the connected Cloudflare domain flow.
+
+  </Step>
+
+<Step title='Start the stack'>
+  Start the runtime with Compose or Helm after the required admin inputs are set. Required values fail closed:
+  the deployment must not start when required hostnames, secrets, OAuth values, or R2 values are missing.
+</Step>
+
+<Step title='Sign in and provision the first domain'>
+  Open the public hostname, sign in, connect Cloudflare from the web UI, select the mail zone, and provision
+  the domain. Domain provisioning creates the DNS, Email Routing, Worker, R2 temporary credential, and Worker
+  binding state for that user's domain.
+</Step>
+
+  <Step title='Validate the deployment'>
+    Run the checks in [Validation](/self-host/validation) to verify health, ingest routing, archive writes, mailbox delivery, and outbound sending.
+  </Step>
+</Steps>
+
+## Required admin inputs
+
+| Input                          | Compose surface                                 | Helm surface                          |
+| ------------------------------ | ----------------------------------------------- | ------------------------------------- |
+| Public app URL                 | `AT_EMAIL_ADMIN_PUBLIC_HOSTNAME`                | `publicHostname`                      |
+| Web auth secret                | `AT_EMAIL_ADMIN_BETTER_AUTH_SECRET`             | `webServer.authSecret`                |
+| Encryption key                 | `AT_EMAIL_ADMIN_ENCRYPT_SECRET_KEY`             | `webServer.encryptionKey`             |
+| Cloudflare OAuth app           | `AT_EMAIL_ADMIN_CF_*`                           | `admin.cloudflare.oauth`              |
+| Admin R2 archive bucket        | `AT_EMAIL_ADMIN_R2_*`                           | `admin.cloudflare.r2`                 |
+| Control-to-web token           | `AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN`       | `controlApi.controlToWebToken`        |
+| WildDuck admin token           | `AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN`    | `wildduck.adminAccessToken`           |
+| WildDuck access-control secret | `AT_EMAIL_ADMIN_WILDDUCK_ACCESS_CONTROL_SECRET` | `wildduck.accessControlSecret`        |
+| Mail loop secret               | `AT_EMAIL_ADMIN_MAIL_LOOP_SECRET`               | `mailRuntime.loopSecret`              |
+| ZoneMTA relay password         | `AT_EMAIL_ADMIN_ZONEMTA_RELAY_PASSWORD`         | `mailRuntime.zonemtaRelayPassword`    |
+| Feedback mailbox password      | `AT_EMAIL_ADMIN_FEEDBACK_MAILBOX_PASSWORD`      | `mailRuntime.feedbackMailboxPassword` |
+| Admin transactional SMTP       | `AT_EMAIL_ADMIN_SMTP_*`                         | `admin.smtp`                          |
+
+## What setup does not do
+
+- Do not put user-domain Cloudflare API tokens in environment variables.
+- Do not use admin SMTP for user-domain sending.
+- Do not expose WildDuck, Haraka, ZoneMTA, Rspamd, MongoDB, Redis, or mail-control publicly.
+- Do not configure Worker runtime bindings by hand in Compose or Helm.
+- Do not create a global Worker webhook signing secret or separate global Worker ingest URL.

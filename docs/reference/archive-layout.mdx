@@ -1,10 +1,10 @@
 ---
-title: "Message archive layout in R2 object storage"
-sidebarTitle: "Archive Layout"
-description: "How AgentTeam Email structures inbound and outbound message bundles in R2, including file names, status values, and hosted-deployment prefixes."
+title: 'Message archive layout in R2 object storage'
+sidebarTitle: 'Archive Layout'
+description: 'How AgentTeam Email structures inbound and outbound message bundles in R2, including file names, status values, and hosted-deployment prefixes.'
 ---
 
-AgentTeam Email writes every inbound and outbound message to an S3-compatible object store as a bundle of immutable artifacts. R2 is the durable archive and completion marker store — it is not the live delivery queue, retry store, or operational database. Every object identity is a [UUIDv7](https://www.ietf.org/rfc/rfc9562.html) in canonical lowercase form, and all date path segments are UTC.
+AgentTeam Email writes every inbound and outbound message to Cloudflare R2 as a bundle of immutable artifacts in the supported self-hosted inbound path. R2 is the durable archive and completion marker store — it is not the live delivery queue, retry store, or operational database. Every object identity is a [UUIDv7](https://www.ietf.org/rfc/rfc9562.html) in canonical lowercase form, and all date path segments are UTC.
 
 ## Inbound bundle
 
@@ -18,25 +18,27 @@ orgs/<org_public_id>/domains/<recipient_domain>/mail/inbound/YYYY/MM/DD/<ingest_
 
 ### Inbound files
 
-| File | Description |
-|---|---|
-| `raw.eml` | Exact RFC 822 bytes as received by the Cloudflare Worker. The Worker never parses MIME, edits headers, rewrites the body, or injects provenance headers before writing this object. |
-| `edge.json` | Envelope metadata, Worker-observed receive surface, and the durable inbound commit marker. Written after `raw.eml` succeeds. The reconciler discovers bundles by listing for keys ending in `/edge.json`. |
+| File          | Description                                                                                                                                                                                                                    |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `raw.eml`     | Exact RFC 822 bytes as received by the Cloudflare Worker. The Worker never parses MIME, edits headers, rewrites the body, or injects provenance headers before writing this object.                                            |
+| `edge.json`   | Envelope metadata, Worker-observed receive surface, and the durable inbound commit marker. Written after `raw.eml` succeeds. The reconciler discovers bundles by listing for keys ending in `/edge.json`.                      |
 | `result.json` | Delivery result and final status. Written only after the bundle reaches a terminal state (delivered, DSN submitted, or DSN suppressed). Its presence is the idempotency marker — a bundle without `result.json` is incomplete. |
-| `dsn.eml` | Agent Mail–generated Delivery Status Notification. Present only when the status is `delivery_failed_dsn_submitted`. Not written for delivered mail or suppressed DSNs. |
+| `dsn.eml`     | Agent Mail–generated Delivery Status Notification. Present only when the status is `delivery_failed_dsn_submitted`. Not written for delivered mail or suppressed DSNs.                                                         |
 
 ### Inbound status values
 
 `result.json` carries one of three terminal statuses:
 
-| Status | Meaning |
-|---|---|
-| `delivered` | The message was successfully delivered to the recipient's WildDuck mailbox. |
-| `delivery_failed_dsn_submitted` | Delivery failed permanently (no local mailbox). A DSN was generated, written as `dsn.eml`, and submitted to the outbound relay with a null SMTP envelope sender. |
-| `delivery_failed_dsn_suppressed` | Delivery failed permanently but the original envelope sender was null or invalid, so no DSN was sent. |
+| Status                           | Meaning                                                                                                                                                          |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `delivered`                      | The message was successfully delivered to the recipient's WildDuck mailbox.                                                                                      |
+| `delivery_failed_dsn_submitted`  | Delivery failed permanently (no local mailbox). A DSN was generated, written as `dsn.eml`, and submitted to the outbound relay with a null SMTP envelope sender. |
+| `delivery_failed_dsn_suppressed` | Delivery failed permanently but the original envelope sender was null or invalid, so no DSN was sent.                                                            |
 
 <Note>
-  If a processing attempt fails transiently, `result.json` is not written and the bundle remains incomplete. The reconciler retries incomplete bundles up to three attempts before marking the Mongo queue item as `blocked` for operator review. Blocked items are not terminal archive state.
+  If a processing attempt fails transiently, `result.json` is not written and the bundle remains incomplete.
+  The reconciler retries incomplete bundles up to three attempts before marking the Mongo queue item as
+  `blocked` for operator review. Blocked items are not terminal archive state.
 </Note>
 
 ## Outbound bundle
@@ -51,27 +53,29 @@ mail/outbound/<source_domain>/YYYY/MM/DD/<send_id>/
 
 ### Outbound files
 
-| File | Description |
-|---|---|
-| `relay.eml` | Exact SMTP DATA bytes accepted from ZoneMTA, preserving the internal `X-Agent-Mail-ZoneMTA-Queue-ID` header. |
-| `relay.json` | Internal SMTP relay boundary metadata: `send_id`, route type, provider, envelope addresses, and relay timestamp. |
-| `provider.eml` or `provider.json` | Provider-specific delivery payload. `provider.eml` is used for AWS SES raw RFC 822 handoff; `provider.json` is used for Cloudflare Email Sending JSON handoff. Required only for provider-bound deliveries — local-routed deliveries do not produce a provider payload object. |
-| `result.json` | Terminal outbound result and completion marker for the bundle. |
+| File            | Description                                                                                                                             |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `relay.eml`     | Exact SMTP DATA bytes accepted from ZoneMTA, preserving the internal `X-Agent-Mail-ZoneMTA-Queue-ID` header.                            |
+| `relay.json`    | Internal SMTP relay boundary metadata: `send_id`, route type, delivery boundary, envelope addresses, and relay timestamp.               |
+| `provider.json` | Delivery-boundary payload metadata for externally delivered messages. Local-routed deliveries do not produce a provider payload object. |
+| `result.json`   | Terminal outbound result and completion marker for the bundle.                                                                          |
 
 ### Outbound status values
 
 `result.json` carries one of five terminal statuses:
 
-| Status | Meaning |
-|---|---|
-| `provider_accepted` | The outbound provider accepted the message for delivery. |
-| `provider_rejected` | The provider rejected the message with a permanent error. |
-| `provider_failed` | The provider returned a transient or unexpected failure. |
-| `local_routed` | Every envelope recipient belongs to an active local AgentTeam Email domain; the message was routed internally without contacting an external provider. |
-| `local_route_failed` | Local routing to an internal mailbox failed. |
+| Status               | Meaning                                                                                                                                                |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `provider_accepted`  | The external delivery boundary accepted the message for delivery.                                                                                      |
+| `provider_rejected`  | The external delivery boundary rejected the message with a permanent error.                                                                            |
+| `provider_failed`    | The external delivery boundary returned a transient or unexpected failure.                                                                             |
+| `local_routed`       | Every envelope recipient belongs to an active local AgentTeam Email domain; the message was routed internally without contacting an external provider. |
+| `local_route_failed` | Local routing to an internal mailbox failed.                                                                                                           |
 
 <Note>
-  ZoneMTA owns outbound retry and bounce behavior. When ZoneMTA retries by resubmitting to the internal SMTP relay, the relay generates a new `send_id` and a new outbound bundle. The shared `zonemta_queue_id` field in `relay.json` links those bundles to the same ZoneMTA queue entry.
+  ZoneMTA owns outbound retry and bounce behavior. When ZoneMTA retries by resubmitting to the internal SMTP
+  relay, the relay generates a new `send_id` and a new outbound bundle. The shared `zonemta_queue_id` field in
+  `relay.json` links those bundles to the same ZoneMTA queue entry.
 </Note>
 
 ## Hosted deployments
@@ -79,5 +83,5 @@ mail/outbound/<source_domain>/YYYY/MM/DD/<send_id>/
 In AgentTeam Email hosted deployments, all archive objects are scoped per organization:
 
 - Every object is prefixed with `orgs/<org_id>/` so bundles from different organizations never share a path namespace.
-- Objects are encrypted with an organization-scoped archive key.
+- Archive objects are not publicly served; direct archive reads require authenticated R2 credentials.
 - You can request short-lived scoped R2 credentials (7-day TTL) to read your organization's archive directly, without routing reads through the AgentTeam Email API.

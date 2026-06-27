@@ -1,0 +1,88 @@
+---
+title: 'Provision a domain'
+sidebarTitle: 'Domain Provisioning'
+description: 'Connect a Cloudflare account and provision DNS, Email Routing, Worker, and archive bindings for a user mail domain.'
+---
+
+Domain provisioning is a signed-in user workflow. It is not an admin environment-variable workflow.
+
+The admin instance provides the Cloudflare OAuth app and the R2 archive bucket. A user signs in to AgentTeam Email, connects Cloudflare through OAuth, selects a zone, and authorizes AgentTeam Email to provision mail routing for that domain.
+
+## Before provisioning
+
+The self-hosted admin instance must already have:
+
+- a public hostname that reaches the web server
+- the admin Cloudflare OAuth app configured
+- the admin R2 archive bucket configured
+- internal service secrets configured
+- the web app running and reachable
+
+See [Self-Host Setup](/self-host/setup) for the admin setup contract.
+
+## Provisioning flow
+
+<Steps>
+  <Step title='Sign in'>
+    Open the AgentTeam Email web app at the configured public hostname and sign in.
+  </Step>
+
+<Step title='Connect Cloudflare'>
+  Start the Cloudflare connection flow in the web UI. The user approves the Cloudflare OAuth scopes and
+  returns to AgentTeam Email.
+</Step>
+
+<Step title='Select the zone'>Choose the Cloudflare zone that should receive agent mail.</Step>
+
+<Step title='Provision the domain'>
+  AgentTeam Email uses the user's Cloudflare OAuth grant to create or update DNS, Email Routing, Worker
+  script, Worker routes, and Worker bindings for that domain.
+</Step>
+
+  <Step title='Verify delivery'>
+    Send a test message to the domain, confirm R2 archive objects were written, and confirm the target mailbox received the message.
+  </Step>
+</Steps>
+
+## Credentials used
+
+| Credential                      | Used during domain provisioning                                                         |
+| ------------------------------- | --------------------------------------------------------------------------------------- |
+| Admin Cloudflare OAuth app      | Starts the Cloudflare OAuth connection                                                  |
+| User Cloudflare OAuth grant     | Authorizes DNS, Email Routing, Worker, and Worker binding changes for the selected zone |
+| Admin R2 API token              | Issues temporary R2 credentials for the domain Worker archive prefix                    |
+| Worker R2 temporary credentials | Let the Worker write inbound archive objects for the domain prefix                      |
+| Worker webhook signing secret   | Signs Worker notifications sent to the web server with Standard Webhooks                |
+
+The user's OAuth grant is stored server-side. Do not copy access tokens into deployment files, browser-visible config, logs, or docs.
+
+## Provisioned Worker bindings
+
+The web app and mail-control service generate the Worker bindings for each domain. Operators do not set these by hand in Compose or Helm.
+
+```text
+AGENTTEAM_ORGANIZATION_ID
+AGENTTEAM_ORG_PUBLIC_ID
+AGENTTEAM_CONNECTION_ID
+AGENTTEAM_DOMAIN_ID
+AGENTTEAM_DOMAIN
+AGENTTEAM_ARCHIVE_PREFIX
+AGENTTEAM_R2_ENDPOINT
+AGENTTEAM_R2_BUCKET
+AGENTTEAM_R2_REGION
+AGENTTEAM_R2_ACCESS_KEY_ID
+AGENTTEAM_R2_SECRET_ACCESS_KEY
+AGENTTEAM_R2_SESSION_TOKEN
+AGENTTEAM_R2_CREDENTIAL_EXPIRES_AT
+AGENTTEAM_WORKER_HMAC_SECRET
+AGENTTEAM_INGEST_URL
+```
+
+`AGENTTEAM_INGEST_URL` is derived from the admin public hostname and the Worker connection public ID. `AGENTTEAM_WORKER_HMAC_SECRET` stores the deployment-owned Standard Webhooks signing secret. R2 credentials are temporary and scoped to the connected domain archive prefix.
+
+## Not part of domain provisioning
+
+- User domains are not configured with `AT_EMAIL_ADMIN_*` environment variables.
+- User-domain mail does not use admin transactional SMTP.
+- Operators do not paste user Cloudflare API tokens into Compose or Helm.
+- Operators do not set global Worker ingest URLs or global Worker webhook signing secrets.

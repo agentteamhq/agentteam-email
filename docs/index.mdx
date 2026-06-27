@@ -1,45 +1,80 @@
 ---
-title: "AgentTeam Email: email infrastructure for AI agents"
-sidebarTitle: "Introduction"
-description: "AgentTeam Email gives every AI agent a dedicated mailbox with inbound capture, archive storage, outbound delivery, and a web admin interface."
+title: 'AgentTeam Email: email infrastructure for AI agents'
+sidebarTitle: 'Introduction'
+description: 'AgentTeam Email gives every AI agent a dedicated mailbox with inbound capture, archive storage, outbound delivery, and a web admin interface.'
 slug: index
 ---
 
-AgentTeam Email is an open-source email service designed so every AI agent in your system gets its own fully functional mailbox. You self-host the entire stack — there are no third-party mailbox providers and no shared inboxes. Mail flows in through Cloudflare Email Routing, gets archived to R2-compatible object storage, and is delivered outbound through ZoneMTA. A web application lets you administer mailboxes, review messages, and manage your Cloudflare integration, all from one place.
+AgentTeam Email is an open-source email service for giving AI agents dedicated email addresses. You can run the full stack yourself: the authenticated web app, mail control service, mail servers, Cloudflare integration, and R2 archive storage. Mail flows in through Cloudflare Email Routing, is archived in Cloudflare R2, and is delivered outbound through the connected-domain mail flow.
 
 <CardGroup cols={2}>
-  <Card title="Quick Start" icon="rocket" href="/get-started/quickstart">
-    Deploy AgentTeam Email in minutes with Docker Compose or Helm and send your first agent message.
+  <Card
+    title='Quickstart'
+    icon='rocket'
+    href='/get-started/quickstart'
+  >
+    Get from repository checkout to a running self-hosted instance.
   </Card>
-  <Card title="Architecture" icon="diagram-project" href="/concepts/architecture">
-    Understand how inbound capture, archive storage, and outbound delivery fit together.
+  <Card
+    title='Self-Host Setup'
+    icon='server'
+    href='/self-host/setup'
+  >
+    Configure the public hostname, Cloudflare OAuth app, R2 archive bucket, runtime secrets, and first domain.
   </Card>
-  <Card title="Self-Hosting" icon="server" href="/guides/self-hosting">
-    Choose between a single-host Docker Compose deployment or a Kubernetes Helm chart.
+  <Card
+    title='Security'
+    icon='shield-halved'
+    href='/self-host/security'
+  >
+    Review the public boundary, internal service boundary, and credential separation requirements.
   </Card>
-  <Card title="Configuration" icon="sliders" href="/reference/configuration">
-    Browse every configuration key, its type, and its default value.
+  <Card
+    title='CLI and Agent Skill'
+    icon='terminal'
+    href='/usage/cli-and-agent-skill'
+  >
+    Use the `at-email` CLI and agent skill to operate an authorized mailbox.
   </Card>
 </CardGroup>
 
 ## What AgentTeam Email provides
 
-- **Dedicated agent mailboxes** — each agent receives its own email address backed by a [WildDuck](https://wildduck.email/) IMAP server, keeping agent mail fully isolated from every other mailbox on your domain.
-- **Inbound mail capture** — Cloudflare Email Routing forwards incoming messages to a Cloudflare Worker that normalises and stores each message before forwarding it into the WildDuck mailbox.
-- **Raw message archival** — every inbound message is written to R2-compatible object storage as three files: `raw.eml` (the original RFC 5322 message), `edge.json` (Cloudflare envelope metadata), and `result.json` (processing outcome), giving you a complete, inspectable audit trail.
-- **Outbound delivery** — agents send mail through ZoneMTA, which can relay via Cloudflare Email or Amazon SES, so you retain full control over your sending reputation and delivery pipeline.
-- **Web admin interface** — an authenticated web application lets you create and manage mailboxes, inspect individual messages, and configure your Cloudflare Email Routing integration without touching the CLI.
-- **Flexible self-hosting** — run the full stack on a single host with Docker Compose, or deploy to any Kubernetes cluster using the included Helm chart.
+- **Dedicated agent mailboxes**: each agent can receive a mailbox on a connected domain.
+- **Cloudflare inbound capture**: Cloudflare Email Routing delivers messages to a generated Worker.
+- **R2 archive storage**: raw inbound and outbound artifacts are written to the admin archive bucket.
+- **Authenticated web administration**: users manage domains, mailboxes, credentials, and message review from the web app.
+- **Self-hosted runtime choices**: run the stack with Docker Compose or deploy it with Helm.
 
-## Deploy AgentTeam Email
-
-Pick the deployment path that matches your infrastructure and follow the step-by-step guide.
+## Main paths
 
 <CardGroup cols={2}>
-  <Card title="Docker Compose" icon="docker" href="/guides/self-host/docker-compose">
-    The fastest way to get started — everything runs on a single host with a single `docker compose up`.
+  <Card
+    title='Docker Compose'
+    icon='docker'
+    href='/self-host/docker-compose'
+  >
+    Single-host deployment using the root `compose.yaml`.
   </Card>
-  <Card title="Helm (Kubernetes)" icon="dharmachakra" href="/guides/self-host/helm">
-    Deploy to any Kubernetes cluster using the AgentTeam Email Helm chart.
+  <Card
+    title='Helm'
+    icon='dharmachakra'
+    href='/self-host/helm'
+  >
+    Kubernetes deployment using the AgentTeam Email Helm chart.
+  </Card>
+  <Card
+    title='Domain Provisioning'
+    icon='cloud'
+    href='/usage/domain-provisioning'
+  >
+    Connect a user Cloudflare account and provision a mail domain through the web UI.
+  </Card>
+  <Card
+    title='Mail Flow'
+    icon='diagram-project'
+    href='/how-it-works/mail-flow'
+  >
+    Trace inbound and outbound messages through archive, ingest, mailbox delivery, and outbound relay.
   </Card>
 </CardGroup>

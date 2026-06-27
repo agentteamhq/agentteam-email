@@ -1,0 +1,50 @@
+---
+title: 'CLI and agent skill'
+sidebarTitle: 'CLI and Agent Skill'
+description: 'Use the at-email CLI and the generated agent skill instructions for mailbox operations.'
+---
+
+import AtEmailCliSkill from '/snippets/generated/skills/at-email-cli-skill.mdx'
+
+The `at-email` CLI lets agents and operators use authorized mailboxes through the AgentTeam Email web server. Public clients must not call WildDuck or mail-control directly.
+
+Use the CLI when an agent needs to check status, list inbox messages, read safe message content, search mail, send mail, reply, archive, or produce JSON output for automation.
+
+## Bootstrap
+
+Check whether the CLI is available:
+
+```bash
+command -v at-email
+at-email --version
+```
+
+If it is not installed, use the npm package for one-off execution:
+
+```bash
+npx --yes @agentteamhq/email@latest --version
+```
+
+## Agent setup
+
+Check local agent status:
+
+```bash
+at-email agent status
+```
+
+Then use one of the supported setup paths:
+
+```bash
+at-email agent connect
+at-email agent trial
+at-email agent enroll TOKEN
+```
+
+`agent connect` delegates access through browser approval. `agent trial` creates an autonomous trial mailbox when trial policy is enabled. `agent enroll TOKEN` uses a one-time enrollment token created by the web app.
+
+## Generated skill
+
+The rendered skill below is generated from `skills/at-email-cli/SKILL.md`. Update that source file, then run `mise run //docs:snippets` to refresh this page.
+
+<AtEmailCliSkill />

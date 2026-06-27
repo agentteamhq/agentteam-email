@@ -1,0 +1,67 @@
+---
+title: 'Mail flow'
+sidebarTitle: 'Mail Flow'
+description: 'How inbound and outbound messages move through Cloudflare, R2 archive storage, mail-control, WildDuck, and ZoneMTA.'
+---
+
+AgentTeam Email uses an archive-first mail pipeline. Inbound messages are written to R2 before your deployment is notified. Outbound messages are archived at the relay boundary before final delivery status is recorded.
+
+## Inbound flow
+
+<Steps>
+  <Step title='Email reaches Cloudflare'>
+    A sender addresses a message to a mailbox on a connected domain. Cloudflare receives the message through the domain's MX routing and Email Routing configuration.
+  </Step>
+
+<Step title='Email Routing invokes the Worker'>
+  Cloudflare Email Routing delivers the message to the AgentTeam Email Worker provisioned for that domain.
+</Step>
+
+<Step title='Worker writes the archive bundle'>
+  The Worker writes the exact RFC 822 bytes as `raw.eml`, then writes `edge.json` with envelope, integrity,
+  and Cloudflare edge metadata. The `edge.json` object is the durable inbound commit marker.
+</Step>
+
+<Step title='Worker notifies the web server'>
+  After the archive commit succeeds, the Worker sends a Standard Webhooks-signed `POST
+  /rpc/agent-mail/ingest/v1/{connectionPublicId}` notification to the public web server. The notification
+  contains bundle metadata, not raw mail bytes.
+</Step>
+
+<Step title='Mail-control queues delivery'>
+  The web server verifies the Standard Webhooks signature and passes the bundle metadata to mail-control.
+  Mail-control validates organization, domain, archive prefix, and Worker metadata before queueing delivery.
+</Step>
+
+  <Step title='Message reaches the mailbox'>
+    Mail-control reads `raw.eml` from R2, verifies integrity, replays the bytes through Haraka into WildDuck, and writes the terminal `result.json` archive object.
+  </Step>
+</Steps>
+
+If the addressed mailbox does not exist, mail-control records the failed delivery result and sends a DSN only when the original envelope sender can safely receive one.
+
+## Outbound flow
+
+<Steps>
+  <Step title='Agent submits mail'>
+    The agent submits a message through the authenticated web server. The web server verifies mailbox permission before initiating submission through WildDuck.
+  </Step>
+
+<Step title='ZoneMTA queues delivery'>
+  WildDuck stores the sent copy and hands the message to ZoneMTA. ZoneMTA owns queueing, retries, and bounce
+  behavior.
+</Step>
+
+<Step title='Mail-control relay archives the message'>
+  ZoneMTA submits the message to the mail-control internal relay. The relay verifies the sender domain, writes
+  `relay.eml` and `relay.json`, and chooses the delivery boundary.
+</Step>
+
+  <Step title='Delivery result is recorded'>
+    After local routing or external delivery accepts or rejects the message, the relay writes `result.json`. Retries create additional outbound bundles linked by the ZoneMTA queue ID.
+  </Step>
+</Steps>
+
+## Archive contract
+
+The exact object paths, file names, and terminal status values are documented in [Archive Layout](/reference/archive-layout). Treat that reference as the stable contract for agents, tools, and operators inspecting R2 directly.

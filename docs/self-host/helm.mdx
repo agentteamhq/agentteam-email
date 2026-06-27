@@ -1,0 +1,225 @@
+---
+title: 'Deploy with Helm'
+sidebarTitle: 'Helm'
+description: 'Install AgentTeam Email on Kubernetes with the official Helm chart.'
+---
+
+Helm is the supported Kubernetes deployment path. The chart renders the web server, mail control service, MongoDB, Redis, WildDuck, Haraka, ZoneMTA, and Rspamd from one OCI chart. Only the web server should be exposed outside the cluster.
+
+Complete the [Self-Host Setup Guide](/self-host/setup) before installing the chart.
+
+## Chart reference
+
+The chart is published as an OCI artifact:
+
+```text
+oci://ghcr.io/agentteamhq/agentteam-email
+```
+
+No Helm repository add step is required.
+
+## Minimal values
+
+The chart uses semantic values, not a raw environment-variable bag.
+
+```yaml
+namespace:
+  create: true
+  name: agentteam-email
+
+publicHostname: https://mail.company.example
+
+webServer:
+  authSecret:
+    value: '<random-secret>'
+  encryptionKey:
+    value: '<base64url-32-byte-key>'
+
+controlApi:
+  controlToWebToken:
+    value: '<random-control-to-web-token>'
+
+wildduck:
+  adminAccessToken:
+    value: '<random-wildduck-token>'
+  accessControlSecret:
+    value: '<random-wildduck-secret>'
+
+mailRuntime:
+  loopSecret:
+    value: '<random-mail-loop-secret>'
+  zonemtaRelayPassword:
+    value: '<random-zonemta-relay-password>'
+  feedbackMailboxPassword:
+    value: '<random-feedback-mailbox-password>'
+
+admin:
+  cloudflare:
+    oauth:
+      clientId:
+        value: '<cloudflare-oauth-client-id>'
+      clientSecret:
+        value: '<cloudflare-oauth-client-secret>'
+    r2:
+      accountId:
+        value: '<cloudflare-account-id>'
+      apiToken:
+        value: '<r2-api-token>'
+      endpoint:
+        value: 'https://<account-id>.r2.cloudflarestorage.com'
+      region:
+        value: auto
+      bucket:
+        value: company-agent-mail-archive
+      accessKeyId:
+        value: '<r2-access-key>'
+      secretAccessKey:
+        value: '<r2-secret-key>'
+```
+
+## Admin transactional SMTP
+
+Transactional SMTP is only for system email from the admin instance. It is not used for user-domain mail.
+
+```yaml
+admin:
+  smtp:
+    address:
+      value: smtp.example.com
+    port:
+      value: '587'
+    secureTls:
+      value: 'true'
+    username:
+      value: '<smtp-user>'
+    password:
+      value: '<smtp-password>'
+    fromEmail:
+      value: noreply@mail.company.example
+    replyToEmail:
+      value: support@mail.company.example
+    sendAsEmail:
+      value: bounce@mail.company.example
+```
+
+## Secret references
+
+Sensitive values support `valueFrom.secretKeyRef` where the chart can render them as container environment variables:
+
+```yaml
+webServer:
+  authSecret:
+    valueFrom:
+      secretKeyRef:
+        name: mail-secrets
+        key: AT_EMAIL_ADMIN_BETTER_AUTH_SECRET
+  encryptionKey:
+    valueFrom:
+      secretKeyRef:
+        name: mail-secrets
+        key: AT_EMAIL_ADMIN_ENCRYPT_SECRET_KEY
+
+controlApi:
+  controlToWebToken:
+    valueFrom:
+      secretKeyRef:
+        name: mail-secrets
+        key: AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN
+```
+
+Secrets rendered into bundled service config files, such as `mailRuntime.loopSecret` and `mailRuntime.zonemtaRelayPassword`, must use inline `value` entries because those values are rendered into ConfigMaps at install time.
+
+## Install or upgrade
+
+Render before installing:
+
+```bash
+helm template atemail oci://ghcr.io/agentteamhq/agentteam-email \
+  --namespace agentteam-email \
+  -f values.yaml
+```
+
+Install or upgrade:
+
+```bash
+helm upgrade --install atemail oci://ghcr.io/agentteamhq/agentteam-email \
+  --namespace agentteam-email \
+  --create-namespace \
+  -f values.yaml
+```
+
+Pin production rollouts with `--version`.
+
+## Public exposure
+
+`publicHostname` must route to the web server service:
+
+```text
+https://mail.company.example/
+https://mail.company.example/rpc/agent-mail/ingest/v1/{connectionPublicId}
+```
+
+Use chart Ingress when your cluster has a public ingress controller:
+
+```yaml
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: mail.company.example
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - hosts:
+        - mail.company.example
+      secretName: mail-company-example-tls
+```
+
+If your cluster is not directly public, run tunnel or proxy infrastructure outside the chart and route it to the web server service:
+
+```text
+http://atemail-web-server:80
+```
+
+Do not expose the internal control API, WildDuck, MongoDB, Redis, Haraka, ZoneMTA, or Rspamd.
+
+## Persistence
+
+The chart renders PersistentVolumeClaims for MongoDB, Redis, Rspamd, and the Haraka queue.
+
+```yaml
+persistence:
+  enabled: true
+  storageClassName: ''
+
+  mongodb:
+    size: 20Gi
+    accessModes: ['ReadWriteOnce']
+    existingClaim: ''
+  redis:
+    size: 2Gi
+    accessModes: ['ReadWriteOnce']
+    existingClaim: ''
+  rspamd:
+    size: 1Gi
+    accessModes: ['ReadWriteOnce']
+    existingClaim: ''
+  harakaQueue:
+    size: 5Gi
+    accessModes: ['ReadWriteOnce']
+    existingClaim: ''
+```
+
+Set `existingClaim` when your environment manages storage independently.
+
+<Warning>
+  `persistence.enabled=false` uses `emptyDir` for stateful services. Data is lost when pods restart.
+</Warning>
+
+## Example values
+
+Example values files are committed under `docs/examples/helm/`:
+
+- `values-basic.yaml`
+- `values-existing-secret.yaml`
