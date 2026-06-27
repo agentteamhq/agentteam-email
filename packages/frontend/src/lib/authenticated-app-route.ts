@@ -2,7 +2,7 @@ import { parseUUIDv7 } from '@main/common'
 
 import { resolveFrontendServerRouteContext } from '../server-route-context'
 import { authReactClient } from './auth-react-client'
-import { throwAuthRequiredRedirect } from './route-redirect'
+import { throwAuthRequiredRedirect, throwRouteRedirect } from './route-redirect'
 import type { FrontendLoaderInput } from '../server-route-context'
 import type { SettingsRouteState } from '@main/backend/routes/webapp'
 
@@ -20,6 +20,10 @@ export async function loadAuthenticatedRouteState(
     const routeState = await serverRouteContext.serverRouteHandlers.loadDashboardRoute(
       serverRouteContext.request
     )
+
+    if (routeState.shouldRedirectToSetup) {
+      throwRouteRedirect(routeState.redirectTo)
+    }
 
     if (routeState.shouldRedirectToSignIn) {
       throwAuthRequiredRedirect(redirectPath)
@@ -39,6 +43,7 @@ export async function loadAuthenticatedRouteState(
     redirectTo: '/signin/',
     setCookieHeaders: [],
     shouldRedirectToSignIn: false,
+    shouldRedirectToSetup: false,
     user: {
       ...auth.data.user,
       id: parseUUIDv7(auth.data.user.id) as NonNullable<SettingsRouteState['user']>['id']

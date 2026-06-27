@@ -5,6 +5,9 @@ import type {
   handleStripeCheckoutRedirect,
   handleStripePortalRedirect,
   handleStripeRedirect,
+  loadAdminRoute,
+  loadAdminSetupRoute,
+  loadAppRouteGate,
   loadBillingRoute,
   loadDashboardRoute,
   loadDeviceRoute,
@@ -23,6 +26,9 @@ export interface FrontendServerRouteHandlers {
   handleStripeCheckoutRedirect?: typeof handleStripeCheckoutRedirect
   handleStripePortalRedirect?: typeof handleStripePortalRedirect
   handleStripeRedirect?: typeof handleStripeRedirect
+  loadAdminRoute?: typeof loadAdminRoute
+  loadAdminSetupRoute?: typeof loadAdminSetupRoute
+  loadAppRouteGate?: typeof loadAppRouteGate
   loadBillingRoute?: typeof loadBillingRoute
   loadDashboardRoute?: typeof loadDashboardRoute
   loadDeviceRoute?: typeof loadDeviceRoute

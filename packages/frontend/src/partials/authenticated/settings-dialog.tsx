@@ -1306,10 +1306,6 @@ function MailRuntimeStatusPanel({ settings }: { settings: DomainSettingsControll
               value={queue ? `${queue.pending} pending · ${queue.retryWait} retry` : 'No queue status'}
             />
             <DomainDetailRow
-              label='Provisioning'
-              value={formatStatusLabel(status.provisioning?.status ?? 'unknown')}
-            />
-            <DomainDetailRow
               label='Runtime domains'
               value={
                 typeof activeDomains === 'number' && typeof totalDomains === 'number'

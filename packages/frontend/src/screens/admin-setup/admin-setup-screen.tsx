@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { ArrowRightIcon } from '@phosphor-icons/react'
+import { ArrowRightIcon, WarningIcon } from '@phosphor-icons/react'
 
 import { Button } from '../../components/ui/button'
 import {
@@ -18,13 +18,13 @@ import {
 import { Input } from '../../components/ui/input'
 import type { SyntheticEvent } from 'react'
 
-export interface OnboardingFormValues {
+export interface AdminSetupFormValues {
   confirmPassword: string
   email: string
   password: string
 }
 
-export interface OnboardingScreenCopy {
+export interface AdminSetupScreenCopy {
   confirmPasswordDescription: string
   confirmPasswordLabel: string
   description: string
@@ -37,11 +37,12 @@ export interface OnboardingScreenCopy {
   title: string
 }
 
-export interface OnboardingScreenProps extends Omit<React.ComponentProps<typeof Card>, 'onSubmit'> {
-  copy?: Partial<OnboardingScreenCopy>
-  defaultValues?: Partial<OnboardingFormValues>
+export interface AdminSetupScreenProps extends Omit<React.ComponentProps<typeof Card>, 'onSubmit'> {
+  copy?: Partial<AdminSetupScreenCopy>
+  defaultValues?: Partial<AdminSetupFormValues>
+  errorMessage?: string | null
   isSubmitting?: boolean
-  onSubmit?: (values: OnboardingFormValues) => void
+  onSubmit?: (values: AdminSetupFormValues) => void
 }
 
 const defaultCopy = {
@@ -55,21 +56,22 @@ const defaultCopy = {
   passwordLabel: 'Admin password',
   submitLabel: 'Set up instance',
   title: 'Create admin account'
-} satisfies OnboardingScreenCopy
+} satisfies AdminSetupScreenCopy
 
-function getFormText(formData: FormData, key: keyof OnboardingFormValues) {
+function getFormText(formData: FormData, key: keyof AdminSetupFormValues) {
   const value = formData.get(key)
 
   return typeof value === 'string' ? value : ''
 }
 
-export function OnboardingScreen({
+export function AdminSetupScreen({
   copy: copyOverride,
   defaultValues,
+  errorMessage,
   isSubmitting = false,
   onSubmit,
   ...props
-}: OnboardingScreenProps) {
+}: AdminSetupScreenProps) {
   const copy = { ...defaultCopy, ...copyOverride }
   const emailId = React.useId()
   const passwordId = React.useId()
@@ -95,17 +97,26 @@ export function OnboardingScreen({
       <CardContent className='px-7 pb-7 sm:px-8 sm:pb-8'>
         <form onSubmit={handleSubmit}>
           <FieldGroup>
+            {errorMessage ? (
+              <div className='text-destructive flex items-start gap-2 text-sm leading-6'>
+                <WarningIcon
+                  className='mt-0.5 shrink-0'
+                  size={16}
+                />
+                <span>{errorMessage}</span>
+              </div>
+            ) : null}
             <Field>
               <FieldLabel htmlFor={emailId}>{copy.emailLabel}</FieldLabel>
               <Input
                 autoComplete='email'
+                className='h-10'
                 defaultValue={defaultValues?.email}
                 disabled={isSubmitting}
                 id={emailId}
                 name='email'
                 placeholder={copy.emailPlaceholder}
                 required
-                className='h-10'
                 type='email'
               />
               <FieldDescription>{copy.emailDescription}</FieldDescription>
@@ -114,12 +125,12 @@ export function OnboardingScreen({
               <FieldLabel htmlFor={passwordId}>{copy.passwordLabel}</FieldLabel>
               <Input
                 autoComplete='new-password'
+                className='h-10'
                 defaultValue={defaultValues?.password}
                 disabled={isSubmitting}
                 id={passwordId}
                 name='password'
                 required
-                className='h-10'
                 type='password'
               />
               <FieldDescription>{copy.passwordDescription}</FieldDescription>
@@ -128,12 +139,12 @@ export function OnboardingScreen({
               <FieldLabel htmlFor={confirmPasswordId}>{copy.confirmPasswordLabel}</FieldLabel>
               <Input
                 autoComplete='new-password'
+                className='h-10'
                 defaultValue={defaultValues?.confirmPassword}
                 disabled={isSubmitting}
                 id={confirmPasswordId}
                 name='confirmPassword'
                 required
-                className='h-10'
                 type='password'
               />
               <FieldDescription>{copy.confirmPasswordDescription}</FieldDescription>
@@ -145,7 +156,7 @@ export function OnboardingScreen({
                   disabled={isSubmitting}
                   type='submit'
                 >
-                  {copy.submitLabel}
+                  {isSubmitting ? 'Setting up instance' : copy.submitLabel}
                   <ArrowRightIcon data-icon='inline-end' />
                 </Button>
               </Field>

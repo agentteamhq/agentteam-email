@@ -1,18 +1,19 @@
 import { ShieldCheckIcon } from '@phosphor-icons/react'
 import { useRouter } from '@tanstack/react-router'
+import * as React from 'react'
 
+import { createFirstAdmin } from '../../lib/admin-setup-rpc'
 import { cn } from '../../lib/utils'
 import { getWebAppManifestIconUrl } from '../../public-assets'
-import { OnboardingScreen } from './onboarding-screen'
-import type * as React from 'react'
-import type { OnboardingScreenProps } from './onboarding-screen'
+import { AdminSetupScreen } from './admin-setup-screen'
+import type { AdminSetupFormValues, AdminSetupScreenProps } from './admin-setup-screen'
 
-export interface OnboardingPageProps extends React.ComponentProps<'main'> {
+export interface AdminSetupPageProps extends React.ComponentProps<'main'> {
   logoSrc: string
-  screenProps?: OnboardingScreenProps
+  screenProps?: AdminSetupScreenProps
 }
 
-export function OnboardingPage({ className, logoSrc, screenProps, ...props }: OnboardingPageProps) {
+export function AdminSetupPage({ className, logoSrc, screenProps, ...props }: AdminSetupPageProps) {
   const { className: screenClassName, ...restScreenProps } = screenProps ?? {}
 
   return (
@@ -54,8 +55,8 @@ export function OnboardingPage({ className, logoSrc, screenProps, ...props }: On
             Setup this instance&apos;s admin account.
           </h1>
           <p className='text-muted-foreground mt-5 max-w-[54ch] text-base leading-7'>
-            Create the first administrator account before connecting domains, workers, and inbound
-            mail routes.
+            Create the first administrator account before managing audit logs, setup health, and
+            service-level configuration.
           </p>
         </div>
 
@@ -75,7 +76,7 @@ export function OnboardingPage({ className, logoSrc, screenProps, ...props }: On
           <div className='border-border/70 bg-background/70 rounded-lg border p-4'>
             <div className='font-medium'>Setup gate</div>
             <p className='text-muted-foreground mt-2 leading-6'>
-              Keep setup locked to this step until the initial admin account exists.
+              This step stays available only until the initial admin account exists.
             </p>
           </div>
         </div>
@@ -86,7 +87,7 @@ export function OnboardingPage({ className, logoSrc, screenProps, ...props }: On
       </section>
 
       <section className='flex min-h-[100dvh] items-center justify-center px-6 py-10 sm:px-10 lg:px-14'>
-        <OnboardingScreen
+        <AdminSetupScreen
           {...restScreenProps}
           className={cn(
             'border-border/70 bg-background/95 w-full max-w-[28rem] rounded-xl shadow-[0_24px_70px_-45px_rgba(39,39,42,0.45)]',
@@ -98,9 +99,42 @@ export function OnboardingPage({ className, logoSrc, screenProps, ...props }: On
   )
 }
 
-export function OnboardingRouteScreen() {
+export function AdminSetupRouteScreen() {
   const router = useRouter()
+  const [errorMessage, setErrorMessage] = React.useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = React.useState(false)
   const logoSrc = getWebAppManifestIconUrl(router.options.context.publicEnv.PUBLIC_HOSTNAME, 192)
 
-  return <OnboardingPage logoSrc={logoSrc} />
+  const handleSubmit = React.useCallback(
+    async (values: AdminSetupFormValues) => {
+      setIsSubmitting(true)
+      setErrorMessage(null)
+
+      try {
+        const result = await createFirstAdmin(values)
+        await router.navigate({ href: result.redirectTo })
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : 'Admin account could not be created.')
+      } finally {
+        setIsSubmitting(false)
+      }
+    },
+    [router]
+  )
+
+  return (
+    <AdminSetupPage
+      logoSrc={logoSrc}
+      screenProps={{
+        errorMessage,
+        isSubmitting,
+        onSubmit: (values) => {
+          handleSubmit(values).catch((error: unknown) => {
+            setErrorMessage(error instanceof Error ? error.message : 'Admin account could not be created.')
+            setIsSubmitting(false)
+          })
+        }
+      }}
+    />
+  )
 }

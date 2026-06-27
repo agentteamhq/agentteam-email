@@ -16,16 +16,18 @@ import { Route as SigninRouteImport } from './routes/signin'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as RecoveryEmailSentRouteImport } from './routes/recovery-email-sent'
 import { Route as RecoverAccountRouteImport } from './routes/recover-account'
-import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as MagicLinkRouteImport } from './routes/magic-link'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as DeviceRouteImport } from './routes/device'
 import { Route as CallbackRouteImport } from './routes/callback'
 import { Route as AcceptInviteRouteImport } from './routes/accept-invite'
+import { Route as AdminRouteRouteImport } from './routes/admin/route'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as DeviceCapabilitiesRouteImport } from './routes/device/capabilities'
 import { Route as DeviceApproveRouteImport } from './routes/device/approve'
+import { Route as AdminSetupRouteImport } from './routes/admin/setup'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AgentClaimTokenRouteImport } from './routes/agent/claim.$token'
@@ -67,11 +69,6 @@ const RecoverAccountRoute = RecoverAccountRouteImport.update({
   path: '/recover-account',
   getParentRoute: () => rootRouteImport,
 } as any)
-const OnboardingRoute = OnboardingRouteImport.update({
-  id: '/onboarding',
-  path: '/onboarding',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const MagicLinkRoute = MagicLinkRouteImport.update({
   id: '/magic-link',
   path: '/magic-link',
@@ -97,6 +94,11 @@ const AcceptInviteRoute = AcceptInviteRouteImport.update({
   path: '/accept-invite',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminRouteRoute = AdminRouteRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
@@ -105,6 +107,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminRouteRoute,
 } as any)
 const DeviceCapabilitiesRoute = DeviceCapabilitiesRouteImport.update({
   id: '/capabilities',
@@ -115,6 +122,11 @@ const DeviceApproveRoute = DeviceApproveRouteImport.update({
   id: '/approve',
   path: '/approve',
   getParentRoute: () => DeviceRoute,
+} as any)
+const AdminSetupRoute = AdminSetupRouteImport.update({
+  id: '/setup',
+  path: '/setup',
+  getParentRoute: () => AdminRouteRoute,
 } as any)
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   id: '/settings',
@@ -146,12 +158,12 @@ const AuthenticatedOrganizationSectionRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteRouteWithChildren
   '/accept-invite': typeof AcceptInviteRoute
   '/callback': typeof CallbackRoute
   '/device': typeof DeviceRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/magic-link': typeof MagicLinkRoute
-  '/onboarding': typeof OnboardingRoute
   '/recover-account': typeof RecoverAccountRoute
   '/recovery-email-sent': typeof RecoveryEmailSentRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -161,8 +173,10 @@ export interface FileRoutesByFullPath {
   '/verification-email-sent': typeof VerificationEmailSentRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/settings': typeof AuthenticatedSettingsRouteWithChildren
+  '/admin/setup': typeof AdminSetupRoute
   '/device/approve': typeof DeviceApproveRoute
   '/device/capabilities': typeof DeviceCapabilitiesRoute
+  '/admin/': typeof AdminIndexRoute
   '/organization/$section': typeof AuthenticatedOrganizationSectionRoute
   '/settings/$section': typeof AuthenticatedSettingsSectionRoute
   '/agent/claim/$token': typeof AgentClaimTokenRoute
@@ -174,7 +188,6 @@ export interface FileRoutesByTo {
   '/device': typeof DeviceRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/magic-link': typeof MagicLinkRoute
-  '/onboarding': typeof OnboardingRoute
   '/recover-account': typeof RecoverAccountRoute
   '/recovery-email-sent': typeof RecoveryEmailSentRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -184,8 +197,10 @@ export interface FileRoutesByTo {
   '/verification-email-sent': typeof VerificationEmailSentRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/settings': typeof AuthenticatedSettingsRouteWithChildren
+  '/admin/setup': typeof AdminSetupRoute
   '/device/approve': typeof DeviceApproveRoute
   '/device/capabilities': typeof DeviceCapabilitiesRoute
+  '/admin': typeof AdminIndexRoute
   '/organization/$section': typeof AuthenticatedOrganizationSectionRoute
   '/settings/$section': typeof AuthenticatedSettingsSectionRoute
   '/agent/claim/$token': typeof AgentClaimTokenRoute
@@ -194,12 +209,12 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/admin': typeof AdminRouteRouteWithChildren
   '/accept-invite': typeof AcceptInviteRoute
   '/callback': typeof CallbackRoute
   '/device': typeof DeviceRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/magic-link': typeof MagicLinkRoute
-  '/onboarding': typeof OnboardingRoute
   '/recover-account': typeof RecoverAccountRoute
   '/recovery-email-sent': typeof RecoveryEmailSentRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -209,8 +224,10 @@ export interface FileRoutesById {
   '/verification-email-sent': typeof VerificationEmailSentRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRouteWithChildren
+  '/admin/setup': typeof AdminSetupRoute
   '/device/approve': typeof DeviceApproveRoute
   '/device/capabilities': typeof DeviceCapabilitiesRoute
+  '/admin/': typeof AdminIndexRoute
   '/_authenticated/organization/$section': typeof AuthenticatedOrganizationSectionRoute
   '/_authenticated/settings/$section': typeof AuthenticatedSettingsSectionRoute
   '/agent/claim/$token': typeof AgentClaimTokenRoute
@@ -219,12 +236,12 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin'
     | '/accept-invite'
     | '/callback'
     | '/device'
     | '/forgot-password'
     | '/magic-link'
-    | '/onboarding'
     | '/recover-account'
     | '/recovery-email-sent'
     | '/reset-password'
@@ -234,8 +251,10 @@ export interface FileRouteTypes {
     | '/verification-email-sent'
     | '/dashboard'
     | '/settings'
+    | '/admin/setup'
     | '/device/approve'
     | '/device/capabilities'
+    | '/admin/'
     | '/organization/$section'
     | '/settings/$section'
     | '/agent/claim/$token'
@@ -247,7 +266,6 @@ export interface FileRouteTypes {
     | '/device'
     | '/forgot-password'
     | '/magic-link'
-    | '/onboarding'
     | '/recover-account'
     | '/recovery-email-sent'
     | '/reset-password'
@@ -257,8 +275,10 @@ export interface FileRouteTypes {
     | '/verification-email-sent'
     | '/dashboard'
     | '/settings'
+    | '/admin/setup'
     | '/device/approve'
     | '/device/capabilities'
+    | '/admin'
     | '/organization/$section'
     | '/settings/$section'
     | '/agent/claim/$token'
@@ -266,12 +286,12 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_authenticated'
+    | '/admin'
     | '/accept-invite'
     | '/callback'
     | '/device'
     | '/forgot-password'
     | '/magic-link'
-    | '/onboarding'
     | '/recover-account'
     | '/recovery-email-sent'
     | '/reset-password'
@@ -281,8 +301,10 @@ export interface FileRouteTypes {
     | '/verification-email-sent'
     | '/_authenticated/dashboard'
     | '/_authenticated/settings'
+    | '/admin/setup'
     | '/device/approve'
     | '/device/capabilities'
+    | '/admin/'
     | '/_authenticated/organization/$section'
     | '/_authenticated/settings/$section'
     | '/agent/claim/$token'
@@ -291,12 +313,12 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  AdminRouteRoute: typeof AdminRouteRouteWithChildren
   AcceptInviteRoute: typeof AcceptInviteRoute
   CallbackRoute: typeof CallbackRoute
   DeviceRoute: typeof DeviceRouteWithChildren
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   MagicLinkRoute: typeof MagicLinkRoute
-  OnboardingRoute: typeof OnboardingRoute
   RecoverAccountRoute: typeof RecoverAccountRoute
   RecoveryEmailSentRoute: typeof RecoveryEmailSentRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
@@ -358,13 +380,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RecoverAccountRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/onboarding': {
-      id: '/onboarding'
-      path: '/onboarding'
-      fullPath: '/onboarding'
-      preLoaderRoute: typeof OnboardingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/magic-link': {
       id: '/magic-link'
       path: '/magic-link'
@@ -400,6 +415,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AcceptInviteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated': {
       id: '/_authenticated'
       path: ''
@@ -414,6 +436,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/': {
+      id: '/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/device/capabilities': {
       id: '/device/capabilities'
       path: '/capabilities'
@@ -427,6 +456,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/device/approve'
       preLoaderRoute: typeof DeviceApproveRouteImport
       parentRoute: typeof DeviceRoute
+    }
+    '/admin/setup': {
+      id: '/admin/setup'
+      path: '/setup'
+      fullPath: '/admin/setup'
+      preLoaderRoute: typeof AdminSetupRouteImport
+      parentRoute: typeof AdminRouteRoute
     }
     '/_authenticated/settings': {
       id: '/_authenticated/settings'
@@ -494,6 +530,20 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
 const AuthenticatedRouteRouteWithChildren =
   AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
 
+interface AdminRouteRouteChildren {
+  AdminSetupRoute: typeof AdminSetupRoute
+  AdminIndexRoute: typeof AdminIndexRoute
+}
+
+const AdminRouteRouteChildren: AdminRouteRouteChildren = {
+  AdminSetupRoute: AdminSetupRoute,
+  AdminIndexRoute: AdminIndexRoute,
+}
+
+const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
+  AdminRouteRouteChildren,
+)
+
 interface DeviceRouteChildren {
   DeviceApproveRoute: typeof DeviceApproveRoute
   DeviceCapabilitiesRoute: typeof DeviceCapabilitiesRoute
@@ -510,12 +560,12 @@ const DeviceRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  AdminRouteRoute: AdminRouteRouteWithChildren,
   AcceptInviteRoute: AcceptInviteRoute,
   CallbackRoute: CallbackRoute,
   DeviceRoute: DeviceRouteWithChildren,
   ForgotPasswordRoute: ForgotPasswordRoute,
   MagicLinkRoute: MagicLinkRoute,
-  OnboardingRoute: OnboardingRoute,
   RecoverAccountRoute: RecoverAccountRoute,
   RecoveryEmailSentRoute: RecoveryEmailSentRoute,
   ResetPasswordRoute: ResetPasswordRoute,
