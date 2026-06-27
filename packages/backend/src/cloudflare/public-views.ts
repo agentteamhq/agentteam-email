@@ -118,7 +118,7 @@ function publicCloudflareOperationalMessage(
   if (!code && !storedMessage) {
     return null
   }
-  if (code === 'AGENT_MAIL_CONTROL_SYNC_FAILED') {
+  if (code === 'AT_EMAIL_ADMIN_CONTROL_SYNC_FAILED') {
     return 'Agent Mail runtime sync failed. Try again or check runtime health.'
   }
   if (code === 'BETTER_AUTH_UNLINK_FAILED') {

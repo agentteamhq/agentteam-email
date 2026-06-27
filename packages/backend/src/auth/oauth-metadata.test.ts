@@ -62,6 +62,51 @@ describe('OAuth metadata public route rewriting', () => {
     })
   })
 
+  it('rewrites response metadata only for parsed application/json media types', async () => {
+    expect.hasAssertions()
+
+    const { rewritePublicOAuthMetadataResponse } = await import('./oauth-metadata')
+    const response = await rewritePublicOAuthMetadataResponse(
+      Response.json(
+        {
+          issuer: 'https://better-auth-internal.test',
+          token_endpoint: 'https://mail.example.com/api/oauth2/token'
+        },
+        {
+          headers: {
+            'content-type': 'application/json; charset=utf-8'
+          }
+        }
+      )
+    )
+
+    expect(await response.json()).toStrictEqual({
+      issuer: 'https://mail.example.com',
+      token_endpoint: 'https://mail.example.com/api/auth/oauth2/token'
+    })
+  })
+
+  it('does not rewrite response metadata for json-like media type suffixes', async () => {
+    expect.hasAssertions()
+
+    const { rewritePublicOAuthMetadataResponse } = await import('./oauth-metadata')
+    const upstream = new Response(
+      JSON.stringify({
+        issuer: 'https://better-auth-internal.test',
+        token_endpoint: 'https://mail.example.com/api/oauth2/token'
+      }),
+      {
+        headers: {
+          'content-type': 'application/json-patch+json'
+        }
+      }
+    )
+
+    const response = await rewritePublicOAuthMetadataResponse(upstream)
+
+    expect(response).toBe(upstream)
+  })
+
   it('forwards canonical authorization-server metadata to Better Auth and rewrites endpoint URLs', async () => {
     expect.hasAssertions()
 

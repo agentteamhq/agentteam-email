@@ -1,3 +1,4 @@
+import { parse as parseContentType } from 'content-type'
 import { oauthProviderResourceClient } from '@better-auth/oauth-provider/resource-client'
 
 import { globals } from '../globals'
@@ -79,8 +80,7 @@ async function publicApiProtectedResourceMetadataResponse(request: Request): Pro
 }
 
 export async function rewritePublicOAuthMetadataResponse(response: Response): Promise<Response> {
-  const contentType = response.headers.get('content-type') ?? ''
-  if (!contentType.toLowerCase().includes('application/json')) {
+  if (!isJsonContentType(response.headers)) {
     return response
   }
 
@@ -149,6 +149,18 @@ function rewriteLogicalAuthUrl(value: string): string {
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isJsonContentType(headers: Headers): boolean {
+  const header = headers.get('content-type')
+  if (!header) {
+    return false
+  }
+  try {
+    return parseContentType(header).type === 'application/json'
+  } catch {
+    return false
+  }
 }
 
 function trimTrailingSlash(value: string): string {

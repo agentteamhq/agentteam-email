@@ -1,5 +1,3 @@
-import { Buffer } from 'node:buffer'
-
 import {
   base62UUIDv7ToUUIDv7,
   normalizeMongooseUUIDv7,
@@ -8,8 +6,12 @@ import {
 } from '@main/db'
 
 import { globals } from '../globals'
-import { createAgentMailWorkerCredentials, syncAgentMailRuntime } from '../agent-mail/control-client'
+import { createAgentMailWorkerCredentials } from '../agent-mail/control-client'
 import { agentMailSubject } from '../agent-mail/permission-policy'
+import {
+  createAgentMailArchivePrefix,
+  syncAgentMailRuntimeProjection
+} from '../agent-mail/runtime-projection'
 import { isAgentMailAccessError, requireAgentMailOrganizationContext } from '../agent-mail/service'
 import { decryptSecretValue, encryptSecretValue } from '../lib/secret-box'
 import { PUBLIC_VARS } from '../vars.public'
@@ -18,14 +20,13 @@ import {
   applyCloudflareProvisioning,
   listCloudflareAccounts,
   listCloudflareZones,
-  sanitizeCloudflareError
+  sanitizeCloudflareError,
+  sendCloudflareRawEmail
 } from './client'
 import {
   CLOUDFLARE_OAUTH_PROVIDER_ID,
-  getCloudflareOAuthTokenUrl,
   getCloudflareRequiredOAuthScopes,
-  isCloudflareOAuthConfigured,
-  requireCloudflareOAuthClientCredentials
+  isCloudflareOAuthConfigured
 } from './config'
 import {
   cloudflareConnectionPublicView,
@@ -39,7 +40,6 @@ import type {
 } from './public-views'
 import type { CloudflareAccountSummary, CloudflareZoneSummary } from './client'
 import type {
-  AccountDocument,
   AgentMailDomainDocument,
   CloudflareConnectionDocument,
   CloudflareConnectionId,
@@ -56,7 +56,9 @@ import type { Database } from '../db/db'
 
 const CLOUDFLARE_OAUTH_INTENT_TTL_MS = 15 * 60 * 1000
 const WORKER_CREDENTIAL_REFRESH_AFTER_MS = 24 * 60 * 60 * 1000
-const OAUTH_TOKEN_REFRESH_SKEW_MS = 5 * 60 * 1000
+const ACTIVE_SEND_DOMAIN_STATUSES = ['active', 'degraded'] as const
+const ACTIVE_SEND_CONNECTION_STATUSES = ['active', 'degraded'] as const
+const CLOUDFLARE_EMAIL_SEND_SCOPE = 'email-sending.write'
 
 export type { CloudflareAccountSummary, CloudflareZoneSummary } from './client'
 export type {
@@ -89,6 +91,23 @@ export interface CloudflareStatusResult {
   grants: CloudflareOAuthGrantPublicView[]
 }
 
+export interface CloudflareControlSendRawInput {
+  domain: string
+  from: string
+  mimeMessage: string
+  organizationId: OrganizationId | string
+  organizationPublicId: OrganizationPublicId | string
+  recipients: string[]
+  sendId?: string
+  zoneMtaQueueId?: string
+}
+
+export interface CloudflareControlSendRawResult {
+  delivered: string[]
+  permanent_bounces: string[]
+  queued: string[]
+}
+
 export class CloudflareAccessError extends Error {
   constructor(
     message: string,
@@ -96,6 +115,16 @@ export class CloudflareAccessError extends Error {
   ) {
     super(message)
     this.name = 'CloudflareAccessError'
+  }
+}
+
+export class CloudflareControlSendError extends Error {
+  constructor(
+    message: string,
+    public readonly status: 400 | 403 | 502
+  ) {
+    super(message)
+    this.name = 'CloudflareControlSendError'
   }
 }
 
@@ -228,6 +257,99 @@ export async function listConnectedCloudflareAccounts(headers: Headers): Promise
   const accessToken = await getCloudflareAccessToken(headers, grant)
 
   return listCloudflareAccounts(accessToken)
+}
+
+export async function sendCloudflareRawEmailForControl({
+  domain: inputDomain,
+  from,
+  mimeMessage,
+  organizationId,
+  organizationPublicId,
+  recipients
+}: CloudflareControlSendRawInput): Promise<CloudflareControlSendRawResult> {
+  const domain = normalizeDomain(inputDomain)
+  const requestedOrganizationId = organizationId as OrganizationId
+  const requestedOrganizationPublicId = organizationPublicId as OrganizationPublicId
+  const senderDomain = domainFromAddress(from)
+  if (senderDomain !== domain) {
+    throw new CloudflareControlSendError('Sender domain does not match the active mail domain', 403)
+  }
+  if (recipients.length === 0) {
+    throw new CloudflareControlSendError('At least one recipient is required', 400)
+  }
+  if (mimeMessage.trim() === '') {
+    throw new CloudflareControlSendError('MIME message is required', 400)
+  }
+
+  const { db } = await globals()
+  const domainRecord = await db.models.agentMailDomain
+    .findOne({
+      organizationId: requestedOrganizationId,
+      domain,
+      status: { $in: [...ACTIVE_SEND_DOMAIN_STATUSES] }
+    })
+    .exec()
+
+  if (!domainRecord || domainRecord.organizationPublicId !== requestedOrganizationPublicId) {
+    throw new CloudflareControlSendError('Active Agent Mail domain is not authorized for send', 403)
+  }
+
+  const connection = await db.models.cloudflareConnection
+    .findOne({
+      _id: domainRecord.cloudflareConnectionId,
+      organizationId: requestedOrganizationId,
+      domain,
+      status: { $in: [...ACTIVE_SEND_CONNECTION_STATUSES] },
+      provisioningStatus: 'succeeded'
+    })
+    .exec()
+
+  if (!connection || connection.organizationPublicId !== requestedOrganizationPublicId) {
+    throw new CloudflareControlSendError('Active Cloudflare connection is not authorized for send', 403)
+  }
+
+  const grant = await db.models.cloudflareOAuthGrant
+    .findOne({
+      _id: connection.grantId,
+      organizationId: requestedOrganizationId,
+      status: 'active'
+    })
+    .exec()
+
+  if (!grant || !grant.grantedScopes.includes(CLOUDFLARE_EMAIL_SEND_SCOPE)) {
+    throw new CloudflareControlSendError('Cloudflare OAuth grant is not authorized for email sending', 403)
+  }
+
+  try {
+    const accessToken = await getStoredCloudflareAccessToken(db, grant)
+    const result = await sendCloudflareRawEmail({
+      accessToken,
+      cloudflareAccountId: connection.cloudflareAccountId,
+      from,
+      mimeMessage,
+      recipients
+    })
+    return {
+      delivered: result.delivered,
+      permanent_bounces: result.permanentBounces,
+      queued: result.queued
+    }
+  } catch (error) {
+    const sanitized = sanitizeCloudflareError(error)
+    await db.models.cloudflareConnection
+      .updateOne(
+        { _id: connection._id },
+        {
+          $set: {
+            lastErrorCode: sanitized.code,
+            lastErrorMessage: sanitized.message,
+            status: 'degraded'
+          }
+        }
+      )
+      .exec()
+    throw new CloudflareControlSendError(sanitized.message, 502)
+  }
 }
 
 export async function listConnectedCloudflareZones({
@@ -372,8 +494,8 @@ export async function applyCloudflareConnectionProvisioning({
   const existingDeployment = await db.models.agentMailWorkerDeployment
     .findOne({ cloudflareConnectionId: connection._id, organizationId: context.organizationId })
     .exec()
-  const existingHmacSecret = existingDeployment?.encryptedWorkerHmacSecret
-    ? decryptSecretValue(existingDeployment.encryptedWorkerHmacSecret)
+  const existingWebhookSigningSecret = existingDeployment?.encryptedWorkerHmacSecret
+    ? await decryptSecretValue(existingDeployment.encryptedWorkerHmacSecret)
     : undefined
 
   try {
@@ -385,9 +507,9 @@ export async function applyCloudflareConnectionProvisioning({
       connectionPublicId: connectionView.publicId,
       domainPublicId: publicIdFromUUIDv7(domainRecord._id),
       domain: connection.domain,
-      hmacSecret: existingHmacSecret,
       organizationId: context.organizationId,
       organizationPublicId: context.organizationPublicId,
+      webhookSigningSecret: existingWebhookSigningSecret,
       workerCredentials: {
         accessKeyId: workerCredentials.accessKeyId,
         archivePrefix: workerCredentials.archivePrefix,
@@ -400,7 +522,7 @@ export async function applyCloudflareConnectionProvisioning({
       }
     })
     const now = new Date()
-    const encryptedHmacSecret = encryptSecretValue(result.hmacSecret)
+    const encryptedWebhookSigningSecret = await encryptSecretValue(result.webhookSigningSecret)
     const credentialRefreshAfter = new Date(now.getTime() + WORKER_CREDENTIAL_REFRESH_AFTER_MS)
     const deployment = await db.models.agentMailWorkerDeployment
       .findOneAndUpdate(
@@ -422,8 +544,8 @@ export async function applyCloudflareConnectionProvisioning({
             r2Endpoint: result.r2Endpoint,
             r2Region: result.r2Region,
             workerScriptName: result.workerScriptName,
-            encryptedWorkerHmacSecret: encryptedHmacSecret,
-            hmacSecretReference: result.hmacSecretReference,
+            encryptedWorkerHmacSecret: encryptedWebhookSigningSecret,
+            hmacSecretReference: result.webhookSigningSecretReference,
             credentialIssuedAt: now,
             credentialRefreshAfter,
             credentialExpiresAt: workerCredentials.expiresAt,
@@ -488,27 +610,42 @@ export async function applyCloudflareConnectionProvisioning({
       throw new Error('Cloudflare connection disappeared after provisioning')
     }
 
-    try {
-      await syncAgentMailRuntime([
+    await db.models.agentMailDomain
+      .updateOne(
+        { _id: domainRecord._id },
         {
-          organization_id: controlOrganizationId(context),
-          organization_public_id: context.organizationPublicId,
-          archive_prefix: workerCredentials.archivePrefix,
-          worker_connection_id: connectionView.publicId,
-          worker_domain_deployment_id: publicIdFromUUIDv7(domainRecord._id),
-          cloudflare_zone_name: updatedConnection.cloudflareZoneName ?? updatedConnection.domain,
-          domain: updatedConnection.domain,
-          enabled: true,
-          mail_from_domain: updatedConnection.domain
+          $set: {
+            archivePrefix: workerCredentials.archivePrefix,
+            lastErrorCode: null,
+            lastErrorMessage: null,
+            status: 'active'
+          }
         }
-      ])
+      )
+      .exec()
+
+    try {
+      await syncAgentMailRuntimeProjection(db, { reason: 'cloudflare-provision' })
     } catch (error) {
+      await db.models.agentMailDomain
+        .updateOne(
+          { _id: domainRecord._id },
+          {
+            $set: {
+              lastErrorCode: 'AT_EMAIL_ADMIN_CONTROL_SYNC_FAILED',
+              lastErrorMessage:
+                error instanceof Error ? error.message : 'Agent Mail control runtime sync failed.',
+              status: 'degraded'
+            }
+          }
+        )
+        .exec()
       const failedSyncConnection = await db.models.cloudflareConnection
         .findByIdAndUpdate(
           updatedConnection._id,
           {
             $set: {
-              lastErrorCode: 'AGENT_MAIL_CONTROL_SYNC_FAILED',
+              lastErrorCode: 'AT_EMAIL_ADMIN_CONTROL_SYNC_FAILED',
               lastErrorMessage:
                 error instanceof Error ? error.message : 'Agent Mail control runtime sync failed.',
               status: 'degraded'
@@ -650,30 +787,14 @@ export async function disconnectCloudflare({
 
   if (connectionsToDisconnect.length > 0) {
     try {
-      await syncAgentMailRuntime(
-        connectionsToDisconnect.map((connection) => ({
-          organization_id: controlOrganizationId(context),
-          organization_public_id: context.organizationPublicId,
-          archive_prefix:
-            connection.archivePrefix ??
-            createAgentMailArchivePrefix(context.organizationPublicId, connection.domain),
-          worker_connection_id: cloudflareConnectionPublicView(connection).publicId,
-          worker_domain_deployment_id: connection.agentMailDomainId
-            ? publicIdFromUUIDv7(connection.agentMailDomainId)
-            : cloudflareConnectionPublicView(connection).publicId,
-          cloudflare_zone_name: connection.cloudflareZoneName ?? connection.domain,
-          domain: connection.domain,
-          enabled: false,
-          mail_from_domain: connection.domain
-        }))
-      )
+      await syncAgentMailRuntimeProjection(db, { reason: 'cloudflare-disconnect' })
     } catch {
       await db.models.cloudflareOAuthGrant
         .updateOne(
           { _id: grant._id },
           {
             $set: {
-              lastErrorCode: 'AGENT_MAIL_CONTROL_SYNC_FAILED',
+              lastErrorCode: 'AT_EMAIL_ADMIN_CONTROL_SYNC_FAILED',
               lastErrorMessage: 'Cloudflare local connection was revoked, but Agent Mail runtime sync failed.'
             }
           }
@@ -746,7 +867,7 @@ export async function refreshDueAgentMailWorkerCredentials(
         throw new Error('Cloudflare connection for Worker deployment was not found')
       }
       if (!deployment.encryptedWorkerHmacSecret) {
-        throw new Error('Worker HMAC secret is not available for credential refresh')
+        throw new Error('Worker webhook signing secret is not available for credential refresh')
       }
 
       const grant = await getGrantById(db, connection.grantId, deployment.userId, deployment.organizationId)
@@ -762,7 +883,7 @@ export async function refreshDueAgentMailWorkerCredentials(
         workerDomainDeploymentId: publicIdFromUUIDv7(deployment.agentMailDomainId),
         domain: deployment.domain
       })
-      const existingHmacSecret = decryptSecretValue(deployment.encryptedWorkerHmacSecret)
+      const existingWebhookSigningSecret = await decryptSecretValue(deployment.encryptedWorkerHmacSecret)
       const result = await applyCloudflareProvisioning({
         accessToken,
         archivePrefix: deployment.archivePrefix,
@@ -771,9 +892,9 @@ export async function refreshDueAgentMailWorkerCredentials(
         connectionPublicId: deployment.workerConnectionId,
         domainPublicId: publicIdFromUUIDv7(deployment.agentMailDomainId),
         domain: deployment.domain,
-        hmacSecret: existingHmacSecret,
         organizationId: deployment.organizationId,
         organizationPublicId: deployment.organizationPublicId,
+        webhookSigningSecret: existingWebhookSigningSecret,
         workerCredentials: {
           accessKeyId: workerCredentials.accessKeyId,
           archivePrefix: workerCredentials.archivePrefix,
@@ -993,90 +1114,15 @@ async function getStoredCloudflareAccessToken(
   grant: CloudflareOAuthGrantDocument,
   now = new Date()
 ): Promise<string> {
-  const account = await db.models.account
-    .findOne({
-      _id: grant.betterAuthAccountId,
-      userId: grant.userId,
-      providerId: CLOUDFLARE_OAUTH_PROVIDER_ID
-    })
-    .exec()
-
-  if (!account) {
-    throw new Error('Cloudflare Better Auth account was not found')
-  }
-
-  if (
-    account.accessToken &&
-    (!account.accessTokenExpiresAt ||
-      account.accessTokenExpiresAt.getTime() > now.getTime() + OAUTH_TOKEN_REFRESH_SKEW_MS)
-  ) {
-    await db.models.cloudflareOAuthGrant
-      .updateOne(
-        { _id: grant._id },
-        {
-          $set: {
-            lastTokenCheckAt: now,
-            status: 'active',
-            lastErrorCode: null,
-            lastErrorMessage: null
-          }
-        }
-      )
-      .exec()
-    return account.accessToken
-  }
-
-  return refreshStoredCloudflareAccessToken(db, grant, account)
-}
-
-async function refreshStoredCloudflareAccessToken(
-  db: Database,
-  grant: CloudflareOAuthGrantDocument,
-  account: AccountDocument
-): Promise<string> {
-  if (!account.refreshToken) {
-    throw new Error('Cloudflare OAuth refresh token is not available')
-  }
-
-  const { clientId, clientSecret } = requireCloudflareOAuthClientCredentials()
-  const response = await fetch(getCloudflareOAuthTokenUrl(), {
-    body: new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: account.refreshToken
-    }),
-    headers: {
-      authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
-      'content-type': 'application/x-www-form-urlencoded'
-    },
-    method: 'POST'
+  const { auth } = await globals()
+  const result = await auth.api.getAccessToken({
+    body: {
+      accountId: grant.cloudflareUserId,
+      providerId: CLOUDFLARE_OAUTH_PROVIDER_ID,
+      userId: grant.userId
+    }
   })
-  const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null
 
-  if (!response.ok || typeof payload?.access_token !== 'string' || !payload.access_token) {
-    throw new Error(`Cloudflare OAuth token refresh failed with HTTP ${response.status}`)
-  }
-
-  const now = new Date()
-  const expiresIn = typeof payload.expires_in === 'number' ? payload.expires_in : null
-  const refreshToken =
-    typeof payload.refresh_token === 'string' && payload.refresh_token
-      ? payload.refresh_token
-      : account.refreshToken
-  const scope = typeof payload.scope === 'string' ? payload.scope : account.scope
-
-  await db.models.account
-    .updateOne(
-      { _id: account._id },
-      {
-        $set: {
-          accessToken: payload.access_token,
-          accessTokenExpiresAt: expiresIn ? new Date(now.getTime() + expiresIn * 1000) : null,
-          refreshToken,
-          scope
-        }
-      }
-    )
-    .exec()
   await db.models.cloudflareOAuthGrant
     .updateOne(
       { _id: grant._id },
@@ -1092,7 +1138,7 @@ async function refreshStoredCloudflareAccessToken(
     )
     .exec()
 
-  return payload.access_token
+  return result.accessToken
 }
 
 async function upsertCloudflareGrant(
@@ -1274,13 +1320,6 @@ function controlOrganizationId(context: CloudflareOrganizationContext): string {
   return normalizeMongooseUUIDv7(context.organizationId)
 }
 
-function createAgentMailArchivePrefix(
-  organizationPublicId: OrganizationPublicId | string,
-  domain: string
-): string {
-  return `orgs/${organizationPublicId}/domains/${normalizeDomain(domain)}/mail/inbound`
-}
-
 function requireNonEmptyString(value: unknown, label: string): string {
   if (typeof value !== 'string' || value.trim() === '') {
     throw new Error(`${label} is required`)
@@ -1333,6 +1372,14 @@ function normalizeDomain(domain: string): string {
     throw new Error('Domain must be a valid hostname')
   }
   return normalized
+}
+
+function domainFromAddress(address: string): string {
+  const match = /@([^@\s>]+)>?\s*$/u.exec(address.trim())
+  if (!match?.[1]) {
+    throw new CloudflareControlSendError('Sender address must include a domain', 400)
+  }
+  return normalizeDomain(match[1])
 }
 
 function createOAuthCallbackURL(
