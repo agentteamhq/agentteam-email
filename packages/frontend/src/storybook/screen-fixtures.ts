@@ -54,6 +54,7 @@ export const authenticatedSettingsRouteState = {
   redirectTo: '/signin/',
   setCookieHeaders: [],
   shouldRedirectToSignIn: false,
+  shouldRedirectToSetup: false,
   user: storyAuthenticatedUser
 } satisfies SettingsRouteState
 
@@ -89,15 +90,17 @@ export const billingNeedsCheckoutRouteState = {
 
 export const protectedRouteSignInState = {
   flash: null,
-  redirectTo: '/dashboard/',
+  redirectTo: '/',
   shouldRedirectToDashboard: false,
+  shouldRedirectToSetup: false,
   user: null
 } satisfies AuthRouteState
 
 export const publicAuthRouteState = {
   flash: null,
-  redirectTo: '/dashboard/',
+  redirectTo: '/',
   shouldRedirectToDashboard: false,
+  shouldRedirectToSetup: false,
   user: null
 } satisfies AuthRouteState
 

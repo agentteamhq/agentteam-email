@@ -19,6 +19,7 @@ const runDir = resolve(
   process.env.STORYBOOK_SCREENSHOT_RUN_DIR ?? `tmp/storybook-screenshots/run-${runId}`
 )
 const staticDir = join(runDir, 'storybook-static')
+const assetsDir = join(runDir, 'assets')
 const screenshotsDir = join(runDir, 'screenshots')
 const reportsDir = join(runDir, 'reports')
 const subprocessDir = join(runDir, 'subprocess')
@@ -29,7 +30,62 @@ const viewport = {
 }
 const fullPage = process.env.STORYBOOK_SCREENSHOT_FULL_PAGE !== '0'
 const delayMs = Number.parseInt(process.env.STORYBOOK_SCREENSHOT_DELAY_MS ?? '100', 10)
+const homePageProductPhotoViewport = {
+  height: 600,
+  width: 1034
+}
+const showcaseAssets = [
+  {
+    deviceScaleFactor: 2,
+    fileName: 'og-image-dark-1034x800@2x.png',
+    fullPage: false,
+    globals: 'theme:dark',
+    id: 'product-showcase-screenshot-assets--og-image',
+    name: 'OG image dark @2x',
+    viewport: {
+      height: 800,
+      width: 1034
+    }
+  },
+  {
+    deviceScaleFactor: 2,
+    fileName: 'home-mail-workspace-dark-1034x600@2x.png',
+    fullPage: false,
+    globals: 'theme:dark',
+    id: 'product-showcase-screenshot-assets--home-mail-workspace',
+    name: 'Home mail workspace dark @2x',
+    viewport: homePageProductPhotoViewport
+  },
+  {
+    deviceScaleFactor: 2,
+    fileName: 'home-mailbox-switcher-dark-1034x600@2x.png',
+    fullPage: false,
+    globals: 'theme:dark',
+    id: 'product-showcase-screenshot-assets--home-mailbox-switcher',
+    name: 'Home mailbox switcher dark @2x',
+    viewport: homePageProductPhotoViewport
+  },
+  {
+    deviceScaleFactor: 2,
+    fileName: 'home-mailbox-admin-dark-1034x600@2x.png',
+    fullPage: false,
+    globals: 'theme:dark',
+    id: 'product-showcase-screenshot-assets--home-mailbox-admin',
+    name: 'Home mailbox admin dark @2x',
+    viewport: homePageProductPhotoViewport
+  },
+  {
+    deviceScaleFactor: 2,
+    fileName: 'home-agent-access-dark-1034x600@2x.png',
+    fullPage: false,
+    globals: 'theme:dark',
+    id: 'product-showcase-screenshot-assets--home-agent-access',
+    name: 'Home agent access dark @2x',
+    viewport: homePageProductPhotoViewport
+  }
+]
 
+await mkdir(assetsDir, { recursive: true })
 await mkdir(screenshotsDir, { recursive: true })
 await mkdir(reportsDir, { recursive: true })
 await mkdir(subprocessDir, { recursive: true })
@@ -39,13 +95,19 @@ const harnessLog = createWriteStream(harnessLogPath, { flags: 'a' })
 try {
   log(`run directory: ${runDir}`)
   log('building Storybook')
-  await runCommand('pnpm', ['run', 'storybook:build', '--output-dir', staticDir], {
+  await runCommand('pnpm', ['run', 'storybook:build'], {
     cwd: packageRoot,
+    env: {
+      ...process.env,
+      STORYBOOK_BUILD_OUTPUT_DIR: staticDir
+    },
     name: 'storybook-build'
   })
 
   const index = await readStorybookIndex(staticDir)
-  const stories = Object.values(index.entries ?? index.stories ?? {}).filter((entry) => entry.type === 'story')
+  const stories = Object.values(index.entries ?? index.stories ?? {}).filter(
+    (entry) => entry.type === 'story'
+  )
   if (stories.length === 0) {
     throw new Error('Storybook index did not contain any stories.')
   }
@@ -60,11 +122,49 @@ try {
   })
 
   const results = []
+  const assetResults = []
   try {
     for (const [index_, story] of stories.entries()) {
       const sequence = `${index_ + 1}/${stories.length}`
       log(`[${sequence}] ${story.id}`)
       results.push(await captureStory(context, baseUrl, story))
+    }
+
+    for (const asset of showcaseAssets) {
+      const story = stories.find((candidate) => candidate.id === asset.id)
+      if (!story) {
+        assetResults.push({
+          failures: [{ kind: 'missing-story', message: `Story ${asset.id} was not found.` }],
+          id: asset.id,
+          name: asset.name,
+          screenshotPath: null,
+          status: 'failed',
+          title: 'Screenshot Asset',
+          url: null
+        })
+        continue
+      }
+
+      log(`[asset] ${asset.fileName}`)
+      const assetContext = await browser.newContext({
+        deviceScaleFactor: asset.deviceScaleFactor ?? 1,
+        viewport: asset.viewport ?? viewport
+      })
+      try {
+        assetResults.push(
+          await captureStory(assetContext, baseUrl, story, {
+            filePath: join(assetsDir, asset.fileName),
+            fullPage: asset.fullPage,
+            globals: asset.globals,
+            name: asset.name,
+            viewport: asset.viewport
+          })
+        )
+      } finally {
+        await assetContext
+          .close()
+          .catch((error) => log(`asset browser context close failed: ${stringifyError(error)}`))
+      }
     }
   } finally {
     await context.close().catch((error) => log(`browser context close failed: ${stringifyError(error)}`))
@@ -72,14 +172,16 @@ try {
     await server.close()
   }
 
-  const failures = results.filter((result) => result.status !== 'passed')
+  const failures = [...results, ...assetResults].filter((result) => result.status !== 'passed')
   const summary = {
+    assets: assetResults.length,
     failed: failures.length,
-    passed: results.length - failures.length,
+    passed: results.length + assetResults.length - failures.length,
     runDir,
     stories: results.length
   }
 
+  await writeJson(join(reportsDir, 'asset-results.json'), assetResults)
   await writeJson(join(reportsDir, 'story-results.json'), results)
   await writeJson(join(reportsDir, 'summary.json'), summary)
   log(`summary: ${summary.passed} passed, ${summary.failed} failed`)
@@ -101,13 +203,13 @@ try {
   harnessLog.end()
 }
 
-async function captureStory(context, baseUrl, story) {
+async function captureStory(context, baseUrl, story, options = {}) {
   const page = await context.newPage()
   const consoleErrors = []
   const pageErrors = []
   const failedResponses = []
-  const screenshotPath = join(screenshotsDir, `${safeFileName(story.id)}.png`)
-  const storyUrl = `${baseUrl}/iframe.html?id=${encodeURIComponent(story.id)}&viewMode=story`
+  const screenshotPath = options.filePath ?? join(screenshotsDir, `${safeFileName(story.id)}.png`)
+  const storyUrl = getStoryUrl(baseUrl, story.id, options.globals)
 
   page.on('console', (message) => {
     if (message.type() === 'error' && !isExpectedStoryConsoleError(message.text())) {
@@ -125,6 +227,10 @@ async function captureStory(context, baseUrl, story) {
   })
 
   try {
+    if (options.viewport) {
+      await page.setViewportSize(options.viewport)
+    }
+
     await page.goto(storyUrl, { timeout: 30_000, waitUntil: 'domcontentloaded' })
     await page.waitForSelector('#storybook-root', { state: 'attached', timeout: 15_000 })
     await waitForPageReady(page)
@@ -150,13 +256,13 @@ async function captureStory(context, baseUrl, story) {
     }
 
     await page.screenshot({
-      fullPage,
+      fullPage: options.fullPage ?? fullPage,
       path: screenshotPath
     })
 
     return {
       id: story.id,
-      name: story.name,
+      name: options.name ?? story.name,
       screenshotPath,
       status: failures.length === 0 ? 'passed' : 'failed',
       title: story.title,
@@ -166,7 +272,7 @@ async function captureStory(context, baseUrl, story) {
   } catch (error) {
     return {
       id: story.id,
-      name: story.name,
+      name: options.name ?? story.name,
       screenshotPath: null,
       status: 'failed',
       title: story.title,
@@ -176,6 +282,19 @@ async function captureStory(context, baseUrl, story) {
   } finally {
     await page.close().catch((error) => log(`page close failed for ${story.id}: ${stringifyError(error)}`))
   }
+}
+
+function getStoryUrl(baseUrl, storyId, globals) {
+  const params = new URLSearchParams({
+    id: storyId,
+    viewMode: 'story'
+  })
+
+  if (globals) {
+    params.set('globals', globals)
+  }
+
+  return `${baseUrl}/iframe.html?${params.toString()}`
 }
 
 async function waitForPageReady(page) {
@@ -256,7 +375,7 @@ async function runCommand(command, args, options) {
   await new Promise((resolveCommand, rejectCommand) => {
     const child = spawn(command, args, {
       cwd: options.cwd,
-      env: process.env,
+      env: options.env ?? process.env,
       shell: false,
       stdio: ['ignore', 'pipe', 'pipe']
     })

@@ -59,8 +59,6 @@ import {
   junkMailboxSidebarView,
   loadingAuthenticatedDashboardView,
   loadingAuthenticatedSidebarView,
-  mailboxRowActionSidebarView,
-  mailboxRowPendingActionSidebarView,
   mailtoLinkEmailPreviewsById,
   mailtoLinkSidebarView,
   moveActionErrorView,
@@ -128,7 +126,6 @@ const meta = {
     onMailboxFolderRenameOpenChange: fn(),
     onMailboxFolderRenameSubmit: fn(),
     onMailboxFolderSelect: fn(),
-    onMailboxMessageAction: fn(),
     onMailboxMessageSelect: fn(),
     onMailboxPageChange: fn(),
     onMailboxRefresh: fn(),
@@ -167,6 +164,14 @@ function getContainingMailRow(element: HTMLElement, id: string) {
     throw new TypeError(`Expected message row ${id} to contain the element`)
   }
   return row
+}
+
+async function openWorkspaceMailboxSwitcher(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement)
+
+  await userEvent.click(await canvas.findByRole('button', { name: /open workspace and mailbox switcher/i }))
+
+  return within(canvasElement.ownerDocument.body)
 }
 
 export const MailboxDefault: Story = {
@@ -533,8 +538,8 @@ export const SecurityRemoteContentAccountScoped: Story = {
       await expect(canvas.queryByText(/remote images blocked/i)).not.toBeInTheDocument()
     })
 
-    await userEvent.click(await canvas.findByRole('combobox', { name: /mailbox/i }))
-    await userEvent.click(await body.findByText(/billing agent/i))
+    await openWorkspaceMailboxSwitcher(canvasElement)
+    await userEvent.click(await body.findByRole('menuitem', { name: /billing agent/i }))
 
     await expect(args.onMailboxAccountSelect).toHaveBeenCalledWith('agent-billing')
     await expect(await canvas.findByText(/remote images blocked/i)).toBeInTheDocument()
@@ -691,8 +696,8 @@ export const SecurityExternalLinkGeneratedIdCollision: Story = {
   }
 }
 
-export const SecurityFormContentDisabled: Story = {
-  name: 'security / form content disabled',
+export const SecurityFormContentRemoved: Story = {
+  name: 'security / form content removed',
   args: {
     emailPreviewsById: formEmailPreviewsById,
     sidebarView: formEmailSidebarView
@@ -711,13 +716,10 @@ export const SecurityFormContentDisabled: Story = {
     }
 
     await waitFor(async () => {
-      const inertForm = iframeBody.querySelector('[data-agent-mail-inert-form="true"]')
-      const emailInput = iframeBody.querySelector('input')
-      const submitButton = iframeBody.querySelector('button')
-
-      await expect(inertForm).toBeTruthy()
-      await expect(emailInput).toHaveAttribute('disabled')
-      await expect(submitButton).toHaveAttribute('disabled')
+      await expect(iframeBody.querySelector('form')).toBeNull()
+      await expect(iframeBody.querySelector('input')).toBeNull()
+      await expect(iframeBody.querySelector('button')).toBeNull()
+      await expect(iframeBody.querySelector('[data-agent-mail-inert-form]')).toBeNull()
       await expect(iframeBody.innerHTML).not.toContain('phish.example.test')
     })
   }
@@ -780,56 +782,6 @@ export const MailboxThreadedMetadata: Story = {
     await expect(row).toHaveTextContent(/2 attachments/i)
     await expect(row).toHaveTextContent(/draft in thread/i)
     await expect(row).toHaveTextContent(/needs reply/i)
-  }
-}
-
-export const MailboxRowActions: Story = {
-  name: 'mailbox / row actions',
-  args: {
-    sidebarView: mailboxRowActionSidebarView
-  },
-  play: async ({ args, canvasElement }) => {
-    const canvas = within(canvasElement)
-    const rowButton = await canvas.findByRole('button', { name: /appointment alert/i })
-    const row = getContainingMailRow(rowButton, 'appointment-alert')
-
-    await userEvent.hover(row)
-    await userEvent.click(await within(row).findByRole('button', { name: /^mark as read$/i }))
-    await expect(args.onMailboxMessageAction).toHaveBeenCalledWith(
-      'mark-read',
-      expect.objectContaining({ id: 'appointment-alert' })
-    )
-    await userEvent.click(await within(row).findByRole('button', { name: /^star$/i }))
-    await expect(args.onMailboxMessageAction).toHaveBeenCalledWith(
-      'star',
-      expect.objectContaining({ id: 'appointment-alert' })
-    )
-    await userEvent.click(await within(row).findByRole('button', { name: /^delete$/i }))
-    await expect(args.onMailboxMessageAction).toHaveBeenCalledWith(
-      'delete',
-      expect.objectContaining({ id: 'appointment-alert' })
-    )
-  }
-}
-
-export const MailboxRowPendingActions: Story = {
-  name: 'mailbox / row pending actions',
-  args: {
-    sidebarView: mailboxRowPendingActionSidebarView
-  },
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-    const rowButton = await canvas.findByRole('button', { name: /appointment alert/i })
-    const row = getContainingMailRow(rowButton, 'appointment-alert')
-
-    await userEvent.hover(row)
-
-    const pendingStar = await within(row).findByRole('button', { name: /^star$/i })
-    const disabledDelete = await within(row).findByRole('button', { name: /^delete$/i })
-
-    await expect(pendingStar).toBeDisabled()
-    await expect(disabledDelete).toBeDisabled()
-    await expect(disabledDelete).toHaveAttribute('title', 'Delete: Message action is already queued.')
   }
 }
 
@@ -922,13 +874,13 @@ export const MailboxAccountSwitching: Story = {
     const canvas = within(canvasElement)
 
     await expect(await canvas.findByText(/support agent/i)).toBeInTheDocument()
-    await userEvent.click(await canvas.findByRole('combobox', { name: /mailbox/i }))
 
-    const body = within(canvasElement.ownerDocument.body)
-    await userEvent.click(await body.findByText(/billing agent/i))
+    const body = await openWorkspaceMailboxSwitcher(canvasElement)
+    await userEvent.click(await body.findByRole('menuitem', { name: /billing agent/i }))
     await expect(args.onMailboxAccountSelect).toHaveBeenCalledWith('agent-billing')
-    await userEvent.click(await canvas.findByRole('combobox', { name: /mailbox/i }))
-    await expect(await body.findByText(/alerts agent/i)).toBeInTheDocument()
+
+    await openWorkspaceMailboxSwitcher(canvasElement)
+    await expect(await body.findByRole('menuitem', { name: /alerts agent/i })).toBeInTheDocument()
   }
 }
 
@@ -965,8 +917,8 @@ export const MailboxAccountSwitchingResetsSelection: Story = {
     await userEvent.click(await canvas.findByRole('button', { name: /welcome aboard/i }))
     await expect(await canvas.findByRole('heading', { name: /welcome aboard/i })).toBeInTheDocument()
 
-    await userEvent.click(await canvas.findByRole('combobox', { name: /mailbox/i }))
-    await userEvent.click(await body.findByText(/billing agent/i))
+    await openWorkspaceMailboxSwitcher(canvasElement)
+    await userEvent.click(await body.findByRole('menuitem', { name: /billing agent/i }))
 
     await expect(args.onMailboxAccountSelect).toHaveBeenCalledWith('agent-billing')
     await expect(await canvas.findByRole('heading', { name: /appointment alert/i })).toBeInTheDocument()
@@ -1014,8 +966,8 @@ export const MailboxAccountSwitchingResetsFolder: Story = {
       'true'
     )
 
-    await userEvent.click(await canvas.findByRole('combobox', { name: /mailbox/i }))
-    await userEvent.click(await body.findByText(/billing agent/i))
+    await openWorkspaceMailboxSwitcher(canvasElement)
+    await userEvent.click(await body.findByRole('menuitem', { name: /billing agent/i }))
 
     await expect(args.onMailboxAccountSelect).toHaveBeenCalledWith('agent-billing')
     await expect(await canvas.findByRole('button', { name: /^inbox$/i })).toHaveAttribute(
@@ -1071,8 +1023,8 @@ export const MailboxAccountSwitchingResetsFilters: Story = {
     await expect(searchInput).toHaveValue('welcome')
     await expect(unreadSwitch).toBeChecked()
 
-    await userEvent.click(await canvas.findByRole('combobox', { name: /mailbox/i }))
-    await userEvent.click(await body.findByText(/billing agent/i))
+    await openWorkspaceMailboxSwitcher(canvasElement)
+    await userEvent.click(await body.findByRole('menuitem', { name: /billing agent/i }))
 
     await expect(args.onMailboxAccountSelect).toHaveBeenCalledWith('agent-billing')
     await expect(await canvas.findByPlaceholderText(/type to search/i)).toHaveValue('')
@@ -1086,18 +1038,17 @@ export const MailboxAccountPermissions: Story = {
     sidebarView: accountPermissionsSidebarView
   },
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
     const body = within(canvasElement.ownerDocument.body)
 
-    await userEvent.click(await canvas.findByRole('combobox', { name: /mailbox/i }))
+    await openWorkspaceMailboxSwitcher(canvasElement)
 
-    const deniedAccount = await body.findByRole('option', { name: /finance agent/i })
-    const loadingAccount = await body.findByRole('option', { name: /importing agent/i })
+    const deniedAccount = await body.findByRole('menuitem', { name: /finance agent/i })
+    const loadingAccount = await body.findByRole('menuitem', { name: /importing agent/i })
 
     await expect(await body.findByText(/^no mailbox permission$/i)).toBeInTheDocument()
-    await expect(await body.findByText(/^loading$/i)).toBeInTheDocument()
-    await expect(deniedAccount).toHaveAttribute('aria-disabled', 'true')
-    await expect(loadingAccount).toHaveAttribute('aria-disabled', 'true')
+    await expect(loadingAccount).toHaveTextContent(/loading/i)
+    await expect(deniedAccount).toHaveAttribute('data-disabled')
+    await expect(loadingAccount).toHaveAttribute('data-disabled')
   }
 }
 

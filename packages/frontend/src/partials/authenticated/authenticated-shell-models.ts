@@ -18,6 +18,19 @@ export interface AuthenticatedMailAccount {
   state?: 'ready' | 'loading' | 'attention'
 }
 
+export interface AuthenticatedWorkspaceSwitcherWorkspace {
+  badgeLabel?: string
+  disabled?: boolean
+  id: string
+  name: string
+  slug?: string
+}
+
+export interface AuthenticatedWorkspaceSwitcherView {
+  activeWorkspaceId?: string
+  workspaces: ReadonlyArray<AuthenticatedWorkspaceSwitcherWorkspace>
+}
+
 export interface AuthenticatedMailPagination {
   canGoNext?: boolean
   canGoPrevious?: boolean
@@ -60,7 +73,6 @@ export interface AuthenticatedManagementNavItem {
 }
 
 export interface AuthenticatedMailItem {
-  actions?: ReadonlyArray<AuthenticatedEmailToolbarAction>
   attachmentCountLabel?: string
   date: string
   email: string
@@ -257,6 +269,7 @@ export interface AuthenticatedSidebarView {
   selectedMailId?: string
   state: AuthenticatedViewState
   unreadOnly?: boolean
+  workspaceSwitcher?: AuthenticatedWorkspaceSwitcherView
 }
 
 export interface AuthenticatedDashboardView {
@@ -422,7 +435,17 @@ export const defaultAuthenticatedSidebarView = {
   ],
   mails: [],
   searchQuery: '',
-  state: 'ready'
+  state: 'ready',
+  workspaceSwitcher: {
+    activeWorkspaceId: 'agentteam-email',
+    workspaces: [
+      {
+        id: 'agentteam-email',
+        name: 'AgentTeam Email',
+        slug: 'mail client'
+      }
+    ]
+  }
 } satisfies AuthenticatedSidebarView
 
 export const defaultAuthenticatedDashboardView = {

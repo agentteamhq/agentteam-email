@@ -82,7 +82,6 @@ export interface DashboardScreenProps {
   onMailboxFolderRenameOpenChange?: (open: boolean) => void
   onMailboxFolderRenameSubmit?: () => void
   onMailboxFolderSelect?: (folderId: string) => void
-  onMailboxMessageAction?: (action: AuthenticatedEmailAction, mail: AuthenticatedMailItem) => void
   onMailboxMessageSelect?: (mailId: string) => void
   onMailboxPageChange?: (pageChange: AuthenticatedMailPageChange) => void
   onMailboxRefresh?: () => void
@@ -139,7 +138,6 @@ export function DashboardScreen({
   onMailboxFolderRenameOpenChange,
   onMailboxFolderRenameSubmit,
   onMailboxFolderSelect,
-  onMailboxMessageAction,
   onMailboxMessageSelect,
   onMailboxPageChange,
   onMailboxRefresh,
@@ -343,7 +341,6 @@ export function DashboardScreen({
         onMailboxFolderRenameNameChange={onMailboxFolderRenameNameChange}
         onMailboxFolderRenameOpenChange={onMailboxFolderRenameOpenChange}
         onMailboxFolderRenameSubmit={onMailboxFolderRenameSubmit}
-        onMailboxMessageAction={onMailboxMessageAction}
         onMailboxPageChange={onMailboxPageChange}
         onMailboxRefresh={onMailboxRefresh}
         onMailboxRetry={onMailboxRetry}

@@ -31,7 +31,6 @@ import {
   XIcon
 } from '@phosphor-icons/react'
 
-import { OrganizationSwitcher } from '../../components/auth/organization/organization-switcher'
 import { UserButton } from '../../components/auth/user/user-button'
 import {
   AlertDialog,
@@ -114,11 +113,13 @@ import {
 import { cn } from '../../lib/utils'
 import { CloudflareConnectButton, CloudflareLogo } from './cloudflare-brand'
 import { SettingsDialog } from './settings-dialog'
+import { WorkspaceMailboxSwitcher } from './workspace-mailbox-switcher'
 import {
   defaultAuthenticatedDashboardView,
   defaultAuthenticatedEmailToolbarActions,
   defaultAuthenticatedSidebarView
 } from './authenticated-shell-models'
+import type { EmailIframeThemeMode } from '../../lib/email-safety'
 import type {
   AuthenticatedComposeField,
   AuthenticatedComposeView,
@@ -131,6 +132,7 @@ import type {
   AuthenticatedEmailThreadMessage,
   AuthenticatedEmailToolbarAction,
   AuthenticatedExternalLink,
+  AuthenticatedMailAccount,
   AuthenticatedMailActionDialogKind,
   AuthenticatedMailActionView,
   AuthenticatedMailCreateFolderView,
@@ -142,8 +144,14 @@ import type {
   AuthenticatedMailPagination,
   AuthenticatedManagementNavIconKey,
   AuthenticatedManagementNavItem,
-  AuthenticatedSidebarView
+  AuthenticatedRemoteImage,
+  AuthenticatedSidebarView,
+  AuthenticatedWorkspaceSwitcherWorkspace
 } from './authenticated-shell-models'
+import type {
+  WorkspaceMailboxSwitcherMailbox,
+  WorkspaceMailboxSwitcherState
+} from './workspace-mailbox-switcher'
 import type {
   AgentAccessSettingsState,
   DomainSettingsState,
@@ -182,7 +190,6 @@ export interface AuthenticatedShellProps {
   onMailboxFolderRenameNameChange?: (name: string) => void
   onMailboxFolderRenameOpenChange?: (open: boolean) => void
   onMailboxFolderRenameSubmit?: () => void
-  onMailboxMessageAction?: (action: AuthenticatedEmailAction, mail: AuthenticatedMailItem) => void
   onMailboxPageChange?: (pageChange: AuthenticatedMailPageChange) => void
   onMailboxRefresh?: () => void
   onMailboxRetry?: () => void
@@ -227,7 +234,6 @@ export function AuthenticatedShell({
   onMailboxFolderRenameNameChange,
   onMailboxFolderRenameOpenChange,
   onMailboxFolderRenameSubmit,
-  onMailboxMessageAction,
   onMailboxPageChange,
   onMailboxRefresh,
   onMailboxRetry,
@@ -269,7 +275,6 @@ export function AuthenticatedShell({
         onFolderRenameNameChange={onMailboxFolderRenameNameChange}
         onFolderRenameOpenChange={onMailboxFolderRenameOpenChange}
         onFolderRenameSubmit={onMailboxFolderRenameSubmit}
-        onMailAction={onMailboxMessageAction}
         onMailSelect={onMailSelect}
         onPageChange={onMailboxPageChange}
         onRefresh={onMailboxRefresh}
@@ -1119,7 +1124,6 @@ export interface AuthenticatedSidebarProps {
   onFolderRenameNameChange?: (name: string) => void
   onFolderRenameOpenChange?: (open: boolean) => void
   onFolderRenameSubmit?: () => void
-  onMailAction?: (action: AuthenticatedEmailAction, mail: AuthenticatedMailItem) => void
   onMailSelect?: (mailId: string) => void
   onPageChange?: (pageChange: AuthenticatedMailPageChange) => void
   onRefresh?: () => void
@@ -1142,7 +1146,6 @@ export function AuthenticatedSidebar({
   onFolderRenameNameChange,
   onFolderRenameOpenChange,
   onFolderRenameSubmit,
-  onMailAction,
   onMailSelect,
   onPageChange,
   onRefresh,
@@ -1157,6 +1160,11 @@ export function AuthenticatedSidebar({
   const activeManagementItem = view.managementNav?.find((item) => item.id === view.activeItemId)
   const activeItem = activeMailItem ?? activeManagementItem ?? view.navMain[0]
   const hasExplicitlyNoAccounts = Boolean(view.accounts && view.accounts.length === 0)
+  const workspaceSwitcherWorkspaces = getSidebarWorkspaceSwitcherWorkspaces(view)
+  const workspaceSwitcherActiveWorkspaceId =
+    view.workspaceSwitcher?.activeWorkspaceId ?? workspaceSwitcherWorkspaces[0]?.id
+  const workspaceSwitcherMailboxes = getSidebarWorkspaceSwitcherMailboxes(view.accounts ?? [])
+  const workspaceSwitcherState = getSidebarWorkspaceSwitcherState(view)
 
   return (
     <>
@@ -1169,28 +1177,15 @@ export function AuthenticatedSidebar({
           className='w-[calc(var(--sidebar-width-icon)+1px)]! border-r'
         >
           <SidebarHeader>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  size='lg'
-                  asChild
-                  className='md:h-8 md:p-0'
-                >
-                  <a href='#'>
-                    <div
-                      className='bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8
-                        items-center justify-center rounded-lg'
-                    >
-                      <EnvelopeSimpleIcon className='size-4' />
-                    </div>
-                    <div className='grid flex-1 text-left text-sm leading-tight'>
-                      <span className='truncate font-medium'>AgentTeam Email</span>
-                      <span className='truncate text-xs'>Mail client</span>
-                    </div>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
+            <WorkspaceMailboxSwitcher
+              activeMailboxId={view.activeAccountId}
+              activeWorkspaceId={workspaceSwitcherActiveWorkspaceId}
+              className='md:h-8 md:p-0'
+              mailboxes={workspaceSwitcherMailboxes}
+              onMailboxSelect={onAccountSelect}
+              state={workspaceSwitcherState}
+              workspaces={workspaceSwitcherWorkspaces}
+            />
           </SidebarHeader>
           <SidebarContent className='[scrollbar-gutter:auto] overflow-hidden'>
             <SidebarGroup>
@@ -1260,15 +1255,6 @@ export function AuthenticatedSidebar({
             className='hidden min-w-0 flex-1 md:flex'
           >
             <SidebarHeader className='gap-3 border-b p-3'>
-              <OrganizationSwitcher
-                align='start'
-                className='w-full justify-between border px-2'
-                hideSlug={false}
-              />
-              <MailAccountSelect
-                onAccountSelect={onAccountSelect}
-                view={view}
-              />
               <div className='flex w-full items-center justify-between gap-2'>
                 <div className='flex min-w-0 items-center gap-1.5'>
                   <div className='text-foreground truncate text-base font-medium'>
@@ -1331,7 +1317,6 @@ export function AuthenticatedSidebar({
               <SidebarGroup className='px-0'>
                 <SidebarGroupContent>
                   <MailboxList
-                    onMailAction={onMailAction}
                     onSelectMail={onMailSelect}
                     onRetry={onRetry}
                     view={view}
@@ -1724,67 +1709,52 @@ const folderActionIcons = {
   React.ComponentType<{ 'data-icon'?: string; className?: string }>
 >
 
-function MailAccountSelect({
-  onAccountSelect,
-  view
-}: {
-  onAccountSelect?: (accountId: string) => void
+const fallbackWorkspaceSwitcherWorkspaces = defaultAuthenticatedSidebarView.workspaceSwitcher.workspaces
+
+function getSidebarWorkspaceSwitcherWorkspaces(
   view: AuthenticatedSidebarView
-}) {
-  const accounts = view.accounts ?? []
-  if (!accounts.length) {
-    return null
+): ReadonlyArray<AuthenticatedWorkspaceSwitcherWorkspace> {
+  return view.workspaceSwitcher?.workspaces.length
+    ? view.workspaceSwitcher.workspaces
+    : fallbackWorkspaceSwitcherWorkspaces
+}
+
+function getSidebarWorkspaceSwitcherMailboxes(
+  accounts: ReadonlyArray<AuthenticatedMailAccount>
+): ReadonlyArray<WorkspaceMailboxSwitcherMailbox> {
+  return accounts.map((account) => ({
+    address: account.address,
+    badgeLabel: getMailboxAccountBadgeLabel(account),
+    disabled: account.disabled || account.state === 'loading',
+    disabledReason: account.disabledReason ?? (account.state === 'loading' ? 'Loading' : undefined),
+    id: account.id,
+    name: account.name,
+    status: account.state === 'attention' ? 'attention' : 'ready'
+  }))
+}
+
+function getMailboxAccountBadgeLabel(account: AuthenticatedMailAccount) {
+  if (account.state === 'attention') {
+    return 'Attention'
   }
 
-  const activeAccount = accounts.find((account) => account.id === view.activeAccountId) ?? accounts[0]
+  if (account.state === 'loading') {
+    return 'Loading'
+  }
 
-  return (
-    <div className='grid gap-1'>
-      <Label className='text-muted-foreground text-xs'>Mailbox</Label>
-      <Select
-        disabled={!onAccountSelect || view.state === 'loading'}
-        onValueChange={onAccountSelect}
-        value={activeAccount?.id}
-      >
-        <SelectTrigger
-          aria-label='Mailbox'
-          className='h-auto w-full min-w-0 justify-between px-2 py-2'
-        >
-          <SelectValue placeholder='Select mailbox' />
-        </SelectTrigger>
-        <SelectContent>
-          {accounts.map((account) => (
-            <SelectItem
-              disabled={account.disabled || account.state === 'loading'}
-              key={account.id}
-              title={account.disabledReason}
-              value={account.id}
-            >
-              <span className='flex min-w-0 flex-col items-start gap-0.5'>
-                <span className='flex min-w-0 items-center gap-2'>
-                  <span className='truncate'>{account.name}</span>
-                  {account.state === 'attention' ? <Badge variant='outline'>Attention</Badge> : null}
-                  {account.state === 'loading' ? (
-                    <span className='text-muted-foreground inline-flex shrink-0 items-center gap-1 text-xs'>
-                      <Spinner data-icon='inline-start' />
-                      Loading
-                    </span>
-                  ) : null}
-                </span>
-                <span className='text-muted-foreground truncate text-xs'>{account.address}</span>
-                {account.disabledReason ? (
-                  <span className='text-muted-foreground truncate text-xs'>{account.disabledReason}</span>
-                ) : null}
-              </span>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      {activeAccount?.description ? (
-        <p className='text-muted-foreground line-clamp-1 text-xs'>{activeAccount.description}</p>
-      ) : null}
-    </div>
-  )
+  return undefined
+}
+
+function getSidebarWorkspaceSwitcherState(view: AuthenticatedSidebarView): WorkspaceMailboxSwitcherState {
+  if (view.state === 'loading') {
+    return 'loading'
+  }
+
+  if (view.accounts && view.accounts.length === 0) {
+    return 'empty'
+  }
+
+  return 'ready'
 }
 
 function ManagementNavButton({
@@ -1948,7 +1918,7 @@ function EmailPreviewLoadingPane() {
           <Skeleton className='h-3 w-24 shrink-0' />
         </div>
       </header>
-      <div className='flex min-h-0 flex-1 flex-col gap-4 overflow-hidden bg-white px-5 py-6'>
+      <div className='bg-background flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-5 py-6'>
         <Skeleton className='h-4 w-48' />
         <Skeleton className='h-4 w-full max-w-3xl' />
         <Skeleton className='h-4 w-full max-w-4xl' />
@@ -1962,7 +1932,7 @@ function EmailPreviewLoadingPane() {
 function EmailPreviewEmptyPane({ description, title }: { description: string; title: string }) {
   return (
     <main className='bg-background flex min-h-0 flex-1 flex-col overflow-hidden'>
-      <div className='flex min-h-0 flex-1 items-center justify-center border-b bg-white px-6 py-10'>
+      <div className='bg-background flex min-h-0 flex-1 items-center justify-center border-b px-6 py-10'>
         <div className='flex max-w-sm flex-col items-center text-center'>
           <div
             className='bg-muted text-muted-foreground flex size-10 items-center justify-center rounded-full'
@@ -1991,7 +1961,7 @@ function EmailPreviewErrorPane({
 }) {
   return (
     <main className='bg-background flex min-h-0 flex-1 flex-col overflow-hidden'>
-      <div className='flex min-h-0 flex-1 items-center justify-center border-b bg-white px-6 py-10'>
+      <div className='bg-background flex min-h-0 flex-1 items-center justify-center border-b px-6 py-10'>
         <div className='flex max-w-sm flex-col items-center text-center'>
           <div
             className='bg-destructive/10 text-destructive flex size-10 items-center justify-center
@@ -2053,7 +2023,7 @@ function EmailPreviewPane({
             : undefined
         }
       />
-      <div className='min-h-0 flex-1 overflow-auto bg-white'>
+      <div className='bg-background min-h-0 flex-1 overflow-auto'>
         {email.thread?.length ? (
           <EmailThreadView
             email={email}
@@ -2070,6 +2040,7 @@ function EmailPreviewPane({
             html={email.html}
             loading='lazy'
             onExternalLinkSelect={setSelectedExternalLink}
+            remoteImages={email.remoteImages ?? []}
             title={`${email.subject} email body`}
           />
         )}
@@ -2158,18 +2129,22 @@ function EmailMessageBodyFrame({
   attachments = [],
   className,
   externalLinks = [],
+  fitContent = false,
   html,
   loading,
   onExternalLinkSelect,
+  remoteImages = [],
   title
 }: {
   allowRemoteImages?: boolean
   attachments?: ReadonlyArray<AuthenticatedEmailAttachment>
   className?: string
   externalLinks?: ReadonlyArray<AuthenticatedExternalLink>
+  fitContent?: boolean
   html: string
   loading: 'eager' | 'lazy'
   onExternalLinkSelect?: (link: AuthenticatedExternalLink) => void
+  remoteImages?: ReadonlyArray<AuthenticatedRemoteImage>
   title: string
 }) {
   const iframeRef = React.useRef<HTMLIFrameElement>(null)
@@ -2180,6 +2155,8 @@ function EmailMessageBodyFrame({
       rewriteEmailHTMLForIframe(html, {
         allowRemoteImages,
         baseURL,
+        knownExternalLinks: externalLinks,
+        knownRemoteImages: remoteImages,
         reservedExternalLinkIds: externalLinks.map((link) => link.id),
         inlineAttachments: attachments.flatMap((attachment) =>
           attachment.contentId && attachment.url
@@ -2192,7 +2169,7 @@ function EmailMessageBodyFrame({
             : []
         )
       }),
-    [allowRemoteImages, attachments, baseURL, externalLinks, html]
+    [allowRemoteImages, attachments, baseURL, externalLinks, html, remoteImages]
   )
   const externalLinkMap = React.useMemo(() => {
     const map = new Map<string, AuthenticatedExternalLink>()
@@ -2208,6 +2185,7 @@ function EmailMessageBodyFrame({
     }
     return map
   }, [externalLinks, rewritten.externalLinks])
+  const emailDocumentThemeMode = useEmailDocumentThemeMode()
   const srcDoc = React.useMemo(
     () =>
       buildEmailIframeDocument({
@@ -2215,9 +2193,10 @@ function EmailMessageBodyFrame({
         csp: buildEmailContentSecurityPolicy({
           allowRemoteImages,
           sameOrigin: getCurrentBrowserOrigin()
-        })
+        }),
+        themeMode: emailDocumentThemeMode
       }),
-    [allowRemoteImages, rewritten.html]
+    [allowRemoteImages, emailDocumentThemeMode, rewritten.html]
   )
   const installFrameHandlers = React.useCallback(() => {
     const iframe = iframeRef.current
@@ -2227,6 +2206,28 @@ function EmailMessageBodyFrame({
     }
 
     cleanupFrameRef.current()
+    const cleanupCallbacks: Array<() => void> = []
+
+    if (fitContent) {
+      const resizeFrameToContent = () => {
+        const bodyHeight = iframeDocument.body.scrollHeight
+        const nextHeight = Math.ceil(Math.max(bodyHeight, 1))
+
+        iframe.height = String(nextHeight)
+      }
+      const FrameResizeObserver = iframeDocument.defaultView?.ResizeObserver
+
+      resizeFrameToContent()
+
+      if (FrameResizeObserver) {
+        const resizeObserver = new FrameResizeObserver(resizeFrameToContent)
+        resizeObserver.observe(iframeDocument.documentElement)
+        resizeObserver.observe(iframeDocument.body)
+        cleanupCallbacks.push(() => {
+          resizeObserver.disconnect()
+        })
+      }
+    }
 
     const findLinkTarget = (target: EventTarget | null) => {
       const frameElement = iframeDocument.defaultView?.Element
@@ -2281,8 +2282,11 @@ function EmailMessageBodyFrame({
     cleanupFrameRef.current = () => {
       iframeDocument.removeEventListener('click', handleClick)
       iframeDocument.removeEventListener('keydown', handleKeyDown)
+      for (const cleanupCallback of cleanupCallbacks) {
+        cleanupCallback()
+      }
     }
-  }, [baseURL, externalLinkMap, onExternalLinkSelect])
+  }, [baseURL, externalLinkMap, fitContent, onExternalLinkSelect])
 
   React.useEffect(
     () => () => {
@@ -2294,7 +2298,8 @@ function EmailMessageBodyFrame({
   return (
     <iframe
       ref={iframeRef}
-      className={cn('block w-full border-0 bg-white', className)}
+      className={cn('bg-background block w-full border-0', fitContent ? 'min-h-0' : className)}
+      height={fitContent ? 1 : undefined}
       loading={loading}
       onLoad={installFrameHandlers}
       referrerPolicy='no-referrer'
@@ -2556,7 +2561,7 @@ function EmailThreadView({
   onExternalLinkSelect?: (link: AuthenticatedExternalLink) => void
 }) {
   return (
-    <div className='flex min-h-full flex-col bg-white'>
+    <div className='bg-background flex min-h-full flex-col'>
       {email.thread?.map((message, index) => (
         <EmailThreadMessageItem
           email={email}
@@ -2677,7 +2682,7 @@ function EmailThreadMessageItem({
       <EmailMessageBodyFrame
         allowRemoteImages={false}
         attachments={message.attachments ?? []}
-        className={getEmailBodyFrameClass(message.bodySize ?? 'standard')}
+        fitContent
         html={message.html}
         loading={index === 0 ? 'eager' : 'lazy'}
         onExternalLinkSelect={onExternalLinkSelect}
@@ -2820,6 +2825,55 @@ function getCurrentBrowserOrigin() {
   }
 }
 
+function useEmailDocumentThemeMode() {
+  const [themeMode, setThemeMode] = React.useState<EmailIframeThemeMode | undefined>(
+    readEmailDocumentThemeMode
+  )
+
+  React.useEffect(() => {
+    if (typeof globalThis.document === 'undefined' || typeof globalThis.MutationObserver === 'undefined') {
+      return undefined
+    }
+
+    const root = globalThis.document.documentElement
+    const syncThemeMode = () => {
+      setThemeMode(readEmailDocumentThemeMode())
+    }
+    const observer = new globalThis.MutationObserver(syncThemeMode)
+
+    syncThemeMode()
+    observer.observe(root, {
+      attributeFilter: ['class', 'data-theme'],
+      attributes: true
+    })
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [])
+
+  return themeMode
+}
+
+function readEmailDocumentThemeMode(): EmailIframeThemeMode | undefined {
+  if (typeof globalThis.document === 'undefined') {
+    return undefined
+  }
+
+  const root = globalThis.document.documentElement
+  const dataTheme = root.getAttribute('data-theme')
+  if (dataTheme === 'dark' || dataTheme === 'light') {
+    return dataTheme
+  }
+  if (root.classList.contains('dark')) {
+    return 'dark'
+  }
+  if (root.classList.contains('light')) {
+    return 'light'
+  }
+  return undefined
+}
+
 function getUrlHost(value: string) {
   try {
     const url = new URL(value)
@@ -2937,12 +2991,10 @@ function EmailToolbarButton({
 }
 
 function MailboxList({
-  onMailAction,
   onSelectMail,
   onRetry,
   view
 }: {
-  onMailAction?: (action: AuthenticatedEmailAction, mail: AuthenticatedMailItem) => void
   onSelectMail?: (mailId: string) => void
   onRetry?: () => void
   view: AuthenticatedSidebarView
@@ -3084,16 +3136,6 @@ function MailboxList({
           {mail.teaser}
         </span>
       </button>
-      {mail.actions?.length ? (
-        <div className='bg-sidebar-accent/95 absolute right-2 bottom-2 flex rounded-md p-0.5 shadow-xs'>
-          <EmailToolbarButtonList
-            actions={mail.actions}
-            onAction={(action) => {
-              onMailAction?.(action, mail)
-            }}
-          />
-        </div>
-      ) : null}
     </div>
   ))
 }

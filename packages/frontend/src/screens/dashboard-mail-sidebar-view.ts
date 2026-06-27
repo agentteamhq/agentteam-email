@@ -139,7 +139,7 @@ export function toSidebarView(
           title: folderRename.title ?? 'Rename folder'
         }
       : undefined,
-    mails: messages.map((message) => toMailItem(message, folders)),
+    mails: messages.map(toMailItem),
     managementNav,
     navMain: folders.map(toNavItem),
     pagination: toPagination(workspace),
@@ -246,12 +246,8 @@ function toNavItem(folder: AgentMailWebFolder): AuthenticatedSidebarView['navMai
   }
 }
 
-function toMailItem(
-  message: AgentMailWebMessageSummary,
-  folders: ReadonlyArray<AgentMailWebFolder>
-): AuthenticatedMailItem {
+function toMailItem(message: AgentMailWebMessageSummary): AuthenticatedMailItem {
   return {
-    actions: actionsForMessage(message, folders),
     attachmentCountLabel: message.attachmentCount ? String(message.attachmentCount) : undefined,
     date: formatMessageDate(message.receivedAt),
     email: message.from,

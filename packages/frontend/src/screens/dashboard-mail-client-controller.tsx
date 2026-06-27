@@ -2003,15 +2003,6 @@ export function DashboardMailController({
           messageId: undefined
         })
       }}
-      onMailboxMessageAction={(action, mail) => {
-        if (mail.id !== selectedMessage?.id) {
-          navigateMail({ messageId: mail.id })
-          return
-        }
-        if (selectedPreview) {
-          handleEmailAction(action, selectedPreview)
-        }
-      }}
       onMailboxMessageSelect={(mailId) => {
         navigateMail({ messageId: mailId })
       }}

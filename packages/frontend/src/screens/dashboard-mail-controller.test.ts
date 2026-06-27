@@ -3,7 +3,7 @@ import { QueryClient } from '@tanstack/react-query'
 
 import { invalidateMailboxAdminQueries } from './dashboard-mailbox-admin-query-cache'
 import { mailboxAdminViewQueryForSection } from './dashboard-mailbox-admin-query'
-import { toSidebarView } from './dashboard-mail-sidebar-view'
+import { actionsForMessage, toSidebarView } from './dashboard-mail-sidebar-view'
 import { toMailboxAdminView } from './dashboard-mailbox-admin-view'
 import type { AgentMailWebWorkspace } from '@main/backend'
 import type { MailboxAdminView } from '../partials/authenticated/mailbox-admin-models'
@@ -364,52 +364,35 @@ describe('mail client controller view mapping', () => {
     })
   })
 
-  it('derives row actions from the active folder context', () => {
+  it('derives selected message actions from the active folder context', () => {
     expect.hasAssertions()
-    const view = toSidebarView(
-      mailWorkspace({
-        activeFolderId: 'junk-id',
-        folders: [
-          {
-            id: 'inbox-id',
-            name: 'Inbox',
-            path: 'INBOX',
-            protected: true,
-            specialUse: '\\Inbox'
-          },
-          {
-            id: 'junk-id',
-            name: 'Junk',
-            path: 'Junk',
-            protected: true,
-            specialUse: '\\Junk'
-          }
-        ],
-        messages: [
-          {
-            attachmentCount: 0,
-            from: 'Sender <sender@example.test>',
-            id: '12',
-            isDraft: false,
-            isStarred: false,
-            mailboxId: 'junk-id',
-            subject: 'Junk fixture',
-            teaser: 'Message preview',
-            unread: false
-          }
-        ]
-      }),
-      'success',
-      null,
-      { name: '', state: 'closed' },
-      { state: 'closed' },
-      { name: '', state: 'closed' },
-      undefined,
-      undefined
+    const actions = actionsForMessage(
+      {
+        isDraft: false,
+        isStarred: false,
+        mailboxId: 'junk-id',
+        unread: false
+      },
+      [
+        {
+          id: 'inbox-id',
+          name: 'Inbox',
+          path: 'INBOX',
+          protected: true,
+          specialUse: '\\Inbox'
+        },
+        {
+          id: 'junk-id',
+          name: 'Junk',
+          path: 'Junk',
+          protected: true,
+          specialUse: '\\Junk'
+        }
+      ]
     )
 
-    expect(view.mails[0]?.actions?.some((action) => action.action === 'mark-not-spam')).toBe(true)
-    expect(view.mails[0]?.actions?.find((action) => action.action === 'mark-spam')).toBeUndefined()
+    expect(actions.some((action) => action.action === 'mark-not-spam')).toBe(true)
+    expect(actions.find((action) => action.action === 'mark-spam')).toBeUndefined()
   })
 })
 

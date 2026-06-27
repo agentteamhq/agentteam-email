@@ -57,7 +57,7 @@ export const agentAccessEmptyState = {
 export const agentAccessEnrollmentCreatedState = {
   ...agentAccessEmptyState,
   createdAgentEnrollment: {
-    enrollmentToken: 'enroll_9sV8P2uL4dTq7mZc',
+    enrollmentToken: 'enroll_AAAAAAAAAAAAAAAA',
     enrollmentTokenExpiresAt: '2026-06-22T12:30:00.000Z',
     grantExpiresAt: '2026-07-22T12:30:00.000Z',
     hostId: 'host_01JZMAILAGENT',

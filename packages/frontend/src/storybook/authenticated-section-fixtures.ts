@@ -135,11 +135,9 @@ const denseCloudflareConnections = [
 
 const mailRuntimeStatus = {
   controlState: {
-    configured: true,
     domainsActive: 1,
     domainsDisabled: 0,
     domainsTotal: 1,
-    exists: true,
     issues: [],
     ok: true,
     schema: 'agent-mail.control-state.v1',
@@ -189,13 +187,6 @@ const mailRuntimeStatus = {
     }
   },
   ok: true,
-  provisioning: {
-    domainsApplied: 1,
-    domainsFailed: 0,
-    domainsPending: 0,
-    issues: [],
-    status: 'succeeded'
-  },
   selectedProvider: 'cloudflare',
   status: 'ready'
 } satisfies NonNullable<DomainSettingsState['mailStatus']>
@@ -238,13 +229,6 @@ export const domainSettingsDomainProvisioningState = {
   mailStatus: {
     ...mailRuntimeStatus,
     ok: false,
-    provisioning: {
-      domainsApplied: 0,
-      domainsFailed: 0,
-      domainsPending: 1,
-      issues: [],
-      status: 'pending'
-    },
     status: 'provisioning'
   },
   message: 'Domain provisioning is queued for Cloudflare.',
@@ -273,13 +257,6 @@ export const domainSettingsDomainNeedsAttentionState = {
     ...mailRuntimeStatus,
     issues: ['Cloudflare route requires attention'],
     ok: false,
-    provisioning: {
-      domainsApplied: 0,
-      domainsFailed: 1,
-      domainsPending: 0,
-      issues: ['Route apply failed'],
-      status: 'failed'
-    },
     status: 'degraded'
   },
   mode: 'domain',
@@ -559,69 +536,6 @@ const archiveMessageActions =
   defaultAuthenticatedEmailToolbarActions.flatMap<AuthenticatedEmailToolbarAction>((action) =>
     action.action === 'move' ? [archiveToolbarAction, action] : [action]
   ) satisfies ReadonlyArray<AuthenticatedEmailToolbarAction>
-
-const mailboxRowActions = [
-  {
-    action: 'mark-read',
-    group: 'organization',
-    iconKey: 'mark-read',
-    label: 'Mark as read',
-    section: 'start'
-  },
-  {
-    action: 'star',
-    group: 'organization',
-    iconKey: 'star',
-    label: 'Star',
-    section: 'start'
-  },
-  {
-    action: 'delete',
-    group: 'utility',
-    iconKey: 'delete',
-    label: 'Delete',
-    section: 'start'
-  }
-] satisfies ReadonlyArray<AuthenticatedEmailToolbarAction>
-
-export const mailboxRowActionSidebarView = {
-  ...emailPreviewSidebarView,
-  mails: emailPreviewMails.map((mail) =>
-    mail.id === 'appointment-alert'
-      ? {
-          ...mail,
-          actions: mailboxRowActions
-        }
-      : mail
-  )
-} satisfies AuthenticatedSidebarView
-
-const mailboxRowPendingActions = mailboxRowActions.map((action) =>
-  action.action === 'star'
-    ? {
-        ...action,
-        pending: true
-      }
-    : action.action === 'delete'
-      ? {
-          ...action,
-          disabled: true,
-          disabledReason: 'Message action is already queued.'
-        }
-      : action
-)
-
-export const mailboxRowPendingActionSidebarView = {
-  ...emailPreviewSidebarView,
-  mails: emailPreviewMails.map((mail) =>
-    mail.id === 'appointment-alert'
-      ? {
-          ...mail,
-          actions: mailboxRowPendingActions
-        }
-      : mail
-  )
-} satisfies AuthenticatedSidebarView
 
 const threadMessageOriginalActions = [
   {

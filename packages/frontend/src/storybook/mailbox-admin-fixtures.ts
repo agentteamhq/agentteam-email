@@ -15,7 +15,7 @@ import type {
 function ignoreMailboxAdminAction() {}
 
 export const mailboxAdminDomain = 'agentteam.example'
-const mailboxAdminOperationsApiKeyPublicId = '2zXdRMpXKicecXjRnFg1b'
+const mailboxAdminOperationsApiKeyPublicId = 'api_key_story_fixture'
 
 export const mailboxAdminPermissionCatalog = {
   ...agentMailAdminPermissionCatalog
@@ -546,7 +546,7 @@ export const mailboxAdminCreateAgentSavingView = {
 export const mailboxAdminCreateAgentEnrollmentView = {
   ...mailboxAdminCreateAgentView,
   createdAgentEnrollment: {
-    enrollmentToken: 'enroll_9sV8P2uL4dTq7mZc',
+    enrollmentToken: 'enroll_AAAAAAAAAAAAAAAA',
     enrollmentTokenExpiresAt: '2026-06-22T12:30:00.000Z',
     grantExpiresAt: '2026-07-22T12:30:00.000Z',
     hostId: 'host_01JZMAILAGENT',
