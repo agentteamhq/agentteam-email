@@ -4,7 +4,7 @@ WORKDIR /src
 
 COPY apps/at-email-cli/go.mod ./
 COPY apps/at-email-cli/skill.go ./
-COPY skills/at-email-cli/SKILL.md ./SKILL.md
+COPY skills/at-email-cli/SKILL.md ./tmp/SKILL.md
 COPY apps/at-email-cli/cmd ./cmd
 COPY apps/at-email-cli/internal ./internal
 
@@ -22,7 +22,7 @@ ARG VERSION=0.1.0-dev
 
 COPY apps/at-email-cli/go.mod ./
 COPY apps/at-email-cli/skill.go ./
-COPY skills/at-email-cli/SKILL.md ./SKILL.md
+COPY skills/at-email-cli/SKILL.md ./tmp/SKILL.md
 COPY apps/at-email-cli/cmd ./cmd
 COPY apps/at-email-cli/internal ./internal
 

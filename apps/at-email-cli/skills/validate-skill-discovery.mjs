@@ -7,7 +7,7 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const cliRoot = path.resolve(scriptDir, '..')
 const repoRoot = path.resolve(cliRoot, '..', '..')
 const canonicalSkillPath = path.join(repoRoot, 'skills', 'at-email-cli', 'SKILL.md')
-const stagedSkillPath = path.join(cliRoot, 'SKILL.md')
+const stagedSkillPath = path.join(cliRoot, 'tmp', 'SKILL.md')
 const skillsConfigPath = path.join(repoRoot, 'skills.sh.json')
 
 function assert(condition, message) {
@@ -55,7 +55,7 @@ async function validate() {
   if (stagedSkill !== null) {
     assert(
       stagedSkill === canonicalSkill,
-      'generated apps/at-email-cli/SKILL.md must match skills/at-email-cli/SKILL.md. Run mise run //apps/at-email-cli:skills:stage.'
+      'generated apps/at-email-cli/tmp/SKILL.md must match skills/at-email-cli/SKILL.md. Run mise run //apps/at-email-cli:skills:stage.'
     )
   }
 

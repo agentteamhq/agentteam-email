@@ -123,15 +123,10 @@ func extractAddresses(value any) []string {
 
 func parseAddressHeader(header string) []string {
 	parsed, err := mail.ParseAddressList(header)
-	if err == nil {
-		return mailAddressStrings(parsed)
+	if err != nil {
+		return nil
 	}
-
-	addresses := make([]string, 0)
-	for _, segment := range splitAddressHeader(header) {
-		addresses = append(addresses, parseAddressSegment(segment)...)
-	}
-	return addresses
+	return mailAddressStrings(parsed)
 }
 
 func mailAddressStrings(parsed []*mail.Address) []string {
@@ -143,91 +138,6 @@ func mailAddressStrings(parsed []*mail.Address) []string {
 		}
 	}
 	return addresses
-}
-
-func parseAddressSegment(segment string) []string {
-	cleaned := strings.TrimSpace(segment)
-	if cleaned == "" {
-		return nil
-	}
-	if parsed, err := mail.ParseAddress(cleaned); err == nil {
-		return mailAddressStrings([]*mail.Address{parsed})
-	}
-
-	addresses := make([]string, 0)
-	for _, candidate := range angleAddressCandidates(cleaned) {
-		if parsed, err := mail.ParseAddress("<" + candidate + ">"); err == nil {
-			addresses = append(addresses, strings.TrimSpace(parsed.Address))
-		}
-	}
-	if len(addresses) > 0 {
-		return addresses
-	}
-
-	if strings.ContainsAny(cleaned, " \t\r\n<>") {
-		return nil
-	}
-	if parsed, err := mail.ParseAddress(cleaned); err == nil {
-		return mailAddressStrings([]*mail.Address{parsed})
-	}
-	return nil
-}
-
-func splitAddressHeader(header string) []string {
-	segments := make([]string, 0)
-	start := 0
-	inQuote := false
-	escaped := false
-	angleDepth := 0
-	for index, char := range header {
-		if escaped {
-			escaped = false
-			continue
-		}
-		if inQuote && char == '\\' {
-			escaped = true
-			continue
-		}
-		switch char {
-		case '"':
-			inQuote = !inQuote
-		case '<':
-			if !inQuote {
-				angleDepth++
-			}
-		case '>':
-			if !inQuote && angleDepth > 0 {
-				angleDepth--
-			}
-		case ',':
-			if !inQuote && angleDepth == 0 {
-				segments = append(segments, header[start:index])
-				start = index + len(string(char))
-			}
-		}
-	}
-	segments = append(segments, header[start:])
-	return segments
-}
-
-func angleAddressCandidates(segment string) []string {
-	candidates := make([]string, 0)
-	start := -1
-	for index, char := range segment {
-		switch char {
-		case '<':
-			start = index + len(string(char))
-		case '>':
-			if start >= 0 && start <= index {
-				candidate := strings.TrimSpace(segment[start:index])
-				if candidate != "" {
-					candidates = append(candidates, candidate)
-				}
-			}
-			start = -1
-		}
-	}
-	return candidates
 }
 
 func appendUniqueAddress(target []string, seen map[string]struct{}, address string) []string {

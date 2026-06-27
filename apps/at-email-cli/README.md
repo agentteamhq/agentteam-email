@@ -93,7 +93,7 @@ mise run skills:check
 ```
 
 For direct host Go debugging, run `mise run skills:stage` first so the ignored
-`SKILL.md` needed by `go:embed` exists in this package directory.
+`tmp/SKILL.md` needed by `go:embed` exists in this package directory.
 
 ## Builds
 
@@ -171,8 +171,8 @@ are intentionally handled separately from this release bundle generator.
 
 The root skill at `skills/at-email-cli/SKILL.md` is canonical for the Go binary,
 plugin bundles, and marketplace/tap discovery. Do not commit an app-local skill
-copy under this directory. Host release builds stage an ignored copy with
-`mise run skills:stage`.
+copy under this directory. Host release builds stage an ignored
+`tmp/SKILL.md` copy with `mise run skills:stage`.
 
 Validate the skill discovery setup with:
 

@@ -3,7 +3,6 @@ package atemail
 import (
 	"fmt"
 	"net/url"
-	"strings"
 )
 
 type queryParam struct {
@@ -12,11 +11,11 @@ type queryParam struct {
 }
 
 func encodeQuery(params []queryParam) string {
-	values := make([]string, 0, len(params))
+	values := url.Values{}
 	for _, param := range params {
-		values = append(values, url.QueryEscape(param.Key)+"="+url.QueryEscape(param.Value))
+		values.Add(param.Key, param.Value)
 	}
-	return strings.Join(values, "&")
+	return values.Encode()
 }
 
 func newServiceTransportError(service string, action string) error {

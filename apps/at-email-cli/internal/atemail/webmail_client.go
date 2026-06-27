@@ -116,10 +116,14 @@ func (c *webMailClient) updateMessage(ctx context.Context, mailboxID string, mes
 	result := map[string]any{"success": true}
 	if seen != nil {
 		payload := map[string]any{"seen": *seen}
+		path, err := webMailPath("accounts", accountID, "mailboxes", mailboxID, "messages", fmt.Sprint(messageID))
+		if err != nil {
+			return nil, err
+		}
 		response, err := c.requestJSON(
 			ctx,
 			http.MethodPatch,
-			"/rpc/mail/accounts/"+pathEscape(accountID)+"/mailboxes/"+pathEscape(mailboxID)+"/messages/"+fmt.Sprint(messageID),
+			path,
 			nil,
 			payload,
 		)
@@ -129,10 +133,14 @@ func (c *webMailClient) updateMessage(ctx context.Context, mailboxID string, mes
 		result["message_update"] = response
 	}
 	if moveTo != "" {
+		path, err := webMailPath("accounts", accountID, "mailboxes", mailboxID, "messages", fmt.Sprint(messageID), "move")
+		if err != nil {
+			return nil, err
+		}
 		response, err := c.requestJSON(
 			ctx,
 			http.MethodPost,
-			"/rpc/mail/accounts/"+pathEscape(accountID)+"/mailboxes/"+pathEscape(mailboxID)+"/messages/"+fmt.Sprint(messageID)+"/move",
+			path,
 			nil,
 			map[string]any{"targetMailboxId": moveTo},
 		)
@@ -178,7 +186,11 @@ func (c *webMailClient) submitMessage(ctx context.Context, message outboundMessa
 	if message.Reference != nil {
 		body["reference"] = webComposeReference(message.Reference)
 	}
-	response, err := c.requestJSON(ctx, http.MethodPost, "/rpc/mail/accounts/"+pathEscape(accountID)+"/messages", nil, body)
+	path, err := webMailPath("accounts", accountID, "messages")
+	if err != nil {
+		return nil, err
+	}
+	response, err := c.requestJSON(ctx, http.MethodPost, path, nil, body)
 	if err != nil {
 		return nil, err
 	}
@@ -193,14 +205,22 @@ func (c *webMailClient) createAdminAccount(ctx context.Context, address string, 
 	if strings.TrimSpace(name) != "" {
 		body["name"] = strings.TrimSpace(name)
 	}
-	return c.requestJSON(ctx, http.MethodPost, "/rpc/mail/admin/accounts", nil, body)
+	path, err := webMailPath("admin", "accounts")
+	if err != nil {
+		return nil, err
+	}
+	return c.requestJSON(ctx, http.MethodPost, path, nil, body)
 }
 
 func (c *webMailClient) workspace(ctx context.Context, query []queryParam) (map[string]any, error) {
 	if c.preferredAccountID != "" && !hasQueryParam(query, "accountId") {
 		query = append([]queryParam{{Key: "accountId", Value: c.preferredAccountID}}, query...)
 	}
-	return c.requestJSON(ctx, http.MethodGet, "/rpc/mail/workspace", query, nil)
+	path, err := webMailPath("workspace")
+	if err != nil {
+		return nil, err
+	}
+	return c.requestJSON(ctx, http.MethodGet, path, query, nil)
 }
 
 func (c *webMailClient) accountID(ctx context.Context) (string, error) {
@@ -223,9 +243,9 @@ func (c *webMailClient) accountID(ctx context.Context) (string, error) {
 }
 
 func (c *webMailClient) requestJSON(ctx context.Context, method string, path string, query []queryParam, body map[string]any) (map[string]any, error) {
-	requestURL := c.baseURL + path
-	if len(query) > 0 {
-		requestURL += "?" + encodeQuery(query)
+	requestURL, err := buildRequestURL(c.baseURL, path, query)
+	if err != nil {
+		return nil, err
 	}
 
 	var reader io.Reader
@@ -381,6 +401,30 @@ func hasQueryParam(query []queryParam, key string) bool {
 	return false
 }
 
-func pathEscape(value string) string {
-	return url.PathEscape(value)
+func webMailPath(elements ...string) (string, error) {
+	escaped := make([]string, 0, len(elements)+2)
+	escaped = append(escaped, "rpc", "mail")
+	for _, element := range elements {
+		escaped = append(escaped, url.PathEscape(element))
+	}
+	return url.JoinPath("/", escaped...)
+}
+
+func buildRequestURL(baseURL string, requestPath string, query []queryParam) (string, error) {
+	requestURL, err := url.JoinPath(baseURL, strings.TrimPrefix(requestPath, "/"))
+	if err != nil {
+		return "", fmt.Errorf("build request URL: %w", err)
+	}
+	parsed, err := url.Parse(requestURL)
+	if err != nil {
+		return "", fmt.Errorf("parse request URL: %w", err)
+	}
+	if len(query) > 0 {
+		values := url.Values{}
+		for _, param := range query {
+			values.Add(param.Key, param.Value)
+		}
+		parsed.RawQuery = values.Encode()
+	}
+	return parsed.String(), nil
 }

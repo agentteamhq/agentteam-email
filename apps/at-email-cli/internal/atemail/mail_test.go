@@ -1,7 +1,6 @@
 package atemail
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -50,7 +49,7 @@ func TestResolveReplyRecipientsDedupesOwnAddress(t *testing.T) {
 	}
 }
 
-func TestResolveReplyRecipientsParsesMalformedMixedHeaders(t *testing.T) {
+func TestResolveReplyRecipientsRejectsMalformedMixedHeaders(t *testing.T) {
 	message := map[string]any{
 		"from": "Sender <sender@example.net>",
 		"to":   []any{"Broken <bad, Alice <alice@example.com>, Team <team@example.com>"},
@@ -63,18 +62,7 @@ func TestResolveReplyRecipientsParsesMalformedMixedHeaders(t *testing.T) {
 	if len(recipients.To) != 1 || recipients.To[0] != "sender@example.net" {
 		t.Fatalf("To = %#v", recipients.To)
 	}
-	wantCC := []string{"alice@example.com", "team@example.com", "bob@example.com"}
-	if len(recipients.Cc) != len(wantCC) {
+	if len(recipients.Cc) != 0 {
 		t.Fatalf("Cc = %#v", recipients.Cc)
-	}
-	for i, want := range wantCC {
-		if recipients.Cc[i] != want {
-			t.Fatalf("Cc[%d] = %q, want %q", i, recipients.Cc[i], want)
-		}
-	}
-	for _, address := range recipients.Cc {
-		if strings.Contains(address, "<") || strings.Contains(address, "Alice ") {
-			t.Fatalf("corrupted address = %q", address)
-		}
 	}
 }

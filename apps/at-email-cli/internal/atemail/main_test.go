@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"runtime"
 	"strconv"
 	"strings"
@@ -260,7 +261,7 @@ func TestMainSendUsesAgentMailRPCWithoutWildDuckConfig(t *testing.T) {
 				"pagination":{"limit":25,"nextCursor":null,"previousCursor":null,"total":0},
 				"selectedMessage":null
 			}`))
-		case "/rpc/mail/accounts/" + pathEscape("agent@example.com") + "/messages":
+		case "/rpc/mail/accounts/" + url.PathEscape("agent@example.com") + "/messages":
 			if r.Method != http.MethodPost {
 				t.Fatalf("method = %s", r.Method)
 			}
@@ -298,7 +299,7 @@ func TestMainSendUsesAgentMailRPCWithoutWildDuckConfig(t *testing.T) {
 	if objectValue(payload["message"])["success"] != true {
 		t.Fatalf("payload = %#v", payload)
 	}
-	if strings.Join(seen, "\n") != "/rpc/mail/workspace\n/rpc/mail/accounts/"+pathEscape("agent@example.com")+"/messages" {
+	if strings.Join(seen, "\n") != "/rpc/mail/workspace\n/rpc/mail/accounts/"+url.PathEscape("agent@example.com")+"/messages" {
 		t.Fatalf("seen = %#v", seen)
 	}
 	if stderr.String() != "" {
@@ -1559,7 +1560,7 @@ func TestMainSendUsesBodyAndRendersSubmitResponse(t *testing.T) {
 				"pagination":{"limit":25,"nextCursor":null,"previousCursor":null,"total":0},
 				"selectedMessage":null
 			}`))
-		case "/rpc/mail/accounts/" + pathEscape("agent@example.com") + "/messages":
+		case "/rpc/mail/accounts/" + url.PathEscape("agent@example.com") + "/messages":
 			var payload map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				t.Fatalf("decode request: %v", err)
@@ -1606,7 +1607,7 @@ func TestMainSendAllowsExplicitEmptySubject(t *testing.T) {
 				"pagination":{"limit":25,"nextCursor":null,"previousCursor":null,"total":0},
 				"selectedMessage":null
 			}`))
-		case "/rpc/mail/accounts/" + pathEscape("agent@example.com") + "/messages":
+		case "/rpc/mail/accounts/" + url.PathEscape("agent@example.com") + "/messages":
 			var payload map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				t.Fatalf("decode request: %v", err)
