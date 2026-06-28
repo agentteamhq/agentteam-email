@@ -144,6 +144,7 @@ jobs:
       - name: Run unit and integration tests
         run: |
           docker run \
+            --env-file .env.example \
             -e CI=true \
             -e DEBUG='*' \
             -e DOCKER_IMAGE=atemail-web-server:test \
