@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 
 import { Auth } from '../../components/auth/auth'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
+import { Spinner } from '../../components/ui/spinner'
 import { cn, tw } from '../../lib/utils'
 import type { ReactNode } from 'react'
 import type { TailwindClass } from '../../lib/utils'
@@ -99,7 +100,6 @@ const authConfig = {
 const supportedAuthViewValues = [
   'signIn',
   'signUp',
-  'signOut',
   'forgotPassword',
   'resetPassword',
   'verifyEmail',
@@ -125,26 +125,14 @@ function getLastMethodClass(
   view: BetterAuthRouteView,
   lastUsedLoginMethod: BetterAuthLastUsedLoginMethod | null | undefined
 ) {
-  if (view !== 'signIn' && view !== 'signUp') {
-    return undefined
-  }
-
-  if (!lastUsedLoginMethod) {
-    return undefined
-  }
-
-  if (lastUsedLoginMethod === 'email' && view !== 'signIn') {
+  if (view !== 'signIn' || !lastUsedLoginMethod) {
     return undefined
   }
 
   return lastUsedAnchors[lastUsedLoginMethod]
 }
 
-export function BetterAuthViewTemplate({
-  view,
-  flash,
-  lastUsedLoginMethod
-}: BetterAuthViewTemplateProps) {
+export function BetterAuthViewTemplate({ view, flash, lastUsedLoginMethod }: BetterAuthViewTemplateProps) {
   const config = view in authConfig ? authConfig[view] : null
 
   useEffect(() => {
@@ -158,7 +146,9 @@ export function BetterAuthViewTemplate({
       view={view}
       lastUsedLoginMethod={lastUsedLoginMethod}
     >
-      {isSupportedAuthView(view) ? (
+      {view === 'signOut' ? (
+        <AuthSignOutCard />
+      ) : isSupportedAuthView(view) ? (
         <Auth
           socialLayout={view === 'signIn' || view === 'signUp' ? 'vertical' : 'auto'}
           view={view}
@@ -171,6 +161,22 @@ export function BetterAuthViewTemplate({
         />
       )}
     </BetterAuthViewFrame>
+  )
+}
+
+function AuthSignOutCard() {
+  return (
+    <Card
+      className='border-secondary-card-border bg-surface min-h-48 w-full justify-center gap-5 py-8 shadow-sm'
+    >
+      <CardHeader className='items-center px-8 text-center'>
+        <CardTitle className='text-xl font-semibold'>Signing out</CardTitle>
+        <CardDescription>Redirecting you to sign in.</CardDescription>
+      </CardHeader>
+      <CardContent className='flex justify-center px-8 pb-0'>
+        <Spinner className='text-muted-foreground size-5' />
+      </CardContent>
+    </Card>
   )
 }
 
@@ -197,8 +203,8 @@ export function BetterAuthViewFrame({ children, view, lastUsedLoginMethod }: Bet
                 border-t-transparent border-b-transparent will-change-transform'
             />
             <div
-              className='bg-primary text-primary-foreground flex items-center rounded-md px-2.5 py-1 text-xs
-                font-medium will-change-transform'
+              className='bg-primary text-primary-foreground flex shrink-0 items-center rounded-md px-2.5 py-1
+                text-xs font-medium whitespace-nowrap will-change-transform'
             >
               <KeyIcon className='text-primary-foreground/90 mr-1 size-3 transform-gpu will-change-transform' />
               Last used
@@ -214,8 +220,8 @@ export function BetterAuthViewFrame({ children, view, lastUsedLoginMethod }: Bet
             )}
           >
             <div
-              className='bg-primary text-primary-foreground flex items-center rounded-md px-2.5 py-1 text-xs
-                font-medium will-change-transform'
+              className='bg-primary text-primary-foreground flex shrink-0 items-center rounded-md px-2.5 py-1
+                text-xs font-medium whitespace-nowrap will-change-transform'
             >
               <KeyIcon className='text-primary-foreground/90 mr-1 size-3 transform-gpu will-change-transform' />
               Last used

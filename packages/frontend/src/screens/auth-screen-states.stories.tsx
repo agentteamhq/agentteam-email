@@ -1,3 +1,5 @@
+import { expect, within } from 'storybook/test'
+
 import { defaultAuthRouteArgs } from '../storybook/auth-route-fixtures'
 import { protectedRouteSignInState, publicAuthRouteState } from '../storybook/screen-fixtures'
 import { AuthRoutePage } from './auth-route-page'
@@ -60,6 +62,11 @@ export const SignInLastUsedGoogle: Story = {
     routeState: protectedRouteSignInState,
     lastUsedLoginMethod: 'google',
     view: 'signIn'
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement.ownerDocument.body)
+
+    await expect(await canvas.findByText('Last used')).toBeInTheDocument()
   }
 }
 
@@ -78,33 +85,12 @@ export const SignUpDefault: Story = {
     routeState: publicAuthRouteState,
     lastUsedLoginMethod: null,
     view: 'signUp'
-  }
-}
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement.ownerDocument.body)
 
-export const SignUpLastUsedMagicLink: Story = {
-  name: 'Sign up / last used magic link',
-  args: {
-    routeState: publicAuthRouteState,
-    lastUsedLoginMethod: 'magic-link',
-    view: 'signUp'
-  }
-}
-
-export const SignUpLastUsedGoogle: Story = {
-  name: 'Sign up / last used Google',
-  args: {
-    routeState: publicAuthRouteState,
-    lastUsedLoginMethod: 'google',
-    view: 'signUp'
-  }
-}
-
-export const SignUpLastUsedLinkedIn: Story = {
-  name: 'Sign up / last used LinkedIn',
-  args: {
-    routeState: publicAuthRouteState,
-    lastUsedLoginMethod: 'linkedin',
-    view: 'signUp'
+    await canvas.findByRole('heading', { name: 'Sign Up' })
+    await expect(canvas.queryByText('Last used')).not.toBeInTheDocument()
   }
 }
 
@@ -113,5 +99,11 @@ export const SignOutRedirecting: Story = {
   args: {
     routeState: publicAuthRouteState,
     view: 'signOut'
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement.ownerDocument.body)
+
+    await expect(await canvas.findByRole('heading', { name: 'Signing out' })).toBeInTheDocument()
+    await expect(await canvas.findByRole('status', { name: 'Loading' })).toBeInTheDocument()
   }
 }

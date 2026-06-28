@@ -469,6 +469,25 @@
   }
 }
 
+@layer components {
+  #signinup-page form button[type='submit'] {
+    anchor-name: --login-email;
+  }
+
+  #signinup-page a[href='/magic-link'],
+  #signinup-page a[href='/magic-link/'] {
+    anchor-name: --login-magic-link;
+  }
+
+  #signinup-page button[type='button'][aria-label='Google'] {
+    anchor-name: --login-google;
+  }
+
+  #signinup-page button[type='button'][aria-label='LinkedIn'] {
+    anchor-name: --login-linkedin;
+  }
+}
+
 @utility h-text-base {
   height: calc(var(--text-base) * 1.25);
 }
@@ -483,26 +502,6 @@
 
 @utility h-text-xxs {
   height: var(--text-xxs);
-}
-/* email/password login */
-#signinup-page form button[type='submit'] {
-  anchor-name: --login-email;
-}
-/* magic link */
-#signinup-page form + button {
-  anchor-name: --login-magic-link;
-}
-/* google */
-#signinup-page .flex-col > button:nth-child(1):has(svg[viewBox='0 0 256 262']) {
-  anchor-name: --login-google;
-}
-/* x (twitter) */
-#signinup-page .flex-col > button:nth-child(2):has(svg[viewBox='0 0 512 512']) {
-  anchor-name: --login-twitter;
-}
-/* discord */
-#signinup-page .flex-col > button:nth-child(3):has(svg[viewBox='0 0 256 199']) {
-  anchor-name: --login-discord;
 }
 
 /*
