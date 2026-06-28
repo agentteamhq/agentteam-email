@@ -203,7 +203,7 @@ services:
           'CMD',
           'sh',
           '-c',
-          'wget -qO- --header="X-Access-Token: ${AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN}" http://localhost:8080/health || exit 1'
+          'wget -qO- --header="X-Access-Token: ${AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN}" http://127.0.0.1:8080/health || exit 1'
         ]
       interval: 5s
       timeout: 3s
