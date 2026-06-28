@@ -279,7 +279,7 @@ services:
       atemail-mail-control-service:
         condition: service_healthy
     healthcheck:
-      test: ['CMD', 'sh', '-c', 'wget -qO- http://localhost:4321/health >/dev/null || exit 1']
+      test: ['CMD', 'sh', '-c', 'wget -qO- http://127.0.0.1:4321/health >/dev/null || exit 1']
       interval: 5s
       timeout: 3s
       retries: 10
