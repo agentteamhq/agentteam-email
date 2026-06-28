@@ -1,7 +1,7 @@
 # ============================================
 # Complete Development Environment
 # ============================================
-FROM node:24.16.0-bookworm AS build
+FROM node:26.4.0-bookworm AS build
 
 ENV CI=true
 ARG NODE_OPTIONS="--max-old-space-size=4096 --max-semi-space-size=256"
@@ -58,7 +58,7 @@ RUN pnpm turbo run typecheck --no-cache --output-logs=full --log-order=stream --
 # ============================================
 # Production Runtime
 # ============================================
-FROM node:24.16.0-alpine3.23 AS runtime
+FROM node:26.4.0-alpine3.23 AS runtime
 
 
 # Build arguments for dynamic labels

@@ -1,4 +1,4 @@
-import { AbilityBuilder, PureAbility, subject } from '@casl/ability'
+import { Ability, AbilityBuilder, subject } from '@casl/ability'
 import {
   AgentMailAbilityActionByCapability,
   AgentMailCapability,
@@ -90,7 +90,7 @@ type AgentMailCapabilityResourceSubject = AgentMailAgentGrantResourceSubject
 
 type AppSubject = 'all' | AgentMailSubject | (ForcedSubject<AgentMailSubject> & AgentMailResourceSubject)
 
-export type AgentMailAbility = PureAbility<[AgentMailAbilityAction, AppSubject], MatchConditions>
+export type AgentMailAbility = Ability<[AgentMailAbilityAction, AppSubject], MatchConditions>
 
 export function buildAgentMailAbility({
   capabilityGrants = [],
@@ -103,7 +103,7 @@ export function buildAgentMailAbility({
   principal: AgentMailPrincipal
   systemGrants: ReadonlyArray<AgentMailSystemGrantDocument>
 }): AgentMailAbility {
-  const { can, build } = new AbilityBuilder<AgentMailAbility>(PureAbility)
+  const { can, build } = new AbilityBuilder<AgentMailAbility>(Ability)
   const now = new Date()
 
   if (

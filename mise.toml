@@ -11,8 +11,8 @@ postinstall = "pnpm install --frozen-lockfile"
 
 [tools]
 go = "1.26.4"
-node = "24.16.0"
-"npm:pnpm" = "11.4.0"
+node = "26.4.0"
+"npm:pnpm" = "11.8.0"
 podman = "5.8.2"
 kubectl = "1.36.1"
 kind = "0.32.0"

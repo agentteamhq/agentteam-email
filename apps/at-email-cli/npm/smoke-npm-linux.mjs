@@ -13,8 +13,8 @@ function parseArgs(argv) {
     engine: process.env.CONTAINER_ENGINE || 'docker',
     npmRoot: path.join(cliRoot, 'dist', 'npm'),
     smokeDir: path.join(cliRoot, 'dist', 'npm-linux-smoke'),
-    glibcImage: 'docker.io/library/node:24-bookworm-slim',
-    muslImage: 'docker.io/library/node:24-alpine'
+    glibcImage: 'docker.io/library/node:26.4.0-bookworm-slim',
+    muslImage: 'docker.io/library/node:26.4.0-alpine'
   }
 
   for (let i = 0; i < argv.length; i += 1) {

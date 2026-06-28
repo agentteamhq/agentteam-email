@@ -1,4 +1,4 @@
-import { AbilityBuilder, PureAbility } from '@casl/ability'
+import { Ability, AbilityBuilder } from '@casl/ability'
 import type { ForcedSubject, MatchConditions } from '@casl/ability'
 import type { AuditActorEntry, PermissionPolicyActionType, PermissionPolicyV1Schema } from '@main/db'
 
@@ -11,12 +11,12 @@ const lambdaMatcher = (matchConditions: MatchConditions) => matchConditions
 
 type Subject = 'all' | 'Policy' | (ForcedSubject<'Policy'> & Policy)
 type Action = PermissionPolicyActionType
-type AppAbility = PureAbility<[Action, Subject], MatchConditions>
+type AppAbility = Ability<[Action, Subject], MatchConditions>
 
 export function abilityForActor(actor: AuditActorEntry) {
   // const actor = resolveActorEntry(actorEntry)
 
-  const { can, build } = new AbilityBuilder<AppAbility>(PureAbility)
+  const { can, build } = new AbilityBuilder<AppAbility>(Ability)
 
   if (actor.actorType === 'actor') {
     can(
