@@ -12,7 +12,7 @@ verifyDepsBeforeRun: false
 catalog:
   'lodash.startcase': 4.4.0
   '@types/lodash.startcase': 4.4.9
-  '@apidevtools/json-schema-ref-parser': 15.3.5
+  '@apidevtools/json-schema-ref-parser': 15.3.6
   '@agendajs/mongo-backend': 4.0.2
   '@better-auth/agent-auth': 0.6.2
   '@better-auth/api-key': 1.6.19
@@ -38,9 +38,9 @@ catalog:
   '@hcaptcha/react-hcaptcha': 2.0.2
   '@headlessui/react': 2.2.10
   '@hookform/resolvers': 5.4.0
-  '@marsidev/react-turnstile': 1.5.2
+  '@marsidev/react-turnstile': 1.5.3
   '@mikkelscheike/email-provider-links': 5.1.8
-  '@microsoft/api-extractor': 7.58.7
+  '@microsoft/api-extractor': 7.58.9
   '@noble/ciphers': 2.2.0
   '@noble/hashes': 2.2.0
   '@paperclipai/create-paperclip-plugin': 2026.618.0
@@ -50,37 +50,37 @@ catalog:
   '@phosphor-icons/react': 2.1.10
   '@picocss/pico': 2.1.1
   '@playwright/cli': 0.1.14
-  '@pnpm/lockfile.types': 1002.1.1
+  '@pnpm/lockfile.types': 1002.1.2
   '@pnpm/logger': 1001.0.1
   '@pnpm/pnpmfile': 1002.1.13
-  '@radix-ui/react-accordion': 1.2.12
-  '@radix-ui/react-alert-dialog': 1.1.15
-  '@radix-ui/react-aspect-ratio': 1.1.8
-  '@radix-ui/react-avatar': 1.1.11
-  '@radix-ui/react-checkbox': 1.3.3
-  '@radix-ui/react-collapsible': 1.1.12
-  '@radix-ui/react-context-menu': 2.2.16
-  '@radix-ui/react-dialog': 1.1.15
-  '@radix-ui/react-dropdown-menu': 2.1.16
-  '@radix-ui/react-hover-card': 1.1.15
-  '@radix-ui/react-label': 2.1.8
-  '@radix-ui/react-menubar': 1.1.16
-  '@radix-ui/react-navigation-menu': 1.2.14
-  '@radix-ui/react-popover': 1.1.15
-  '@radix-ui/react-progress': 1.1.8
-  '@radix-ui/react-radio-group': 1.3.8
-  '@radix-ui/react-scroll-area': 1.2.10
-  '@radix-ui/react-select': 2.2.6
-  '@radix-ui/react-separator': 1.1.8
-  '@radix-ui/react-slider': 1.3.6
-  '@radix-ui/react-slot': 1.2.4
-  '@radix-ui/react-switch': 1.2.6
-  '@radix-ui/react-tabs': 1.1.13
-  '@radix-ui/react-toggle': 1.1.10
-  '@radix-ui/react-toggle-group': 1.1.11
-  '@radix-ui/react-tooltip': 1.2.8
+  '@radix-ui/react-accordion': 1.2.14
+  '@radix-ui/react-alert-dialog': 1.1.17
+  '@radix-ui/react-aspect-ratio': 1.1.10
+  '@radix-ui/react-avatar': 1.2.0
+  '@radix-ui/react-checkbox': 1.3.5
+  '@radix-ui/react-collapsible': 1.1.14
+  '@radix-ui/react-context-menu': 2.3.1
+  '@radix-ui/react-dialog': 1.1.17
+  '@radix-ui/react-dropdown-menu': 2.1.18
+  '@radix-ui/react-hover-card': 1.1.17
+  '@radix-ui/react-label': 2.1.10
+  '@radix-ui/react-menubar': 1.1.18
+  '@radix-ui/react-navigation-menu': 1.2.16
+  '@radix-ui/react-popover': 1.1.17
+  '@radix-ui/react-progress': 1.1.10
+  '@radix-ui/react-radio-group': 1.4.1
+  '@radix-ui/react-scroll-area': 1.2.12
+  '@radix-ui/react-select': 2.3.1
+  '@radix-ui/react-separator': 1.1.10
+  '@radix-ui/react-slider': 1.4.1
+  '@radix-ui/react-slot': 1.3.0
+  '@radix-ui/react-switch': 1.3.1
+  '@radix-ui/react-tabs': 1.1.15
+  '@radix-ui/react-toggle': 1.1.12
+  '@radix-ui/react-toggle-group': 1.1.13
+  '@radix-ui/react-tooltip': 1.2.10
   '@react-email/components': 1.0.12
-  '@react-email/render': 2.0.6
+  '@react-email/render': 2.0.9
   '@responsive-image/core': 2.1.0
   '@responsive-image/react': 1.1.6
   '@responsive-image/vite-plugin': 3.0.0
@@ -89,45 +89,45 @@ catalog:
   '@scure/base': 2.2.0
   '@sinclair/typebox': 0.34.49
   '@simplewebauthn/browser': 13.3.0
-  '@smithy/types': 4.14.2
+  '@smithy/types': 4.15.0
   '@storybook/addon-vitest': 10.4.6
   '@storybook/addon-themes': 10.4.6
   '@storybook/html-vite': 10.4.6
   '@storybook/react': 10.4.6
   '@storybook/react-vite': 10.4.6
   '@stylistic/eslint-plugin': 5.10.0
-  '@tailwindcss/vite': 4.3.0
+  '@tailwindcss/vite': 4.3.1
   '@tanstack/eslint-config': 0.3.4
   '@tanstack/eslint-plugin-query': 5.101.0
   '@tanstack/eslint-plugin-router': 1.162.0
-  '@tanstack/query-core': 5.100.14
+  '@tanstack/query-core': 5.101.0
   '@tanstack/react-pacer': 0.22.1
-  '@tanstack/react-query': 5.100.14
-  '@tanstack/react-router': 1.170.8
-  '@tanstack/react-router-ssr-query': 1.167.0
-  '@tanstack/react-start-client': 1.168.3
-  '@tanstack/react-start-server': 1.167.8
-  '@tanstack/router-plugin': 1.168.11
-  '@tanstack/start-plugin-core': 1.171.4
-  '@tanstack/start-server-core': 1.169.3
+  '@tanstack/react-query': 5.101.0
+  '@tanstack/react-router': 1.170.16
+  '@tanstack/react-router-ssr-query': 1.167.1
+  '@tanstack/react-start-client': 1.168.14
+  '@tanstack/react-start-server': 1.167.20
+  '@tanstack/router-plugin': 1.168.18
+  '@tanstack/start-plugin-core': 1.171.18
+  '@tanstack/start-server-core': 1.169.15
   '@testing-library/dom': 10.4.1
   '@types/debug': 4.1.13
   '@types/estree': 1.0.9
   '@types/hast': 3.0.4
   '@types/json-schema': 7.0.15
   '@types/micromatch': 4.0.10
-  '@types/node': 25.9.1
-  '@types/nodemailer': 7.0.11
+  '@types/node': 25.9.3
+  '@types/nodemailer': 7.0.12
   '@types/proxy-addr': 2.0.3
   '@types/ramda': 0.31.1
-  '@types/react': 19.2.15
+  '@types/react': 19.2.17
   '@types/react-dom': 19.2.3
   '@types/send': 1.2.1
   '@types/ws': 8.18.1
-  '@typescript-eslint/parser': 8.59.4
+  '@typescript-eslint/parser': 8.61.1
   '@vitejs/plugin-react': 6.0.2
-  '@vitest/browser-playwright': 4.1.8
-  '@vitest/eslint-plugin': 1.6.18
+  '@vitest/browser-playwright': 4.1.9
+  '@vitest/eslint-plugin': 1.6.20
   agenda: 6.2.5
   aws4fetch: 1.0.20
   babel-plugin-react-compiler: 1.0.0
@@ -135,7 +135,7 @@ catalog:
   better-call: 1.3.6
   bowser: 2.14.1
   class-variance-authority: 0.7.1
-  cloudflare: 6.3.0
+  cloudflare: 6.4.0
   clsx: 2.1.1
   cmdk: 1.1.1
   content-type: 2.0.0
@@ -144,19 +144,19 @@ catalog:
   csrf: 3.1.0
   d3-scale: 4.0.2
   d3-shape: 3.2.0
-  date-fns: 4.3.0
+  date-fns: 4.4.0
   debug: 4.4.3
   dompurify: 3.4.11
-  elysia: 1.4.28
+  elysia: 1.4.29
   email-addresses: 5.0.0
   esbuild: 0.28.1
-  enhanced-resolve: 5.22.0
+  enhanced-resolve: 5.24.0
   eslint: 9.39.4
-  eslint-plugin-better-tailwindcss: 4.5.0
+  eslint-plugin-better-tailwindcss: 4.6.0
   eslint-plugin-react: 7.37.5
   eslint-plugin-react-hooks: 7.1.1
   eslint-plugin-react-perf: 3.3.3
-  eslint-plugin-react-refresh: 0.5.2
+  eslint-plugin-react-refresh: 0.5.3
   eslint-plugin-simple-import-sort: 12.1.1
   eslint-plugin-unicorn: 62.0.0
   file-type: 22.0.1
@@ -173,33 +173,33 @@ catalog:
   js-yaml: 4.2.0
   magic-string: 0.30.21
   micromatch: 4.0.8
-  oidc-provider: 9.8.4
+  oidc-provider: 9.8.5
   mongodb-connection-string-url: 7.0.1
   mongodb: 7.2.0
-  mongoose: 9.6.3
+  mongoose: 9.7.1
   next-themes: 0.4.6
   nodemailer: 9.0.1
-  oxfmt: 0.51.0
-  oxlint: 1.66.0
+  oxfmt: 0.56.0
+  oxlint: 1.71.0
   oxlint-tsgolint: 0.23.0
-  playwright: 1.60.0
+  playwright: 1.61.1
   postcss-font-base64: 1.0.5
   proxy-addr: 2.0.7
-  prettier: 3.8.3
-  prettier-plugin-classnames: 0.10.1
+  prettier: 3.8.4
+  prettier-plugin-classnames: 0.10.2
   prettier-plugin-merge: 0.10.1
   prettier-plugin-packagejson: 3.0.2
   prettier-plugin-sort-json: 4.2.0
   prettier-plugin-tailwindcss: 0.8.0
   ramda: 0.32.0
-  react: 19.2.6
+  react: 19.2.7
   react-day-picker: 9.14.0
-  react-dom: 19.2.6
-  react-error-boundary: 6.1.1
+  react-dom: 19.2.7
+  react-error-boundary: 6.1.2
   react-google-recaptcha: 3.1.0
-  react-hook-form: 7.76.1
-  react-is: 19.2.6
-  react-qr-code: 2.0.21
+  react-hook-form: 7.79.0
+  react-is: 19.2.7
+  react-qr-code: 2.2.0
   react-use-measure: 2.1.7
   recharts: 3.8.1
   rehype-external-links: 3.0.0
@@ -221,14 +221,14 @@ catalog:
   tailwind-merge: 3.6.0
   tailwindcss: 4.3.1
   taze: 19.14.1
-  testcontainers: 12.0.1
+  testcontainers: 12.0.3
   tw-animate-css: 1.4.0
-  type-fest: 5.6.0
-  turbo: 2.9.14
+  type-fest: 5.7.0
+  turbo: 2.9.18
   typescript: npm:@typescript/typescript6@6.0.1
   typescript-7: npm:typescript@7.0.1-rc
   '@typescript/typescript6': 6.0.1
-  typescript-eslint: 8.59.4
+  typescript-eslint: 8.61.1
   uglify-js: 3.19.3
   unified: 11.0.5
   undici: 7.28.0
@@ -238,7 +238,7 @@ catalog:
   vite: 8.0.16
   vite-tsconfig-paths: 6.1.1
   vitefu: 1.1.3
-  vitest: 4.1.8
+  vitest: 4.1.9
   ws: 8.21.0
   yaml: 2.9.0
   zod: 4.4.3
@@ -249,8 +249,8 @@ catalog:
   radix-ui: 1.6.0
   react-resizable-panels: 4.11.2
   embla-carousel-react: 8.6.0
-  lucide-react: 1.18.0
-  '@base-ui/react': 1.5.0
+  lucide-react: 1.21.0
+  '@base-ui/react': 1.6.0
 catalogMode: strict
 
 dedupeDirectDeps: false

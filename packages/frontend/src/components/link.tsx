@@ -24,7 +24,7 @@ function isInternalLink(baseHost: string, href: string) {
   }
 }
 
-export const Link = React.forwardRef<HTMLAnchorElement, LinkProps>(function Link(
+export const Link = React.forwardRef<HTMLAnchorElement, LinkProps>(function LinkAnchor(
   {
     align = 'start',
     children,
