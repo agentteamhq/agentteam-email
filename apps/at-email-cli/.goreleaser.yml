@@ -2,6 +2,10 @@ version: 2
 
 project_name: at-email
 
+release:
+  prerelease: auto
+  make_latest: '{{ if .Prerelease }}false{{ else }}true{{ end }}'
+
 before:
   hooks:
     - go mod tidy
@@ -25,7 +29,7 @@ builds:
       - -X at-email-cli/internal/atemail.Version={{ .Version }}
       - -X at-email-cli/internal/atemail.Commit={{ .Commit }}
       - -X at-email-cli/internal/atemail.Date={{ .Date }}
-    mod_timestamp: "{{ .CommitTimestamp }}"
+    mod_timestamp: '{{ .CommitTimestamp }}'
 
   - id: darwin-amd64
     main: ./cmd/at-email
@@ -43,7 +47,7 @@ builds:
       - -X at-email-cli/internal/atemail.Version={{ .Version }}
       - -X at-email-cli/internal/atemail.Commit={{ .Commit }}
       - -X at-email-cli/internal/atemail.Date={{ .Date }}
-    mod_timestamp: "{{ .CommitTimestamp }}"
+    mod_timestamp: '{{ .CommitTimestamp }}'
 
   - id: darwin-arm64
     main: ./cmd/at-email
@@ -61,7 +65,7 @@ builds:
       - -X at-email-cli/internal/atemail.Version={{ .Version }}
       - -X at-email-cli/internal/atemail.Commit={{ .Commit }}
       - -X at-email-cli/internal/atemail.Date={{ .Date }}
-    mod_timestamp: "{{ .CommitTimestamp }}"
+    mod_timestamp: '{{ .CommitTimestamp }}'
 
 archives:
   - id: raw-binaries
@@ -69,7 +73,7 @@ archives:
       - linux-and-windows
       - darwin-amd64
       - darwin-arm64
-    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
     formats:
       - binary
     format_overrides:
@@ -81,7 +85,7 @@ checksum:
   name_template: checksums.txt
 
 snapshot:
-  version_template: "{{ incpatch .Version }}-next"
+  version_template: '{{ incpatch .Version }}-next'
 
 changelog:
   use: git
