@@ -138,7 +138,7 @@ catalog:
   dompurify: 3.4.11
   elysia: 1.4.28
   email-addresses: 5.0.0
-  esbuild: 0.28.0
+  esbuild: 0.28.1
   file-type: 22.0.1
   forwarded-parse: 2.1.2
   glob: 13.0.6
@@ -154,7 +154,7 @@ catalog:
   mongodb: 7.2.0
   mongoose: 9.6.3
   next-themes: 0.4.6
-  nodemailer: 8.0.8
+  nodemailer: 9.0.1
   oxlint-tsgolint: 0.23.0
   playwright: 1.60.0
   postcss-font-base64: 1.0.5
