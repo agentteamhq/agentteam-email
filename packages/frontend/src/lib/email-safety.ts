@@ -41,6 +41,7 @@ const EMAIL_SANITIZER_CONFIG = {
     'style',
     'textarea'
   ],
+  KEEP_CONTENT: false,
   RETURN_TRUSTED_TYPE: false,
   USE_PROFILES: { html: true }
 } satisfies Config

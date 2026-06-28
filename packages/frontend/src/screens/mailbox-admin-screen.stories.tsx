@@ -398,10 +398,10 @@ export const AgentCreateEnrollment: Story = {
   play: async ({ args, canvasElement }) => {
     const canvas = storyBody(canvasElement)
 
-    await expect(await canvas.findByText('at-email agent enroll enroll_9sV8P2uL4dTq7mZc')).toBeInTheDocument()
+    await expect(await canvas.findByText('at-email agent enroll enroll_AAAAAAAAAAAAAAAA')).toBeInTheDocument()
     await userEvent.click(await canvas.findByRole('button', { name: /^copy command$/i }))
     await expect(args.mailboxAdminView?.onCopyAgentEnrollmentCommand).toHaveBeenCalledWith(
-      'at-email agent enroll enroll_9sV8P2uL4dTq7mZc'
+      'at-email agent enroll enroll_AAAAAAAAAAAAAAAA'
     )
   }
 }

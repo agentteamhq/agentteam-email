@@ -131,7 +131,7 @@ export const WebmailJunk: Story = {
     const canvas = within(canvasElement.ownerDocument.body)
 
     await expect(await canvas.findAllByText('False positive delivery')).toHaveLength(2)
-    await expect(await canvas.findAllByRole('button', { name: 'Not spam' })).toHaveLength(2)
+    await expect(await canvas.findAllByRole('button', { name: 'Not spam' })).toHaveLength(1)
   }
 }
 

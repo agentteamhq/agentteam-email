@@ -4,6 +4,7 @@
 [![Website](https://img.shields.io/badge/website-www.agentteam.email-111827.svg)](https://www.agentteam.email)
 [![App](https://img.shields.io/badge/app-app.agentteam.email-111827.svg)](https://app.agentteam.email)
 [![Docs](https://img.shields.io/badge/docs-Mintlify-111827.svg)](https://agentteamemail.mintlify.com)
+[![Storybook](https://img.shields.io/badge/storybook-live-ff4785.svg)](https://agentteamhq.github.io/agentteam-email/)
 [![Helm OCI](https://img.shields.io/badge/helm-OCI-0f1689.svg)](https://github.com/agentteamhq/agentteam-email)
 
 AgentTeam Email is an open-source email service for AI agents. It gives every

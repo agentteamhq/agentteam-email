@@ -99,8 +99,10 @@ export const Security: Story = {
     const canvas = storyBody(canvasElement)
 
     await expect(await canvas.findByText('Active sessions')).toBeInTheDocument()
-    await expect(await canvas.findByText('at-email 0.4.0')).toBeInTheDocument()
-    await expect(await canvas.findByText(/linux\/amd64/i)).toBeInTheDocument()
+    await expect(await canvas.findByText(/Safari/i)).toBeInTheDocument()
+    await expect(await canvas.findByText(/Chrome/i)).toBeInTheDocument()
+    await expect(await canvas.findByText(/at-email/i)).toBeInTheDocument()
+    await expect(await canvas.findByText(/Linux/i)).toBeInTheDocument()
   }
 }
 
@@ -149,10 +151,10 @@ export const AgentAccessEnrollmentCreated: Story = {
   play: async ({ args, canvasElement }) => {
     const canvas = storyBody(canvasElement)
 
-    await expect(await canvas.findByText('at-email agent enroll enroll_9sV8P2uL4dTq7mZc')).toBeInTheDocument()
+    await expect(await canvas.findByText('at-email agent enroll enroll_AAAAAAAAAAAAAAAA')).toBeInTheDocument()
     await userEvent.click(await canvas.findByRole('button', { name: /^copy command$/i }))
     await expect(args.agentAccessState?.onCopyEnrollmentCommand).toHaveBeenCalledWith(
-      'at-email agent enroll enroll_9sV8P2uL4dTq7mZc'
+      'at-email agent enroll enroll_AAAAAAAAAAAAAAAA'
     )
   }
 }

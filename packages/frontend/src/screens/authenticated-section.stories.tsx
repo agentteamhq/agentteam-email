@@ -627,8 +627,9 @@ export const SecurityUnsafeControllerLink: Story = {
       throw new Error('Expected email iframe body to be readable')
     }
 
-    await userEvent.click(await within(iframeBody).findByText(/provider portal/i))
+    await expect(await within(iframeBody).findByText(/provider portal/i)).toBeInTheDocument()
 
+    await userEvent.click(await canvas.findByRole('button', { name: /unsupported destination/i }))
     const body = within(canvasElement.ownerDocument.body)
     const dialog = await body.findByRole('dialog')
     await expect(dialog).toHaveTextContent(/unsupported destination/i)
