@@ -52,13 +52,13 @@ entrypoint package            → runtime-lib in dependencies (catalog:)
 
 ### Frozen versions
 
-All versions are **exact** — no caret (`^`), no tilde (`~`), no range operators. This ensures `pnpm install` never changes resolved versions. Upgrades are done manually by editing the exact version number in the catalog or root `package.json`.
+All versions are **exact** — no caret (`^`), no tilde (`~`), no range operators. This ensures `pnpm install` never changes resolved versions. Upgrades are done manually by editing the exact version number in the catalog.
 
 - **Catalog entries:** `x.y.z` (not `^x.y.z`)
-- **Root `package.json`:** `x.y.z` (not `^x.y.z`)
+- **Root `package.json`:** `catalog:`, `workspace:*`, or a peer contract
 - **`peerDependencies`:** `*` or `workspace:*` (unchanged — peers are version-agnostic contracts)
 
-When upgrading a dependency, update the exact version in the catalog. All workspace packages using `catalog:` will pick up the new version on the next `pnpm install`.
+When upgrading a dependency, update the exact version in the catalog. All packages using `catalog:` will pick up the new version on the next `pnpm install`.
 
 ### Where versions live
 
@@ -71,10 +71,10 @@ When upgrading a dependency, update the exact version in the catalog. All worksp
 
 ## App Packages
 
-| Package type                                  | Role                                         | Dependency style                                                                                                                    |
-| --------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Production Node entrypoint package            | Deploy wrapper and runtime package provider  | Real `dependencies` — provides every runtime package needed by imported workspace packages                                          |
-| Frontend or SSR app package under `packages/` | Vite/TanStack source and build package       | Library package rules — `devDependencies` + `peerDependencies`, with runtime packages provided by the production entrypoint package |
+| Package type                                  | Role                                        | Dependency style                                                                                                                    |
+| --------------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Production Node entrypoint package            | Deploy wrapper and runtime package provider | Real `dependencies` — provides every runtime package needed by imported workspace packages                                          |
+| Frontend or SSR app package under `packages/` | Vite/TanStack source and build package      | Library package rules — `devDependencies` + `peerDependencies`, with runtime packages provided by the production entrypoint package |
 
 The production entrypoint package is not a normal package-local development server.
 Routine frontend development may run package-local Vite/TanStack dev servers
@@ -95,7 +95,9 @@ Root `devDependencies` contain project-wide tooling: eslint, typescript, prettie
 
 **Exception: vite** must be in each package's `devDependencies` individually (via `catalog:`) because Vite plugins may require specific versions, and version conflicts can occur.
 
-Root-only tooling (eslint plugins, prettier plugins, etc.) should NOT have catalog entries. The catalog is only for packages referenced with `catalog:` in workspace `package.json` files. Root `package.json` can use direct version strings for its own deps.
+Root-only tooling (eslint plugins, prettier plugins, etc.) must also use
+`catalog:`. The catalog is the single source of truth for npm package versions
+used by the root package and workspace packages.
 
 ## Ignoring Optional Peers
 
@@ -184,7 +186,7 @@ pnpm ls --filter=<workspace-package> --depth=1
 2. Remove from all packages up the dependency chain (devDeps + peerDeps)
 3. Remove from the production entrypoint package dependencies and from any
    app/build package that directly consumed it
-4. If no workspace package references it via `catalog:`, remove from catalog
+4. If no package references it via `catalog:`, remove it from the catalog
 5. If it's an unwanted third-party peer, add to `peerDependencyRules.ignoreMissing`
 6. Run `pnpm install` from the workspace root to verify dependency
    resolution and update pnpm-managed artifacts
@@ -202,8 +204,8 @@ pnpm taze major -r -l
 ```
 
 1. Run `pnpm taze major -r -l` to list available updates
-2. Update exact versions in the catalog (`pnpm-workspace.yaml`) and/or root `package.json` — no `^` or `~`
+2. Update exact versions in the catalog (`pnpm-workspace.yaml`) — no `^` or `~`
 3. Skip any package where the new version is under 10 days old (will fail `minimumReleaseAge`)
-4. For non-catalog deps, update directly in the package's `package.json`
+4. For npm package dependencies, keep package manifests on `catalog:` and move any missing version owner into the catalog
 5. Run `pnpm install` — if a package fails with `ERR_PNPM_NO_MATURE_MATCHING_VERSION`, revert that specific version and re-run
 6. The `trustPolicyIgnoreAfter: 10080` (1 week) setting skips trust checks for packages older than 1 week — if a trust downgrade error occurs for a very recent package, wait or revert
