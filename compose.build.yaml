@@ -225,8 +225,6 @@ services:
     build:
       context: .
       dockerfile: apps/web-server/Containerfile
-    networks:
-      - '${AT_EMAIL_ADMIN_COMPOSE_NETWORK:-default}'
     ports:
       - '${AT_EMAIL_ADMIN_FRONTEND_PORT:-23100}:4321'
     environment:
