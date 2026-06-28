@@ -1,58 +1,80 @@
 const brandName = 'AgentTeam Email'
 const appDisplayName = 'AT Email'
-const organizationName = 'AgentTeam'
+const companyName = 'Agentteam Email'
 const marketingOrigin = 'https://www.agentteam.email'
 const appOrigin = 'https://app.agentteam.email'
-const docsOrigin = 'https://agentteamemail.mintlify.com'
+const docsOrigin = 'https://agentteamemail.mintlify.app'
 const githubOrganizationUrl = 'https://github.com/agentteamhq'
 const repositoryUrl = `${githubOrganizationUrl}/agentteam-email`
-const twitterAccount = '@agentteam'
-const twitterUrl = 'https://x.com/agentteam'
+const linkedInUrl = 'https://www.linkedin.com/company/agentteamhq'
+const discordUrl = 'https://discord.gg/9NxGdSK5qB'
+const defaultDescription =
+  'Provision governed email addresses for agents, review drafts, and keep every mailbox on your own domain.'
+const defaultKeywords =
+  'at email,www.agentteam.email,agent email,email for ai agents,agent mailboxes,ai agent email,agent email platform,domain email for agents,cloudflare email routing,agent draft review,agent email permissions,agent activity log,agentteam email'
 
 export const STRINGS = {
   BRAND_NAME: brandName,
-  TWITTER_ACCOUNT: twitterAccount,
-  TWITTER_TITLE: `Follow ${twitterAccount} on X`,
-  TWITTER_URL: twitterUrl,
   DISCORD_TITLE: `${brandName} community on Discord`,
-  DISCORD_URL: 'https://discord.gg/X8znnm5Vbc'
+  DISCORD_URL: discordUrl
 }
 
 export const SITE_STRINGS = {
   APP_DISPLAY_NAME: appDisplayName,
   ASSET_VERSION: '20260619',
   BRAND_NAME: brandName,
+  COMPANY_NAME: companyName,
   APP_ORIGIN: appOrigin,
-  DEFAULT_DESCRIPTION:
-    'Give every AI agent its own mailbox for inbound capture, outbound delivery, archival, and operator review.',
-  DEFAULT_TITLE: `${brandName} | Agent email service`,
+  DEFAULT_DESCRIPTION: defaultDescription,
+  DEFAULT_KEYWORDS: defaultKeywords,
+  DEFAULT_TITLE: `${appDisplayName} - Agent Email on Your Domain`,
   DOCS_ORIGIN: docsOrigin,
   MARKETING_ORIGIN: marketingOrigin,
+  SUPPORT_EMAIL: 'support@agentteam.email',
   THEME_COLOR: '#ffffff',
   DOCUMENTATION: {
     NAME: `${brandName} documentation`,
     URL: docsOrigin
   },
+  OPEN_GRAPH_IMAGE: {
+    ALT: `${appDisplayName} - Agent Email Platform`,
+    HEIGHT: 630,
+    PATHNAME: '/ogimage.jpg',
+    TYPE: 'image/jpeg',
+    WIDTH: 1200
+  },
   ORGANIZATION: {
     ID: `${marketingOrigin}/#organization`,
-    NAME: organizationName,
-    SAME_AS: [marketingOrigin, appOrigin, docsOrigin, githubOrganizationUrl, twitterUrl]
+    NAME: companyName
   },
   REPOSITORY: {
     ID: `${repositoryUrl}#source-code`,
     LICENSE_URL: `${repositoryUrl}/blob/main/LICENSE`,
-    NAME: `${brandName} source code`,
-    PROGRAMMING_LANGUAGES: ['TypeScript'],
+    DESCRIPTION: 'Source code for the Agentteam Email public website and product surface.',
+    NAME: `${companyName} source code`,
+    PROGRAMMING_LANGUAGES: ['Astro', 'TypeScript'],
     URL: repositoryUrl
+  },
+  SOCIAL_URLS: {
+    DISCORD: discordUrl,
+    GITHUB: repositoryUrl,
+    LINKEDIN: linkedInUrl
+  },
+  WEBSITE: {
+    ID: `${marketingOrigin}/#website`,
+    IN_LANGUAGE: 'en',
+    NAME: companyName,
+    URL: marketingOrigin
   },
   WEB_APPLICATION: {
     APPLICATION_CATEGORY: 'BusinessApplication',
+    DESCRIPTION:
+      'Agentteam Email provisions governed email addresses for AI agents, with domain routing, draft review, permissions, and activity visibility.',
     ID_PATH: '/#web-application',
-    OG_IMAGE_ALT: `${appDisplayName} app icon`,
     RUNTIME_PLATFORM: 'Web'
   }
 } as const
 
 export function formatSiteTitle(title: string): string {
-  return `${title} | ${brandName}`
+  return `${title} | ${appDisplayName}`
 }

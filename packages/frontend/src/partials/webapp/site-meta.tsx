@@ -1,6 +1,10 @@
 import { useRouterState } from '@tanstack/react-router'
 
-import { getWebAppManifestIconUrl } from '../../public-assets'
+import {
+  getOpenGraphImageUrl,
+  getVersionedPublicAssetPath,
+  getWebAppManifestIconUrl
+} from '../../public-assets'
 import { SITE_STRINGS } from '../../strings'
 import type { PublicEnv } from '../../types'
 
@@ -25,10 +29,17 @@ export function SiteMeta({ publicEnv }: SiteMetaProps) {
 
   const pageTitle = resolveRouteTitle(routeMeta) ?? SITE_STRINGS.DEFAULT_TITLE
   const pageDescription = resolveRouteDescription(routeMeta) ?? SITE_STRINGS.DEFAULT_DESCRIPTION
+  const pageKeywords = resolveRouteNamedMeta(routeMeta, 'keywords') ?? SITE_STRINGS.DEFAULT_KEYWORDS
+  const robots = resolveRouteNamedMeta(routeMeta, 'robots') ?? 'index, follow'
+  const googlebot =
+    robots === 'index, follow'
+      ? 'index, follow, max-video-preview:-1, max-image-preview:large, max-snippet:-1'
+      : robots
   const canonicalUrl = absoluteUrl(publicEnv.PUBLIC_HOSTNAME, pathname)
   const appUrl = absoluteUrl(publicEnv.PUBLIC_HOSTNAME, '/')
   const webApplicationId = absoluteUrl(publicEnv.PUBLIC_HOSTNAME, SITE_STRINGS.WEB_APPLICATION.ID_PATH)
-  const openGraphImageUrl = getWebAppManifestIconUrl(publicEnv.PUBLIC_HOSTNAME, 512)
+  const openGraphImageUrl = getOpenGraphImageUrl(publicEnv.PUBLIC_HOSTNAME)
+  const socialUrls = Object.values(SITE_STRINGS.SOCIAL_URLS)
   const jsonLd = serializeJsonLd({
     '@context': 'https://schema.org',
     '@graph': [
@@ -36,31 +47,77 @@ export function SiteMeta({ publicEnv }: SiteMetaProps) {
         '@type': 'Organization',
         '@id': SITE_STRINGS.ORGANIZATION.ID,
         name: SITE_STRINGS.ORGANIZATION.NAME,
+        alternateName: SITE_STRINGS.APP_DISPLAY_NAME,
         url: `${SITE_STRINGS.MARKETING_ORIGIN}/`,
-        sameAs: SITE_STRINGS.ORGANIZATION.SAME_AS
+        email: `mailto:${SITE_STRINGS.SUPPORT_EMAIL}`,
+        sameAs: socialUrls,
+        contactPoint: [
+          {
+            '@type': 'ContactPoint',
+            email: SITE_STRINGS.SUPPORT_EMAIL,
+            contactType: 'customer support',
+            availableLanguage: ['en']
+          }
+        ]
+      },
+      {
+        '@type': 'WebSite',
+        '@id': SITE_STRINGS.WEBSITE.ID,
+        name: SITE_STRINGS.WEBSITE.NAME,
+        alternateName: SITE_STRINGS.APP_DISPLAY_NAME,
+        url: SITE_STRINGS.WEBSITE.URL,
+        inLanguage: SITE_STRINGS.WEBSITE.IN_LANGUAGE,
+        publisher: {
+          '@id': SITE_STRINGS.ORGANIZATION.ID
+        },
+        about: {
+          '@id': webApplicationId
+        },
+        hasPart: {
+          '@id': webApplicationId
+        },
+        subjectOf: {
+          '@id': SITE_STRINGS.REPOSITORY.ID
+        }
       },
       {
         '@type': 'WebApplication',
         '@id': webApplicationId,
-        name: SITE_STRINGS.APP_DISPLAY_NAME,
-        alternateName: SITE_STRINGS.BRAND_NAME,
+        name: SITE_STRINGS.COMPANY_NAME,
+        alternateName: SITE_STRINGS.APP_DISPLAY_NAME,
         applicationCategory: SITE_STRINGS.WEB_APPLICATION.APPLICATION_CATEGORY,
         operatingSystem: SITE_STRINGS.WEB_APPLICATION.RUNTIME_PLATFORM,
+        browserRequirements: 'Requires JavaScript and a modern web browser.',
+        description: SITE_STRINGS.WEB_APPLICATION.DESCRIPTION,
         url: appUrl,
         publisher: {
           '@id': SITE_STRINGS.ORGANIZATION.ID
-        }
+        },
+        provider: {
+          '@id': SITE_STRINGS.ORGANIZATION.ID
+        },
+        mainEntityOfPage: {
+          '@id': SITE_STRINGS.WEBSITE.ID
+        },
+        isBasedOn: {
+          '@id': SITE_STRINGS.REPOSITORY.ID
+        },
+        sameAs: [SITE_STRINGS.MARKETING_ORIGIN]
       },
       {
         '@type': 'SoftwareSourceCode',
         '@id': SITE_STRINGS.REPOSITORY.ID,
         name: SITE_STRINGS.REPOSITORY.NAME,
+        description: SITE_STRINGS.REPOSITORY.DESCRIPTION,
         url: SITE_STRINGS.REPOSITORY.URL,
         codeRepository: SITE_STRINGS.REPOSITORY.URL,
         programmingLanguage: SITE_STRINGS.REPOSITORY.PROGRAMMING_LANGUAGES,
         runtimePlatform: SITE_STRINGS.WEB_APPLICATION.RUNTIME_PLATFORM,
         license: SITE_STRINGS.REPOSITORY.LICENSE_URL,
         publisher: {
+          '@id': SITE_STRINGS.ORGANIZATION.ID
+        },
+        author: {
           '@id': SITE_STRINGS.ORGANIZATION.ID
         },
         targetProduct: {
@@ -74,6 +131,10 @@ export function SiteMeta({ publicEnv }: SiteMetaProps) {
     <>
       <meta
         name='application-name'
+        content={SITE_STRINGS.APP_DISPLAY_NAME}
+      />
+      <meta
+        name='author'
         content={SITE_STRINGS.APP_DISPLAY_NAME}
       />
       <meta
@@ -93,8 +154,24 @@ export function SiteMeta({ publicEnv }: SiteMetaProps) {
         content='light dark'
       />
       <meta
+        name='creator'
+        content={SITE_STRINGS.APP_DISPLAY_NAME}
+      />
+      <meta
+        name='category'
+        content='Technology'
+      />
+      <meta
         name='format-detection'
         content='telephone=no'
+      />
+      <meta
+        name='googlebot'
+        content={googlebot}
+      />
+      <meta
+        name='keywords'
+        content={pageKeywords}
       />
       <meta
         name='mobile-web-app-capable'
@@ -110,7 +187,7 @@ export function SiteMeta({ publicEnv }: SiteMetaProps) {
       />
       <meta
         name='robots'
-        content='index, follow'
+        content={robots}
       />
       <meta
         name='theme-color'
@@ -132,19 +209,19 @@ export function SiteMeta({ publicEnv }: SiteMetaProps) {
       )}
       <meta
         property='og:image:alt'
-        content={SITE_STRINGS.WEB_APPLICATION.OG_IMAGE_ALT}
+        content={SITE_STRINGS.OPEN_GRAPH_IMAGE.ALT}
       />
       <meta
         property='og:image:height'
-        content='512'
+        content={String(SITE_STRINGS.OPEN_GRAPH_IMAGE.HEIGHT)}
       />
       <meta
         property='og:image:type'
-        content='image/png'
+        content={SITE_STRINGS.OPEN_GRAPH_IMAGE.TYPE}
       />
       <meta
         property='og:image:width'
-        content='512'
+        content={String(SITE_STRINGS.OPEN_GRAPH_IMAGE.WIDTH)}
       />
       <meta
         property='og:locale'
@@ -152,7 +229,7 @@ export function SiteMeta({ publicEnv }: SiteMetaProps) {
       />
       <meta
         property='og:site_name'
-        content={SITE_STRINGS.BRAND_NAME}
+        content={SITE_STRINGS.APP_DISPLAY_NAME}
       />
       <meta
         property='og:title'
@@ -168,7 +245,7 @@ export function SiteMeta({ publicEnv }: SiteMetaProps) {
       />
       <meta
         name='twitter:card'
-        content='summary'
+        content='summary_large_image'
       />
       <meta
         name='twitter:description'
@@ -180,7 +257,7 @@ export function SiteMeta({ publicEnv }: SiteMetaProps) {
       />
       <meta
         name='twitter:image:alt'
-        content={SITE_STRINGS.WEB_APPLICATION.OG_IMAGE_ALT}
+        content={SITE_STRINGS.OPEN_GRAPH_IMAGE.ALT}
       />
       <meta
         name='twitter:title'
@@ -189,22 +266,22 @@ export function SiteMeta({ publicEnv }: SiteMetaProps) {
       <link
         rel='icon'
         type='image/png'
-        href={`/favicon-96x96.png?v=${SITE_STRINGS.ASSET_VERSION}`}
+        href={getVersionedPublicAssetPath('/favicon-96x96.png')}
         sizes='96x96'
       />
       <link
         rel='icon'
         type='image/svg+xml'
-        href={`/favicon.svg?v=${SITE_STRINGS.ASSET_VERSION}`}
+        href={getVersionedPublicAssetPath('/favicon.svg')}
       />
       <link
         rel='shortcut icon'
-        href={`/favicon.ico?v=${SITE_STRINGS.ASSET_VERSION}`}
+        href={getVersionedPublicAssetPath('/favicon.ico')}
       />
       <link
         rel='apple-touch-icon'
         sizes='180x180'
-        href={`/apple-touch-icon.png?v=${SITE_STRINGS.ASSET_VERSION}`}
+        href={getVersionedPublicAssetPath('/apple-touch-icon.png')}
       />
       <link
         rel='canonical'
@@ -220,8 +297,20 @@ export function SiteMeta({ publicEnv }: SiteMetaProps) {
       />
       <link
         rel='manifest'
-        href={`/site.webmanifest?v=${SITE_STRINGS.ASSET_VERSION}`}
+        href={getVersionedPublicAssetPath('/site.webmanifest')}
       />
+      <link
+        rel='service'
+        href={appUrl}
+        title={`${SITE_STRINGS.COMPANY_NAME} app`}
+      />
+      {socialUrls.map((href) => (
+        <link
+          key={href}
+          rel='me'
+          href={href}
+        />
+      ))}
       <script
         type='application/ld+json'
         dangerouslySetInnerHTML={{ __html: jsonLd }}
@@ -251,6 +340,13 @@ function resolveRouteTitle(routeMeta: Array<Array<SiteMetaEntry | undefined> | u
 function resolveRouteDescription(
   routeMeta: Array<Array<SiteMetaEntry | undefined> | undefined>
 ): string | null {
+  return resolveRouteNamedMeta(routeMeta, 'description')
+}
+
+function resolveRouteNamedMeta(
+  routeMeta: Array<Array<SiteMetaEntry | undefined> | undefined>,
+  name: string
+): string | null {
   for (let i = routeMeta.length - 1; i >= 0; i -= 1) {
     const metaEntries = routeMeta[i]
     if (!metaEntries) {
@@ -259,11 +355,7 @@ function resolveRouteDescription(
 
     for (let j = metaEntries.length - 1; j >= 0; j -= 1) {
       const metaEntry = metaEntries[j]
-      if (
-        metaEntry?.name === 'description' &&
-        typeof metaEntry.content === 'string' &&
-        metaEntry.content.length > 0
-      ) {
+      if (metaEntry?.name === name && typeof metaEntry.content === 'string' && metaEntry.content.length > 0) {
         return metaEntry.content
       }
     }
@@ -273,7 +365,13 @@ function resolveRouteDescription(
 }
 
 function absoluteUrl(origin: string, pathname: string): string {
-  return new URL(pathname, origin).toString()
+  const url = new URL(pathname, origin)
+
+  if (url.pathname !== '/' && !url.pathname.endsWith('/')) {
+    url.pathname = `${url.pathname}/`
+  }
+
+  return url.toString()
 }
 
 function serializeJsonLd(value: unknown): string {

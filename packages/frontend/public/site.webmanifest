@@ -1,7 +1,7 @@
 {
   "name": "AT Email",
   "short_name": "ATEmail",
-  "description": "Manage outbound email, reply operations, account settings, and billing.",
+  "description": "Provision governed email addresses for agents, review drafts, and keep every mailbox on your own domain.",
   "id": "/",
   "start_url": "/",
   "scope": "/",
