@@ -20,11 +20,9 @@ const storySessionExpiresAt = new Date('2026-12-01T12:00:00.000Z')
 
 const storyUser = {
   ...storyAuthenticatedUser,
-  displayUsername: 'Marin Patel',
   email: storyAuthenticatedUser.email ?? 'marin.patel@northstar-ops.example.test',
   emailVerified: storyAuthenticatedUser.emailVerified ?? true,
-  name: storyAuthenticatedUser.name ?? 'Marin Patel',
-  username: 'marin.patel'
+  name: storyAuthenticatedUser.name ?? 'Marin Patel'
 }
 
 const storySession = {
@@ -158,8 +156,7 @@ const storyAuthClientOverrides = {
 
     return {
       data: {
-        login: account.accountId ?? storyUser.email,
-        username: account.accountId ?? storyUser.email
+        login: account.accountId ?? storyUser.email
       },
       user: {
         emailVerified: storyUser.emailVerified,
@@ -191,7 +188,6 @@ const storyAuthClientOverrides = {
   signIn: {
     passkey: async () => ({ status: true })
   },
-  isUsernameAvailable: async () => ({ available: true }),
   organization: {
     list: async () => [storyOrganization],
     getFullOrganization: async () => storyFullOrganization,

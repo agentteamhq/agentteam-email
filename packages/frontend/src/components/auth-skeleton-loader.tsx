@@ -1,6 +1,6 @@
 export function AuthSkeletonLoader() {
   return (
-    <div className='bg-body-background flex min-h-screen w-full items-start justify-center p-4'>
+    <div className='flex w-full justify-center'>
       <div className='flex w-full max-w-sm flex-col items-center'>
         <div
           className={`text-card-foreground bg-surface border-secondary-card-border flex w-full max-w-sm

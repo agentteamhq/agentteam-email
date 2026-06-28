@@ -180,7 +180,7 @@ export function BetterAuthViewFrame({ children, view, lastUsedLoginMethod }: Bet
   return (
     <div
       id={view === 'signIn' || view === 'signUp' ? 'signinup-page' : undefined}
-      className='flex min-h-screen w-full items-start justify-center p-4'
+      className='relative flex w-full justify-center'
     >
       <div className='flex w-full max-w-sm flex-col items-center'>
         {children}
