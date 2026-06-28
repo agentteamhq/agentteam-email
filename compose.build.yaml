@@ -170,7 +170,7 @@ services:
     pull_policy: build
     image: atemail.main.mail-control-service:stage
     build:
-      context: ../apps/mail-control-service
+      context: ./apps/mail-control-service
       dockerfile: Containerfile
     environment:
       AT_EMAIL_ADMIN_R2_ACCOUNT_ID: '${AT_EMAIL_ADMIN_R2_ACCOUNT_ID:?missing AT_EMAIL_ADMIN_R2_ACCOUNT_ID}'
@@ -213,7 +213,7 @@ services:
     pull_policy: build
     image: atemail.main.web-server:stage
     build:
-      context: ..
+      context: .
       dockerfile: apps/web-server/Containerfile
     ports:
       - '${AT_EMAIL_ADMIN_FRONTEND_PORT:-23100}:4321'
