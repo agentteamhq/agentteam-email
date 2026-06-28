@@ -126,7 +126,7 @@ services:
       rspamd:
         condition: service_healthy
     healthcheck:
-      test: ['CMD', 'bash', '-c', 'echo > /dev/tcp/localhost/10025 || exit 1']
+      test: ['CMD', 'nc', '-z', '127.0.0.1', '10025']
       interval: 5s
       timeout: 3s
       retries: 10
