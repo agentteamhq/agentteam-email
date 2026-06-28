@@ -199,12 +199,12 @@ export function BetterAuthViewFrame({ children, view, lastUsedLoginMethod }: Bet
             )}
           >
             <div
-              className='border-r-primary mr-[-1px] h-0 w-0 border-t-[7px] border-r-[7px] border-b-[7px]
+              className='border-r-primary mr-[-3.5px] h-0 w-0 border-t-[7px] border-r-[7px] border-b-[7px]
                 border-t-transparent border-b-transparent will-change-transform'
             />
             <div
-              className='bg-primary text-primary-foreground flex shrink-0 items-center rounded-md px-2.5 py-1
-                text-xs font-medium whitespace-nowrap will-change-transform'
+              className='bg-primary text-primary-foreground flex shrink-0 items-center rounded-[10px] px-2.5
+                py-1 text-xs font-medium whitespace-nowrap will-change-transform'
             >
               <KeyIcon className='text-primary-foreground/90 mr-1 size-3 transform-gpu will-change-transform' />
               Last used
@@ -220,14 +220,14 @@ export function BetterAuthViewFrame({ children, view, lastUsedLoginMethod }: Bet
             )}
           >
             <div
-              className='bg-primary text-primary-foreground flex shrink-0 items-center rounded-md px-2.5 py-1
-                text-xs font-medium whitespace-nowrap will-change-transform'
+              className='bg-primary text-primary-foreground flex shrink-0 items-center rounded-[10px] px-2.5
+                py-1 text-xs font-medium whitespace-nowrap will-change-transform'
             >
               <KeyIcon className='text-primary-foreground/90 mr-1 size-3 transform-gpu will-change-transform' />
               Last used
             </div>
             <div
-              className='border-t-primary mt-[-1px] h-0 w-0 border-t-[7px] border-r-[7px] border-l-[7px]
+              className='border-t-primary mt-[-3px] h-0 w-0 border-t-[7px] border-r-[7px] border-l-[7px]
                 border-r-transparent border-l-transparent will-change-transform'
             />
           </div>
