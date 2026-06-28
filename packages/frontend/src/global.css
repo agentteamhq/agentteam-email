@@ -488,6 +488,12 @@
   }
 }
 
+@layer utilities {
+  #signinup-page [data-slot='field-separator-content'] {
+    background-color: var(--color-surface);
+  }
+}
+
 @utility h-text-base {
   height: calc(var(--text-base) * 1.25);
 }
