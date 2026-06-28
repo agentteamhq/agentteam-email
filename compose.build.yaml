@@ -30,6 +30,7 @@ services:
     user: '${AT_EMAIL_ADMIN_UID:-1000}:${AT_EMAIL_ADMIN_GID:-1000}'
     pull_policy: '${AT_EMAIL_ADMIN_PULL_POLICY:-always}'
     image: 'docker.io/rspamd/rspamd:4.1.0'
+    network_mode: '${AT_EMAIL_ADMIN_COMPOSE_NETWORK:-}'
     volumes:
       - rspamd-data:/var/lib/rspamd
     configs:
@@ -51,6 +52,7 @@ services:
     user: '${AT_EMAIL_ADMIN_UID:-1000}:${AT_EMAIL_ADMIN_GID:-1000}'
     pull_policy: '${AT_EMAIL_ADMIN_PULL_POLICY:-always}'
     image: 'ghcr.io/zone-eu/zonemta-wildduck:1.32.30'
+    network_mode: '${AT_EMAIL_ADMIN_COMPOSE_NETWORK:-}'
     environment:
       NODE_ENV: production
     configs:
@@ -95,6 +97,7 @@ services:
     user: '${AT_EMAIL_ADMIN_UID:-1000}:${AT_EMAIL_ADMIN_GID:-1000}'
     pull_policy: '${AT_EMAIL_ADMIN_PULL_POLICY:-always}'
     image: 'ghcr.io/zone-eu/haraka-plugin-wildduck:5.8.41'
+    network_mode: '${AT_EMAIL_ADMIN_COMPOSE_NETWORK:-}'
     volumes:
       - haraka-queue:/app/queue
     configs:
@@ -137,6 +140,7 @@ services:
     user: '${AT_EMAIL_ADMIN_UID:-1000}:${AT_EMAIL_ADMIN_GID:-1000}'
     pull_policy: '${AT_EMAIL_ADMIN_PULL_POLICY:-always}'
     image: 'ghcr.io/zone-eu/wildduck:1.48.2'
+    network_mode: '${AT_EMAIL_ADMIN_COMPOSE_NETWORK:-}'
     environment:
       APPCONF_api_accessToken: '${AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN:?missing AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN}'
       APPCONF_api_accessControl_secret: '${AT_EMAIL_ADMIN_WILDDUCK_ACCESS_CONTROL_SECRET:?missing AT_EMAIL_ADMIN_WILDDUCK_ACCESS_CONTROL_SECRET}'
@@ -172,6 +176,7 @@ services:
     build:
       context: ./apps/mail-control-service
       dockerfile: Containerfile
+    network_mode: '${AT_EMAIL_ADMIN_COMPOSE_NETWORK:-}'
     environment:
       AT_EMAIL_ADMIN_R2_ACCOUNT_ID: '${AT_EMAIL_ADMIN_R2_ACCOUNT_ID:?missing AT_EMAIL_ADMIN_R2_ACCOUNT_ID}'
       AT_EMAIL_ADMIN_R2_API_TOKEN: '${AT_EMAIL_ADMIN_R2_API_TOKEN:?missing AT_EMAIL_ADMIN_R2_API_TOKEN}'
@@ -215,6 +220,7 @@ services:
     build:
       context: .
       dockerfile: apps/web-server/Containerfile
+    network_mode: '${AT_EMAIL_ADMIN_COMPOSE_NETWORK:-}'
     ports:
       - '${AT_EMAIL_ADMIN_FRONTEND_PORT:-23100}:4321'
     environment:
