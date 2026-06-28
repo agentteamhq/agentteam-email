@@ -16,16 +16,16 @@ ARG ESLINT_CONCURRENCY=auto
 ENV ESLINT_CONCURRENCY=${ESLINT_CONCURRENCY}
 ARG ESLINT_CACHE_FLAG=--cache
 ENV ESLINT_CACHE_FLAG=${ESLINT_CACHE_FLAG}
-# Set pnpm store inside build directory to avoid filesystem/bind mount issues
+# Set pnpm home and store inside build directory to avoid filesystem/bind mount issues
 ENV PNPM_HOME="/build/.pnpm-home"
-ENV PNPM_STORE_DIR="/build/.pnpm-store"
+ENV PNPM_CONFIG_STORE_DIR="/build/.pnpm-store"
 
 WORKDIR /build
 
 RUN corepack enable
 
 # Copy lockfiles and root package metadata for dependency fetching.
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .pnpmfile.cjs ./
 
 # Copy all package.json files preserving directory structure
 RUN --mount=type=bind,source=apps,target=/tmp/apps \
@@ -40,13 +40,15 @@ RUN --mount=type=bind,source=test-containers,target=/tmp/test-containers \
   fi
 
 # Fetch all dependencies with cache
-RUN pnpm fetch --frozen-lockfile
+RUN --mount=type=cache,id=atemail-web-server-pnpm-store-v11,target=/build/.pnpm-store,sharing=locked \
+  pnpm fetch --frozen-lockfile
 
 # Copy repo into container
 COPY . .
 
 # Install dependencies offline (already fetched)
-RUN pnpm install --recursive --offline --frozen-lockfile --prod=false
+RUN --mount=type=cache,id=atemail-web-server-pnpm-store-v11,target=/build/.pnpm-store,sharing=locked \
+  pnpm install --recursive --offline --frozen-lockfile --prod=false
 
 # Build the application
 RUN pnpm turbo run typecheck --no-cache --output-logs=full --log-order=stream --ui=stream --summarize=false && \
