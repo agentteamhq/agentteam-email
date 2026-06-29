@@ -36,7 +36,8 @@ worktrees. The database name is the isolation boundary.
 
 ## Local Runtime
 
-Start the local database and mail test services through repo-owned tasks:
+Start the lightweight source-development support services through repo-owned
+tasks:
 
 ```bash
 mise run db:start
@@ -54,18 +55,44 @@ mise run mail:logs
 mise run mail:stop
 ```
 
-Run the local frontend and server development graph with:
+Run the local frontend and backend source-development graph with:
 
 ```bash
 mise run dev
 ```
 
-Build and run the local production server preview with:
+This starts package-local development processes. It does not start the full
+mail runtime stack.
+
+Run the production-like local stack through the Compose-backed stack tasks:
 
 ```bash
-mise run deploy:build
-mise run deploy:start
+mise run stack:env
+mise run stack:up
+mise run stack:status
+mise run stack:smoke
 ```
+
+`stack:env` creates `.env.compose` from
+`docs/examples/compose/.env.example` when missing. Review `.env.compose` before
+starting the stack; it is ignored by Git and is separate from the source-dev
+`.env` file.
+
+`stack:up` uses the root `compose.yaml` plus `compose.build.yaml`, builds the
+first-party web server and mail control service images locally, and starts the
+single-host stack with MongoDB, Redis, WildDuck, Haraka, Rspamd, ZoneMTA, the
+mail control service, and the web server.
+
+Inspect or stop the production-like local stack with:
+
+```bash
+mise run stack:config
+mise run stack:logs
+mise run stack:down
+```
+
+The legacy `deploy`, `deploy:build`, and `deploy:start` task names are aliases
+for the production-like local stack tasks.
 
 ## Repo-Built Images
 
@@ -277,6 +304,12 @@ podman-compose --env-file docs/examples/compose/.env.example -f compose.yaml con
 docker compose --env-file docs/examples/compose/.env.example -f compose.yaml config
 podman-compose --env-file docs/examples/compose/.env.example -f compose.yaml -f compose.build.yaml config
 docker compose --env-file docs/examples/compose/.env.example -f compose.yaml -f compose.build.yaml config
+```
+
+For the local production-like stack, use the repo-owned wrapper task:
+
+```bash
+mise run stack:config
 ```
 
 Run all end-to-end suites through the aggregate root task:

@@ -31,7 +31,7 @@
     "clean": "rimraf --glob {.,packages/*,apps/*,test-containers/*}/{build,dist,.turbo,.cache,.tanstack,.gocache,.playwright-cli,.vitest,node_modules/.cache,node_modules/.vite*,.eslintcache,*.tsbuildinfo}",
     "dev": "node --env-file-if-exists=.env ./node_modules/turbo/bin/turbo run dev --filter=@main/backend --filter=@main/frontend",
     "dev:all": "node --env-file-if-exists=.env ./node_modules/turbo/bin/turbo run dev",
-    "dist": "./apps/web-server/deploy-local.sh deploy",
+    "dist": "bash scripts/local-compose.sh up",
     "format": "turbo run format",
     "lint": "turbo run lint",
     "lint:inspect": "pnpm exec eslint --inspect-config",

@@ -270,14 +270,60 @@ run = '''
 "${CONTAINER_ENGINE}" logs -f agentteam-email-mailpit
 '''
 
+[tasks."stack:env"]
+description = "Create the production-like local Compose env file when missing"
+run = "bash scripts/local-compose.sh env"
+
+[tasks."stack:config"]
+description = "Render the production-like local Compose configuration"
+depends = ["stack:env"]
+run = "bash scripts/local-compose.sh config"
+
+[tasks."stack:network"]
+description = "Create the external production-like local Compose network"
+run = "bash scripts/local-compose.sh network"
+
+[tasks."stack:build"]
+description = "Build first-party images for the production-like local Compose stack"
+depends = ["stack:env"]
+run = "bash scripts/local-compose.sh build"
+
+[tasks."stack:up"]
+description = "Build and start the production-like local Compose stack"
+depends = ["stack:env", "stack:network"]
+run = "bash scripts/local-compose.sh up"
+
+[tasks."stack:down"]
+description = "Stop the production-like local Compose stack without deleting volumes"
+depends = ["stack:env"]
+run = "bash scripts/local-compose.sh down"
+
+[tasks."stack:status"]
+description = "Show production-like local Compose stack status"
+depends = ["stack:env"]
+run = "bash scripts/local-compose.sh status"
+
+[tasks."stack:logs"]
+description = "Follow production-like local Compose stack logs"
+depends = ["stack:env"]
+run = "bash scripts/local-compose.sh logs"
+
+[tasks."stack:smoke"]
+description = "Smoke-check the production-like local Compose stack"
+depends = ["stack:env"]
+run = "bash scripts/local-compose.sh smoke"
+
 [tasks.deploy]
-description = "Build, deploy, and start production server locally"
-run = "./apps/web-server/deploy-local.sh deploy"
+description = "Build and start the production-like local Compose stack"
+depends = ["stack:up"]
+run = "true"
 
 [tasks."deploy:build"]
-description = "Build and deploy locally without starting the server"
-run = "./apps/web-server/deploy-local.sh build"
+description = "Build first-party images for the production-like local Compose stack"
+depends = ["stack:build"]
+run = "true"
 
 [tasks."deploy:start"]
-description = "Start deployed server in foreground"
-run = "./apps/web-server/deploy-local.sh start"
+description = "Build and start the production-like local Compose stack"
+depends = ["stack:up"]
+run = "true"
