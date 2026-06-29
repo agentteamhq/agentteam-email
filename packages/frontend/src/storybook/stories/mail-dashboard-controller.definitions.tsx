@@ -1,4 +1,4 @@
-import { expect, userEvent, waitFor, within } from 'storybook/test'
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test'
 
 import { agentAccessActionableState } from '../agent-access-fixtures'
 import {
@@ -60,6 +60,19 @@ const mailWorkspaceMiddlePageView = {
   }
 } satisfies AgentMailWebWorkspace
 
+const mailWorkspaceFirstUseView = {
+  ...mailWorkspaceEmptyView,
+  accounts: [],
+  activeAccountId: '',
+  activeFolderId: '',
+  folders: []
+} satisfies AgentMailWebWorkspace
+
+const firstUseDomainSettingsState = {
+  ...domainSettingsEmptyFirstUseState,
+  onStartOAuth: fn()
+}
+
 export const WebmailInbox: Story = {
   args: {
     routeSearch: {}
@@ -112,6 +125,28 @@ export const WebmailEmpty: Story = {
 
     await expect(await canvas.findByText('Inbox is empty')).toBeInTheDocument()
     await expect(await canvas.findByText('Select a message')).toBeInTheDocument()
+  }
+}
+
+export const WebmailFirstUseOnboarding: Story = {
+  args: {
+    domainSettingsState: firstUseDomainSettingsState,
+    routeSearch: {}
+  },
+  render: (args) =>
+    renderMailWorkspaceControllerStory(args, {
+      view: mailWorkspaceFirstUseView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+
+    await expect(await canvas.findByText('Connect your domain', {}, { timeout: 15000 })).toBeInTheDocument()
+    await expect(
+      await canvas.findByText('Connect Cloudflare to choose the domain you want to use with AgentTeam Email.')
+    ).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: 'Continue with Cloudflare' })).toBeEnabled()
+    await expect(await canvas.findByText('No mailbox yet')).toBeInTheDocument()
+    await expect(canvas.queryByText('Choose a message from the mailbox to read it here.')).not.toBeInTheDocument()
   }
 }
 

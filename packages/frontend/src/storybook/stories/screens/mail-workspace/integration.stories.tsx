@@ -2,6 +2,7 @@ import {
   WebmailAccountSwitch as WebmailAccountSwitchStory,
   WebmailEmpty as WebmailEmptyStory,
   WebmailError as WebmailErrorStory,
+  WebmailFirstUseOnboarding as WebmailFirstUseOnboardingStory,
   WebmailInbox as WebmailInboxStory,
   WebmailJunk as WebmailJunkStory,
   WebmailLoading as WebmailLoadingStory,
@@ -32,6 +33,11 @@ export const WebmailPaginated: Story = {
 export const WebmailEmpty: Story = {
   ...WebmailEmptyStory,
   name: 'RPC empty folder'
+}
+
+export const WebmailFirstUseOnboarding: Story = {
+  ...WebmailFirstUseOnboardingStory,
+  name: 'First-use onboarding'
 }
 
 export const WebmailJunk: Story = {
