@@ -566,6 +566,9 @@ catalogs:
     srcset:
       specifier: 5.0.3
       version: 5.0.3
+    srvx:
+      specifier: 0.11.16
+      version: 0.11.16
     standardwebhooks:
       specifier: 1.0.0
       version: 1.0.0
@@ -901,7 +904,7 @@ importers:
         version: link:../../packages/db
       '@main/frontend':
         specifier: workspace:*
-        version: file:packages/frontend(45f5ad128cc56a18d9cb1e9c738e647c)
+        version: file:packages/frontend(2be8a246640f5ae67db64f8d2acc67cf)
       '@main/shutdown-manager':
         specifier: workspace:*
         version: link:../../packages/shutdown-manager
@@ -1217,6 +1220,9 @@ importers:
       srcset:
         specifier: 'catalog:'
         version: 5.0.3
+      srvx:
+        specifier: 'catalog:'
+        version: 0.11.16
       standardwebhooks:
         specifier: 'catalog:'
         version: 1.0.0
@@ -2061,6 +2067,9 @@ importers:
       srcset:
         specifier: 'catalog:'
         version: 5.0.3
+      srvx:
+        specifier: 'catalog:'
+        version: 0.11.16
       standardwebhooks:
         specifier: 'catalog:'
         version: 1.0.0
@@ -3246,6 +3255,7 @@ packages:
       send: '*'
       sonner: '*'
       srcset: '*'
+      srvx: '*'
       standardwebhooks: '*'
       tailwind-merge: '*'
       tailwindcss: '*'
@@ -10563,7 +10573,7 @@ snapshots:
       uuid: 14.0.0
       zod: 4.4.3
 
-  '@main/frontend@file:packages/frontend(45f5ad128cc56a18d9cb1e9c738e647c)':
+  '@main/frontend@file:packages/frontend(2be8a246640f5ae67db64f8d2acc67cf)':
     dependencies:
       '@agendajs/mongo-backend': 4.0.2(f85595a9325ffde548f7db927ea1b6a7)
       '@base-ui/react': 1.6.0(6dab3ab8b285aa871f9aa69505023584)
@@ -10696,6 +10706,7 @@ snapshots:
       send: 1.2.1(supports-color@10.2.2)
       sonner: 2.0.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       srcset: 5.0.3
+      srvx: 0.11.16
       standardwebhooks: 1.0.0
       tailwind-merge: 3.6.0
       tailwindcss: 4.3.1

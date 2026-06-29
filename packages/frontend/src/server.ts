@@ -1,12 +1,14 @@
-import { createServer as createHttpServer } from 'node:http'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import debug from 'debug'
 import send from 'send'
+import { fetchNodeHandler, serve } from 'srvx/node'
 
-import { createWebRequest, getRequestOrigin, sendWebResponse } from './http'
+import { createWebRequest, getRequestOrigin } from './http'
 import { handleBackendPackageRequest } from './backend-package-handlers'
 import startWebServer from './start-web-server.js'
+import { resolveClientStaticAssetPath } from './static-assets'
+import type { Server, ServerRequest } from 'srvx'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 const log = debug('app:frontend')
@@ -21,48 +23,50 @@ export interface StartFrontendServerOptions {
   port?: number
 }
 
-export function startFrontendServer(options: StartFrontendServerOptions = {}) {
+export function startFrontendServer(options: StartFrontendServerOptions = {}): Server {
   const host = options.host ?? resolveHost()
   const port = options.port ?? resolvePort()
-  const server = createHttpServer((req, res) => {
-    handleNodeRequest(req, res).catch((error: unknown) => {
-      log('request failed: %O', error)
-      if (!res.headersSent) {
-        res.statusCode = 500
-        res.setHeader('content-type', 'text/plain; charset=utf-8')
-      }
-      res.end('Internal Server Error')
-    })
+  const server = serve({
+    fetch: handleServerRequest,
+    hostname: host,
+    manual: true,
+    port,
+    silent: true
   })
 
-  // Container ingress and Testcontainers mapped ports cannot reach a listener
-  // bound only to loopback, so the production default must be externally reachable.
-  server.listen(port, host, () => {
-    log('web server listening on %s:%d', host, port)
-  })
+  Promise.resolve(server.serve())
+    .then(() => {
+      log('web server listening on %s:%d', host, port)
+    })
+    .catch((error: unknown) => {
+      process.nextTick(() => {
+        throw error
+      })
+    })
 
   return server
 }
 
-async function handleNodeRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  const request = createWebRequest(req, getRequestOrigin(req))
+async function handleServerRequest(serverRequest: ServerRequest): Promise<Response> {
+  const nodeRequest = resolveNodeRequest(serverRequest)
+  const request = createWebRequest(nodeRequest, getRequestOrigin(nodeRequest))
   const backendPackageResponse = await handleBackendPackageRequest(request)
 
   if (backendPackageResponse) {
-    await sendWebResponse(backendPackageResponse, res)
-    return
+    return backendPackageResponse
   }
 
   const url = new URL(request.url)
+  const staticAssetPath = await resolveStaticAssetRequestPath(nodeRequest, url)
 
-  if (isStaticAssetRequest(req, url)) {
-    await sendStaticAsset(req, res, url.pathname)
-    return
+  if (staticAssetPath) {
+    const staticAssetHandler = (req: IncomingMessage, res: ServerResponse) =>
+      sendStaticAsset(req, res, staticAssetPath)
+
+    return fetchNodeHandler(staticAssetHandler, serverRequest)
   }
 
-  const response = await startWebServer.fetch(request, { context: {} })
-
-  await sendWebResponse(response, res)
+  return startWebServer.fetch(request, { context: {} })
 }
 
 async function sendStaticAsset(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<void> {
@@ -86,8 +90,22 @@ async function sendStaticAsset(req: IncomingMessage, res: ServerResponse, pathna
   })
 }
 
-function isStaticAssetRequest(req: IncomingMessage, url: URL): boolean {
-  return (req.method === 'GET' || req.method === 'HEAD') && url.pathname.startsWith('/_build/')
+async function resolveStaticAssetRequestPath(req: IncomingMessage, url: URL): Promise<string | null> {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    return null
+  }
+
+  return resolveClientStaticAssetPath(clientDist, url.pathname)
+}
+
+function resolveNodeRequest(request: ServerRequest): IncomingMessage {
+  const nodeContext = request.runtime?.node
+
+  if (!nodeContext) {
+    throw new Error('Frontend server requires the srvx Node runtime context.')
+  }
+
+  return nodeContext.req as IncomingMessage
 }
 
 function resolvePort(): number {

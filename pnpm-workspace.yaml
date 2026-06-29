@@ -218,6 +218,7 @@ catalog:
   standardwebhooks: 1.0.0
   storybook: 10.4.6
   srcset: 5.0.3
+  srvx: 0.11.16
   tailwind-merge: 3.6.0
   tailwindcss: 4.3.1
   taze: 19.14.1
