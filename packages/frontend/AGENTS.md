@@ -24,6 +24,8 @@ Storybook stories must be grouped by the rendered product surface; implementatio
 
 Storybook screen state catalogs must keep viewport variants shallow with sibling `meta.title` leaves such as `Screens/<Surface>/States - Desktop` and `Screens/<Surface>/States - Mobile`.
 
+Storybook mobile screen state catalogs must set the mobile viewport with `globals.viewport.value = 'mobile1'` and `globals.viewport.isRotated = false`.
+
 Stories must not define product layout, component hierarchy, controller logic, or product behavior.
 
 Stories must pass props to the canonical screen, page, or block component and let that component render its own children.
