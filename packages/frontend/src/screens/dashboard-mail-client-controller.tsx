@@ -52,7 +52,6 @@ import {
   sendMailMessage,
   updateMailMessage
 } from '../lib/mail-rpc'
-import { defaultAuthenticatedDashboardView } from '../partials/authenticated/authenticated-shell-models'
 import { isMailboxAdminSectionId } from '../partials/authenticated/mailbox-admin-models'
 import {
   actionsForMessage,
@@ -62,6 +61,7 @@ import {
   threadActionsForMessage,
   toSidebarView
 } from './dashboard-mail-sidebar-view'
+import { toDashboardView } from './dashboard-mail-dashboard-view'
 import { DashboardScreen } from './dashboard-screen'
 import { toMailboxAdminView } from './dashboard-mailbox-admin-view'
 import { invalidateMailboxAdminQueries } from './dashboard-mailbox-admin-query-cache'
@@ -87,7 +87,6 @@ import type {
   AuthenticatedComposeField,
   AuthenticatedComposeMode,
   AuthenticatedComposeView,
-  AuthenticatedDashboardView,
   AuthenticatedEmailAction,
   AuthenticatedEmailPreview,
   AuthenticatedMailActionDialogKind,
@@ -120,14 +119,6 @@ import type {
 const AGENT_ACCESS_QUERY_KEY = ['agent-access', 'view'] as const
 const MAIL_QUERY_LIMIT = 25
 const MAILBOX_ADMIN_PAGE_SIZE = 25
-const FIRST_USE_DASHBOARD_ONBOARDING_PROMPT = {
-  actionLabel: 'Continue with Cloudflare',
-  description: 'Connect Cloudflare to choose the domain you want to use with AgentTeam Email.',
-  helperText:
-    'Cloudflare will open in a secure window. AgentTeam Email will only configure the domain you approve.',
-  title: 'Connect your domain'
-} satisfies Omit<NonNullable<AuthenticatedDashboardView['onboardingPrompt']>, 'state'>
-
 function mailboxAdminPrincipalKey(principal: Pick<MailboxAdminExternalPrincipal, 'id' | 'kind'>) {
   return `${principal.kind}:${principal.id}`
 }
@@ -2057,54 +2048,6 @@ export function DashboardMailController({
       sidebarView={sidebarView}
     />
   )
-}
-
-function toDashboardView(
-  status: 'error' | 'pending' | 'success',
-  error: Error | null,
-  selectedEmail: AuthenticatedEmailPreview | undefined,
-  workspace: AgentMailWebWorkspace | undefined,
-  domainSettingsState: DomainSettingsState
-): AuthenticatedDashboardView {
-  if (status === 'pending') {
-    return {
-      ...defaultAuthenticatedDashboardView,
-      state: 'loading'
-    }
-  }
-
-  if (status === 'error') {
-    return {
-      ...defaultAuthenticatedDashboardView,
-      errorDescription: errorMessage(error, 'Message data could not be loaded.'),
-      errorTitle: 'Message unavailable',
-      retryLabel: 'Retry',
-      state: 'error'
-    }
-  }
-
-  if (!selectedEmail && isFirstUseWorkspace(workspace)) {
-    return {
-      ...defaultAuthenticatedDashboardView,
-      emptyDescription: 'Connect a Cloudflare domain to start receiving agent email.',
-      emptyTitle: 'Connect your domain',
-      onboardingPrompt: {
-        ...FIRST_USE_DASHBOARD_ONBOARDING_PROMPT,
-        state: domainSettingsState.busy ? 'connecting' : 'ready'
-      },
-      state: 'empty'
-    }
-  }
-
-  return {
-    ...defaultAuthenticatedDashboardView,
-    selectedEmail,
-    state: selectedEmail ? 'ready' : 'empty'
-  }
-}
-
-function isFirstUseWorkspace(workspace: AgentMailWebWorkspace | undefined) {
-  return Boolean(workspace && workspace.accounts.length === 0)
 }
 
 function toEmailPreview(

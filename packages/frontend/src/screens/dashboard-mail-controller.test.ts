@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from 'vitest'
 import { QueryClient } from '@tanstack/react-query'
 
 import { invalidateMailboxAdminQueries } from './dashboard-mailbox-admin-query-cache'
+import { toDashboardView } from './dashboard-mail-dashboard-view'
 import { mailboxAdminViewQueryForSection } from './dashboard-mailbox-admin-query'
 import { actionsForMessage, toSidebarView } from './dashboard-mail-sidebar-view'
 import { toMailboxAdminView } from './dashboard-mailbox-admin-view'
 import type { AgentMailWebWorkspace } from '@main/backend'
 import type { MailboxAdminView } from '../partials/authenticated/mailbox-admin-models'
+import type { DomainSettingsState, DomainSettingsStatus } from '../partials/authenticated/settings-dialog'
 
 const noAllowedActions = {
   createAccount: false,
@@ -234,6 +236,90 @@ describe('mailbox admin controller view mapping', () => {
 })
 
 describe('mail client controller view mapping', () => {
+  it('starts first-use dashboard onboarding with Cloudflare authorization when no grant exists', () => {
+    expect.hasAssertions()
+    const view = toDashboardView(
+      'success',
+      null,
+      undefined,
+      mailWorkspace({
+        accounts: [],
+        folders: [],
+        messages: []
+      }),
+      domainSettings()
+    )
+
+    expect(view.state).toBe('empty')
+    expect(view.onboardingPrompt).toMatchObject({
+      actionLabel: 'Continue with Cloudflare',
+      state: 'ready',
+      title: 'Connect your domain'
+    })
+    expect(view.onboardingPrompt?.mode).toBeUndefined()
+  })
+
+  it('advances first-use dashboard onboarding to domain selection after Cloudflare is connected', () => {
+    expect.hasAssertions()
+    const view = toDashboardView(
+      'success',
+      null,
+      undefined,
+      mailWorkspace({
+        accounts: [],
+        folders: [],
+        messages: []
+      }),
+      domainSettings({
+        accounts: [cloudflareAccount()],
+        draftDomain: 'agentteam.example',
+        selectedAccountId: 'cloudflare-account-id',
+        selectedZoneId: 'cloudflare-zone-id',
+        status: {
+          connections: [],
+          grants: [cloudflareGrant()]
+        },
+        zones: [cloudflareZone()]
+      })
+    )
+
+    expect(view.state).toBe('empty')
+    expect(view.onboardingPrompt).toMatchObject({
+      actionLabel: 'Continue setup',
+      mode: 'configureDomain',
+      state: 'ready',
+      title: 'Choose your domain'
+    })
+  })
+
+  it('keeps first-use dashboard onboarding on domain setup while a connected domain needs provisioning', () => {
+    expect.hasAssertions()
+    const view = toDashboardView(
+      'success',
+      null,
+      undefined,
+      mailWorkspace({
+        accounts: [],
+        folders: [],
+        messages: []
+      }),
+      domainSettings({
+        mode: 'domain',
+        selectedDomainPublicId: cloudflareConnection().publicId,
+        status: {
+          connections: [cloudflareConnection()],
+          grants: [cloudflareGrant()]
+        }
+      })
+    )
+
+    expect(view.state).toBe('empty')
+    expect(view.onboardingPrompt).toMatchObject({
+      mode: 'configureDomain',
+      state: 'ready'
+    })
+  })
+
   it('prompts Cloudflare onboarding when the workspace has no accounts', () => {
     expect.hasAssertions()
     const view = toSidebarView(
@@ -444,5 +530,64 @@ function inboxFolder(): AgentMailWebWorkspace['folders'][number] {
     path: 'INBOX',
     protected: true,
     specialUse: '\\Inbox'
+  }
+}
+
+function domainSettings(overrides: Partial<DomainSettingsState> = {}): DomainSettingsState {
+  return {
+    mode: 'addDomain',
+    status: {
+      connections: [],
+      grants: []
+    },
+    ...overrides
+  }
+}
+
+function cloudflareGrant(): DomainSettingsStatus['grants'][number] {
+  return {
+    cloudflareEmail: 'admin@example.com',
+    cloudflareUserId: 'cloudflare-user-id',
+    grantedScopes: ['account:read', 'zone:read'],
+    lastErrorMessage: null,
+    lastTokenCheckAt: new Date('2026-06-21T16:12:00.000Z'),
+    publicId: 'grant-public-id' as DomainSettingsStatus['grants'][number]['publicId'],
+    requiredScopes: ['account:read', 'zone:read'],
+    status: 'active'
+  }
+}
+
+function cloudflareConnection(): DomainSettingsStatus['connections'][number] {
+  return {
+    cloudflareAccountId: 'cloudflare-account-id',
+    cloudflareAccountName: 'AgentTeam Production',
+    cloudflareZoneId: 'cloudflare-zone-id',
+    cloudflareZoneName: 'agentteam.example',
+    domain: 'agentteam.example',
+    lastErrorMessage: null,
+    lastProvisionedAt: null,
+    provisioningStatus: 'not_started',
+    publicId: 'connection-public-id' as DomainSettingsStatus['connections'][number]['publicId'],
+    status: 'connected',
+    updatedAt: new Date('2026-06-21T16:16:00.000Z'),
+    workerScriptName: null
+  }
+}
+
+function cloudflareAccount(): NonNullable<DomainSettingsState['accounts']>[number] {
+  return {
+    id: 'cloudflare-account-id',
+    name: 'AgentTeam Production',
+    type: 'standard'
+  }
+}
+
+function cloudflareZone(): NonNullable<DomainSettingsState['zones']>[number] {
+  return {
+    accountId: 'cloudflare-account-id',
+    accountName: 'AgentTeam Production',
+    id: 'cloudflare-zone-id',
+    name: 'agentteam.example',
+    status: 'active'
   }
 }

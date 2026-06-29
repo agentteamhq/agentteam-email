@@ -471,7 +471,7 @@ function SettingsPanelContent({
   }
 
   if (section === 'domains') {
-    return <DomainSettingsPanel settings={domainSettings} />
+    return <DomainSettingsContent settings={domainSettings} />
   }
 
   return null
@@ -1220,7 +1220,33 @@ function domainSettingsControllerFromState(state?: DomainSettingsState): DomainS
   }
 }
 
-function DomainSettingsPanel({ settings }: { settings: DomainSettingsController }) {
+export function DomainSettingsPanel({
+  className,
+  includeMailRuntimeStatus = true,
+  state
+}: {
+  className?: string
+  includeMailRuntimeStatus?: boolean
+  state?: DomainSettingsState
+}) {
+  return (
+    <DomainSettingsContent
+      className={className}
+      includeMailRuntimeStatus={includeMailRuntimeStatus}
+      settings={domainSettingsControllerFromState(state)}
+    />
+  )
+}
+
+function DomainSettingsContent({
+  className,
+  includeMailRuntimeStatus = true,
+  settings
+}: {
+  className?: string
+  includeMailRuntimeStatus?: boolean
+  settings: DomainSettingsController
+}) {
   if (settings.status === null && !settings.message) {
     return <DomainSettingsLoadingContent />
   }
@@ -1233,9 +1259,9 @@ function DomainSettingsPanel({ settings }: { settings: DomainSettingsController 
     )
 
   return (
-    <div className='grid max-w-3xl gap-4'>
+    <div className={cn('grid max-w-3xl gap-4', className)}>
       {domainPanel}
-      <MailRuntimeStatusPanel settings={settings} />
+      {includeMailRuntimeStatus ? <MailRuntimeStatusPanel settings={settings} /> : null}
     </div>
   )
 }
