@@ -2,6 +2,7 @@ import {
   WebmailAccountSwitch as WebmailAccountSwitchStory,
   WebmailEmpty as WebmailEmptyStory,
   WebmailError as WebmailErrorStory,
+  WebmailFirstUseDomainSelection as WebmailFirstUseDomainSelectionStory,
   WebmailFirstUseOnboarding as WebmailFirstUseOnboardingStory,
   WebmailInbox as WebmailInboxStory,
   WebmailJunk as WebmailJunkStory,
@@ -38,6 +39,11 @@ export const WebmailEmpty: Story = {
 export const WebmailFirstUseOnboarding: Story = {
   ...WebmailFirstUseOnboardingStory,
   name: 'First-use onboarding'
+}
+
+export const WebmailFirstUseDomainSelection: Story = {
+  ...WebmailFirstUseDomainSelectionStory,
+  name: 'First-use domain selection'
 }
 
 export const WebmailJunk: Story = {

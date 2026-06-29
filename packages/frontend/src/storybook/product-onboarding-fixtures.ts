@@ -1,6 +1,10 @@
 import {
   authenticatedSectionBaseArgs,
   domainSettingsAddDomainAuthorizeCloudflareState,
+  domainSettingsAddDomainSelectZoneState,
+  domainSettingsDomainConnectedState,
+  domainSettingsDomainLiveState,
+  domainSettingsDomainProvisioningState,
   emptyAuthenticatedSidebarView
 } from './authenticated-section-fixtures'
 import type { DashboardScreenProps } from '../screens/dashboard-screen'
@@ -29,6 +33,19 @@ const errorOnboardingPrompt = {
   state: 'error'
 } satisfies NonNullable<AuthenticatedDashboardView['onboardingPrompt']>
 
+const domainSetupOnboardingPrompt = {
+  actionLabel: 'Continue setup',
+  description: 'Choose the Cloudflare domain that should receive AgentTeam Email.',
+  mode: 'configureDomain',
+  state: 'ready',
+  title: 'Choose your domain'
+} satisfies NonNullable<AuthenticatedDashboardView['onboardingPrompt']>
+
+const returningOnboardingPrompt = {
+  ...domainSetupOnboardingPrompt,
+  state: 'connecting'
+} satisfies NonNullable<AuthenticatedDashboardView['onboardingPrompt']>
+
 const firstUseDashboardView = {
   emptyDescription: 'Connect a Cloudflare domain to start receiving agent email.',
   emptyTitle: 'Connect your domain',
@@ -44,6 +61,16 @@ const connectingDashboardView = {
 const errorDashboardView = {
   ...firstUseDashboardView,
   onboardingPrompt: errorOnboardingPrompt
+} satisfies AuthenticatedDashboardView
+
+const domainSetupDashboardView = {
+  ...firstUseDashboardView,
+  onboardingPrompt: domainSetupOnboardingPrompt
+} satisfies AuthenticatedDashboardView
+
+const returningDashboardView = {
+  ...firstUseDashboardView,
+  onboardingPrompt: returningOnboardingPrompt
 } satisfies AuthenticatedDashboardView
 
 const noAccountSidebarView = {
@@ -81,4 +108,38 @@ export const productOnboardingSettingsOpenShellArgs = {
   defaultSettingsOpen: true,
   settingsOpen: true,
   settingsSection: 'domains'
+} satisfies Partial<DashboardScreenProps>
+
+export const productOnboardingReturningShellArgs = {
+  ...productOnboardingAuthenticatedShellArgs,
+  dashboardView: returningDashboardView,
+  domainSettingsState: {
+    busy: true,
+    message: 'Cloudflare account connected',
+    mode: 'addDomain',
+    status: null
+  }
+} satisfies Partial<DashboardScreenProps>
+
+export const productOnboardingChooseDomainShellArgs = {
+  ...productOnboardingAuthenticatedShellArgs,
+  dashboardView: domainSetupDashboardView,
+  domainSettingsState: domainSettingsAddDomainSelectZoneState
+} satisfies Partial<DashboardScreenProps>
+
+export const productOnboardingConnectSelectedDomainShellArgs = {
+  ...productOnboardingAuthenticatedShellArgs,
+  dashboardView: domainSetupDashboardView,
+  domainSettingsState: domainSettingsDomainConnectedState
+} satisfies Partial<DashboardScreenProps>
+
+export const productOnboardingProvisionDomainShellArgs = {
+  ...productOnboardingAuthenticatedShellArgs,
+  dashboardView: domainSetupDashboardView,
+  domainSettingsState: domainSettingsDomainProvisioningState
+} satisfies Partial<DashboardScreenProps>
+
+export const productOnboardingMailboxReadyShellArgs = {
+  ...authenticatedSectionBaseArgs,
+  domainSettingsState: domainSettingsDomainLiveState
 } satisfies Partial<DashboardScreenProps>

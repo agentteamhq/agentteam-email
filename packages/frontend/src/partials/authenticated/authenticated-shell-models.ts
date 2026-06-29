@@ -288,6 +288,7 @@ export interface AuthenticatedDashboardOnboardingView {
   description: string
   errorDescription?: string
   helperText?: string
+  mode?: 'connectCloudflare' | 'configureDomain'
   state: 'ready' | 'connecting' | 'error'
   title: string
 }

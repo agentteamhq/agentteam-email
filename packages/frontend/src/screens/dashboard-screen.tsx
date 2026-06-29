@@ -366,6 +366,7 @@ export function DashboardScreen({
           />
         ) : (
           <AuthenticatedDashboardContent
+            domainSettingsState={domainSettingsState}
             onAttachmentPreview={onEmailAttachmentPreview}
             onEmailAction={handleEmailAction}
             onOnboardingConnect={onDashboardOnboardingConnect}

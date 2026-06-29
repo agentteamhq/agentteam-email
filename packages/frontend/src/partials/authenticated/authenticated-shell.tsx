@@ -112,7 +112,7 @@ import {
 } from '../../lib/email-safety'
 import { cn } from '../../lib/utils'
 import { CloudflareConnectButton, CloudflareLogo } from './cloudflare-brand'
-import { SettingsDialog } from './settings-dialog'
+import { DomainSettingsPanel, SettingsDialog } from './settings-dialog'
 import { WorkspaceMailboxSwitcher } from './workspace-mailbox-switcher'
 import {
   defaultAuthenticatedDashboardView,
@@ -1787,11 +1787,13 @@ function ManagementNavButton({
 export function AuthenticatedDashboardContent({
   onAttachmentPreview,
   onEmailAction,
+  domainSettingsState,
   onOnboardingConnect,
   onRetry,
   view = defaultAuthenticatedDashboardView
 }: {
   onAttachmentPreview?: (attachment: AuthenticatedEmailAttachment, email: AuthenticatedEmailPreview) => void
+  domainSettingsState?: DomainSettingsState
   onEmailAction?: (action: AuthenticatedEmailAction, email: AuthenticatedEmailPreview) => void
   onOnboardingConnect?: () => void
   onRetry?: () => void
@@ -1816,6 +1818,7 @@ export function AuthenticatedDashboardContent({
     if (view.onboardingPrompt) {
       return (
         <DashboardOnboardingPrompt
+          domainSettingsState={domainSettingsState}
           onConnect={onOnboardingConnect}
           view={view.onboardingPrompt}
         />
@@ -1849,13 +1852,26 @@ export function AuthenticatedDashboardContent({
 }
 
 function DashboardOnboardingPrompt({
+  domainSettingsState,
   onConnect,
   view
 }: {
+  domainSettingsState?: DomainSettingsState
   onConnect?: () => void
   view: NonNullable<AuthenticatedDashboardView['onboardingPrompt']>
 }) {
   const isConnecting = view.state === 'connecting'
+
+  if (view.mode === 'configureDomain') {
+    return (
+      <div className='flex min-h-[calc(100dvh-3.5rem)] items-center justify-center p-6'>
+        <DomainSettingsPanel
+          className='w-full max-w-2xl'
+          state={domainSettingsState}
+        />
+      </div>
+    )
+  }
 
   return (
     <div className='flex min-h-[calc(100dvh-3.5rem)] items-center justify-center p-6'>
