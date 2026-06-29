@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/miekg/dns"
+	moxmessage "github.com/mjl-/mox/message"
 	goaddr "github.com/zostay/go-addr/pkg/addr"
 	"golang.org/x/net/idna"
 )
@@ -35,9 +36,21 @@ func BuildAddrSpec(localPart string, domainValue string) (string, error) {
 }
 
 func ParseMailbox(value string) (Mailbox, error) {
+	parsed, err := parseAddrMailbox(value)
+	if err == nil {
+		return parsed, nil
+	}
+	fallback, fallbackErr := parseMessageMailbox(value)
+	if fallbackErr == nil {
+		return fallback, nil
+	}
+	return Mailbox{}, fmt.Errorf("parse mailbox: %w", err)
+}
+
+func parseAddrMailbox(value string) (Mailbox, error) {
 	mailbox, err := goaddr.ParseEmailMailbox(value)
 	if err != nil {
-		return Mailbox{}, fmt.Errorf("parse mailbox: %w", err)
+		return Mailbox{}, err
 	}
 	spec := mailbox.AddrSpec()
 	domain, err := CanonicalDomain(spec.Domain())
@@ -56,6 +69,24 @@ func ParseMailbox(value string) (Mailbox, error) {
 		LocalPart: spec.LocalPart(),
 		Domain:    domain,
 	}, nil
+}
+
+func parseMessageMailbox(value string) (Mailbox, error) {
+	addrs, err := moxmessage.ParseAddressList(value)
+	if err != nil {
+		return Mailbox{}, err
+	}
+	if len(addrs) != 1 {
+		return Mailbox{}, fmt.Errorf("mailbox must contain exactly one address")
+	}
+	addr := addrs[0]
+	if addr.User == "" {
+		return Mailbox{}, fmt.Errorf("mailbox local-part is required")
+	}
+	if addr.Host == "" {
+		return Mailbox{}, fmt.Errorf("mailbox domain is required")
+	}
+	return parseAddrMailbox(addr.User + "@" + addr.Host)
 }
 
 func NormalizeMailbox(value string) (string, error) {

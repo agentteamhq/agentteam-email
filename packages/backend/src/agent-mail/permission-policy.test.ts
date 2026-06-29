@@ -263,6 +263,24 @@ describe('Agent Mail permission policy', () => {
     expect(canSendMessageTo(ability, ['recipient@example.net (Recipient)'])).toBe(true)
   })
 
+  it('allows a constrained recipient domain when the message recipient has an IDNA domain', () => {
+    expect.hasAssertions()
+    const ability = constrainedSendAbility({
+      allowedRecipientDomains: ['xn--exmple-cua.com']
+    })
+
+    expect(canSendMessageTo(ability, ['Recipient <recipient@Exämple.com>'])).toBe(true)
+  })
+
+  it('allows an exact constrained recipient when the message recipient has an IDNA domain', () => {
+    expect.hasAssertions()
+    const ability = constrainedSendAbility({
+      allowedRecipients: ['recipient@xn--exmple-cua.com']
+    })
+
+    expect(canSendMessageTo(ability, ['Recipient <recipient@Exämple.com>'])).toBe(true)
+  })
+
   it('matches constrained recipient patterns against the parsed mailbox address', () => {
     expect.hasAssertions()
     const ability = constrainedSendAbility({
@@ -270,6 +288,15 @@ describe('Agent Mail permission policy', () => {
     })
 
     expect(canSendMessageTo(ability, ['Recipient <recipient@example.net>'])).toBe(true)
+  })
+
+  it('matches constrained recipient patterns against the IDNA-normalized parsed mailbox address', () => {
+    expect.hasAssertions()
+    const ability = constrainedSendAbility({
+      allowedRecipientPatterns: ['*@xn--exmple-cua.com']
+    })
+
+    expect(canSendMessageTo(ability, ['Recipient <recipient@Exämple.com>'])).toBe(true)
   })
 
   it('fails closed for a malformed recipient whose first split domain is allowed', () => {
