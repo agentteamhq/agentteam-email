@@ -1,6 +1,4 @@
-import { domainToASCII } from 'node:url'
 import { Ability, AbilityBuilder, subject } from '@casl/ability'
-import parseEmailAddress from 'email-addresses'
 import {
   AgentMailAbilityActionByCapability,
   AgentMailCapability,
@@ -11,6 +9,8 @@ import {
   AgentMailOrganizationCapabilityGrantConstraints,
   AgentMailSystemGrantConstraints
 } from '@main/db'
+
+import { parseMailboxAddress } from './mailbox-address'
 import type { ForcedSubject, MatchConditions } from '@casl/ability'
 import type {
   AgentCapabilityGrantDocument,
@@ -445,29 +445,6 @@ function normalizedMailbox(value: string | null | undefined) {
   return value?.trim().toLowerCase() ?? ''
 }
 
-function parsedMailbox(value: string | null | undefined) {
-  const input = value?.trim()
-  if (!input) {
-    return null
-  }
-  const parsed = parseEmailAddress({ input, rfc6532: true })
-  if (!parsed || parsed.addresses.length !== 1) {
-    return null
-  }
-  const mailbox = parsed.addresses[0]
-  if (mailbox.type !== 'mailbox' || !mailbox.local || !mailbox.address || !mailbox.domain) {
-    return null
-  }
-  const domain = domainToASCII(mailbox.domain).toLowerCase()
-  if (!domain) {
-    return null
-  }
-  return {
-    address: `${mailbox.local}@${domain}`.toLowerCase(),
-    domain
-  }
-}
-
 function recipientConstraintsSatisfied(
   resource: AgentMailMessageResourceSubject,
   capability: AgentMailCapabilityValue,
@@ -488,7 +465,7 @@ function recipientConstraintsSatisfied(
     return true
   }
 
-  const recipients = resource.recipientAddresses?.map((recipient) => parsedMailbox(recipient))
+  const recipients = resource.recipientAddresses?.map((recipient) => parseMailboxAddress(recipient))
   if (!recipients?.length || recipients.some((recipient) => recipient === null)) {
     return false
   }

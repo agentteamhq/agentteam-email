@@ -343,10 +343,10 @@ describe('Agent Mail service status boundary', () => {
       submitAgentMailOutboundFromWeb({
         headers: new Headers(),
         input: {
-          from: 'Support@Example.Test',
+          from: 'Support <Support@Example.Test>',
           subject: 'Hello ✓',
           text: 'Body ✓',
-          to: ['Recipient@Example.Net']
+          to: ['Recipient <Recipient@Exämple.com>']
         }
       })
     ).resolves.toStrictEqual({
@@ -359,10 +359,10 @@ describe('Agent Mail service status boundary', () => {
     expect(request).toMatchObject({
       domain: 'example.test',
       from: 'support@example.test',
-      to: 'recipient@example.net'
+      to: 'recipient@xn--exmple-cua.com'
     })
     expect(request.raw).toContain('From: support@example.test\r\n')
-    expect(request.raw).toContain('To: recipient@example.net\r\n')
+    expect(request.raw).toContain('To: recipient@xn--exmple-cua.com\r\n')
     expect(request.raw).toContain('Subject: =?UTF-8?')
     expect(request.raw).toContain('Message-ID: <')
     expect(request.raw).toContain('MIME-Version: 1.0\r\n')

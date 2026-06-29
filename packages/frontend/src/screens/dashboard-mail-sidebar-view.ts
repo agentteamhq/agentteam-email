@@ -2,6 +2,7 @@ import {
   defaultAuthenticatedEmailToolbarActions,
   defaultAuthenticatedSidebarView
 } from '../partials/authenticated/authenticated-shell-models'
+import { mailboxAddressOrRaw, mailboxDisplayName } from '../lib/mail-addresses'
 import type {
   AgentMailWebAccount,
   AgentMailWebFolder,
@@ -250,13 +251,13 @@ function toMailItem(message: AgentMailWebMessageSummary): AuthenticatedMailItem 
   return {
     attachmentCountLabel: message.attachmentCount ? String(message.attachmentCount) : undefined,
     date: formatMessageDate(message.receivedAt),
-    email: message.from,
+    email: mailboxAddressOrRaw(message.from),
     folderId: message.mailboxId,
     id: message.id,
     isDraft: message.isDraft,
     isStarred: message.isStarred,
     isUnread: message.unread,
-    name: displayName(message.from),
+    name: mailboxDisplayName(message.from),
     subject: message.subject,
     teaser: message.teaser,
     threadId: message.threadId
@@ -415,11 +416,6 @@ export function formatMessageDate(value: string | undefined) {
         timeStyle: 'short'
       }).format(date)
     : value
-}
-
-export function displayName(value: string) {
-  const angleIndex = value.indexOf('<')
-  return angleIndex > 0 ? value.slice(0, angleIndex).trim() : value
 }
 
 function errorMessage(error: unknown, fallback: string) {

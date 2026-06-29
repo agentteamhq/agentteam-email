@@ -18,6 +18,7 @@ import { PAPERCLIP_EMAIL_PLUGIN_ID, readPaperclipOAuthClientMetadata } from '../
 import { globals } from '../globals'
 
 import { getAgentMailControlStatus, submitAgentMailSend } from './control-client'
+import { mailboxDomain, parseMailboxAddress } from './mailbox-address'
 import {
   agentMailCapabilityGrantOrganizationId,
   agentMailMailboxGrantOrganizationId,
@@ -1487,19 +1488,19 @@ async function buildSimpleTextMessage({
 }
 
 function normalizeMailbox(value: string, label: string): string {
-  const normalized = value.trim().toLowerCase()
-  if (/[<>\r\n]/u.test(normalized) || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/u.test(normalized)) {
+  const mailbox = parseMailboxAddress(value)
+  if (!mailbox) {
     throw new Error(`${label} must be a valid mailbox`)
   }
-  return normalized
+  return mailbox.address
 }
 
 function domainPart(mailbox: string): string {
-  const at = mailbox.lastIndexOf('@')
-  if (at < 0 || at === mailbox.length - 1) {
+  const domain = mailboxDomain(mailbox)
+  if (!domain) {
     throw new Error('Mailbox is missing a domain')
   }
-  return mailbox.slice(at + 1).toLowerCase()
+  return domain
 }
 
 function sanitizeHeaderValue(value: string, label: string): string {

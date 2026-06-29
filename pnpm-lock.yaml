@@ -2139,6 +2139,9 @@ importers:
       '@types/react':
         specifier: 'catalog:'
         version: 19.2.17
+      email-addresses:
+        specifier: 'catalog:'
+        version: 5.0.0
       esbuild:
         specifier: 'catalog:'
         version: 0.28.1

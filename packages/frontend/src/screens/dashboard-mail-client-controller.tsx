@@ -52,11 +52,11 @@ import {
   sendMailMessage,
   updateMailMessage
 } from '../lib/mail-rpc'
+import { mailboxAddress, mailboxAddressOrRaw, mailboxDisplayName } from '../lib/mail-addresses'
 import { defaultAuthenticatedDashboardView } from '../partials/authenticated/authenticated-shell-models'
 import { isMailboxAdminSectionId } from '../partials/authenticated/mailbox-admin-models'
 import {
   actionsForMessage,
-  displayName,
   findSystemFolder,
   formatMessageDate,
   threadActionsForMessage,
@@ -2122,8 +2122,8 @@ function toEmailPreview(
     isUnread: message.unread,
     receivedAt: formatMessageDate(message.receivedAt),
     recipientEmail: message.to.join(', '),
-    senderEmail: emailAddress(message.from),
-    senderName: displayName(message.from),
+    senderEmail: mailboxAddressOrRaw(message.from),
+    senderName: mailboxDisplayName(message.from),
     subject: message.subject,
     thread: message.thread?.map((threadMessage: AgentMailWebThreadMessage) =>
       toEmailThreadMessage(
@@ -2152,8 +2152,8 @@ function toEmailThreadMessage(
     isDraft: message.isDraft,
     receivedAt: formatMessageDate(message.receivedAt),
     recipientEmail: message.to.join(', '),
-    senderEmail: emailAddress(message.from),
-    senderName: displayName(message.from),
+    senderEmail: mailboxAddressOrRaw(message.from),
+    senderName: mailboxDisplayName(message.from),
     state,
     teaser: message.teaser
   }
@@ -2341,7 +2341,7 @@ function composeFromMessage(
     state: 'open',
     subject: prefixedSubject(action === 'forward' ? 'Fwd' : 'Re', message.subject),
     title: action === 'forward' ? 'Forward message' : action === 'reply-all' ? 'Reply all' : 'Reply',
-    to: action === 'forward' ? '' : emailAddress(message.from)
+    to: action === 'forward' ? '' : replyRecipient(message)
   }
 }
 
@@ -2390,9 +2390,8 @@ function formatBytes(value: number) {
   return `${(value / 1024 / 1024).toFixed(1)} MB`
 }
 
-function emailAddress(value: string) {
-  const match = /<([^>]+)>/u.exec(value)
-  return match?.[1]?.trim() ?? value
+function replyRecipient(message: AgentMailWebThreadMessage) {
+  return mailboxAddress(message.replyTo[0]) || mailboxAddress(message.from)
 }
 
 function stripHTML(value: string) {

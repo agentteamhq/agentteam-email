@@ -1,6 +1,8 @@
 import { Buffer } from 'node:buffer'
 import { spawn } from 'node:child_process'
 import process from 'node:process'
+import { domainToASCII } from 'node:url'
+import parseEmailAddress from 'email-addresses'
 
 import { PLUGIN_ID } from './constants'
 import type { JsonSchema, PluginToolDeclaration, ToolResult, ToolRunContext } from '@paperclipai/plugin-sdk'
@@ -293,9 +295,11 @@ function validateOperationRequirements(input: EmailToolInput): ValidationResult 
     if (!input.mailbox) {
       return { error: 'Email provision requires mailbox.', ok: false }
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(input.mailbox)) {
+    const mailbox = readMailboxAddress(input.mailbox)
+    if (!mailbox) {
       return { error: 'Email provision requires mailbox to be an email address.', ok: false }
     }
+    input.mailbox = mailbox
   }
 
   if (input.operation === 'read' && !input.messageId && !input.threadId) {
@@ -347,13 +351,51 @@ function readOptionalEmailList(value: unknown, key: string): string[] | Validati
     if (typeof item !== 'string') {
       return { error: `Email tool field ${key} must contain only strings.` }
     }
-    const normalized = item.trim().toLowerCase()
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(normalized)) {
+    const normalized = readMailboxAddress(item)
+    if (!normalized) {
       return { error: `Email tool field ${key} contains an invalid email address.` }
     }
     values.push(normalized)
   }
   return values
+}
+
+function readMailboxAddress(value: string) {
+  const input = value.trim()
+  if (!input) {
+    return null
+  }
+  const parsed = parseEmailAddress({ input, rejectTLD: true, rfc6532: true, strict: true })
+  if (!parsed || parsed.addresses.length !== 1) {
+    return null
+  }
+  const mailbox = parsed.addresses[0]
+  if (mailbox.type !== 'mailbox' || !mailbox.local || !mailbox.address || !mailbox.domain) {
+    return null
+  }
+  const domain = domainToASCII(mailbox.domain).toLowerCase()
+  if (!domain) {
+    return null
+  }
+  const address = `${mailbox.local}@${domain}`.toLowerCase()
+  return canonicalMailboxAddressRoundTrips(address, mailbox.local, domain) ? address : null
+}
+
+function canonicalMailboxAddressRoundTrips(
+  address: string,
+  expectedLocalPart: string,
+  expectedDomain: string
+) {
+  const parsed = parseEmailAddress({ input: address, rejectTLD: true, rfc6532: true, strict: true })
+  if (!parsed || parsed.addresses.length !== 1) {
+    return false
+  }
+  const mailbox = parsed.addresses[0]
+  return (
+    mailbox.type === 'mailbox' &&
+    mailbox.local?.toLowerCase() === expectedLocalPart.toLowerCase() &&
+    domainToASCII(mailbox.domain ?? '').toLowerCase() === expectedDomain
+  )
 }
 
 function readOptionalLimit(value: unknown): number | ValidationError | undefined {

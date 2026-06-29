@@ -1907,6 +1907,27 @@ describe('Agent Mail admin service', () => {
     expect(adminServiceTestState.createUser).not.toHaveBeenCalled()
   })
 
+  it('rejects plus-address mailbox accounts using the parsed local part before WildDuck calls', async () => {
+    expect.hasAssertions()
+
+    const { createAgentMailAccountForWeb } = await import('./admin-service')
+
+    await expect(
+      createAgentMailAccountForWeb({
+        headers: new Headers(),
+        input: {
+          address: 'support+tag@example.test',
+          type: 'mailbox'
+        }
+      })
+    ).rejects.toMatchObject({
+      message: 'Mailbox account address must be a valid mailbox address',
+      status: 400
+    })
+    expect(adminServiceTestState.createWildDuckClient).not.toHaveBeenCalled()
+    expect(adminServiceTestState.createUser).not.toHaveBeenCalled()
+  })
+
   it('rejects forwarding group recipients outside active organization mail domains before WildDuck calls', async () => {
     expect.hasAssertions()
 
