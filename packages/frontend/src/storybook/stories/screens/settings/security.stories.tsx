@@ -12,5 +12,5 @@ type Story = StoryObj<typeof meta>
 
 export const Security: Story = {
   ...SecurityStory,
-  name: 'default'
+  name: 'Default'
 }

@@ -16,14 +16,14 @@ type VerificationStory = StoryObj<typeof DeviceCodeVerificationScreen>
 const noop = async () => {}
 
 export const EnterCode: VerificationStory = {
-  name: 'enter code',
+  name: 'Enter code',
   args: {
     onVerify: noop
   }
 }
 
 export const PrefilledCode: VerificationStory = {
-  name: 'prefilled code',
+  name: 'Prefilled code',
   args: {
     initialUserCode: 'ABCD1234',
     onVerify: noop
@@ -31,7 +31,7 @@ export const PrefilledCode: VerificationStory = {
 }
 
 export const InvalidCode: VerificationStory = {
-  name: 'invalid code',
+  name: 'Invalid code',
   args: {
     initialError: 'Invalid user code.',
     initialUserCode: 'ABCD1234',

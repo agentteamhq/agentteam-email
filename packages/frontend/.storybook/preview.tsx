@@ -68,7 +68,7 @@ const preview: Preview = {
     layout: 'fullscreen',
     options: {
       storySort: {
-        order: ['Screens', 'Controllers', 'Components', 'Mocks', 'Showcase']
+        order: ['Screens', 'Components', 'Mocks', 'Showcase']
       }
     }
   }

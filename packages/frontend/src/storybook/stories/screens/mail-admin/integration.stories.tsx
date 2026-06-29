@@ -12,12 +12,12 @@ import {
   MailboxAdminLoading as MailboxAdminLoadingStory,
   MailboxAdminReadOnly as MailboxAdminReadOnlyStory,
   dashboardMailControllerStoryMeta
-} from '../mail-dashboard-controller.definitions'
+} from '../../mail-dashboard-controller.definitions'
 import type { Meta, StoryObj } from '@storybook/react'
 
 const meta = {
   ...dashboardMailControllerStoryMeta,
-  title: 'Controllers/Mail Admin'
+  title: 'Screens/Mail Admin/Integration'
 } satisfies Meta<typeof dashboardMailControllerStoryMeta.component>
 
 export default meta
@@ -26,60 +26,60 @@ type Story = StoryObj<typeof meta>
 
 export const MailboxAdminAccounts: Story = {
   ...MailboxAdminAccountsStory,
-  name: 'accounts'
+  name: 'RPC accounts load'
 }
 
 export const MailboxAdminAccountsPagination: Story = {
   ...MailboxAdminAccountsPaginationStory,
-  name: 'accounts pagination'
+  name: 'RPC accounts pagination'
 }
 
 export const MailboxAdminAccountsSearch: Story = {
   ...MailboxAdminAccountsSearchStory,
-  name: 'accounts search'
+  name: 'RPC accounts search'
 }
 
 export const MailboxAdminGroups: Story = {
   ...MailboxAdminGroupsStory,
-  name: 'groups'
+  name: 'Section route search groups'
 }
 
 export const MailboxAdminAgents: Story = {
   ...MailboxAdminAgentsStory,
-  name: 'agents'
+  name: 'Section route search agents'
 }
 
 export const MailboxAdminConnectedClients: Story = {
   ...MailboxAdminConnectedClientsStory,
-  name: 'connected clients'
+  name: 'RPC connected clients'
 }
 
 export const MailboxAdminReadOnly: Story = {
   ...MailboxAdminReadOnlyStory,
-  name: 'read only'
+  name: 'RPC read-only permissions'
 }
 
 export const MailboxAdminGroupsOnly: Story = {
   ...MailboxAdminGroupsOnlyStory,
-  name: 'groups-only permissions'
+  name: 'RPC groups-only permissions'
 }
 
 export const MailboxAdminEmpty: Story = {
   ...MailboxAdminEmptyStory,
-  name: 'empty'
+  name: 'RPC empty state'
 }
 
 export const MailboxAdminLoading: Story = {
   ...MailboxAdminLoadingStory,
-  name: 'loading'
+  name: 'RPC pending'
 }
 
 export const MailboxAdminForbidden: Story = {
   ...MailboxAdminForbiddenStory,
-  name: 'forbidden'
+  name: 'RPC forbidden'
 }
 
 export const MailboxAdminError: Story = {
   ...MailboxAdminErrorStory,
-  name: 'backend error'
+  name: 'RPC backend error'
 }

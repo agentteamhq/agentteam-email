@@ -12,5 +12,5 @@ type Story = StoryObj<typeof meta>
 
 export const AccountMenu: Story = {
   ...AccountMenuStory,
-  name: 'user menu'
+  name: 'User menu'
 }

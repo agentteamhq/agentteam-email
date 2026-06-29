@@ -172,7 +172,6 @@ async function openWorkspaceMailboxSwitcher(canvasElement: HTMLElement) {
 }
 
 export const MailboxDefault: Story = {
-  name: 'mailbox / default',
   play: async ({ args, canvasElement }) => {
     const canvas = within(canvasElement)
 
@@ -184,7 +183,6 @@ export const MailboxDefault: Story = {
 }
 
 export const MailboxLoading: Story = {
-  name: 'mailbox / loading',
   args: {
     dashboardView: loadingAuthenticatedDashboardView,
     sidebarView: loadingAuthenticatedSidebarView
@@ -192,7 +190,6 @@ export const MailboxLoading: Story = {
 }
 
 export const MailboxRefreshing: Story = {
-  name: 'mailbox / refreshing',
   args: {
     sidebarView: refreshingMailboxSidebarView
   },
@@ -204,7 +201,6 @@ export const MailboxRefreshing: Story = {
 }
 
 export const MailboxEmpty: Story = {
-  name: 'mailbox / empty',
   args: {
     dashboardView: emptyAuthenticatedDashboardView,
     sidebarView: emptyAuthenticatedSidebarView
@@ -212,7 +208,6 @@ export const MailboxEmpty: Story = {
 }
 
 export const MailboxError: Story = {
-  name: 'mailbox / error',
   args: {
     dashboardView: emptyAuthenticatedDashboardView,
     sidebarView: errorAuthenticatedSidebarView
@@ -227,14 +222,12 @@ export const MailboxError: Story = {
 }
 
 export const MessageAppointment: Story = {
-  name: 'message / appointment',
   args: {
     sidebarView: emailPreviewSidebarView
   }
 }
 
 export const MessageError: Story = {
-  name: 'message / error',
   args: {
     dashboardView: errorAuthenticatedDashboardView,
     emailPreviewsById: {},
@@ -250,7 +243,6 @@ export const MessageError: Story = {
 }
 
 export const MessageToolbarControllerActions: Story = {
-  name: 'message / toolbar controller actions',
   args: {
     sidebarView: emailPreviewSidebarView
   },
@@ -311,7 +303,6 @@ export const MessageToolbarControllerActions: Story = {
 }
 
 export const MessageArchiveAction: Story = {
-  name: 'message / archive action',
   args: {
     emailPreviewsById: archiveActionEmailPreviewsById,
     sidebarView: blockedImagesSidebarView
@@ -328,14 +319,12 @@ export const MessageArchiveAction: Story = {
 }
 
 export const MessageWelcome: Story = {
-  name: 'message / welcome',
   args: {
     sidebarView: welcomeEmailSidebarView
   }
 }
 
 export const MessageStarred: Story = {
-  name: 'message / starred',
   args: {
     emailPreviewsById: starredEmailPreviewsById,
     sidebarView: starredMessageSidebarView
@@ -354,7 +343,6 @@ export const MessageStarred: Story = {
 }
 
 export const MessageUnread: Story = {
-  name: 'message / unread',
   args: {
     emailPreviewsById: unreadMessageEmailPreviewsById,
     sidebarView: emailPreviewSidebarView
@@ -373,7 +361,6 @@ export const MessageUnread: Story = {
 }
 
 export const MessageDisabledActions: Story = {
-  name: 'message / disabled toolbar action',
   args: {
     emailPreviewsById: disabledToolbarEmailPreviewsById,
     sidebarView: disabledToolbarActionSidebarView
@@ -386,7 +373,6 @@ export const MessageDisabledActions: Story = {
 }
 
 export const ConversationThread: Story = {
-  name: 'conversation / thread',
   args: {
     sidebarView: conversationThreadSidebarView
   },
@@ -415,7 +401,6 @@ export const ConversationThread: Story = {
 }
 
 export const ConversationThreadMessageActions: Story = {
-  name: 'conversation / message actions',
   args: {
     sidebarView: conversationThreadSidebarView
   },
@@ -456,14 +441,12 @@ export const ConversationThreadMessageActions: Story = {
 }
 
 export const SecurityRemoteContentBlocked: Story = {
-  name: 'security / remote content blocked',
   args: {
     sidebarView: blockedImagesSidebarView
   }
 }
 
 export const SecurityRemoteContentInteraction: Story = {
-  name: 'security / remote content interaction',
   args: {
     sidebarView: blockedImagesSidebarView
   },
@@ -498,7 +481,6 @@ export const SecurityRemoteContentInteraction: Story = {
 }
 
 export const SecurityRemoteContentAccountScoped: Story = {
-  name: 'security / remote content account scoped',
   args: {
     sidebarView: accountScopedRemoteImagesSidebarView
   },
@@ -544,7 +526,6 @@ export const SecurityRemoteContentAccountScoped: Story = {
 }
 
 export const SecurityRemoteBackgroundImagesBlocked: Story = {
-  name: 'security / remote background images blocked',
   args: {
     emailPreviewsById: remoteBackgroundImagesEmailPreviewsById,
     sidebarView: remoteBackgroundImagesSidebarView
@@ -573,7 +554,6 @@ export const SecurityRemoteBackgroundImagesBlocked: Story = {
 }
 
 export const SecurityDocumentResourceTagsBlocked: Story = {
-  name: 'security / document resource tags blocked',
   args: {
     emailPreviewsById: documentResourceEmailPreviewsById,
     sidebarView: documentResourceSidebarView
@@ -608,7 +588,6 @@ export const SecurityDocumentResourceTagsBlocked: Story = {
 }
 
 export const SecurityUnsafeControllerLink: Story = {
-  name: 'security / unsafe controller link',
   args: {
     emailPreviewsById: unsafeExternalLinkEmailPreviewsById,
     sidebarView: blockedImagesSidebarView
@@ -635,7 +614,6 @@ export const SecurityUnsafeControllerLink: Story = {
 }
 
 export const SecurityMailtoLinkInteraction: Story = {
-  name: 'security / mailto link interaction',
   args: {
     emailPreviewsById: mailtoLinkEmailPreviewsById,
     sidebarView: mailtoLinkSidebarView
@@ -664,7 +642,6 @@ export const SecurityMailtoLinkInteraction: Story = {
 }
 
 export const SecurityExternalLinkGeneratedIdCollision: Story = {
-  name: 'security / external link generated id collision',
   args: {
     emailPreviewsById: externalLinkCollisionEmailPreviewsById,
     sidebarView: externalLinkCollisionSidebarView
@@ -694,7 +671,6 @@ export const SecurityExternalLinkGeneratedIdCollision: Story = {
 }
 
 export const SecurityFormContentRemoved: Story = {
-  name: 'security / form content removed',
   args: {
     emailPreviewsById: formEmailPreviewsById,
     sidebarView: formEmailSidebarView
@@ -723,7 +699,6 @@ export const SecurityFormContentRemoved: Story = {
 }
 
 export const MailboxSearchFiltered: Story = {
-  name: 'mailbox / search filtered',
   args: {
     sidebarView: searchFilteredSidebarView
   },
@@ -738,7 +713,6 @@ export const MailboxSearchFiltered: Story = {
 }
 
 export const MailboxSearchEmpty: Story = {
-  name: 'mailbox / search empty',
   args: {
     dashboardView: emptyAuthenticatedDashboardView,
     sidebarView: searchEmptySidebarView
@@ -754,7 +728,6 @@ export const MailboxSearchEmpty: Story = {
 }
 
 export const MailboxUnreadOnly: Story = {
-  name: 'mailbox / unread only',
   args: {
     sidebarView: unreadOnlySidebarView
   },
@@ -767,7 +740,6 @@ export const MailboxUnreadOnly: Story = {
 }
 
 export const MailboxThreadedMetadata: Story = {
-  name: 'mailbox / threaded metadata',
   args: {
     sidebarView: threadedMailboxSidebarView
   },
@@ -783,7 +755,6 @@ export const MailboxThreadedMetadata: Story = {
 }
 
 export const MailboxJunk: Story = {
-  name: 'mailbox / junk',
   args: {
     sidebarView: junkMailboxSidebarView
   },
@@ -797,7 +768,6 @@ export const MailboxJunk: Story = {
 }
 
 export const MailboxSent: Story = {
-  name: 'mailbox / sent',
   args: {
     emailPreviewsById: sentEmailPreviewsById,
     sidebarView: sentMailboxSidebarView
@@ -812,7 +782,6 @@ export const MailboxSent: Story = {
 }
 
 export const MailboxTrash: Story = {
-  name: 'mailbox / trash',
   args: {
     emailPreviewsById: trashEmailPreviewsById,
     sidebarView: trashMailboxSidebarView
@@ -829,7 +798,6 @@ export const MailboxTrash: Story = {
 }
 
 export const MessageMarkNotSpam: Story = {
-  name: 'message / mark not spam',
   args: {
     emailPreviewsById: junkActionEmailPreviewsById,
     sidebarView: junkMailboxSidebarView
@@ -846,7 +814,6 @@ export const MessageMarkNotSpam: Story = {
 }
 
 export const MessageRestoreFromTrash: Story = {
-  name: 'message / restore from trash',
   args: {
     emailPreviewsById: trashActionEmailPreviewsById,
     sidebarView: trashMailboxSidebarView
@@ -863,7 +830,6 @@ export const MessageRestoreFromTrash: Story = {
 }
 
 export const MailboxAccountSwitching: Story = {
-  name: 'mailbox / account switching',
   args: {
     sidebarView: accountSwitchingSidebarView
   },
@@ -882,7 +848,6 @@ export const MailboxAccountSwitching: Story = {
 }
 
 export const MailboxAccountSwitchingResetsSelection: Story = {
-  name: 'mailbox / account switching resets selection',
   args: {
     sidebarView: accountSwitchingSidebarView
   },
@@ -924,7 +889,6 @@ export const MailboxAccountSwitchingResetsSelection: Story = {
 }
 
 export const MailboxAccountSwitchingResetsFolder: Story = {
-  name: 'mailbox / account switching resets folder',
   args: {
     sidebarView: customFolderSidebarView
   },
@@ -979,7 +943,6 @@ export const MailboxAccountSwitchingResetsFolder: Story = {
 }
 
 export const MailboxAccountSwitchingResetsFilters: Story = {
-  name: 'mailbox / account switching resets filters',
   args: {
     sidebarView: accountSwitchingSidebarView
   },
@@ -1030,7 +993,6 @@ export const MailboxAccountSwitchingResetsFilters: Story = {
 }
 
 export const MailboxAccountPermissions: Story = {
-  name: 'mailbox / account permissions',
   args: {
     sidebarView: accountPermissionsSidebarView
   },
@@ -1050,7 +1012,6 @@ export const MailboxAccountPermissions: Story = {
 }
 
 export const MailboxFolderNavigation: Story = {
-  name: 'mailbox / folder navigation',
   args: {
     sidebarView: accountSwitchingSidebarView
   },
@@ -1069,7 +1030,6 @@ export const MailboxFolderNavigation: Story = {
 }
 
 export const MailboxCustomFolder: Story = {
-  name: 'mailbox / custom folder',
   args: {
     emailPreviewsById: customFolderEmailPreviewsById,
     sidebarView: customFolderSidebarView
@@ -1086,7 +1046,6 @@ export const MailboxCustomFolder: Story = {
 }
 
 export const MailboxCreateFolder: Story = {
-  name: 'mailbox / create folder trigger',
   args: {
     emailPreviewsById: customFolderEmailPreviewsById,
     sidebarView: folderCreateSidebarView
@@ -1100,7 +1059,6 @@ export const MailboxCreateFolder: Story = {
 }
 
 export const MailboxCreateFolderOpen: Story = {
-  name: 'mailbox / create folder open',
   args: {
     emailPreviewsById: customFolderEmailPreviewsById,
     sidebarView: folderCreateOpenSidebarView
@@ -1120,7 +1078,6 @@ export const MailboxCreateFolderOpen: Story = {
 }
 
 export const MailboxCreateFolderSubmitting: Story = {
-  name: 'mailbox / create folder submitting',
   args: {
     emailPreviewsById: customFolderEmailPreviewsById,
     sidebarView: folderCreateSubmittingSidebarView
@@ -1135,7 +1092,6 @@ export const MailboxCreateFolderSubmitting: Story = {
 }
 
 export const MailboxCreateFolderError: Story = {
-  name: 'mailbox / create folder error',
   args: {
     emailPreviewsById: customFolderEmailPreviewsById,
     sidebarView: folderCreateErrorSidebarView
@@ -1150,7 +1106,6 @@ export const MailboxCreateFolderError: Story = {
 }
 
 export const MailboxFolderActions: Story = {
-  name: 'mailbox / folder actions',
   args: {
     emailPreviewsById: customFolderEmailPreviewsById,
     sidebarView: customFolderSidebarView
@@ -1176,7 +1131,6 @@ export const MailboxFolderActions: Story = {
 }
 
 export const MailboxProtectedFolderActions: Story = {
-  name: 'mailbox / protected folder actions',
   args: {
     sidebarView: protectedFolderActionSidebarView
   },
@@ -1196,7 +1150,6 @@ export const MailboxProtectedFolderActions: Story = {
 }
 
 export const MailboxRenameFolderOpen: Story = {
-  name: 'mailbox / rename folder open',
   args: {
     emailPreviewsById: customFolderEmailPreviewsById,
     sidebarView: folderRenameOpenSidebarView
@@ -1216,7 +1169,6 @@ export const MailboxRenameFolderOpen: Story = {
 }
 
 export const MailboxRenameFolderSubmitting: Story = {
-  name: 'mailbox / rename folder submitting',
   args: {
     emailPreviewsById: customFolderEmailPreviewsById,
     sidebarView: folderRenameSubmittingSidebarView
@@ -1231,7 +1183,6 @@ export const MailboxRenameFolderSubmitting: Story = {
 }
 
 export const MailboxRenameFolderError: Story = {
-  name: 'mailbox / rename folder error',
   args: {
     emailPreviewsById: customFolderEmailPreviewsById,
     sidebarView: folderRenameErrorSidebarView
@@ -1246,7 +1197,6 @@ export const MailboxRenameFolderError: Story = {
 }
 
 export const MailboxDeleteFolderConfirm: Story = {
-  name: 'mailbox / delete folder confirm',
   args: {
     emailPreviewsById: customFolderEmailPreviewsById,
     sidebarView: folderDeleteOpenSidebarView
@@ -1263,7 +1213,6 @@ export const MailboxDeleteFolderConfirm: Story = {
 }
 
 export const MailboxDeleteFolderSubmitting: Story = {
-  name: 'mailbox / delete folder submitting',
   args: {
     emailPreviewsById: customFolderEmailPreviewsById,
     sidebarView: folderDeleteSubmittingSidebarView
@@ -1277,7 +1226,6 @@ export const MailboxDeleteFolderSubmitting: Story = {
 }
 
 export const MailboxDeleteFolderError: Story = {
-  name: 'mailbox / delete folder error',
   args: {
     emailPreviewsById: customFolderEmailPreviewsById,
     sidebarView: folderDeleteErrorSidebarView
@@ -1292,7 +1240,6 @@ export const MailboxDeleteFolderError: Story = {
 }
 
 export const MailboxPagination: Story = {
-  name: 'mailbox / cursor pagination',
   args: {
     sidebarView: paginatedMailboxSidebarView
   },
@@ -1315,7 +1262,6 @@ export const MailboxPagination: Story = {
 }
 
 export const MailboxPaginationLoading: Story = {
-  name: 'mailbox / cursor pagination loading',
   args: {
     sidebarView: paginatedMailboxLoadingSidebarView
   },
@@ -1328,7 +1274,6 @@ export const MailboxPaginationLoading: Story = {
 }
 
 export const DraftEditing: Story = {
-  name: 'drafts / edit draft',
   args: {
     composeView: composeDraftView,
     emailPreviewsById: draftEmailPreviewsById,
@@ -1352,7 +1297,6 @@ export const DraftEditing: Story = {
 }
 
 export const DraftToolbarActions: Story = {
-  name: 'drafts / toolbar actions',
   args: {
     emailPreviewsById: draftToolbarEmailPreviewsById,
     sidebarView: draftSidebarView
@@ -1380,7 +1324,6 @@ export const DraftToolbarActions: Story = {
 }
 
 export const ComposeSending: Story = {
-  name: 'compose / sending',
   args: {
     composeView: composeSendingView,
     sidebarView: accountSwitchingSidebarView
@@ -1394,7 +1337,6 @@ export const ComposeSending: Story = {
 }
 
 export const ComposeSelectedAccount: Story = {
-  name: 'compose / selected account',
   args: {
     composeView: composeSelectedAccountView,
     sidebarView: accountSwitchingSidebarView
@@ -1409,7 +1351,6 @@ export const ComposeSelectedAccount: Story = {
 }
 
 export const ComposeSavedDraft: Story = {
-  name: 'compose / saved draft',
   args: {
     composeView: composeSavedDraftView,
     sidebarView: draftSidebarView
@@ -1424,7 +1365,6 @@ export const ComposeSavedDraft: Story = {
 }
 
 export const ComposeSavingDraft: Story = {
-  name: 'compose / saving draft',
   args: {
     composeView: composeSavingDraftView,
     sidebarView: accountSwitchingSidebarView
@@ -1439,7 +1379,6 @@ export const ComposeSavingDraft: Story = {
 }
 
 export const ComposeReplyAll: Story = {
-  name: 'compose / reply all',
   args: {
     composeView: composeReplyAllView,
     sidebarView: accountSwitchingSidebarView
@@ -1447,7 +1386,6 @@ export const ComposeReplyAll: Story = {
 }
 
 export const ComposeForward: Story = {
-  name: 'compose / forward',
   args: {
     composeView: composeForwardView,
     sidebarView: accountSwitchingSidebarView
@@ -1455,7 +1393,6 @@ export const ComposeForward: Story = {
 }
 
 export const ComposeDraftSaveError: Story = {
-  name: 'compose / draft save error',
   args: {
     composeView: composeDraftSaveErrorView,
     sidebarView: accountSwitchingSidebarView
@@ -1468,7 +1405,6 @@ export const ComposeDraftSaveError: Story = {
 }
 
 export const ComposeValidationErrors: Story = {
-  name: 'compose / validation errors',
   args: {
     composeView: composeValidationErrorView,
     sidebarView: accountSwitchingSidebarView
@@ -1493,7 +1429,6 @@ export const ComposeValidationErrors: Story = {
 }
 
 export const ComposeAttachments: Story = {
-  name: 'compose / attachments',
   args: {
     composeView: composeWithAttachmentsView,
     sidebarView: accountSwitchingSidebarView
@@ -1517,7 +1452,6 @@ export const ComposeAttachments: Story = {
 }
 
 export const ComposeAttachmentStatus: Story = {
-  name: 'compose / attachment status',
   args: {
     composeView: composeAttachmentUploadStatusView,
     sidebarView: accountSwitchingSidebarView
@@ -1538,7 +1472,6 @@ export const ComposeAttachmentStatus: Story = {
 }
 
 export const MessageAttachments: Story = {
-  name: 'message / attachments',
   args: {
     emailPreviewsById: attachmentEmailPreviewsById,
     sidebarView: attachmentSidebarView
@@ -1564,7 +1497,6 @@ export const MessageAttachments: Story = {
 }
 
 export const MessageInlineAttachments: Story = {
-  name: 'message / inline attachments',
   args: {
     emailPreviewsById: inlineAttachmentEmailPreviewsById,
     sidebarView: inlineAttachmentSidebarView
@@ -1601,7 +1533,6 @@ export const MessageInlineAttachments: Story = {
 }
 
 export const MessagePendingAction: Story = {
-  name: 'message / pending action',
   args: {
     emailPreviewsById: pendingActionEmailPreviewsById,
     sidebarView: pendingActionSidebarView
@@ -1609,7 +1540,6 @@ export const MessagePendingAction: Story = {
 }
 
 export const MessageMoveToSpam: Story = {
-  name: 'message / move to spam',
   args: {
     mailActionView: moveToSpamActionView,
     sidebarView: pendingActionSidebarView
@@ -1625,7 +1555,6 @@ export const MessageMoveToSpam: Story = {
 }
 
 export const MessageMoveTargetSelection: Story = {
-  name: 'message / move target selection',
   args: {
     mailActionView: moveToSpamActionView,
     sidebarView: pendingActionSidebarView
@@ -1641,7 +1570,6 @@ export const MessageMoveTargetSelection: Story = {
 }
 
 export const MessageMoveDisabledTarget: Story = {
-  name: 'message / move disabled target',
   args: {
     mailActionView: moveDisabledTargetActionView,
     sidebarView: accountSwitchingSidebarView
@@ -1661,7 +1589,6 @@ export const MessageMoveDisabledTarget: Story = {
 }
 
 export const MessageMoveSubmitting: Story = {
-  name: 'message / move submitting',
   args: {
     mailActionView: moveActionSubmittingView,
     sidebarView: pendingActionSidebarView
@@ -1675,7 +1602,6 @@ export const MessageMoveSubmitting: Story = {
 }
 
 export const MessageMoveError: Story = {
-  name: 'message / move error',
   args: {
     mailActionView: moveActionErrorView,
     sidebarView: pendingActionSidebarView
@@ -1688,7 +1614,6 @@ export const MessageMoveError: Story = {
 }
 
 export const MessageDeleteConfirm: Story = {
-  name: 'message / delete confirm',
   args: {
     mailActionView: deleteMessageActionView,
     sidebarView: pendingActionSidebarView
@@ -1703,7 +1628,6 @@ export const MessageDeleteConfirm: Story = {
 }
 
 export const MessageDeleteSubmitting: Story = {
-  name: 'message / delete submitting',
   args: {
     mailActionView: deleteMessageSubmittingActionView,
     sidebarView: pendingActionSidebarView
@@ -1717,7 +1641,6 @@ export const MessageDeleteSubmitting: Story = {
 }
 
 export const MessageOriginalSource: Story = {
-  name: 'message / original source',
   args: {
     mailActionView: originalSourceActionView,
     sidebarView: pendingActionSidebarView
@@ -1733,7 +1656,6 @@ export const MessageOriginalSource: Story = {
 }
 
 export const MessageOriginalSourceEvidence: Story = {
-  name: 'message / original source evidence',
   args: {
     mailActionView: originalSourceEvidenceActionView,
     sidebarView: pendingActionSidebarView
@@ -1753,7 +1675,6 @@ export const MessageOriginalSourceEvidence: Story = {
 }
 
 export const MessageOriginalSourceLoading: Story = {
-  name: 'message / original source loading',
   args: {
     mailActionView: originalSourceLoadingActionView,
     sidebarView: pendingActionSidebarView
@@ -1767,7 +1688,6 @@ export const MessageOriginalSourceLoading: Story = {
 }
 
 export const MessageOriginalSourceError: Story = {
-  name: 'message / original source error',
   args: {
     mailActionView: originalSourceErrorActionView,
     sidebarView: pendingActionSidebarView
@@ -1781,7 +1701,6 @@ export const MessageOriginalSourceError: Story = {
 }
 
 export const MessageRowSelection: Story = {
-  name: 'message / row selection',
   args: {
     sidebarView: emailPreviewSidebarView
   },
@@ -1796,7 +1715,6 @@ export const MessageRowSelection: Story = {
 }
 
 export const AccountMenu: Story = {
-  name: 'account / user menu',
   play: async ({ canvasElement }) => {
     const body = within(canvasElement.ownerDocument.body)
 

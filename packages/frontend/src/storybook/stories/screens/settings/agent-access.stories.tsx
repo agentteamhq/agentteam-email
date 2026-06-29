@@ -30,80 +30,80 @@ type Story = StoryObj<typeof meta>
 
 export const AgentAccessLoading: Story = {
   ...AgentAccessLoadingStory,
-  name: 'loading'
+  name: 'Loading'
 }
 
 export const AgentAccessError: Story = {
   ...AgentAccessErrorStory,
-  name: 'error'
+  name: 'Error'
 }
 
 export const AgentAccessEmpty: Story = {
   ...AgentAccessEmptyStory,
-  name: 'empty'
+  name: 'Empty'
 }
 
 export const AgentAccessEnrollmentCreated: Story = {
   ...AgentAccessEnrollmentCreatedStory,
-  name: 'enrollment created'
+  name: 'Enrollment created'
 }
 
 export const AgentAccessActive: Story = {
   ...AgentAccessActiveStory,
-  name: 'active'
+  name: 'Active'
 }
 
 export const AgentAccessPaperclipHandoff: Story = {
   ...AgentAccessPaperclipHandoffStory,
-  name: 'paperclip handoff'
+  name: 'Paperclip handoff'
 }
 
 export const AgentAccessPaperclipConnected: Story = {
   ...AgentAccessPaperclipConnectedStory,
-  name: 'paperclip connected'
+  name: 'Paperclip connected'
 }
 
 export const AgentAccessPendingApproval: Story = {
   ...AgentAccessPendingApprovalStory,
-  name: 'pending approval'
+  name: 'Pending approval'
 }
 
 export const AgentAccessPendingBusy: Story = {
   ...AgentAccessPendingBusyStory,
-  name: 'pending busy'
+  name: 'Pending busy'
 }
 
 export const AgentAccessDeniedExpiredApprovals: Story = {
   ...AgentAccessDeniedExpiredApprovalsStory,
-  name: 'denied and expired approvals'
+  name: 'Denied and expired approvals'
 }
 
 export const AgentAccessActions: Story = {
   ...AgentAccessActionsStory,
-  name: 'actions'
+  name: 'Actions'
 }
 
 export const AgentAccessPartialActions: Story = {
   ...AgentAccessPartialActionsStory,
-  name: 'partial actions'
+  name: 'Partial actions'
 }
 
 export const AgentAccessRevokedExpired: Story = {
   ...AgentAccessRevokedExpiredStory,
-  name: 'revoked and expired'
+  name: 'Revoked and expired'
 }
 
 export const AgentAccessClaimed: Story = {
   ...AgentAccessClaimedStory,
-  name: 'claimed autonomous agent'
+  name: 'Claimed autonomous agent'
 }
 
 export const AgentAccessConstraintDetails: Story = {
   ...AgentAccessConstraintDetailsStory,
-  name: 'constraint details'
+  name: 'Constraint details'
 }
 
 export const AgentAccessDense: Story = {
   ...AgentAccessDenseStory,
-  name: 'dense'
+  name: 'Dense'
 }

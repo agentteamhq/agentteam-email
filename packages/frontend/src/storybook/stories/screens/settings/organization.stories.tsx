@@ -17,15 +17,15 @@ type Story = StoryObj<typeof meta>
 
 export const Organizations: Story = {
   ...OrganizationsStory,
-  name: 'organizations list'
+  name: 'Organizations list'
 }
 
 export const OrganizationSettings: Story = {
   ...OrganizationSettingsStory,
-  name: 'settings'
+  name: 'Settings'
 }
 
 export const OrganizationPeople: Story = {
   ...OrganizationPeopleStory,
-  name: 'people'
+  name: 'People'
 }

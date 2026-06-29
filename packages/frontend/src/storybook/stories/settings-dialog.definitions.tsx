@@ -84,14 +84,12 @@ function storyBody(canvasElement: HTMLElement) {
 }
 
 export const Account: Story = {
-  name: 'settings / account',
   args: {
     settingsSection: 'account'
   }
 }
 
 export const Security: Story = {
-  name: 'settings / security',
   args: {
     settingsSection: 'security'
   },
@@ -105,7 +103,6 @@ export const Security: Story = {
 }
 
 export const AgentAccessLoading: Story = {
-  name: 'agent access / loading',
   args: {
     agentAccessState: agentAccessLoadingState,
     settingsSection: 'agentAccess'
@@ -113,7 +110,6 @@ export const AgentAccessLoading: Story = {
 }
 
 export const AgentAccessError: Story = {
-  name: 'agent access / error',
   args: {
     agentAccessState: {
       ...agentAccessErrorState,
@@ -130,7 +126,6 @@ export const AgentAccessError: Story = {
 }
 
 export const AgentAccessEmpty: Story = {
-  name: 'agent access / empty',
   args: {
     agentAccessState: agentAccessEmptyState,
     settingsSection: 'agentAccess'
@@ -138,7 +133,6 @@ export const AgentAccessEmpty: Story = {
 }
 
 export const AgentAccessEnrollmentCreated: Story = {
-  name: 'agent access / enrollment created',
   args: {
     agentAccessState: {
       ...agentAccessEnrollmentCreatedState,
@@ -158,7 +152,6 @@ export const AgentAccessEnrollmentCreated: Story = {
 }
 
 export const AgentAccessActive: Story = {
-  name: 'agent access / active',
   args: {
     agentAccessState: agentAccessActiveState,
     settingsSection: 'agentAccess'
@@ -166,7 +159,6 @@ export const AgentAccessActive: Story = {
 }
 
 export const AgentAccessPaperclipHandoff: Story = {
-  name: 'agent access / paperclip handoff',
   args: {
     agentAccessState: {
       ...agentAccessActiveState,
@@ -205,7 +197,6 @@ export const AgentAccessPaperclipHandoff: Story = {
 }
 
 export const AgentAccessPaperclipConnected: Story = {
-  name: 'agent access / paperclip connected',
   args: {
     agentAccessState: {
       ...agentAccessPaperclipConnectedState,
@@ -228,7 +219,6 @@ export const AgentAccessPaperclipConnected: Story = {
 }
 
 export const AgentAccessPendingApproval: Story = {
-  name: 'agent access / pending approval',
   args: {
     agentAccessState: agentAccessPendingApprovalState,
     settingsSection: 'agentAccess'
@@ -236,7 +226,6 @@ export const AgentAccessPendingApproval: Story = {
 }
 
 export const AgentAccessPendingBusy: Story = {
-  name: 'agent access / pending busy',
   args: {
     agentAccessState: agentAccessBusyApprovalState,
     settingsSection: 'agentAccess'
@@ -251,7 +240,6 @@ export const AgentAccessPendingBusy: Story = {
 }
 
 export const AgentAccessDeniedExpiredApprovals: Story = {
-  name: 'agent access / denied and expired approvals',
   args: {
     agentAccessState: agentAccessDeniedExpiredApprovalState,
     settingsSection: 'agentAccess'
@@ -268,7 +256,6 @@ export const AgentAccessDeniedExpiredApprovals: Story = {
 }
 
 export const AgentAccessActions: Story = {
-  name: 'agent access / actions',
   args: {
     agentAccessState: agentAccessInteractiveActionState,
     settingsSection: 'agentAccess'
@@ -296,7 +283,6 @@ export const AgentAccessActions: Story = {
 }
 
 export const AgentAccessPartialActions: Story = {
-  name: 'agent access / partial actions',
   args: {
     agentAccessState: agentAccessReviewOnlyActionState,
     settingsSection: 'agentAccess'
@@ -320,7 +306,6 @@ export const AgentAccessPartialActions: Story = {
 }
 
 export const AgentAccessRevokedExpired: Story = {
-  name: 'agent access / revoked and expired',
   args: {
     agentAccessState: agentAccessRevokedExpiredState,
     settingsSection: 'agentAccess'
@@ -328,7 +313,6 @@ export const AgentAccessRevokedExpired: Story = {
 }
 
 export const AgentAccessClaimed: Story = {
-  name: 'agent access / claimed autonomous agent',
   args: {
     agentAccessState: agentAccessClaimedState,
     settingsSection: 'agentAccess'
@@ -342,7 +326,6 @@ export const AgentAccessClaimed: Story = {
 }
 
 export const AgentAccessConstraintDetails: Story = {
-  name: 'agent access / constraint details',
   args: {
     agentAccessState: agentAccessConstraintDetailsState,
     settingsSection: 'agentAccess'
@@ -360,7 +343,6 @@ export const AgentAccessConstraintDetails: Story = {
 }
 
 export const AgentAccessDense: Story = {
-  name: 'agent access / dense',
   args: {
     agentAccessState: agentAccessDenseState,
     settingsSection: 'agentAccess'
@@ -368,28 +350,24 @@ export const AgentAccessDense: Story = {
 }
 
 export const Organizations: Story = {
-  name: 'settings / organizations',
   args: {
     settingsSection: 'organizations'
   }
 }
 
 export const OrganizationSettings: Story = {
-  name: 'organization / settings',
   args: {
     settingsSection: 'organizationSettings'
   }
 }
 
 export const OrganizationPeople: Story = {
-  name: 'organization / people',
   args: {
     settingsSection: 'organizationPeople'
   }
 }
 
 export const DomainsEmptyFirstUse: Story = {
-  name: 'domains / empty first use',
   args: {
     domainSettingsState: domainSettingsEmptyFirstUseState,
     settingsSection: 'domains'
@@ -397,7 +375,6 @@ export const DomainsEmptyFirstUse: Story = {
 }
 
 export const DomainsAddDomainAuthorizeCloudflare: Story = {
-  name: 'domains / add domain authorize cloudflare',
   args: {
     domainSettingsState: domainSettingsAddDomainAuthorizeCloudflareState,
     settingsSection: 'domains'
@@ -405,7 +382,6 @@ export const DomainsAddDomainAuthorizeCloudflare: Story = {
 }
 
 export const DomainsAddDomainSelectZone: Story = {
-  name: 'domains / add domain select zone',
   args: {
     domainSettingsState: domainSettingsAddDomainSelectZoneState,
     settingsSection: 'domains'
@@ -413,7 +389,6 @@ export const DomainsAddDomainSelectZone: Story = {
 }
 
 export const DomainsDomainConnected: Story = {
-  name: 'domains / domain connected',
   args: {
     domainSettingsState: domainSettingsDomainConnectedState,
     settingsSection: 'domains'
@@ -421,7 +396,6 @@ export const DomainsDomainConnected: Story = {
 }
 
 export const DomainsDomainProvisioning: Story = {
-  name: 'domains / domain provisioning',
   args: {
     domainSettingsState: domainSettingsDomainProvisioningState,
     settingsSection: 'domains'
@@ -429,7 +403,6 @@ export const DomainsDomainProvisioning: Story = {
 }
 
 export const DomainsDomainLive: Story = {
-  name: 'domains / domain live',
   args: {
     domainSettingsState: domainSettingsDomainLiveState,
     settingsSection: 'domains'
@@ -437,7 +410,6 @@ export const DomainsDomainLive: Story = {
 }
 
 export const DomainsDisconnectAction: Story = {
-  name: 'domains / disconnect action',
   args: {
     domainSettingsState: domainSettingsDisconnectActionState,
     settingsSection: 'domains'
@@ -454,7 +426,6 @@ export const DomainsDisconnectAction: Story = {
 }
 
 export const DomainsDomainNeedsAttention: Story = {
-  name: 'domains / domain needs attention',
   args: {
     domainSettingsState: domainSettingsDomainNeedsAttentionState,
     settingsSection: 'domains'
@@ -462,7 +433,6 @@ export const DomainsDomainNeedsAttention: Story = {
 }
 
 export const DomainsDenseDomainList: Story = {
-  name: 'domains / dense domain list',
   args: {
     domainSettingsState: domainSettingsDenseDomainListState,
     settingsSection: 'domains'

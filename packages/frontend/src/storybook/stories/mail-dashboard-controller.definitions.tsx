@@ -61,7 +61,6 @@ const mailWorkspaceMiddlePageView = {
 } satisfies AgentMailWebWorkspace
 
 export const WebmailInbox: Story = {
-  name: 'Webmail / inbox via RPC',
   args: {
     routeSearch: {}
   },
@@ -80,7 +79,6 @@ export const WebmailInbox: Story = {
 }
 
 export const WebmailPaginated: Story = {
-  name: 'Webmail / middle cursor page via RPC',
   args: {
     routeSearch: {
       cursor: 'middle-page-cursor',
@@ -102,7 +100,6 @@ export const WebmailPaginated: Story = {
 }
 
 export const WebmailEmpty: Story = {
-  name: 'Webmail / empty folder via RPC',
   args: {
     routeSearch: {}
   },
@@ -119,7 +116,6 @@ export const WebmailEmpty: Story = {
 }
 
 export const WebmailJunk: Story = {
-  name: 'Webmail / junk folder via RPC',
   args: {
     routeSearch: { folderId: 'junk-id' }
   },
@@ -136,7 +132,6 @@ export const WebmailJunk: Story = {
 }
 
 export const WebmailAccountSwitch: Story = {
-  name: 'Webmail / account switch via RPC',
   args: {
     routeSearch: { accountId: 'assistant@second.example' }
   },
@@ -153,7 +148,6 @@ export const WebmailAccountSwitch: Story = {
 }
 
 export const WebmailLoading: Story = {
-  name: 'Webmail / loading via RPC',
   args: {
     routeSearch: {}
   },
@@ -165,7 +159,6 @@ export const WebmailLoading: Story = {
 }
 
 export const WebmailError: Story = {
-  name: 'Webmail / backend error via RPC',
   args: {
     routeSearch: {}
   },
@@ -183,7 +176,6 @@ export const WebmailError: Story = {
 }
 
 export const MailboxAdminAccounts: Story = {
-  name: 'Mailbox admin / accounts via RPC',
   render: (args) =>
     renderMailboxAdminControllerStory(args, {
       view: mailboxAdminReadyView
@@ -198,7 +190,6 @@ export const MailboxAdminAccounts: Story = {
 }
 
 export const MailboxAdminAccountsPagination: Story = {
-  name: 'Mailbox admin / accounts pagination via RPC',
   render: (args) =>
     renderMailboxAdminControllerStory(args, {
       view: {
@@ -222,7 +213,6 @@ export const MailboxAdminAccountsPagination: Story = {
 }
 
 export const MailboxAdminAccountsSearch: Story = {
-  name: 'Mailbox admin / accounts search via RPC',
   render: (args) =>
     renderMailboxAdminControllerStory(args, {
       view: mailboxAdminReadyView
@@ -242,7 +232,6 @@ export const MailboxAdminAccountsSearch: Story = {
 }
 
 export const MailboxAdminGroups: Story = {
-  name: 'Mailbox admin / groups via RPC',
   args: {
     routeSearch: { mailboxAdmin: 'groups' }
   },
@@ -260,7 +249,6 @@ export const MailboxAdminGroups: Story = {
 }
 
 export const MailboxAdminAgents: Story = {
-  name: 'Mailbox admin / agents via RPC',
   args: {
     routeSearch: { mailboxAdmin: 'agents' }
   },
@@ -278,7 +266,6 @@ export const MailboxAdminAgents: Story = {
 }
 
 export const MailboxAdminConnectedClients: Story = {
-  name: 'Mailbox admin / connected clients via RPC',
   args: {
     routeSearch: { mailboxAdmin: 'agents' }
   },
@@ -296,7 +283,6 @@ export const MailboxAdminConnectedClients: Story = {
 }
 
 export const MailboxAdminReadOnly: Story = {
-  name: 'Mailbox admin / read only via RPC',
   render: (args) =>
     renderMailboxAdminControllerStory(args, {
       view: mailboxAdminReadOnlyAccountsView
@@ -310,7 +296,6 @@ export const MailboxAdminReadOnly: Story = {
 }
 
 export const MailboxAdminGroupsOnly: Story = {
-  name: 'Mailbox admin / groups-only permissions via RPC',
   args: {
     routeSearch: { mailboxAdmin: 'groups' }
   },
@@ -327,7 +312,6 @@ export const MailboxAdminGroupsOnly: Story = {
 }
 
 export const MailboxAdminEmpty: Story = {
-  name: 'Mailbox admin / empty via RPC',
   render: (args) =>
     renderMailboxAdminControllerStory(args, {
       view: mailboxAdminEmptyView
@@ -340,7 +324,6 @@ export const MailboxAdminEmpty: Story = {
 }
 
 export const MailboxAdminLoading: Story = {
-  name: 'Mailbox admin / loading via RPC',
   render: (args) =>
     renderMailboxAdminControllerStory(args, {
       pending: true,
@@ -349,7 +332,6 @@ export const MailboxAdminLoading: Story = {
 }
 
 export const MailboxAdminForbidden: Story = {
-  name: 'Mailbox admin / forbidden via RPC',
   render: (args) =>
     renderMailboxAdminControllerStory(args, {
       error: new Error('Mailbox administration is forbidden.'),
@@ -365,7 +347,6 @@ export const MailboxAdminForbidden: Story = {
 }
 
 export const MailboxAdminError: Story = {
-  name: 'Mailbox admin / backend error via RPC',
   render: (args) =>
     renderMailboxAdminControllerStory(args, {
       error: new Error('The mailbox administration RPC returned HTTP 502 while loading accounts.'),

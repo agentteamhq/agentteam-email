@@ -38,21 +38,21 @@ const agentCapabilityApprovalArgs = {
 } satisfies Partial<ComponentProps<typeof DeviceCodeApprovalScreen>>
 
 export const Approve: Story = {
-  name: 'approve',
+  name: 'Approve',
   args: {
     userCode: 'ABCD1234'
   }
 }
 
 export const MissingCode: Story = {
-  name: 'approve / missing code',
+  name: 'Approve missing code',
   args: {
     userCode: null
   }
 }
 
 export const Error: Story = {
-  name: 'approve / error',
+  name: 'Approve error',
   args: {
     initialError: 'This device code has already been processed.',
     userCode: 'ABCD1234'
@@ -60,12 +60,12 @@ export const Error: Story = {
 }
 
 export const AgentCapabilities: Story = {
-  name: 'agent capabilities approval',
+  name: 'Agent capabilities approval',
   args: agentCapabilityApprovalArgs
 }
 
 export const AgentCapabilitiesApproved: Story = {
-  name: 'agent / capabilities approval / approved',
+  name: 'Agent capabilities approved',
   args: {
     ...agentCapabilityApprovalArgs,
     onApprove: fn()
@@ -82,7 +82,7 @@ export const AgentCapabilitiesApproved: Story = {
 }
 
 export const AgentCapabilitiesDenied: Story = {
-  name: 'agent / capabilities approval / denied',
+  name: 'Agent capabilities denied',
   args: {
     ...agentCapabilityApprovalArgs,
     onDeny: fn()
@@ -97,7 +97,7 @@ export const AgentCapabilitiesDenied: Story = {
 }
 
 export const AgentCapabilitiesByApprovalId: Story = {
-  name: 'agent / capabilities approval / approval id',
+  name: 'Agent capabilities approval ID',
   args: {
     ...agentCapabilityApprovalArgs,
     onApprove: fn(),
@@ -117,7 +117,7 @@ export const AgentCapabilitiesByApprovalId: Story = {
 }
 
 export const AgentCapabilitiesAlreadyDenied: Story = {
-  name: 'agent / capabilities approval / already denied',
+  name: 'Agent capabilities already denied',
   args: {
     ...agentCapabilityApprovalArgs,
     decisionDisabled: true,
@@ -137,7 +137,7 @@ export const AgentCapabilitiesAlreadyDenied: Story = {
 }
 
 export const AgentCapabilitiesExpired: Story = {
-  name: 'agent / capabilities approval / expired',
+  name: 'Agent capabilities expired',
   args: {
     ...agentCapabilityApprovalArgs,
     decisionDisabled: true,

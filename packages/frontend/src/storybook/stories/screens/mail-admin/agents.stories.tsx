@@ -27,7 +27,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 
 const meta = {
   ...mailAdminMockStoryMeta,
-  title: 'Mocks/Mail Admin/Agents'
+  title: 'Screens/Mail Admin/Agents'
 } satisfies Meta<typeof mailAdminMockStoryMeta.component>
 
 export default meta
@@ -36,110 +36,110 @@ type Story = StoryObj<typeof meta>
 
 export const Agents: Story = {
   ...AgentsStory,
-  name: 'table'
+  name: 'Table'
 }
 
 export const AgentsDisabledStatusFilter: Story = {
   ...AgentsDisabledStatusFilterStory,
-  name: 'disabled status filter'
+  name: 'Disabled status filter'
 }
 
 export const AgentsWithoutGrantManagement: Story = {
   ...AgentsWithoutGrantManagementStory,
-  name: 'without grant management'
+  name: 'Without grant management'
 }
 
 export const AgentsExternalPrincipalsOnly: Story = {
   ...AgentsExternalPrincipalsOnlyStory,
-  name: 'external principals only'
+  name: 'External principals only'
 }
 
 export const AgentsPendingEnrollments: Story = {
   ...AgentsPendingEnrollmentsStory,
-  name: 'pending enrollments'
+  name: 'Pending enrollments'
 }
 
 export const AgentEnrollmentCancelSaving: Story = {
   ...AgentEnrollmentCancelSavingStory,
-  name: 'enrollment cancel saving'
+  name: 'Enrollment cancel saving'
 }
 
 export const AgentEnrollmentCancelDenied: Story = {
   ...AgentEnrollmentCancelDeniedStory,
-  name: 'enrollment cancel denied'
+  name: 'Enrollment cancel denied'
 }
 
 export const AgentCreateDialog: Story = {
   ...AgentCreateDialogStory,
-  name: 'create dialog'
+  name: 'Create dialog'
 }
 
 export const AgentCreateSaving: Story = {
   ...AgentCreateSavingStory,
-  name: 'create saving'
+  name: 'Create saving'
 }
 
 export const AgentCreateEnrollment: Story = {
   ...AgentCreateEnrollmentStory,
-  name: 'enrollment created'
+  name: 'Enrollment created'
 }
 
 export const AgentEditDialog: Story = {
   ...AgentEditDialogStory,
-  name: 'edit dialog'
+  name: 'Edit dialog'
 }
 
 export const AgentEditSaving: Story = {
   ...AgentEditSavingStory,
-  name: 'edit saving'
+  name: 'Edit saving'
 }
 
 export const AgentPermissionsDialog: Story = {
   ...AgentPermissionsDialogStory,
-  name: 'system permissions dialog'
+  name: 'System permissions dialog'
 }
 
 export const AgentPermissionsSaving: Story = {
   ...AgentPermissionsSavingStory,
-  name: 'system permissions saving'
+  name: 'System permissions saving'
 }
 
 export const AgentAccountAccessSheet: Story = {
   ...AgentAccountAccessSheetStory,
-  name: 'account access sheet'
+  name: 'Account access sheet'
 }
 
 export const AgentAccountAccessSaving: Story = {
   ...AgentAccountAccessSavingStory,
-  name: 'account access saving'
+  name: 'Account access saving'
 }
 
 export const PrincipalAccountAccessSheet: Story = {
   ...PrincipalAccountAccessSheetStory,
-  name: 'client account access sheet'
+  name: 'Client account access sheet'
 }
 
 export const PrincipalAccountAccessSaving: Story = {
   ...PrincipalAccountAccessSavingStory,
-  name: 'client account access saving'
+  name: 'Client account access saving'
 }
 
 export const PrincipalPermissionsDialog: Story = {
   ...PrincipalPermissionsDialogStory,
-  name: 'client system permissions dialog'
+  name: 'Client system permissions dialog'
 }
 
 export const PrincipalPermissionsSaving: Story = {
   ...PrincipalPermissionsSavingStory,
-  name: 'client system permissions saving'
+  name: 'Client system permissions saving'
 }
 
 export const AgentProvisionAccountDialog: Story = {
   ...AgentProvisionAccountDialogStory,
-  name: 'provision account dialog'
+  name: 'Provision account dialog'
 }
 
 export const AgentProvisionAccountSaving: Story = {
   ...AgentProvisionAccountSavingStory,
-  name: 'provision account saving'
+  name: 'Provision account saving'
 }

@@ -18,14 +18,14 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 export const VerificationEmailSent: Story = {
-  name: 'verification email sent',
+  name: 'Verification email sent',
   args: {
     type: 'verification'
   }
 }
 
 export const RecoveryEmailSent: Story = {
-  name: 'recovery email sent',
+  name: 'Recovery email sent',
   args: {
     type: 'recovery'
   }

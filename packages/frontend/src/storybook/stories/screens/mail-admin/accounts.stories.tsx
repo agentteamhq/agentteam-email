@@ -13,7 +13,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 
 const meta = {
   ...mailAdminMockStoryMeta,
-  title: 'Mocks/Mail Admin/Accounts'
+  title: 'Screens/Mail Admin/Accounts'
 } satisfies Meta<typeof mailAdminMockStoryMeta.component>
 
 export default meta
@@ -22,40 +22,40 @@ type Story = StoryObj<typeof meta>
 
 export const Accounts: Story = {
   ...AccountsStory,
-  name: 'table'
+  name: 'Table'
 }
 
 export const AccountCreateDialog: Story = {
   ...AccountCreateDialogStory,
-  name: 'create dialog'
+  name: 'Create dialog'
 }
 
 export const AccountEditDialog: Story = {
   ...AccountEditDialogStory,
-  name: 'edit dialog'
+  name: 'Edit dialog'
 }
 
 export const AccountDisableSaving: Story = {
   ...AccountDisableSavingStory,
-  name: 'disable saving'
+  name: 'Disable saving'
 }
 
 export const AccountsPendingStatusFilter: Story = {
   ...AccountsPendingStatusFilterStory,
-  name: 'pending status filter'
+  name: 'Pending status filter'
 }
 
 export const AccountsSearchNoResults: Story = {
   ...AccountsSearchNoResultsStory,
-  name: 'search no results'
+  name: 'Search no results'
 }
 
 export const AccountsReadOnly: Story = {
   ...AccountsReadOnlyStory,
-  name: 'read only'
+  name: 'Read only'
 }
 
 export const AccountsPaginated: Story = {
   ...AccountsPaginatedStory,
-  name: 'paginated'
+  name: 'Paginated'
 }

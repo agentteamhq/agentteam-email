@@ -23,11 +23,11 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 export const Ready: Story = {
-  name: 'ready'
+  name: 'Ready'
 }
 
 export const NarrowPostClaimAccess: Story = {
-  name: 'narrower post-claim access',
+  name: 'Narrower post-claim access',
   args: {
     claim: {
       ...agentTrialClaimView,
@@ -37,7 +37,7 @@ export const NarrowPostClaimAccess: Story = {
 }
 
 export const Loading: Story = {
-  name: 'loading',
+  name: 'Loading',
   args: {
     claim: null,
     loading: true
@@ -45,7 +45,7 @@ export const Loading: Story = {
 }
 
 export const LoadError: Story = {
-  name: 'error',
+  name: 'Error',
   args: {
     claim: null,
     loadError: 'Trial claim has expired.'
@@ -53,7 +53,7 @@ export const LoadError: Story = {
 }
 
 export const Approved: Story = {
-  name: 'approved',
+  name: 'Approved',
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
 
@@ -63,7 +63,7 @@ export const Approved: Story = {
 }
 
 export const AlreadyApproved: Story = {
-  name: 'already approved',
+  name: 'Already approved',
   args: {
     claim: {
       ...agentTrialClaimView,
@@ -83,7 +83,7 @@ export const AlreadyApproved: Story = {
 }
 
 export const Expired: Story = {
-  name: 'expired',
+  name: 'Expired',
   args: {
     claim: {
       ...agentTrialClaimView,
@@ -103,7 +103,7 @@ export const Expired: Story = {
 }
 
 export const TargetOrganizationChoice: Story = {
-  name: 'target organization choice',
+  name: 'Target organization choice',
   args: {
     claim: {
       ...agentTrialClaimView,
@@ -135,7 +135,7 @@ export const TargetOrganizationChoice: Story = {
 }
 
 export const Denied: Story = {
-  name: 'denied',
+  name: 'Denied',
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
 
@@ -145,7 +145,7 @@ export const Denied: Story = {
 }
 
 export const ActionError: Story = {
-  name: 'action error',
+  name: 'Action error',
   args: {
     onApprove: async () => {
       throw new Error('Trial claim approval failed by policy.')

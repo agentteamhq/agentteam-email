@@ -7,12 +7,12 @@ import {
   WebmailLoading as WebmailLoadingStory,
   WebmailPaginated as WebmailPaginatedStory,
   dashboardMailControllerStoryMeta
-} from '../mail-dashboard-controller.definitions'
+} from '../../mail-dashboard-controller.definitions'
 import type { Meta, StoryObj } from '@storybook/react'
 
 const meta = {
   ...dashboardMailControllerStoryMeta,
-  title: 'Controllers/Mail Workspace'
+  title: 'Screens/Mail Workspace/Integration'
 } satisfies Meta<typeof dashboardMailControllerStoryMeta.component>
 
 export default meta
@@ -21,35 +21,35 @@ type Story = StoryObj<typeof meta>
 
 export const WebmailInbox: Story = {
   ...WebmailInboxStory,
-  name: 'inbox'
+  name: 'RPC inbox load'
 }
 
 export const WebmailPaginated: Story = {
   ...WebmailPaginatedStory,
-  name: 'middle cursor page'
+  name: 'Route search cursor pagination'
 }
 
 export const WebmailEmpty: Story = {
   ...WebmailEmptyStory,
-  name: 'empty folder'
+  name: 'RPC empty folder'
 }
 
 export const WebmailJunk: Story = {
   ...WebmailJunkStory,
-  name: 'junk folder'
+  name: 'Folder route search'
 }
 
 export const WebmailAccountSwitch: Story = {
   ...WebmailAccountSwitchStory,
-  name: 'account switch'
+  name: 'Account route search'
 }
 
 export const WebmailLoading: Story = {
   ...WebmailLoadingStory,
-  name: 'loading'
+  name: 'RPC pending'
 }
 
 export const WebmailError: Story = {
   ...WebmailErrorStory,
-  name: 'backend error'
+  name: 'RPC backend error'
 }

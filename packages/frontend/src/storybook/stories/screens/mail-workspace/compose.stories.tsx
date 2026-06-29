@@ -24,50 +24,50 @@ type Story = StoryObj<typeof meta>
 
 export const ComposeSending: Story = {
   ...ComposeSendingStory,
-  name: 'sending'
+  name: 'Sending'
 }
 
 export const ComposeSelectedAccount: Story = {
   ...ComposeSelectedAccountStory,
-  name: 'selected account'
+  name: 'Selected account'
 }
 
 export const ComposeSavedDraft: Story = {
   ...ComposeSavedDraftStory,
-  name: 'saved draft'
+  name: 'Saved draft'
 }
 
 export const ComposeSavingDraft: Story = {
   ...ComposeSavingDraftStory,
-  name: 'saving draft'
+  name: 'Saving draft'
 }
 
 export const ComposeReplyAll: Story = {
   ...ComposeReplyAllStory,
-  name: 'reply all'
+  name: 'Reply all'
 }
 
 export const ComposeForward: Story = {
   ...ComposeForwardStory,
-  name: 'forward'
+  name: 'Forward'
 }
 
 export const ComposeDraftSaveError: Story = {
   ...ComposeDraftSaveErrorStory,
-  name: 'draft save error'
+  name: 'Draft save error'
 }
 
 export const ComposeValidationErrors: Story = {
   ...ComposeValidationErrorsStory,
-  name: 'validation errors'
+  name: 'Validation errors'
 }
 
 export const ComposeAttachments: Story = {
   ...ComposeAttachmentsStory,
-  name: 'attachments'
+  name: 'Attachments'
 }
 
 export const ComposeAttachmentStatus: Story = {
   ...ComposeAttachmentStatusStory,
-  name: 'attachment status'
+  name: 'Attachment status'
 }

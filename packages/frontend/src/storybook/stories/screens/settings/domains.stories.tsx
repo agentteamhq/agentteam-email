@@ -23,45 +23,45 @@ type Story = StoryObj<typeof meta>
 
 export const DomainsEmptyFirstUse: Story = {
   ...DomainsEmptyFirstUseStory,
-  name: 'empty first use'
+  name: 'Empty first use'
 }
 
 export const DomainsAddDomainAuthorizeCloudflare: Story = {
   ...DomainsAddDomainAuthorizeCloudflareStory,
-  name: 'add domain authorize cloudflare'
+  name: 'Add domain authorize Cloudflare'
 }
 
 export const DomainsAddDomainSelectZone: Story = {
   ...DomainsAddDomainSelectZoneStory,
-  name: 'add domain select zone'
+  name: 'Add domain select zone'
 }
 
 export const DomainsDomainConnected: Story = {
   ...DomainsDomainConnectedStory,
-  name: 'domain connected'
+  name: 'Domain connected'
 }
 
 export const DomainsDomainProvisioning: Story = {
   ...DomainsDomainProvisioningStory,
-  name: 'domain provisioning'
+  name: 'Domain provisioning'
 }
 
 export const DomainsDomainLive: Story = {
   ...DomainsDomainLiveStory,
-  name: 'domain live'
+  name: 'Domain live'
 }
 
 export const DomainsDisconnectAction: Story = {
   ...DomainsDisconnectActionStory,
-  name: 'disconnect action'
+  name: 'Disconnect action'
 }
 
 export const DomainsDomainNeedsAttention: Story = {
   ...DomainsDomainNeedsAttentionStory,
-  name: 'domain needs attention'
+  name: 'Domain needs attention'
 }
 
 export const DomainsDenseDomainList: Story = {
   ...DomainsDenseDomainListStory,
-  name: 'dense domain list'
+  name: 'Dense domain list'
 }

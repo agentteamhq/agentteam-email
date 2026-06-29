@@ -204,15 +204,15 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 export const OgImage: Story = {
-  name: 'OG image / mail workspace'
+  name: 'Mail workspace OG image'
 }
 
 export const HomeMailWorkspace: Story = {
-  name: 'home / mail workspace'
+  name: 'Home mail workspace'
 }
 
 export const HomeMailboxSwitcher: Story = {
-  name: 'home / mailbox switcher',
+  name: 'Home mailbox switcher',
   args: {
     sidebarView: showcaseLongMailboxListSidebarView
   },
@@ -224,7 +224,7 @@ export const HomeMailboxSwitcher: Story = {
 }
 
 export const HomeMailboxAdmin: Story = {
-  name: 'home / mailbox admin',
+  name: 'Home mailbox admin',
   args: {
     mailboxAdminView: mailboxAdminReadyView,
     sidebarView: mailboxAdminSidebarView('accounts')
@@ -232,7 +232,7 @@ export const HomeMailboxAdmin: Story = {
 }
 
 export const HomeAgentAccess: Story = {
-  name: 'home / agent access',
+  name: 'Home agent access',
   args: {
     agentAccessState: agentAccessActiveState,
     settingsOpen: true,

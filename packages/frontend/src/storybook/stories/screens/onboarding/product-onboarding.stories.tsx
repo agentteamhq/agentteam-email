@@ -10,7 +10,7 @@ import { DashboardScreen } from 'src/screens/dashboard-screen'
 import type { Meta, StoryObj } from '@storybook/react'
 
 const meta = {
-  title: 'Mocks/Onboarding/Product Onboarding',
+  title: 'Screens/Onboarding/Product Onboarding',
   component: DashboardScreen,
   tags: ['mock'],
   args: {
@@ -27,14 +27,14 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 export const AuthenticatedShellEmpty: Story = {
-  name: 'authenticated shell empty',
+  name: 'Authenticated shell empty',
   args: {
     ...productOnboardingAuthenticatedShellArgs
   }
 }
 
 export const ConnectingCloudflare: Story = {
-  name: 'connecting Cloudflare',
+  name: 'Connecting Cloudflare',
   args: {
     ...productOnboardingConnectingShellArgs
   }
@@ -48,14 +48,14 @@ export const CloudflareError: Story = {
 }
 
 export const SettingsOpen: Story = {
-  name: 'settings open',
+  name: 'Settings open',
   args: {
     ...productOnboardingSettingsOpenShellArgs
   }
 }
 
 export const Mobile: Story = {
-  name: 'mobile',
+  name: 'Mobile',
   args: {
     ...productOnboardingAuthenticatedShellArgs
   },

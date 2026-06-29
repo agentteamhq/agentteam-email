@@ -12,5 +12,5 @@ type Story = StoryObj<typeof meta>
 
 export const Account: Story = {
   ...AccountStory,
-  name: 'default'
+  name: 'Default'
 }

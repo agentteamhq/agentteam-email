@@ -23,45 +23,45 @@ type Story = StoryObj<typeof meta>
 
 export const SecurityRemoteContentBlocked: Story = {
   ...SecurityRemoteContentBlockedStory,
-  name: 'remote content blocked'
+  name: 'Remote content blocked'
 }
 
 export const SecurityRemoteContentInteraction: Story = {
   ...SecurityRemoteContentInteractionStory,
-  name: 'remote content interaction'
+  name: 'Remote content interaction'
 }
 
 export const SecurityRemoteContentAccountScoped: Story = {
   ...SecurityRemoteContentAccountScopedStory,
-  name: 'remote content account scoped'
+  name: 'Remote content account scoped'
 }
 
 export const SecurityRemoteBackgroundImagesBlocked: Story = {
   ...SecurityRemoteBackgroundImagesBlockedStory,
-  name: 'remote background images blocked'
+  name: 'Remote background images blocked'
 }
 
 export const SecurityDocumentResourceTagsBlocked: Story = {
   ...SecurityDocumentResourceTagsBlockedStory,
-  name: 'document resource tags blocked'
+  name: 'Document resource tags blocked'
 }
 
 export const SecurityUnsafeControllerLink: Story = {
   ...SecurityUnsafeControllerLinkStory,
-  name: 'unsafe controller link'
+  name: 'Unsafe controller link'
 }
 
 export const SecurityMailtoLinkInteraction: Story = {
   ...SecurityMailtoLinkInteractionStory,
-  name: 'mailto link interaction'
+  name: 'Mailto link interaction'
 }
 
 export const SecurityExternalLinkGeneratedIdCollision: Story = {
   ...SecurityExternalLinkGeneratedIdCollisionStory,
-  name: 'external link generated id collision'
+  name: 'External link generated id collision'
 }
 
 export const SecurityFormContentRemoved: Story = {
   ...SecurityFormContentRemovedStory,
-  name: 'form content removed'
+  name: 'Form content removed'
 }

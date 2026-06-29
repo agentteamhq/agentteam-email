@@ -14,7 +14,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 
 const meta = {
   ...mailAdminMockStoryMeta,
-  title: 'Mocks/Mail Admin/Forwarding Groups'
+  title: 'Screens/Mail Admin/Forwarding Groups'
 } satisfies Meta<typeof mailAdminMockStoryMeta.component>
 
 export default meta
@@ -23,45 +23,45 @@ type Story = StoryObj<typeof meta>
 
 export const Groups: Story = {
   ...GroupsStory,
-  name: 'list'
+  name: 'List'
 }
 
 export const GroupsOnlyAccess: Story = {
   ...GroupsOnlyAccessStory,
-  name: 'only access'
+  name: 'Only access'
 }
 
 export const GroupsPendingStatusFilter: Story = {
   ...GroupsPendingStatusFilterStory,
-  name: 'pending status filter'
+  name: 'Pending status filter'
 }
 
 export const GroupsStatusNoResults: Story = {
   ...GroupsStatusNoResultsStory,
-  name: 'status no results'
+  name: 'Status no results'
 }
 
 export const GroupEditDialog: Story = {
   ...GroupEditDialogStory,
-  name: 'edit dialog'
+  name: 'Edit dialog'
 }
 
 export const GroupRecipientsSheet: Story = {
   ...GroupRecipientsSheetStory,
-  name: 'recipients sheet'
+  name: 'Recipients sheet'
 }
 
 export const GroupRecipientsSaving: Story = {
   ...GroupRecipientsSavingStory,
-  name: 'recipients saving'
+  name: 'Recipients saving'
 }
 
 export const GroupsLoading: Story = {
   ...GroupsLoadingStory,
-  name: 'loading'
+  name: 'Loading'
 }
 
 export const GroupsEmpty: Story = {
   ...GroupsEmptyStory,
-  name: 'empty'
+  name: 'Empty'
 }

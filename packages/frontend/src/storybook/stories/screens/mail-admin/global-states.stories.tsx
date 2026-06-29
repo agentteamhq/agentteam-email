@@ -9,7 +9,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 
 const meta = {
   ...mailAdminMockStoryMeta,
-  title: 'Mocks/Mail Admin/Global States'
+  title: 'Screens/Mail Admin/Global States'
 } satisfies Meta<typeof mailAdminMockStoryMeta.component>
 
 export default meta
@@ -18,20 +18,20 @@ type Story = StoryObj<typeof meta>
 
 export const Loading: Story = {
   ...LoadingStory,
-  name: 'loading'
+  name: 'Loading'
 }
 
 export const Empty: Story = {
   ...EmptyStory,
-  name: 'empty'
+  name: 'Empty'
 }
 
 export const BackendError: Story = {
   ...BackendErrorStory,
-  name: 'backend error'
+  name: 'Backend error'
 }
 
 export const Forbidden: Story = {
   ...ForbiddenStory,
-  name: 'forbidden'
+  name: 'Forbidden'
 }

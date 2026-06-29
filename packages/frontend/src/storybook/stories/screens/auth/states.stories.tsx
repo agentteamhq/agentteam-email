@@ -30,7 +30,7 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 export const SignInDefault: Story = {
-  name: 'Sign in / default',
+  name: 'Sign in default',
   args: {
     routeState: protectedRouteSignInState,
     lastUsedLoginMethod: null,
@@ -39,7 +39,7 @@ export const SignInDefault: Story = {
 }
 
 export const SignInLastUsedEmail: Story = {
-  name: 'Sign in / last used email',
+  name: 'Sign in last used email',
   args: {
     routeState: protectedRouteSignInState,
     lastUsedLoginMethod: 'email',
@@ -48,7 +48,7 @@ export const SignInLastUsedEmail: Story = {
 }
 
 export const SignInLastUsedMagicLink: Story = {
-  name: 'Sign in / last used magic link',
+  name: 'Sign in last used magic link',
   args: {
     routeState: protectedRouteSignInState,
     lastUsedLoginMethod: 'magic-link',
@@ -57,7 +57,7 @@ export const SignInLastUsedMagicLink: Story = {
 }
 
 export const SignInLastUsedGoogle: Story = {
-  name: 'Sign in / last used Google',
+  name: 'Sign in last used Google',
   args: {
     routeState: protectedRouteSignInState,
     lastUsedLoginMethod: 'google',
@@ -71,7 +71,7 @@ export const SignInLastUsedGoogle: Story = {
 }
 
 export const SignInLastUsedLinkedIn: Story = {
-  name: 'Sign in / last used LinkedIn',
+  name: 'Sign in last used LinkedIn',
   args: {
     routeState: protectedRouteSignInState,
     lastUsedLoginMethod: 'linkedin',
@@ -80,7 +80,7 @@ export const SignInLastUsedLinkedIn: Story = {
 }
 
 export const SignUpDefault: Story = {
-  name: 'Sign up / default',
+  name: 'Sign up default',
   args: {
     routeState: publicAuthRouteState,
     lastUsedLoginMethod: null,
@@ -95,7 +95,7 @@ export const SignUpDefault: Story = {
 }
 
 export const SignOutRedirecting: Story = {
-  name: 'Sign out / redirecting to sign in',
+  name: 'Sign out redirecting to sign in',
   args: {
     routeState: publicAuthRouteState,
     view: 'signOut'
