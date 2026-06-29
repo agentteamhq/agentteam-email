@@ -148,6 +148,7 @@
       },
       "type": "object"
     },
+    "bundledContainerSecurityContext": { "type": "object" },
     "containerSecurityContext": { "type": "object" },
     "controlApi": {
       "properties": {

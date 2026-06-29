@@ -47,7 +47,7 @@ spec:
         - name: mongodb
           image: {{ include "agentteam-email.image" .Values.images.mongodb | quote }}
           imagePullPolicy: {{ .Values.images.mongodb.pullPolicy }}
-{{ include "agentteam-email.securityContext" . | nindent 10 }}
+{{ include "agentteam-email.bundledSecurityContext" . | nindent 10 }}
           command:
             - mongod
             - --config
@@ -177,7 +177,7 @@ spec:
         - name: redis
           image: {{ include "agentteam-email.image" .Values.images.redis | quote }}
           imagePullPolicy: {{ .Values.images.redis.pullPolicy }}
-{{ include "agentteam-email.securityContext" . | nindent 10 }}
+{{ include "agentteam-email.bundledSecurityContext" . | nindent 10 }}
           command:
             - redis-server
             - /usr/local/etc/redis/redis.conf
@@ -269,7 +269,7 @@ spec:
         - name: rspamd
           image: {{ include "agentteam-email.image" .Values.images.rspamd | quote }}
           imagePullPolicy: {{ .Values.images.rspamd.pullPolicy }}
-{{ include "agentteam-email.securityContext" . | nindent 10 }}
+{{ include "agentteam-email.bundledSecurityContext" . | nindent 10 }}
           ports:
             - name: rspamd
               containerPort: 11333

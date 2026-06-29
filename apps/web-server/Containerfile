@@ -68,6 +68,8 @@ FROM node:26.4.0-alpine3.23 AS runtime
 ARG BUILD_DATE
 ARG VCS_REF
 ARG VERSION
+ARG APP_UID=1000
+ARG APP_GID=1000
 ARG PORT=4321
 ENV PORT=${PORT}
 ARG NODE_ENV=production
@@ -86,13 +88,16 @@ LABEL "org.opencontainers.image.title"="AgentTeam Email Web Server" \
   "org.opencontainers.image.revision"="${VCS_REF}" \
   "org.opencontainers.image.version"="${VERSION}"
 
-# Install curl for healthchecks
-RUN apk add --no-cache curl
+# Install curl for healthchecks and create the runtime app user.
+RUN apk add --no-cache curl && \
+  deluser node && \
+  addgroup -S -g "${APP_GID}" atemail-web-server && \
+  adduser -D -H -u "${APP_UID}" -G atemail-web-server atemail-web-server
 
-RUN mkdir -p /pnpmdeploy/
+RUN mkdir -p /pnpmdeploy/ && chown atemail-web-server:atemail-web-server /pnpmdeploy/
 
 # Copy built application
-COPY --from=build /build/pnpmdeploy /pnpmdeploy/
+COPY --from=build --chown=atemail-web-server:atemail-web-server /build/pnpmdeploy /pnpmdeploy/
 
 # Runtime configuration
 EXPOSE 4321
@@ -105,5 +110,7 @@ RUN printf '%s\n' \
   "exec node /pnpmdeploy/dist/index.mjs" \
   > /startup.sh \
   && chmod +x /startup.sh
+
+USER atemail-web-server
 
 ENTRYPOINT ["/startup.sh"]

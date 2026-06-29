@@ -17,6 +17,8 @@ FROM docker.io/library/alpine:3.23.4
 ARG BUILD_DATE
 ARG VCS_REF
 ARG VERSION
+ARG APP_UID=1000
+ARG APP_GID=1000
 
 LABEL "org.opencontainers.image.title"="AgentTeam Email Mail Control Service" \
   "org.opencontainers.image.description"="Internal mail control service for AgentTeam Email self-hosted deployments" \
@@ -31,10 +33,11 @@ LABEL "org.opencontainers.image.title"="AgentTeam Email Mail Control Service" \
   "org.opencontainers.image.revision"="${VCS_REF}" \
   "org.opencontainers.image.version"="${VERSION}"
 
-RUN adduser -D -H -u 65532 appuser
+RUN addgroup -S -g "${APP_GID}" atemail-mail-control-service && \
+  adduser -D -H -u "${APP_UID}" -G atemail-mail-control-service atemail-mail-control-service
 
-USER appuser
+COPY --from=build --chown=atemail-mail-control-service:atemail-mail-control-service /out/agent-mail-control-service /usr/local/bin/agent-mail-control-service
 
-COPY --from=build /out/agent-mail-control-service /usr/local/bin/agent-mail-control-service
+USER atemail-mail-control-service
 
 ENTRYPOINT ["/usr/local/bin/agent-mail-control-service"]

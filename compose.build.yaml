@@ -9,6 +9,9 @@ services:
     build:
       context: ./apps/mail-control-service
       dockerfile: Containerfile
+      args:
+        APP_UID: '${AT_EMAIL_ADMIN_UID:-1000}'
+        APP_GID: '${AT_EMAIL_ADMIN_GID:-1000}'
 
   atemail-web-server:
     pull_policy: build
@@ -16,3 +19,6 @@ services:
     build:
       context: .
       dockerfile: apps/web-server/Containerfile
+      args:
+        APP_UID: '${AT_EMAIL_ADMIN_UID:-1000}'
+        APP_GID: '${AT_EMAIL_ADMIN_GID:-1000}'

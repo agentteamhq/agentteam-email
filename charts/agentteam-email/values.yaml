@@ -232,6 +232,8 @@ containerSecurityContext:
   runAsGroup: 1000
   runAsNonRoot: true
 
+bundledContainerSecurityContext: {}
+
 nodeSelector: {}
 tolerations: []
 affinity: {}

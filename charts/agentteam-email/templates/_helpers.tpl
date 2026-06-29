@@ -217,8 +217,17 @@ emptyDir: {}
 {{- end -}}
 
 {{- define "agentteam-email.securityContext" -}}
+{{- with .Values.containerSecurityContext }}
 securityContext:
-{{ toYaml .Values.containerSecurityContext | nindent 2 }}
+{{ toYaml . | nindent 2 }}
+{{- end }}
+{{- end -}}
+
+{{- define "agentteam-email.bundledSecurityContext" -}}
+{{- with .Values.bundledContainerSecurityContext }}
+securityContext:
+{{ toYaml . | nindent 2 }}
+{{- end }}
 {{- end -}}
 
 {{- define "agentteam-email.podScheduling" -}}

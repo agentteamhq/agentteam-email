@@ -23,7 +23,6 @@ x-required-env:
 
 services:
   mongodb:
-    user: '${AT_EMAIL_ADMIN_UID:-1000}:${AT_EMAIL_ADMIN_GID:-1000}'
     pull_policy: '${AT_EMAIL_ADMIN_PULL_POLICY:-always}'
     image: 'docker.io/library/mongo:8.3.2'
     networks:
@@ -67,7 +66,6 @@ services:
     restart: unless-stopped
 
   redis:
-    user: '${AT_EMAIL_ADMIN_UID:-1000}:${AT_EMAIL_ADMIN_GID:-1000}'
     pull_policy: '${AT_EMAIL_ADMIN_PULL_POLICY:-always}'
     image: 'docker.io/library/redis:8.6.3'
     networks:
@@ -89,7 +87,6 @@ services:
     restart: unless-stopped
 
   rspamd:
-    user: '${AT_EMAIL_ADMIN_UID:-1000}:${AT_EMAIL_ADMIN_GID:-1000}'
     pull_policy: '${AT_EMAIL_ADMIN_PULL_POLICY:-always}'
     image: 'docker.io/rspamd/rspamd:4.1.0'
     networks:
@@ -112,7 +109,6 @@ services:
     restart: unless-stopped
 
   zonemta:
-    user: '${AT_EMAIL_ADMIN_UID:-1000}:${AT_EMAIL_ADMIN_GID:-1000}'
     pull_policy: '${AT_EMAIL_ADMIN_PULL_POLICY:-always}'
     image: 'ghcr.io/zone-eu/zonemta-wildduck:1.32.30'
     networks:
@@ -162,7 +158,6 @@ services:
     restart: unless-stopped
 
   haraka:
-    user: '${AT_EMAIL_ADMIN_UID:-1000}:${AT_EMAIL_ADMIN_GID:-1000}'
     pull_policy: '${AT_EMAIL_ADMIN_PULL_POLICY:-always}'
     image: 'ghcr.io/zone-eu/haraka-plugin-wildduck:5.8.41'
     networks:
@@ -206,7 +201,6 @@ services:
     restart: unless-stopped
 
   wildduck:
-    user: '${AT_EMAIL_ADMIN_UID:-1000}:${AT_EMAIL_ADMIN_GID:-1000}'
     pull_policy: '${AT_EMAIL_ADMIN_PULL_POLICY:-always}'
     image: 'ghcr.io/zone-eu/wildduck:1.48.2'
     networks:

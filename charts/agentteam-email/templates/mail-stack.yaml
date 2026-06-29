@@ -65,7 +65,7 @@ spec:
         - name: wildduck
           image: {{ include "agentteam-email.image" .Values.images.wildduck | quote }}
           imagePullPolicy: {{ .Values.images.wildduck.pullPolicy }}
-{{ include "agentteam-email.securityContext" . | nindent 10 }}
+{{ include "agentteam-email.bundledSecurityContext" . | nindent 10 }}
           ports:
             - name: api
               containerPort: 8080
@@ -162,7 +162,7 @@ spec:
         - name: haraka
           image: {{ include "agentteam-email.image" .Values.images.haraka | quote }}
           imagePullPolicy: {{ .Values.images.haraka.pullPolicy }}
-{{ include "agentteam-email.securityContext" . | nindent 10 }}
+{{ include "agentteam-email.bundledSecurityContext" . | nindent 10 }}
           ports:
             - name: smtp
               containerPort: 10025
@@ -270,7 +270,7 @@ spec:
         - name: zonemta
           image: {{ include "agentteam-email.image" .Values.images.zonemta | quote }}
           imagePullPolicy: {{ .Values.images.zonemta.pullPolicy }}
-{{ include "agentteam-email.securityContext" . | nindent 10 }}
+{{ include "agentteam-email.bundledSecurityContext" . | nindent 10 }}
           ports:
             - name: api
               containerPort: 12080

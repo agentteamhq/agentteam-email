@@ -33,6 +33,8 @@ FROM docker.io/library/alpine:3.23.4
 ARG BUILD_DATE=unknown
 ARG VCS_REF=unknown
 ARG VERSION=0.1.0-dev
+ARG APP_UID=1000
+ARG APP_GID=1000
 
 LABEL "org.opencontainers.image.title"="AgentTeam Email CLI" \
   "org.opencontainers.image.description"="Portable at-email mailbox CLI" \
@@ -47,10 +49,12 @@ LABEL "org.opencontainers.image.title"="AgentTeam Email CLI" \
   "org.opencontainers.image.revision"="${VCS_REF}" \
   "org.opencontainers.image.version"="${VERSION}"
 
-RUN apk add --no-cache ca-certificates && adduser -D -H -u 65532 appuser
+RUN apk add --no-cache ca-certificates && \
+  addgroup -S -g "${APP_GID}" atemail-cli && \
+  adduser -D -H -u "${APP_UID}" -G atemail-cli atemail-cli
 
-USER appuser
+COPY --from=build --chown=atemail-cli:atemail-cli /out/at-email /usr/local/bin/at-email
 
-COPY --from=build /out/at-email /usr/local/bin/at-email
+USER atemail-cli
 
 ENTRYPOINT ["/usr/local/bin/at-email"]

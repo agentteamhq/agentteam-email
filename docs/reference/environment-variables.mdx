@@ -81,14 +81,14 @@ These values are defaulted by the Compose files. Leave them unset unless you are
 </ParamField>
 
 <ParamField path="AT_EMAIL_ADMIN_UID" type="number">
-  Host user ID used for containers that set a runtime user.
+  Host user ID used for first-party AgentTeam Email app containers. Bundled third-party data and mail services use their image-defined runtime users.
 
 **Default:** `1000`
 
 </ParamField>
 
 <ParamField path="AT_EMAIL_ADMIN_GID" type="number">
-  Host group ID used for containers that set a runtime user.
+  Host group ID used for first-party AgentTeam Email app containers. Bundled third-party data and mail services use their image-defined runtime groups.
 
 **Default:** `1000`
 
@@ -543,14 +543,14 @@ These variables are used only by the Docker Compose deployment and have no effec
 </ParamField>
 
 <ParamField path="AT_EMAIL_ADMIN_UID" type="number">
-  UID that container processes run as. Match this to the owner of any bind-mounted volumes.
+  UID that first-party AgentTeam Email app containers run as. Bundled third-party containers keep their image-defined users.
 
 **Example:** `1000`
 
 </ParamField>
 
 <ParamField path="AT_EMAIL_ADMIN_GID" type="number">
-  GID that container processes run as. Match this to the group of any bind-mounted volumes.
+  GID that first-party AgentTeam Email app containers run as. Bundled third-party containers keep their image-defined groups.
 
 **Example:** `1000`
 
