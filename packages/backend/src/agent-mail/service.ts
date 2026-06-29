@@ -7,6 +7,7 @@ import { UUID } from 'mongodb'
 import { createTransport } from 'nodemailer'
 
 import { apiKeyConfigurations } from '../auth/api-key-config'
+import { parseBearerAuthorization } from '../auth/authorization-header'
 import {
   AGENTTEAM_API_OAUTH_AUDIENCE,
   AGENTTEAM_MAIL_API_OAUTH_SCOPE,
@@ -1314,12 +1315,14 @@ function isExpiredAt(expiresAt: Date | null | undefined, now: Date) {
 }
 
 function bearerTokenFromHeaders(headers: Headers): string | null {
-  const authorization = headers.get('authorization')?.trim()
-  const match = authorization?.match(/^bearer\s+(.+)$/iu)
-  if (!match) {
+  const bearer = parseBearerAuthorization(headers)
+  if (bearer.status === 'absent') {
     return null
   }
-  return match[1]?.trim() || null
+  if (bearer.status === 'malformed') {
+    throw new AgentMailAccessError('Authentication required', 401)
+  }
+  return bearer.token
 }
 
 function stringClaim(value: unknown): string | null {

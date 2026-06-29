@@ -6,6 +6,7 @@ import { globals } from '../globals'
 import { handleAgentMailIngestRequest } from '../agent-mail/ingest'
 import { handleAgentMailRuntimeSnapshotRequest } from '../agent-mail/runtime-projection'
 import { isValidAgentMailCapabilityRequestBody } from '../auth/agent-auth-config'
+import { hasBearerCredential, hasBearerJwt, parseBearerAuthorization } from '../auth/authorization-header'
 import { handleCloudflareControlSendRawRequest } from '../cloudflare/internal-send'
 import { rewritePublicOAuthMetadataResponse } from '../auth/oauth-metadata'
 import { PUBLIC_VARS } from '../vars.public'
@@ -86,6 +87,11 @@ export const backendRpcApp = new Elysia({ name: 'rpc', prefix: '/rpc', normalize
   // Better Auth basePath. Public OAuth metadata routes above rewrite generated
   // /api URLs back to this public /rpc/auth/api mount.
   .mount('/auth', async (req) => {
+    const invalidBearerCredentialResponse = invalidAgentAuthBearerCredentialResponse(req)
+    if (invalidBearerCredentialResponse) {
+      return invalidBearerCredentialResponse
+    }
+
     const invalidCapabilityRequestResponse = await invalidAgentMailCapabilityRequestResponse(req)
     if (invalidCapabilityRequestResponse) {
       return invalidCapabilityRequestResponse
@@ -103,6 +109,28 @@ export const backendRpcApp = new Elysia({ name: 'rpc', prefix: '/rpc', normalize
   .use(whoami)
 
 export type BackendRpcAppType = typeof backendRpcApp
+
+function invalidAgentAuthBearerCredentialResponse(request: Request): Response | null {
+  if (!AGENT_AUTH_BEARER_CREDENTIAL_PATHS.has(new URL(request.url).pathname)) {
+    return null
+  }
+
+  if (parseBearerAuthorization(request.headers).status !== 'malformed') {
+    return null
+  }
+
+  return Response.json(
+    {
+      error: 'invalid_token'
+    },
+    {
+      headers: {
+        'WWW-Authenticate': 'Bearer realm="agentteam-agent-auth"'
+      },
+      status: HttpStatusCode.Unauthorized
+    }
+  )
+}
 
 async function invalidAgentMailCapabilityRequestResponse(request: Request): Promise<Response | null> {
   if (request.method !== 'POST' || !AGENT_AUTH_CAPABILITY_REQUEST_PATHS.has(new URL(request.url).pathname)) {
@@ -132,18 +160,6 @@ async function invalidAgentMailCapabilityRequestResponse(request: Request): Prom
       status: HttpStatusCode.BadRequest
     }
   )
-}
-
-function hasBearerJwt(headers: Headers): boolean {
-  const authorization = headers.get('authorization')
-  const bearerToken = authorization?.replace(/^Bearer\s+/i, '')
-  return (
-    typeof bearerToken === 'string' && bearerToken !== authorization && bearerToken.split('.').length === 3
-  )
-}
-
-function hasBearerCredential(headers: Headers): boolean {
-  return /^Bearer\s+\S+/iu.test(headers.get('authorization') ?? '')
 }
 
 function agentAuthBearerChallengeResponse(request: Request, response: Response): Response {

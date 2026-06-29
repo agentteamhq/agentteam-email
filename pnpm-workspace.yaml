@@ -41,6 +41,7 @@ catalog:
   '@marsidev/react-turnstile': 1.5.3
   '@mikkelscheike/email-provider-links': 5.1.8
   '@microsoft/api-extractor': 7.58.9
+  '@mitmaro/http-authorization-header': 1.0.0
   '@noble/ciphers': 2.2.0
   '@noble/hashes': 2.2.0
   '@paperclipai/create-paperclip-plugin': 2026.618.0

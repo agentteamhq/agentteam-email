@@ -92,6 +92,9 @@ catalogs:
     '@mikkelscheike/email-provider-links':
       specifier: 5.1.8
       version: 5.1.8
+    '@mitmaro/http-authorization-header':
+      specifier: 1.0.0
+      version: 1.0.0
     '@noble/ciphers':
       specifier: 2.2.0
       version: 2.2.0
@@ -892,7 +895,7 @@ importers:
         version: 5.4.0(react-hook-form@7.79.0(react@19.2.7))
       '@main/backend':
         specifier: workspace:*
-        version: file:packages/backend(74750f205a479d7e43c887d0b3ec2fad)
+        version: file:packages/backend(c54609c2b3b321fc20c8f91fda34e437)
       '@main/cloudflare-email-worker':
         specifier: workspace:*
         version: link:../../packages/cloudflare-email-worker
@@ -904,7 +907,7 @@ importers:
         version: link:../../packages/db
       '@main/frontend':
         specifier: workspace:*
-        version: file:packages/frontend(2be8a246640f5ae67db64f8d2acc67cf)
+        version: file:packages/frontend(b3bf49a260af879cd3ba6378a16cd388)
       '@main/shutdown-manager':
         specifier: workspace:*
         version: link:../../packages/shutdown-manager
@@ -914,6 +917,9 @@ importers:
       '@mikkelscheike/email-provider-links':
         specifier: 'catalog:'
         version: 5.1.8
+      '@mitmaro/http-authorization-header':
+        specifier: 'catalog:'
+        version: 1.0.0
       '@noble/ciphers':
         specifier: 'catalog:'
         version: 2.2.0
@@ -1326,6 +1332,9 @@ importers:
       '@mikkelscheike/email-provider-links':
         specifier: 'catalog:'
         version: 5.1.8
+      '@mitmaro/http-authorization-header':
+        specifier: 'catalog:'
+        version: 1.0.0
       '@noble/ciphers':
         specifier: 'catalog:'
         version: 2.2.0
@@ -1716,6 +1725,9 @@ importers:
       '@mikkelscheike/email-provider-links':
         specifier: 'catalog:'
         version: 5.1.8
+      '@mitmaro/http-authorization-header':
+        specifier: 'catalog:'
+        version: 1.0.0
       '@noble/ciphers':
         specifier: 'catalog:'
         version: 2.2.0
@@ -3026,6 +3038,7 @@ packages:
       '@main/db': workspace:*
       '@main/shutdown-manager': workspace:*
       '@mikkelscheike/email-provider-links': '*'
+      '@mitmaro/http-authorization-header': '*'
       '@noble/ciphers': '*'
       '@noble/hashes': '*'
       '@react-email/components': '*'
@@ -3154,6 +3167,7 @@ packages:
       '@main/shutdown-manager': workspace:*
       '@marsidev/react-turnstile': '*'
       '@mikkelscheike/email-provider-links': '*'
+      '@mitmaro/http-authorization-header': '*'
       '@noble/ciphers': '*'
       '@noble/hashes': '*'
       '@phosphor-icons/react': '*'
@@ -3293,6 +3307,13 @@ packages:
   '@mikkelscheike/email-provider-links@5.1.8':
     resolution: {integrity: sha512-I499oaqSgwpzIE8zkAJaKvenUm2au4SVCnrBNxScuPYTFsVvxsJ4kYrkWs23zg1czwDTaN9C+4k8eDHmIONeFw==}
     engines: {comment: 'Supports Node.js 18.x, 20.x, 22.x, 24.x, and 25.x', node: '>=18.0.0'}
+
+  '@mitmaro/errors@1.0.0':
+    resolution: {integrity: sha512-KUU0J4rgHsJiMsAj6Ndj+OTAlsKsX/fe3geQ0UB1jYm1DoaqFoanh1sBshb9rLNJpPjsD7yNQFykGajAsPciyw==}
+    engines: {node: '>= 6'}
+
+  '@mitmaro/http-authorization-header@1.0.0':
+    resolution: {integrity: sha512-cAm7w7S04aswBtsXAReyzHrq9EV7yNalYj8OObsnavCucDoxC10y14gE2Eg82UKnR5v2TWSJAVCLFea4gaiddQ==}
 
   '@mongodb-js/saslprep@1.4.11':
     resolution: {integrity: sha512-o9rAHc0IpIjuPSxRutWpE1F62x7n+4mVS4rCNHkzhIUMQcc18bb6xEq5wd2NdN0WjepIyXIppRshYI2kQDOZVA==}
@@ -10459,7 +10480,7 @@ snapshots:
 
   '@levischuck/tiny-cbor@0.2.11': {}
 
-  '@main/backend@file:packages/backend(74750f205a479d7e43c887d0b3ec2fad)':
+  '@main/backend@file:packages/backend(c54609c2b3b321fc20c8f91fda34e437)':
     dependencies:
       '@agendajs/mongo-backend': 4.0.2(f85595a9325ffde548f7db927ea1b6a7)
       '@better-auth-ui/core': 1.6.27(de4c539c52728e602ddebbea33891d73)
@@ -10481,6 +10502,7 @@ snapshots:
       '@main/db': file:packages/db(46d5f157a11ee3af3a2d1e6e7ad044e7)
       '@main/shutdown-manager': file:packages/shutdown-manager
       '@mikkelscheike/email-provider-links': 5.1.8
+      '@mitmaro/http-authorization-header': 1.0.0
       '@noble/ciphers': 2.2.0
       '@noble/hashes': 2.2.0
       '@react-email/components': 1.0.12(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -10573,7 +10595,7 @@ snapshots:
       uuid: 14.0.0
       zod: 4.4.3
 
-  '@main/frontend@file:packages/frontend(2be8a246640f5ae67db64f8d2acc67cf)':
+  '@main/frontend@file:packages/frontend(b3bf49a260af879cd3ba6378a16cd388)':
     dependencies:
       '@agendajs/mongo-backend': 4.0.2(f85595a9325ffde548f7db927ea1b6a7)
       '@base-ui/react': 1.6.0(6dab3ab8b285aa871f9aa69505023584)
@@ -10598,13 +10620,14 @@ snapshots:
       '@hcaptcha/react-hcaptcha': 2.0.2
       '@headlessui/react': 2.2.10(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@hookform/resolvers': 5.4.0(react-hook-form@7.79.0(react@19.2.7))
-      '@main/backend': file:packages/backend(74750f205a479d7e43c887d0b3ec2fad)
+      '@main/backend': file:packages/backend(c54609c2b3b321fc20c8f91fda34e437)
       '@main/cloudflare-email-worker': file:packages/cloudflare-email-worker(b2a85f1b505824a4462d520e27c1303e)
       '@main/common': file:packages/common(3f006b1cb798ec636a1842410f99e0f2)
       '@main/db': file:packages/db(46d5f157a11ee3af3a2d1e6e7ad044e7)
       '@main/shutdown-manager': file:packages/shutdown-manager
       '@marsidev/react-turnstile': 1.5.3(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@mikkelscheike/email-provider-links': 5.1.8
+      '@mitmaro/http-authorization-header': 1.0.0
       '@noble/ciphers': 2.2.0
       '@noble/hashes': 2.2.0
       '@phosphor-icons/react': 2.1.10(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -10762,6 +10785,12 @@ snapshots:
   '@microsoft/tsdoc@0.16.0': {}
 
   '@mikkelscheike/email-provider-links@5.1.8': {}
+
+  '@mitmaro/errors@1.0.0': {}
+
+  '@mitmaro/http-authorization-header@1.0.0':
+    dependencies:
+      '@mitmaro/errors': 1.0.0
 
   '@mongodb-js/saslprep@1.4.11':
     dependencies:
