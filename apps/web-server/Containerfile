@@ -16,13 +16,16 @@ ARG ESLINT_CONCURRENCY=auto
 ENV ESLINT_CONCURRENCY=${ESLINT_CONCURRENCY}
 ARG ESLINT_CACHE_FLAG=--cache
 ENV ESLINT_CACHE_FLAG=${ESLINT_CACHE_FLAG}
+# renovate: datasource=npm depName=corepack versioning=npm
+ARG COREPACK_VERSION=0.35.0
 # Set pnpm home and store inside build directory to avoid filesystem/bind mount issues
 ENV PNPM_HOME="/build/.pnpm-home"
 ENV PNPM_CONFIG_STORE_DIR="/build/.pnpm-store"
 
 WORKDIR /build
 
-RUN corepack enable
+RUN npm install --global --no-audit --no-fund "corepack@${COREPACK_VERSION}" && \
+  corepack enable
 
 # Copy lockfiles and root package metadata for dependency fetching.
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .pnpmfile.cjs ./
