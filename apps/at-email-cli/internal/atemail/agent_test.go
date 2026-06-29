@@ -3,7 +3,6 @@ package atemail
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +11,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	jose "github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4/jwt"
 )
 
 func TestSaveCredentialFilesUsePrivateModes(t *testing.T) {
@@ -111,6 +113,64 @@ func TestSaveCredentialFilesUsePrivateModes(t *testing.T) {
 		t.Fatalf("overwrite agent host credential failed: %v", err)
 	}
 	assertCredentialPathModes(t, hostPath)
+}
+
+func TestSignAgentAuthJWTProducesVerifiableJOSEToken(t *testing.T) {
+	key, err := newAgentEd25519JWK()
+	if err != nil {
+		t.Fatalf("key generation failed: %v", err)
+	}
+	claims, err := newAgentAuthClaims(
+		"host-1",
+		"agent-1",
+		"https://mail.example.com",
+		http.MethodGet,
+		"https://mail.example.com/rpc/mail/workspace",
+	)
+	if err != nil {
+		t.Fatalf("claims failed: %v", err)
+	}
+	token, err := signAgentAuthJWT(key, "agent+jwt", claims)
+	if err != nil {
+		t.Fatalf("sign jwt failed: %v", err)
+	}
+
+	parsed, err := jwt.ParseSigned(token, []jose.SignatureAlgorithm{jose.EdDSA})
+	if err != nil {
+		t.Fatalf("parse signed jwt failed: %v", err)
+	}
+	if len(parsed.Headers) != 1 {
+		t.Fatalf("jwt headers = %#v", parsed.Headers)
+	}
+	if parsed.Headers[0].Algorithm != string(jose.EdDSA) || parsed.Headers[0].ExtraHeaders["typ"] != "agent+jwt" || parsed.Headers[0].KeyID != key.Kid {
+		t.Fatalf("jwt header = %#v", parsed.Headers[0])
+	}
+
+	publicKey, err := key.publicJWK()
+	if err != nil {
+		t.Fatalf("public jwk failed: %v", err)
+	}
+	if publicKey["d"] != nil {
+		t.Fatalf("public jwk exposed private key material: %#v", publicKey)
+	}
+	publicKeyJSON, err := json.Marshal(publicKey)
+	if err != nil {
+		t.Fatalf("marshal public jwk failed: %v", err)
+	}
+	var verificationKey jose.JSONWebKey
+	if err := json.Unmarshal(publicKeyJSON, &verificationKey); err != nil {
+		t.Fatalf("parse public jwk failed: %v", err)
+	}
+	var verified map[string]any
+	if err := parsed.Claims(verificationKey.Key, &verified); err != nil {
+		t.Fatalf("verify jwt failed: %v", err)
+	}
+	if verified["iss"] != "host-1" || verified["sub"] != "agent-1" || verified["aud"] != "https://mail.example.com" {
+		t.Fatalf("verified jwt claims = %#v", verified)
+	}
+	if verified["htm"] != http.MethodGet || verified["htu"] != "https://mail.example.com/rpc/mail/workspace" {
+		t.Fatalf("verified jwt request binding = %#v", verified)
+	}
 }
 
 func assertCredentialPathModes(t *testing.T, path string) {
@@ -1454,24 +1514,25 @@ func writeJSON(t *testing.T, writer http.ResponseWriter, payload any) {
 func decodeTestJWT(t *testing.T, authorization string) (map[string]any, map[string]any) {
 	t.Helper()
 	token := strings.TrimPrefix(authorization, "Bearer ")
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
+	parsed, err := jwt.ParseSigned(token, []jose.SignatureAlgorithm{jose.EdDSA})
+	if err != nil || len(parsed.Headers) != 1 {
 		t.Fatalf("authorization is not a bearer JWT: %q", authorization)
 	}
-	return decodeTestJWTSegment(t, parts[0]), decodeTestJWTSegment(t, parts[1])
-}
-
-func decodeTestJWTSegment(t *testing.T, segment string) map[string]any {
-	t.Helper()
-	data, err := base64.RawURLEncoding.DecodeString(segment)
-	if err != nil {
-		t.Fatalf("jwt segment decode failed: %v", err)
+	joseHeader := parsed.Headers[0]
+	header := map[string]any{
+		"alg": joseHeader.Algorithm,
+	}
+	if joseHeader.KeyID != "" {
+		header["kid"] = joseHeader.KeyID
+	}
+	for key, value := range joseHeader.ExtraHeaders {
+		header[string(key)] = value
 	}
 	var payload map[string]any
-	if err := json.Unmarshal(data, &payload); err != nil {
-		t.Fatalf("jwt segment json failed: %v", err)
+	if err := parsed.UnsafeClaimsWithoutVerification(&payload); err != nil {
+		t.Fatalf("jwt claims parse failed: %v", err)
 	}
-	return payload
+	return header, payload
 }
 
 func assertNoAgentSecretsInOutput(t *testing.T, output string) {

@@ -65,7 +65,9 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: apps/at-email-cli/go.mod
-          cache-dependency-path: apps/at-email-cli/go.mod
+          cache-dependency-path: |
+            apps/at-email-cli/go.mod
+            apps/at-email-cli/go.sum
 
       - name: Set up Node for at-email CLI npm package validation
         uses: actions/setup-node@v6
@@ -225,7 +227,9 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: apps/at-email-cli/go.mod
-          cache-dependency-path: apps/at-email-cli/go.mod
+          cache-dependency-path: |
+            apps/at-email-cli/go.mod
+            apps/at-email-cli/go.sum
 
       - name: Set up Node for at-email CLI npm release
         uses: actions/setup-node@v6

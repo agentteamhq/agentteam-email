@@ -3,6 +3,7 @@ FROM docker.io/library/golang:1.26.4 AS test
 WORKDIR /src
 
 COPY apps/at-email-cli/go.mod ./
+COPY apps/at-email-cli/go.sum ./
 COPY apps/at-email-cli/skill.go ./
 COPY skills/at-email-cli/SKILL.md ./tmp/SKILL.md
 COPY apps/at-email-cli/cmd ./cmd
@@ -21,6 +22,7 @@ ARG VCS_REF=unknown
 ARG VERSION=0.1.0-dev
 
 COPY apps/at-email-cli/go.mod ./
+COPY apps/at-email-cli/go.sum ./
 COPY apps/at-email-cli/skill.go ./
 COPY skills/at-email-cli/SKILL.md ./tmp/SKILL.md
 COPY apps/at-email-cli/cmd ./cmd
