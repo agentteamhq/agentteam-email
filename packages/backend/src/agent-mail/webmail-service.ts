@@ -13,6 +13,12 @@ import {
   requireAgentMailOrganizationContext,
   requireAgentMailPaperclipOperation
 } from './service'
+import {
+  mailboxDomain,
+  mailboxLocalPart,
+  normalizeMailDomain,
+  normalizeMailboxIdentifier
+} from './mailbox-address'
 import { WildDuckAPIError, createWildDuckClient } from './wildduck-client'
 import type { AgentMailPaperclipOperation } from './service'
 import type {
@@ -1516,11 +1522,7 @@ function hasExactScopedMailboxAuthorization(
 }
 
 function normalizeMailboxAddress(value: string | undefined) {
-  const normalized = value?.trim().toLowerCase() ?? ''
-  if (!/^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$/u.test(normalized)) {
-    return null
-  }
-  return normalized
+  return normalizeMailboxIdentifier(value)
 }
 
 function addressesForUser(user: WildDuckUser) {
@@ -1541,8 +1543,8 @@ function addNormalizedMailbox(target: Set<string>, value: string | undefined) {
 }
 
 function addNormalizedDomain(target: Set<string>, value: string | undefined) {
-  const normalized = value?.trim().toLowerCase() ?? ''
-  if (/^[a-z0-9.-]+\.[a-z0-9-]+$/u.test(normalized)) {
+  const normalized = normalizeMailDomain(value)
+  if (normalized?.includes('.')) {
     target.add(normalized)
   }
 }
@@ -1553,13 +1555,11 @@ function mailboxBelongsToDomains(address: string, domains: ReadonlyArray<string>
 }
 
 function domainPart(address: string) {
-  const at = address.lastIndexOf('@')
-  return at === -1 ? '' : address.slice(at + 1)
+  return mailboxDomain(address)
 }
 
 function localPart(address: string) {
-  const at = address.lastIndexOf('@')
-  return at === -1 ? address : address.slice(0, at)
+  return mailboxLocalPart(address) || address
 }
 
 function normalizeLimit(value: number | undefined) {

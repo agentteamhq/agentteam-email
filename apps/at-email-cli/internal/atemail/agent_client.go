@@ -188,7 +188,11 @@ func (c agentAuthClient) registerAgent(ctx context.Context, credential agentCred
 		claims["host_name"] = credential.Name
 	}
 	if credential.HostID == "" {
-		claims["host_public_key"] = credential.HostPrivateKey.publicJWK()
+		hostPublicKey, err := credential.HostPrivateKey.publicJWK()
+		if err != nil {
+			return nil, err
+		}
+		claims["host_public_key"] = hostPublicKey
 	}
 	token, err := signAgentAuthJWT(credential.HostPrivateKey, "host+jwt", claims)
 	if err != nil {

@@ -33,3 +33,19 @@ func TestParseMailboxReturnsCanonicalAddressAndDomain(t *testing.T) {
 		t.Fatalf("Domain = %q", got.Domain)
 	}
 }
+
+func TestParseMailboxReturnsIDNAAddressAndDomain(t *testing.T) {
+	got, err := ParseMailbox("Agent <agent@Exämple.com>")
+	if err != nil {
+		t.Fatalf("ParseMailbox returned error: %v", err)
+	}
+	if got.Address != "agent@xn--exmple-cua.com" {
+		t.Fatalf("Address = %q", got.Address)
+	}
+	if got.LocalPart != "agent" {
+		t.Fatalf("LocalPart = %q", got.LocalPart)
+	}
+	if got.Domain != "xn--exmple-cua.com" {
+		t.Fatalf("Domain = %q", got.Domain)
+	}
+}

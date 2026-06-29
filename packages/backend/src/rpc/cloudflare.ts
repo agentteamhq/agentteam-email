@@ -27,6 +27,7 @@ const cloudflareErrorResponseSchemas = {
 type CloudflareResponseSet = {
   status?: number | string
 }
+type CloudflareResponseHeaders = Record<string, string | number | string[]>
 
 const optionalDateLikeSchema = t.Optional(t.Any())
 const optionalNullableStringSchema = t.Optional(t.Nullable(t.String()))
@@ -306,12 +307,12 @@ function getSetCookieHeaders(headers: Headers): string[] {
   return splitCombinedSetCookie(headers.get('set-cookie'))
 }
 
-function applySetCookieHeaders(targetHeaders: Record<string, string | number>, sourceHeaders: Headers): void {
+function applySetCookieHeaders(targetHeaders: CloudflareResponseHeaders, sourceHeaders: Headers): void {
   const cookies = getSetCookieHeaders(sourceHeaders)
   if (cookies.length === 0) {
     return
   }
-  targetHeaders['set-cookie'] = cookies.join(', ')
+  targetHeaders['set-cookie'] = cookies
 }
 
 function splitCombinedSetCookie(value: string | null): string[] {

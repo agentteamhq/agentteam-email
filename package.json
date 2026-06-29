@@ -35,7 +35,6 @@
     "format": "turbo run format",
     "lint": "turbo run lint",
     "lint:inspect": "pnpm exec eslint --inspect-config",
-    "open": "bash -lc 'set -a; [ ! -f .env ] || . ./.env; set +a; : \"${PUBLIC_HOSTNAME:?PUBLIC_HOSTNAME is required}\"; open \"$PUBLIC_HOSTNAME\"'",
     "playwright-cli": "./node_modules/.bin/playwright-cli",
     "pnpm:reset": "rimraf --glob {.,packages/*,apps/*,test-containers/*}/{pnpm-lock.yaml,node_modules,.pnpm}",
     "preview": "turbo run preview --filter=@main/web-server",

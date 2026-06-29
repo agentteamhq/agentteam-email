@@ -410,6 +410,29 @@ describe('mail client controller view mapping', () => {
     )
   })
 
+  it('maps structured sender headers to canonical mail item values', () => {
+    expect.hasAssertions()
+    const view = toSidebarView(
+      mailWorkspace({
+        accounts: [mailAccount()],
+        folders: [inboxFolder()],
+        messages: [mailMessage({ from: 'Person <Person@Exämple.com>' })]
+      }),
+      'success',
+      null,
+      { name: '', state: 'closed' },
+      { state: 'closed' },
+      { name: '', state: 'closed' },
+      undefined,
+      undefined
+    )
+
+    expect(view.mails[0]).toMatchObject({
+      email: 'person@xn--exmple-cua.com',
+      name: 'Person'
+    })
+  })
+
   it('maps cursor pagination without inventing an offset range', () => {
     expect.hasAssertions()
     const view = toSidebarView(

@@ -5,6 +5,8 @@ import {
   AGENTTEAM_OAUTH_ACCESS_TOKEN_CLAIMS
 } from '../auth/oauth-provider-config'
 
+const DECODED_JWT = 'eyJ0eXAiOiJhZ2VudCtqd3QifQ.eyJzdWIiOiJhZ2VudC0xIn0.sig'
+
 const webmailTestState = vi.hoisted(() => ({
   authGetSession: vi.fn(),
   authVerifyApiKey: vi.fn(),
@@ -691,6 +693,44 @@ describe('Agent Mail WildDuck webmail service', () => {
       },
       headers: expect.any(Headers)
     })
+    expect(webmailTestState.agentMailMailboxGrantFind).not.toHaveBeenCalled()
+    expect(webmailTestState.createWildDuckClient).not.toHaveBeenCalled()
+  }, 15_000)
+
+  it('rejects malformed Bearer credentials before API key, OAuth, or session fallback', async () => {
+    expect.hasAssertions()
+    webmailTestState.authGetSession.mockResolvedValue({
+      session: {
+        activeOrganizationId: 'org-1',
+        id: 'session-1'
+      },
+      user: {
+        id: 'user-1'
+      }
+    })
+    mockOrganizationApiKeyVerification()
+
+    const { getAgentMailWorkspaceForWeb } = await import('./webmail-service')
+
+    await expect(
+      getAgentMailWorkspaceForWeb({
+        headers: new Headers({
+          authorization: `Bearer ${DECODED_JWT} more`,
+          'x-api-key': '_secret_api_valid'
+        }),
+        input: {}
+      })
+    ).rejects.toMatchObject({
+      message: 'Authentication required',
+      status: 401
+    })
+    expect(webmailTestState.decodeJwt).not.toHaveBeenCalled()
+    expect(webmailTestState.decodeProtectedHeader).not.toHaveBeenCalled()
+    expect(webmailTestState.jwtVerify).not.toHaveBeenCalled()
+    expect(webmailTestState.authVerifyApiKey).not.toHaveBeenCalled()
+    expect(webmailTestState.oauthVerifyAccessToken).not.toHaveBeenCalled()
+    expect(webmailTestState.authGetAgentSession).not.toHaveBeenCalled()
+    expect(webmailTestState.authGetSession).not.toHaveBeenCalled()
     expect(webmailTestState.agentMailMailboxGrantFind).not.toHaveBeenCalled()
     expect(webmailTestState.createWildDuckClient).not.toHaveBeenCalled()
   }, 15_000)

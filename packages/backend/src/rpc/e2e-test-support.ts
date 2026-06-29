@@ -4,19 +4,15 @@ import { HttpStatusCode } from '@main/common'
 import { Elysia, t } from 'elysia'
 
 import { globals } from '../globals'
+import { parseBearerAuthorization } from '../auth/authorization-header'
 import { PRIVATE_VARS } from '../vars.private'
 import { PUBLIC_VARS } from '../vars.public'
 
 const TEST_SUPPORT_SEED = 'e2e-test-support'
 
 function bearerToken(request: Request): string | null {
-  const authorization = request.headers.get('authorization')
-  const prefix = 'Bearer '
-  if (!authorization?.startsWith(prefix)) {
-    return null
-  }
-  const token = authorization.slice(prefix.length).trim()
-  return token || null
+  const bearer = parseBearerAuthorization(request.headers)
+  return bearer.status === 'present' ? bearer.token : null
 }
 
 function constantTimeStringEqual(actual: string, expected: string): boolean {

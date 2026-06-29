@@ -304,12 +304,18 @@ func (a *controlRuntimeAPI) SubmitSend(ctx context.Context, params controlapi.Se
 	if err != nil {
 		return controlapi.SendSubmitResult{}, fmt.Errorf("domain: %w", err)
 	}
-	from := strings.ToLower(strings.TrimSpace(params.From))
-	to := strings.ToLower(strings.TrimSpace(params.To))
-	if from == "" || to == "" {
+	if strings.TrimSpace(params.From) == "" || strings.TrimSpace(params.To) == "" {
 		return controlapi.SendSubmitResult{}, fmt.Errorf("from and to are required")
 	}
-	if senderDomain := domainFromMailbox(from); senderDomain != domain {
+	from, err := structured.ParseMailbox(params.From)
+	if err != nil {
+		return controlapi.SendSubmitResult{}, fmt.Errorf("from: %w", err)
+	}
+	to, err := structured.ParseMailbox(params.To)
+	if err != nil {
+		return controlapi.SendSubmitResult{}, fmt.Errorf("to: %w", err)
+	}
+	if from.Domain != domain {
 		return controlapi.SendSubmitResult{}, fmt.Errorf("from domain does not match authorized domain")
 	}
 	idempotencyKey := strings.TrimSpace(params.IdempotencyKey)
@@ -326,7 +332,7 @@ func (a *controlRuntimeAPI) SubmitSend(ctx context.Context, params controlapi.Se
 	if err != nil {
 		return controlapi.SendSubmitResult{}, err
 	}
-	if err := a.submitSMTP(ctx, from, to, raw); err != nil {
+	if err := a.submitSMTP(ctx, from.Address, to.Address, raw); err != nil {
 		return controlapi.SendSubmitResult{}, err
 	}
 	return controlapi.SendSubmitResult{
@@ -402,14 +408,6 @@ func loopbackRelayAddress(listenAddress string) (string, string, error) {
 
 func stampOutboundQueueID(raw []byte, idempotencyKey string) ([]byte, error) {
 	return rfc822.AddHeaderIfAbsent(raw, "X-Agent-Mail-ZoneMTA-Queue-ID", idempotencyKey)
-}
-
-func domainFromMailbox(mailbox string) string {
-	at := strings.LastIndex(mailbox, "@")
-	if at < 0 || at == len(mailbox)-1 {
-		return ""
-	}
-	return strings.ToLower(strings.TrimSpace(mailbox[at+1:]))
 }
 
 func (a *controlRuntimeAPI) SyncRuntime(ctx context.Context, params controlapi.RuntimeSyncParams, now time.Time) (controlapi.RuntimeSyncResult, error) {

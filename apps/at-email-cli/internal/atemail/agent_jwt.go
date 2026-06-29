@@ -9,6 +9,9 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	jose "github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4/jwt"
 )
 
 const agentJWTLifetime = time.Minute
@@ -26,55 +29,86 @@ func newAgentEd25519JWK() (agentKeyJWK, error) {
 	if err != nil {
 		return agentKeyJWK{}, newAgentMailError("could not generate Agent Auth key")
 	}
-	seed := privateKey.Seed()
 	kidHash := sha256.Sum256(publicKey)
-	return agentKeyJWK{
-		Kty: "OKP",
-		Crv: "Ed25519",
-		X:   base64.RawURLEncoding.EncodeToString(publicKey),
-		D:   base64.RawURLEncoding.EncodeToString(seed),
-		Kid: base64.RawURLEncoding.EncodeToString(kidHash[:12]),
-	}, nil
+	key, err := agentKeyFromJSONWebKey(jose.JSONWebKey{
+		Key:   privateKey,
+		KeyID: base64.RawURLEncoding.EncodeToString(kidHash[:12]),
+	})
+	if err != nil {
+		return agentKeyJWK{}, newAgentMailError("could not generate Agent Auth key")
+	}
+	return key, nil
 }
 
-func (key agentKeyJWK) publicJWK() map[string]any {
-	result := map[string]any{
-		"crv": key.Crv,
-		"kty": key.Kty,
-		"x":   key.X,
+func agentKeyFromJSONWebKey(jwk jose.JSONWebKey) (agentKeyJWK, error) {
+	data, err := json.Marshal(jwk)
+	if err != nil {
+		return agentKeyJWK{}, err
 	}
-	if key.Kid != "" {
-		result["kid"] = key.Kid
+	var key agentKeyJWK
+	if err := json.Unmarshal(data, &key); err != nil {
+		return agentKeyJWK{}, err
 	}
-	return result
+	return key, nil
+}
+
+func (key agentKeyJWK) jsonWebKey() (jose.JSONWebKey, error) {
+	if key.Kty != "OKP" || key.Crv != "Ed25519" {
+		return jose.JSONWebKey{}, newAgentMailError("local at-email agent key is invalid")
+	}
+	data, err := json.Marshal(key)
+	if err != nil {
+		return jose.JSONWebKey{}, newAgentMailError("local at-email agent key is invalid")
+	}
+	var jwk jose.JSONWebKey
+	if err := json.Unmarshal(data, &jwk); err != nil || !jwk.Valid() {
+		return jose.JSONWebKey{}, newAgentMailError("local at-email agent key is invalid")
+	}
+	return jwk, nil
+}
+
+func (key agentKeyJWK) publicJWK() (map[string]any, error) {
+	jwk, err := key.jsonWebKey()
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(jwk.Public())
+	if err != nil {
+		return nil, newAgentMailError("local at-email agent key is invalid")
+	}
+	var result map[string]any
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, newAgentMailError("local at-email agent key is invalid")
+	}
+	return result, nil
 }
 
 func signAgentAuthJWT(key agentKeyJWK, typ string, claims map[string]any) (string, error) {
-	if key.Kty != "OKP" || key.Crv != "Ed25519" || key.D == "" {
-		return "", newAgentMailError("local at-email agent key is invalid")
-	}
-	seed, err := base64.RawURLEncoding.DecodeString(key.D)
-	if err != nil || len(seed) != ed25519.SeedSize {
-		return "", newAgentMailError("local at-email agent key is invalid")
-	}
-	header := map[string]any{
-		"alg": "EdDSA",
-		"typ": typ,
-	}
-	if key.Kid != "" {
-		header["kid"] = key.Kid
-	}
-	encodedHeader, err := encodeJWTSegment(header)
+	jwk, err := key.jsonWebKey()
 	if err != nil {
 		return "", err
 	}
-	encodedPayload, err := encodeJWTSegment(claims)
-	if err != nil {
-		return "", err
+	privateKey, ok := jwk.Key.(ed25519.PrivateKey)
+	if !ok {
+		return "", newAgentMailError("local at-email agent key is invalid")
 	}
-	signingInput := encodedHeader + "." + encodedPayload
-	signature := ed25519.Sign(ed25519.NewKeyFromSeed(seed), []byte(signingInput))
-	return signingInput + "." + base64.RawURLEncoding.EncodeToString(signature), nil
+
+	options := (&jose.SignerOptions{}).WithType(jose.ContentType(typ))
+	if jwk.KeyID != "" {
+		options = options.WithHeader(jose.HeaderKey("kid"), jwk.KeyID)
+	}
+	signer, err := jose.NewSigner(jose.SigningKey{
+		Algorithm: jose.EdDSA,
+		Key:       privateKey,
+	}, options)
+	if err != nil {
+		return "", newAgentMailError("could not sign Agent Auth JWT")
+	}
+	token, err := jwt.Signed(signer).Claims(claims).Serialize()
+	if err != nil {
+		return "", newAgentMailError("could not sign Agent Auth JWT")
+	}
+	return token, nil
 }
 
 func newAgentAuthClaims(issuer string, subject string, audience string, method string, htu string) (map[string]any, error) {
@@ -83,13 +117,18 @@ func newAgentAuthClaims(issuer string, subject string, audience string, method s
 		return nil, err
 	}
 	now := time.Now().UTC()
-	claims := map[string]any{
-		"aud": audience,
-		"exp": now.Add(agentJWTLifetime).Unix(),
-		"iat": now.Unix(),
-		"iss": issuer,
-		"jti": jti,
+	claims, err := agentJWTClaimsMap(jwt.Claims{
+		Audience: jwt.Audience{audience},
+		Expiry:   jwt.NewNumericDate(now.Add(agentJWTLifetime)),
+		ID:       jti,
+		IssuedAt: jwt.NewNumericDate(now),
+		Issuer:   issuer,
+	})
+	if err != nil {
+		return nil, err
 	}
+	claims["aud"] = audience
+	claims["iss"] = issuer
 	if subject != "" {
 		claims["sub"] = subject
 	}
@@ -102,12 +141,16 @@ func newAgentAuthClaims(issuer string, subject string, audience string, method s
 	return claims, nil
 }
 
-func encodeJWTSegment(value any) (string, error) {
-	data, err := json.Marshal(value)
+func agentJWTClaimsMap(claims jwt.Claims) (map[string]any, error) {
+	data, err := json.Marshal(claims)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return base64.RawURLEncoding.EncodeToString(data), nil
+	var result map[string]any
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func randomBase64URL(size int) (string, error) {

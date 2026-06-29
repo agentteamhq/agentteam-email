@@ -34,6 +34,8 @@ const routeTestState = vi.hoisted<RouteTestState>(() => ({
   betterAuthAdapter: null
 }))
 
+const DECODED_JWT = 'eyJ0eXAiOiJob3N0K2p3dCJ9.eyJzdWIiOiJhZ2VudC0xIn0.sig'
+
 vi.mock('@main/db', async (importOriginal) => {
   const actual = await importOriginal<typeof MainDb>()
 
@@ -385,6 +387,69 @@ describe('Better Auth Agent Auth mounted routes', () => {
         status: 401
       })
       expect(challenge, endpoint.path).toContain('Bearer realm="agentteam-agent-auth"')
+    }
+
+    expect(adapterStore.recordsFor('agentHost')).toStrictEqual([])
+    expect(adapterStore.recordsFor('agent')).toStrictEqual([])
+    expect(adapterStore.recordsFor('agentCapabilityGrant')).toStrictEqual([])
+    expect(adapterStore.recordsFor('approvalRequest')).toStrictEqual([])
+  })
+
+  it('rejects malformed Agent Auth Bearer credentials before request validation', async () => {
+    expect.hasAssertions()
+
+    const adapterStore = createMemoryBetterAuthAdapterStore()
+    routeTestState.betterAuthAdapter = adapterStore.adapter
+
+    const { createGlobalAuth } = await import('../auth/auth')
+    routeTestState.auth = createGlobalAuth(createFakeDatabase(vi.fn(async (input: unknown) => input)))
+
+    const { backendRpcApp } = await import('./index')
+
+    for (const endpoint of [
+      {
+        body: JSON.stringify({
+          capabilities: [{ name: 'email.message.send' }],
+          mode: 'delegated',
+          name: 'Local CLI agent'
+        }),
+        method: 'POST',
+        path: '/rpc/auth/api/agent/register'
+      },
+      {
+        body: JSON.stringify({
+          capabilities: [{ name: 'email.message.send' }],
+          reason: 'CLI send request'
+        }),
+        method: 'POST',
+        path: '/rpc/auth/api/agent/request-capability'
+      },
+      {
+        body: undefined,
+        method: 'GET',
+        path: '/rpc/auth/api/agent/status'
+      }
+    ]) {
+      const response = await backendRpcApp.handle(
+        new Request(`https://mail.example.com${endpoint.path}`, {
+          body: endpoint.body,
+          headers: {
+            authorization: `Bearer ${DECODED_JWT} more`,
+            ...(endpoint.body ? { 'content-type': 'application/json' } : {}),
+            host: 'mail.example.com'
+          },
+          method: endpoint.method
+        })
+      )
+
+      expect({ body: await readJsonResponse(response), path: endpoint.path, status: response.status }).toStrictEqual({
+        body: {
+          error: 'invalid_token'
+        },
+        path: endpoint.path,
+        status: 401
+      })
+      expect(response.headers.get('www-authenticate'), endpoint.path).toBe('Bearer realm="agentteam-agent-auth"')
     }
 
     expect(adapterStore.recordsFor('agentHost')).toStrictEqual([])

@@ -37,6 +37,7 @@
     "dev:ui": "paperclip-plugin-dev-server --root . --ui-dir dist/ui --port 4177",
     "format": "pnpm run lint --fix && pnpm exec prettier --write ./src ./OAUTH_AND_PERMISSION_TODO.md ./README.md",
     "lint": "eslint --quiet ${ESLINT_CACHE_FLAG:---cache} --concurrency ${ESLINT_CONCURRENCY:-auto} ./src",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
@@ -44,6 +45,7 @@
     "@phosphor-icons/react": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
+    "email-addresses": "catalog:",
     "esbuild": "catalog:",
     "react": "catalog:",
     "vite": "catalog:"
@@ -51,6 +53,7 @@
   "peerDependencies": {
     "@paperclipai/plugin-sdk": "*",
     "@phosphor-icons/react": "*",
+    "email-addresses": "*",
     "react": "*"
   },
   "paperclipPlugin": {

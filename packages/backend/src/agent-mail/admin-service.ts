@@ -24,6 +24,12 @@ import {
   agentMailSubject
 } from './permission-policy'
 import {
+  mailboxDomain,
+  mailboxLocalPart,
+  normalizeMailDomain,
+  normalizeMailboxIdentifier
+} from './mailbox-address'
+import {
   AgentMailAccessError,
   requireAgentMailOrganizationContext,
   requireAgentMailPaperclipOperation
@@ -3108,12 +3114,12 @@ function requireAdminSectionAccess(access: AdminSectionAccess, section: AgentMai
 }
 
 function normalizedMailbox(value: string) {
-  return value.trim().toLowerCase()
+  return normalizeMailboxIdentifier(value) ?? ''
 }
 
 function normalizeAccountAddress(value: string, domains: ReadonlyArray<string>) {
-  const address = normalizedMailbox(value)
-  if (!isValidMailbox(address) || address.includes('+')) {
+  const address = normalizeMailboxIdentifier(value)
+  if (!address || mailboxLocalPart(address).includes('+')) {
     throw new AgentMailAdminError('Mailbox account address must be a valid mailbox address', 400)
   }
   requireMailboxDomain(address, domains, 'Mailbox account address')
@@ -3121,8 +3127,8 @@ function normalizeAccountAddress(value: string, domains: ReadonlyArray<string>) 
 }
 
 function normalizeGroupAddress(value: string, domains: ReadonlyArray<string>) {
-  const address = normalizedMailbox(value)
-  if (!isValidMailbox(address) || address.includes('+')) {
+  const address = normalizeMailboxIdentifier(value)
+  if (!address || mailboxLocalPart(address).includes('+')) {
     throw new AgentMailAdminError('Forwarding group address must be a valid mailbox address', 400)
   }
   requireMailboxDomain(address, domains, 'Forwarding group address')
@@ -3138,8 +3144,8 @@ function normalizeGroupRecipients(values: ReadonlyArray<string>, domains: Readon
 }
 
 function normalizeGroupRecipient(value: string, domains: ReadonlyArray<string>) {
-  const recipient = normalizedMailbox(value)
-  if (!isValidMailbox(recipient)) {
+  const recipient = normalizeMailboxIdentifier(value)
+  if (!recipient) {
     throw new AgentMailAdminError('Forwarding group recipients must be valid mailbox addresses', 400)
   }
   requireMailboxDomain(recipient, domains, 'Forwarding group recipient')
@@ -3201,21 +3207,15 @@ function addNormalizedDomain(target: Set<string>, value: string | null | undefin
 }
 
 function normalizedDomain(value: string | null | undefined) {
-  return value?.trim().toLowerCase() ?? ''
-}
-
-function isValidMailbox(value: string) {
-  return /^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$/u.test(value)
+  return normalizeMailDomain(value) ?? ''
 }
 
 function domainPart(address: string) {
-  const at = address.lastIndexOf('@')
-  return at === -1 ? '' : address.slice(at + 1)
+  return mailboxDomain(address)
 }
 
 function localPart(address: string) {
-  const at = address.indexOf('@')
-  return at === -1 ? address : address.slice(0, at)
+  return mailboxLocalPart(address) || address
 }
 
 function usernameForMailbox(address: string) {

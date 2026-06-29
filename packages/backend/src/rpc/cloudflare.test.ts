@@ -76,8 +76,10 @@ describe('Cloudflare RPC routes', () => {
     )
 
     expect(response.status).toBe(200)
-    expect(response.headers.get('set-cookie')).toContain('cf-oauth-state=one')
-    expect(response.headers.get('set-cookie')).toContain('cf-oauth-verifier=two')
+    expect((response.headers as Headers & { getSetCookie: () => string[] }).getSetCookie()).toStrictEqual([
+      'cf-oauth-state=one; Path=/; HttpOnly',
+      'cf-oauth-verifier=two; Path=/; Secure'
+    ])
     await expect(response.json()).resolves.toStrictEqual({
       intent: {
         publicId: 'intent-public-1',

@@ -63,6 +63,7 @@
     "@main/shutdown-manager": "workspace:*",
     "@marsidev/react-turnstile": "catalog:",
     "@mikkelscheike/email-provider-links": "catalog:",
+    "@mitmaro/http-authorization-header": "catalog:",
     "@noble/ciphers": "catalog:",
     "@noble/hashes": "catalog:",
     "@phosphor-icons/react": "catalog:",

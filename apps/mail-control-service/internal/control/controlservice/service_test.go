@@ -3,9 +3,13 @@ package controlservice
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,6 +17,9 @@ import (
 	"agent-mail/internal/control/controlapi"
 	"agent-mail/internal/control/controlstate"
 	"agent-mail/internal/modules/poller"
+
+	gosasl "github.com/emersion/go-sasl"
+	gosmtp "github.com/emersion/go-smtp"
 )
 
 func TestRuntimeSecretsFromEnvRequiresRelayPassword(t *testing.T) {
@@ -468,6 +475,133 @@ func TestControlRuntimeAPISelectsIngestDomainByWorkerAuthority(t *testing.T) {
 	}
 }
 
+func TestControlRuntimeAPISubmitSendParsesStructuredMailboxes(t *testing.T) {
+	tests := []struct {
+		name     string
+		domain   string
+		from     string
+		to       string
+		wantFrom string
+		wantTo   string
+	}{
+		{
+			name:     "display name from and recipient",
+			domain:   "example.com",
+			from:     "Agent <Agent@Example.com>",
+			to:       "Recipient <Recipient@Example.net>",
+			wantFrom: "agent@example.com",
+			wantTo:   "recipient@example.net",
+		},
+		{
+			name:     "commented sender mailbox",
+			domain:   "example.com",
+			from:     "agent@example.com (Agent)",
+			to:       "recipient@example.net",
+			wantFrom: "agent@example.com",
+			wantTo:   "recipient@example.net",
+		},
+		{
+			name:     "idna sender domain",
+			domain:   "xn--exmple-cua.com",
+			from:     "Agent <agent@Exämple.com>",
+			to:       "recipient@example.net",
+			wantFrom: "agent@xn--exmple-cua.com",
+			wantTo:   "recipient@example.net",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			relay := newSubmitSendSMTPServer(t)
+			defer relay.Close()
+			api := testSubmitSendRuntimeAPI(relay)
+
+			result, err := api.SubmitSend(context.Background(), testSendSubmitParams(test.domain, test.from, test.to), time.Now().UTC())
+			if err != nil {
+				t.Fatalf("SubmitSend returned error: %v", err)
+			}
+			if result.Status != "submitted" {
+				t.Fatalf("Status = %q, want submitted", result.Status)
+			}
+			deliveries := relay.Deliveries()
+			if len(deliveries) != 1 {
+				t.Fatalf("deliveries = %#v, want one delivery", deliveries)
+			}
+			if deliveries[0].MailFrom != test.wantFrom {
+				t.Fatalf("MAIL FROM = %q, want %q", deliveries[0].MailFrom, test.wantFrom)
+			}
+			if len(deliveries[0].RcptTo) != 1 || deliveries[0].RcptTo[0] != test.wantTo {
+				t.Fatalf("RCPT TO = %#v, want %q", deliveries[0].RcptTo, test.wantTo)
+			}
+		})
+	}
+}
+
+func TestControlRuntimeAPISubmitSendRejectsInvalidStructuredMailboxesBeforeSMTP(t *testing.T) {
+	tests := []struct {
+		name   string
+		domain string
+		from   string
+		to     string
+	}{
+		{
+			name:   "malformed sender with matching final split domain",
+			domain: "attacker.test",
+			from:   "local@example.com@attacker.test",
+			to:     "recipient@example.net",
+		},
+		{
+			name:   "malformed recipient with multiple at signs",
+			domain: "example.com",
+			from:   "agent@example.com",
+			to:     "recipient@example.net@blocked.test",
+		},
+		{
+			name:   "recipient group list",
+			domain: "example.com",
+			from:   "agent@example.com",
+			to:     "Team: one@example.net, two@example.net;",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			relay := newSubmitSendSMTPServer(t)
+			defer relay.Close()
+			api := testSubmitSendRuntimeAPI(relay)
+
+			_, err := api.SubmitSend(context.Background(), testSendSubmitParams(test.domain, test.from, test.to), time.Now().UTC())
+			if err == nil {
+				t.Fatal("SubmitSend succeeded with invalid mailbox input")
+			}
+			if sessions := relay.SessionCount(); sessions != 0 {
+				t.Fatalf("SubmitSend opened %d SMTP sessions before rejecting invalid mailbox input", sessions)
+			}
+			if deliveries := relay.Deliveries(); len(deliveries) != 0 {
+				t.Fatalf("deliveries = %#v, want none", deliveries)
+			}
+		})
+	}
+}
+
+func TestControlRuntimeAPISubmitSendRejectsParsedSenderDomainMismatchBeforeSMTP(t *testing.T) {
+	relay := newSubmitSendSMTPServer(t)
+	defer relay.Close()
+	api := testSubmitSendRuntimeAPI(relay)
+
+	_, err := api.SubmitSend(
+		context.Background(),
+		testSendSubmitParams("example.com", "Agent <agent@blocked.test>", "recipient@example.net"),
+		time.Now().UTC(),
+	)
+	if err == nil {
+		t.Fatal("SubmitSend succeeded with a sender outside the authorized domain")
+	}
+	if sessions := relay.SessionCount(); sessions != 0 {
+		t.Fatalf("SubmitSend opened %d SMTP sessions before rejecting sender domain mismatch", sessions)
+	}
+}
+
 func TestLoopbackRelayAddressUsesLocalhostForPlainAuth(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -506,6 +640,194 @@ func TestLoopbackRelayAddressUsesLocalhostForPlainAuth(t *testing.T) {
 			}
 		})
 	}
+}
+
+func testSubmitSendRuntimeAPI(relay *submitSendSMTPServer) *controlRuntimeAPI {
+	return &controlRuntimeAPI{
+		relayAddress:  relay.Addr(),
+		relayUsername: relayUsername,
+		relayPassword: relayPassword,
+	}
+}
+
+func testSendSubmitParams(domain string, from string, to string) controlapi.SendSubmitParams {
+	return controlapi.SendSubmitParams{
+		IdempotencyKey: "send-test-key",
+		Domain:         domain,
+		From:           from,
+		To:             to,
+		Raw:            "Subject: Test\r\n\r\nBody",
+	}
+}
+
+const (
+	relayUsername = "relay-user"
+	relayPassword = "relay-password"
+)
+
+type submitSendSMTPServer struct {
+	t        *testing.T
+	listener net.Listener
+	smtp     *gosmtp.Server
+	done     chan struct{}
+
+	mu         sync.Mutex
+	sessions   int
+	deliveries []submitSendSMTPDelivery
+}
+
+type submitSendSMTPDelivery struct {
+	MailFrom string
+	RcptTo   []string
+	Raw      []byte
+}
+
+func newSubmitSendSMTPServer(t *testing.T) *submitSendSMTPServer {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen submit send SMTP: %v", err)
+	}
+	server := &submitSendSMTPServer{
+		t:        t,
+		listener: listener,
+		done:     make(chan struct{}),
+	}
+	smtpServer := gosmtp.NewServer(submitSendSMTPBackend{server: server})
+	smtpServer.AllowInsecureAuth = true
+	smtpServer.Domain = "submit-send-smtp.test"
+	smtpServer.ReadTimeout = 10 * time.Second
+	smtpServer.WriteTimeout = 10 * time.Second
+	server.smtp = smtpServer
+	go server.serve()
+	return server
+}
+
+func (s *submitSendSMTPServer) Addr() string {
+	return s.listener.Addr().String()
+}
+
+func (s *submitSendSMTPServer) Close() {
+	_ = s.smtp.Close()
+	_ = s.listener.Close()
+	select {
+	case <-s.done:
+	case <-time.After(2 * time.Second):
+		s.t.Errorf("submit send SMTP server did not stop")
+	}
+}
+
+func (s *submitSendSMTPServer) Deliveries() []submitSendSMTPDelivery {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	deliveries := make([]submitSendSMTPDelivery, len(s.deliveries))
+	for i, delivery := range s.deliveries {
+		deliveries[i] = submitSendSMTPDelivery{
+			MailFrom: delivery.MailFrom,
+			RcptTo:   append([]string(nil), delivery.RcptTo...),
+			Raw:      append([]byte(nil), delivery.Raw...),
+		}
+	}
+	return deliveries
+}
+
+func (s *submitSendSMTPServer) SessionCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.sessions
+}
+
+func (s *submitSendSMTPServer) recordSession() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sessions++
+}
+
+func (s *submitSendSMTPServer) recordDelivery(mailFrom string, rcptTo []string, raw []byte) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.deliveries = append(s.deliveries, submitSendSMTPDelivery{
+		MailFrom: mailFrom,
+		RcptTo:   append([]string(nil), rcptTo...),
+		Raw:      append([]byte(nil), raw...),
+	})
+}
+
+func (s *submitSendSMTPServer) serve() {
+	defer close(s.done)
+	if err := s.smtp.Serve(s.listener); err != nil && !errors.Is(err, gosmtp.ErrServerClosed) {
+		s.t.Errorf("submit send SMTP stopped with error: %v", err)
+	}
+}
+
+type submitSendSMTPBackend struct {
+	server *submitSendSMTPServer
+}
+
+func (b submitSendSMTPBackend) NewSession(*gosmtp.Conn) (gosmtp.Session, error) {
+	b.server.recordSession()
+	return &submitSendSMTPSession{server: b.server}, nil
+}
+
+type submitSendSMTPSession struct {
+	server        *submitSendSMTPServer
+	authenticated bool
+	mailFrom      string
+	rcptTo        []string
+}
+
+func (s *submitSendSMTPSession) AuthMechanisms() []string {
+	return []string{gosasl.Plain}
+}
+
+func (s *submitSendSMTPSession) Auth(mech string) (gosasl.Server, error) {
+	if mech != gosasl.Plain {
+		return nil, gosmtp.ErrAuthUnsupported
+	}
+	return gosasl.NewPlainServer(func(identity string, username string, password string) error {
+		if username != relayUsername || password != relayPassword {
+			return errors.New("invalid relay credentials")
+		}
+		s.authenticated = true
+		return nil
+	}), nil
+}
+
+func (s *submitSendSMTPSession) Mail(from string, _ *gosmtp.MailOptions) error {
+	if !s.authenticated {
+		return gosmtp.ErrAuthRequired
+	}
+	s.mailFrom = from
+	return nil
+}
+
+func (s *submitSendSMTPSession) Rcpt(to string, _ *gosmtp.RcptOptions) error {
+	if !s.authenticated {
+		return gosmtp.ErrAuthRequired
+	}
+	s.rcptTo = append(s.rcptTo, to)
+	return nil
+}
+
+func (s *submitSendSMTPSession) Data(reader io.Reader) error {
+	if !s.authenticated {
+		return gosmtp.ErrAuthRequired
+	}
+	raw, err := io.ReadAll(reader)
+	if err != nil {
+		return err
+	}
+	s.server.recordDelivery(s.mailFrom, s.rcptTo, raw)
+	return nil
+}
+
+func (s *submitSendSMTPSession) Reset() {
+	s.mailFrom = ""
+	s.rcptTo = nil
+}
+
+func (s *submitSendSMTPSession) Logout() error {
+	return nil
 }
 
 func testControlServiceDomainConfig(domain string, enabled bool) controlstate.DomainConfigParams {

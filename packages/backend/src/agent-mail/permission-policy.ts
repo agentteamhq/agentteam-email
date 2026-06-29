@@ -9,6 +9,8 @@ import {
   AgentMailOrganizationCapabilityGrantConstraints,
   AgentMailSystemGrantConstraints
 } from '@main/db'
+
+import { parseMailboxAddress } from './mailbox-address'
 import type { ForcedSubject, MatchConditions } from '@casl/ability'
 import type {
   AgentCapabilityGrantDocument,
@@ -463,19 +465,17 @@ function recipientConstraintsSatisfied(
     return true
   }
 
-  const recipients = resource.recipientAddresses
-    ?.map((recipient) => normalizedMailbox(recipient))
-    .filter(Boolean)
-  if (!recipients?.length) {
+  const recipients = resource.recipientAddresses?.map((recipient) => parseMailboxAddress(recipient))
+  if (!recipients?.length || recipients.some((recipient) => recipient === null)) {
     return false
   }
 
   return recipients.every((recipient) => {
-    const domain = recipient.split('@').at(1) ?? ''
     return (
-      allowedRecipients.has(recipient) ||
-      allowedDomains.has(domain) ||
-      allowedPatterns.some((pattern) => wildcardMatches(pattern, recipient))
+      recipient !== null &&
+      (allowedRecipients.has(recipient.address) ||
+        allowedDomains.has(recipient.domain) ||
+        allowedPatterns.some((pattern) => wildcardMatches(pattern, recipient.address)))
     )
   })
 }

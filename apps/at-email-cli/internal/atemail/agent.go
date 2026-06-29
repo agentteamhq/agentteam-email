@@ -96,6 +96,10 @@ func handleAgentConnect(ctx context.Context, args parsedArgs, env []string, stdo
 	if err != nil {
 		return err
 	}
+	agentPublicKey, err := agentKey.publicJWK()
+	if err != nil {
+		return err
+	}
 	host, err := resolveLocalAgentHostKey(resolution.APIBaseURL, name)
 	if err != nil {
 		return err
@@ -114,7 +118,7 @@ func handleAgentConnect(ctx context.Context, args parsedArgs, env []string, stdo
 	if args.Device {
 		preferredMethod = "device_authorization"
 	}
-	registeredAgent, err := client.registerAgent(ctx, credential, agentKey.publicJWK(), name, agentRegistrationOptions{
+	registeredAgent, err := client.registerAgent(ctx, credential, agentPublicKey, name, agentRegistrationOptions{
 		Capabilities:    capabilities,
 		Mode:            "delegated",
 		PreferredMethod: preferredMethod,
@@ -206,8 +210,16 @@ func handleAgentTrial(ctx context.Context, args parsedArgs, env []string, stdout
 	if err != nil {
 		return err
 	}
+	hostPublicKey, err := host.HostPrivateKey.publicJWK()
+	if err != nil {
+		return err
+	}
+	agentPublicKey, err := agentKey.publicJWK()
+	if err != nil {
+		return err
+	}
 	admissionToken := lookupEnv(envMap(env), "AT_EMAIL_TRIAL_ADMISSION_TOKEN")
-	trial, err := client.startTrial(ctx, host.HostPrivateKey.publicJWK(), agentKey.publicJWK(), name, args.AgentCapabilities, args.AgentPostClaimCapabilities, admissionToken)
+	trial, err := client.startTrial(ctx, hostPublicKey, agentPublicKey, name, args.AgentCapabilities, args.AgentPostClaimCapabilities, admissionToken)
 	if err != nil {
 		return err
 	}
@@ -301,7 +313,11 @@ func handleAgentEnroll(ctx context.Context, args parsedArgs, env []string, stdou
 		return err
 	}
 	host.Issuer = stringValueOrDefault(host.Issuer, issuer)
-	enrolledHost, err := client.enrollHost(ctx, token, host.HostPrivateKey.publicJWK(), name)
+	hostPublicKey, err := host.HostPrivateKey.publicJWK()
+	if err != nil {
+		return err
+	}
+	enrolledHost, err := client.enrollHost(ctx, token, hostPublicKey, name)
 	if err != nil {
 		return err
 	}
@@ -325,7 +341,11 @@ func handleAgentEnroll(ctx context.Context, args parsedArgs, env []string, stdou
 		Name:            name,
 		Status:          stringValue(enrolledHost["status"]),
 	}
-	registeredAgent, err := client.registerAgent(ctx, credential, agentKey.publicJWK(), name, agentRegistrationOptions{
+	agentPublicKey, err := agentKey.publicJWK()
+	if err != nil {
+		return err
+	}
+	registeredAgent, err := client.registerAgent(ctx, credential, agentPublicKey, name, agentRegistrationOptions{
 		Mode: "delegated",
 	})
 	if err != nil {
