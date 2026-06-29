@@ -73,7 +73,11 @@ function ClientOnlyAuthPage(
   }
 
   const lastUsedLoginMethod =
-    props.lastUsedLoginMethod === undefined ? resolveLastUsedLoginMethod() : props.lastUsedLoginMethod
+    props.view === 'signIn'
+      ? props.lastUsedLoginMethod === undefined
+        ? resolveLastUsedLoginMethod()
+        : props.lastUsedLoginMethod
+      : null
 
   return (
     <BetterAuthPage

@@ -53,7 +53,6 @@ export function LinkedAccount({ account, provider }: LinkedAccountProps) {
 
   const displayName =
     accountInfo?.data?.login ||
-    accountInfo?.data?.username ||
     accountInfo?.user?.email ||
     accountInfo?.user?.name ||
     account?.accountId

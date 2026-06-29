@@ -1,10 +1,6 @@
 "use client"
 
-import {
-  type UsernameAuthClient,
-  useAuth,
-  useSession
-} from "@better-auth-ui/react"
+import { useAuth, useSession } from "@better-auth-ui/react"
 import type { User } from "better-auth"
 
 import { Skeleton } from "src/components/ui/skeleton"
@@ -15,19 +11,16 @@ export type UserViewProps = {
   className?: string
   isPending?: boolean
   /**
-   * When true, the subtitle line (email when name/username is shown) is hidden.
+   * When true, the subtitle line (email when name is shown) is hidden.
    * @default false
    */
   hideSubtitle?: boolean
   /** @remarks `User` */
-  user?: Partial<User> & {
-    username?: string | null
-    displayUsername?: string | null
-  }
+  user?: Partial<User>
 }
 
 /**
- * Render a compact user item with an avatar, a primary label (display username, name, or email), and an optional subtitle (email).
+ * Render a compact user item with an avatar, a primary label (name or email), and an optional subtitle (email).
  *
  * @param isPending - If true and no `user` prop is provided, renders a loading skeleton instead of user details
  * @param className - Additional CSS classes applied to the outer container
@@ -42,10 +35,9 @@ export function UserView({
   user
 }: UserViewProps) {
   const { authClient } = useAuth()
-  const { data: session, isPending: sessionPending } = useSession(
-    authClient as UsernameAuthClient,
-    { enabled: !user && !isPending }
-  )
+  const { data: session, isPending: sessionPending } = useSession(authClient, {
+    enabled: !user && !isPending
+  })
 
   const resolvedUser = user ?? session?.user
 
@@ -69,17 +61,12 @@ export function UserView({
 
       <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
         <span className="truncate font-medium text-foreground">
-          {resolvedUser?.displayUsername ||
-            resolvedUser?.name ||
-            resolvedUser?.email}
+          {resolvedUser?.name || resolvedUser?.email}
         </span>
 
-        {!hideSubtitle &&
-          (resolvedUser?.displayUsername || resolvedUser?.name) && (
-            <span className="text-muted-foreground truncate text-xs">
-              {resolvedUser?.email}
-            </span>
-          )}
+        {!hideSubtitle && resolvedUser?.name && (
+          <span className="text-muted-foreground truncate text-xs">{resolvedUser?.email}</span>
+        )}
       </div>
     </div>
   )

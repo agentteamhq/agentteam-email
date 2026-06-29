@@ -5,7 +5,6 @@ import {
   parseAdditionalFieldValue
 } from "@better-auth-ui/core"
 import {
-  type UsernameAuthClient,
   useAuth,
   useSession,
   useUpdateUser
@@ -29,14 +28,14 @@ export type UserProfileProps = {
 }
 
 /**
- * Render a profile card that lets the authenticated user view and update their display name, username, and avatar.
+ * Render a profile card that lets the authenticated user view and update their name and avatar.
  *
  * @param className - Optional additional CSS class names applied to the card container
- * @returns A JSX element containing the profile card with avatar upload and editable name/username fields
+ * @returns A JSX element containing the profile card with avatar upload and editable name fields
  */
 export function UserProfile({ className }: UserProfileProps) {
   const { additionalFields, authClient, localization } = useAuth()
-  const { data: session } = useSession(authClient as UsernameAuthClient)
+  const { data: session } = useSession(authClient)
 
   const { mutate: updateUser, isPending } = useUpdateUser(authClient, {
     onSuccess: () => toast.success(localization.settings.profileUpdatedSuccess)

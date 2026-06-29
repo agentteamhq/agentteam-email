@@ -12,7 +12,6 @@ import { multiSessionPlugin } from '../../lib/auth/multi-session-plugin'
 import { organizationPlugin } from '../../lib/auth/organization-plugin'
 import { passkeyPlugin } from '../../lib/auth/passkey-plugin'
 import { themePlugin } from '../../lib/auth/theme-plugin'
-import { usernamePlugin } from '../../lib/auth/username-plugin'
 import { authReactClient } from '../../lib/auth-react-client'
 import { clearPersistedStore } from '../../store/use-store'
 
@@ -132,7 +131,6 @@ export function BetterAuthUIProvider({
       navigate={navigate}
       plugins={[
         magicLinkPlugin(),
-        usernamePlugin(),
         passkeyPlugin(),
         multiSessionPlugin(),
         organizationPlugin(),

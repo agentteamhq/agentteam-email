@@ -18,6 +18,10 @@ their owning CLI or generated workflow with explicit current-task approval.
 
 Storybook stories must render canonical product components only.
 
+Storybook `meta.title` must use the approved sidebar roots (`Screens`, `Components`, `Mocks`, `Showcase`, and existing `Controllers`); story `name` values must be flat human-readable labels and must not contain `/` because story names do not create sidebar groups.
+
+Storybook stories must be grouped by the rendered product surface; implementation-backed stories, including controller, route, RPC, loader, and interaction-test stories, must live under that product surface's `Integration` subgroup.
+
 Stories must not define product layout, component hierarchy, controller logic, or product behavior.
 
 Stories must pass props to the canonical screen, page, or block component and let that component render its own children.

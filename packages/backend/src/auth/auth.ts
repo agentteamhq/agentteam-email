@@ -19,8 +19,7 @@ import {
   magicLink,
   multiSession,
   openAPI,
-  organization,
-  username
+  organization
 } from 'better-auth/plugins'
 import { auditLog } from 'better-auth-audit-logs'
 import debug from 'debug'
@@ -112,12 +111,10 @@ export const organizationRoles = {
 
 const AUTH_AUDIT_LOG_PATHS = [
   '/sign-in/email',
-  '/sign-in/username',
   '/sign-in/oauth2',
   '/sign-in/social',
   '/sign-in/magic-link',
   '/magic-link/verify',
-  '/is-username-available',
   '/sign-up/email',
   '/sign-out',
   '/callback/:id',
@@ -233,7 +230,6 @@ export type GlobalAuthSessionUser = {
   banReason?: string | null
   banned?: boolean | null
   createdAt?: Date | string | null
-  displayUsername?: string | null
   email?: string | null
   emailVerified?: boolean | null
   id: string
@@ -242,7 +238,6 @@ export type GlobalAuthSessionUser = {
   name?: string | null
   role?: string | null
   updatedAt?: Date | string | null
-  username?: string | null
 }
 
 export type GlobalAuthSession = {
@@ -355,7 +350,6 @@ export function createGlobalAuth(db: Database): GlobalAuth {
     }),
     ...(PUBLIC_VARS.DEV ? [openAPI()] : []),
     ...(cloudflareOAuthConfig ? [genericOAuth({ config: [cloudflareOAuthConfig] })] : []),
-    username(),
     passkey(),
     multiSession(),
     jwt({

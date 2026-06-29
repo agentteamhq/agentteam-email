@@ -356,8 +356,7 @@ const emailPreviewMails = [
     email: 'templates@mailjet.example',
     subject: 'Welcome aboard',
     date: 'Yesterday',
-    teaser:
-      'Dear [[FirstName]], welcome to [[CompanyName]]. You can log in to your account with your username.'
+    teaser: 'Dear [[FirstName]], welcome to [[CompanyName]]. You can log in to your account with your email.'
   },
   {
     id: 'conversation-thread',

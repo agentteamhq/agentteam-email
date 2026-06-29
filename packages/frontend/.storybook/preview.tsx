@@ -65,7 +65,12 @@ const preview: Preview = {
         date: /Date$/i
       }
     },
-    layout: 'fullscreen'
+    layout: 'fullscreen',
+    options: {
+      storySort: {
+        order: ['Screens', 'Components', 'Mocks', 'Showcase']
+      }
+    }
   }
 }
 
