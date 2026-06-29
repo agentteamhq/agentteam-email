@@ -236,6 +236,74 @@ describe('Agent Mail permission policy', () => {
     ).toBe(false)
   })
 
+  it('allows an exact constrained recipient when the message recipient has a display name', () => {
+    expect.hasAssertions()
+    const ability = constrainedSendAbility({
+      allowedRecipients: ['person@example.net']
+    })
+
+    expect(canSendMessageTo(ability, ['Person Example <Person@Example.Net>'])).toBe(true)
+  })
+
+  it('allows a constrained recipient domain when the message recipient has a display name', () => {
+    expect.hasAssertions()
+    const ability = constrainedSendAbility({
+      allowedRecipientDomains: ['example.net']
+    })
+
+    expect(canSendMessageTo(ability, ['Recipient <recipient@Example.Net>'])).toBe(true)
+  })
+
+  it('allows a constrained recipient domain when the message recipient has an RFC comment', () => {
+    expect.hasAssertions()
+    const ability = constrainedSendAbility({
+      allowedRecipientDomains: ['example.net']
+    })
+
+    expect(canSendMessageTo(ability, ['recipient@example.net (Recipient)'])).toBe(true)
+  })
+
+  it('matches constrained recipient patterns against the parsed mailbox address', () => {
+    expect.hasAssertions()
+    const ability = constrainedSendAbility({
+      allowedRecipientPatterns: ['*@example.net']
+    })
+
+    expect(canSendMessageTo(ability, ['Recipient <recipient@example.net>'])).toBe(true)
+  })
+
+  it('fails closed for a malformed recipient whose first split domain is allowed', () => {
+    expect.hasAssertions()
+    const ability = constrainedSendAbility({
+      allowedRecipientDomains: ['allowed.test']
+    })
+
+    expect(canSendMessageTo(ability, ['local@allowed.test@blocked.test'])).toBe(false)
+  })
+
+  it('requires every parsed recipient to satisfy the recipient constraints', () => {
+    expect.hasAssertions()
+    const ability = constrainedSendAbility({
+      allowedRecipientDomains: ['example.net', 'allowed.test']
+    })
+
+    expect(canSendMessageTo(ability, ['recipient@example.net', 'local@allowed.test@blocked.test'])).toBe(
+      false
+    )
+  })
+
+  it('allows mixed exact-recipient and domain constraints after parsed recipient normalization', () => {
+    expect.hasAssertions()
+    const ability = constrainedSendAbility({
+      allowedRecipientDomains: ['example.net'],
+      allowedRecipients: ['specific@example.org']
+    })
+
+    expect(
+      canSendMessageTo(ability, ['Specific <specific@example.org>', 'Recipient <recipient@example.net>'])
+    ).toBe(true)
+  })
+
   it('maps the domain management capability to the Domain subject without mailbox access', () => {
     expect.hasAssertions()
     const ability = buildAgentMailAbility({
@@ -354,6 +422,39 @@ function agentPrincipal() {
     principalId: 'agent-1',
     principalType: 'agent' as AgentMailPrincipalType
   }
+}
+
+function constrainedSendAbility(constraints: {
+  allowedRecipientDomains?: string[]
+  allowedRecipientPatterns?: string[]
+  allowedRecipients?: string[]
+}) {
+  return buildAgentMailAbility({
+    capabilityGrants: [
+      capabilityGrant({
+        capability: 'email.message.send',
+        constraints: {
+          mailboxAddress: 'support@example.test',
+          organizationId,
+          ...constraints
+        }
+      })
+    ],
+    mailboxGrants: [],
+    principal: agentPrincipal(),
+    systemGrants: []
+  })
+}
+
+function canSendMessageTo(ability: ReturnType<typeof buildAgentMailAbility>, recipientAddresses: string[]) {
+  return ability.can(
+    'send',
+    agentMailSubject('Message', {
+      mailboxAddress: 'support@example.test',
+      organizationId,
+      recipientAddresses
+    })
+  )
 }
 
 function capabilityGrant(
