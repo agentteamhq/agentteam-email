@@ -4,7 +4,7 @@ redis:
   db: 3
 
 mongo:
-  url: '{{ include "agentteam-email.mongodbUri" (dict "root" . "database" "wildduck" "options" "maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000") }}'
+  url: '{{ include "agentteam-email.mongodbUri" (dict "root" . "database" "wildduck" "options" (include "agentteam-email.mongodbClientOptions" (dict "pool" .Values.mongodb.clientPools.wildduck))) }}'
   # Regression guard: Haraka performs inbound storage and native forwarding.
   # Its outbound sender DB must match ZoneMTA [dbs].sender, or WildDuck target
   # forwarding is queued into an undrained upstream-default database.

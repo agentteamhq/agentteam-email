@@ -22,3 +22,9 @@ services:
       args:
         APP_UID: '${AT_EMAIL_ADMIN_UID:-1000}'
         APP_GID: '${AT_EMAIL_ADMIN_GID:-1000}'
+
+volumes:
+  mongodb-data:
+  redis-data:
+  rspamd-data:
+  haraka-queue:

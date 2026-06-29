@@ -135,6 +135,11 @@ emptyDir: {}
 {{- end -}}
 {{- end -}}
 
+{{- define "agentteam-email.mongodbClientOptions" -}}
+{{- $pool := .pool -}}
+{{- printf "maxPoolSize=%v&minPoolSize=%v&maxIdleTimeMS=%v" $pool.maxPoolSize $pool.minPoolSize $pool.maxIdleTimeMS -}}
+{{- end -}}
+
 {{- define "agentteam-email.envFor" -}}
 {{- $root := .root -}}
 {{- $name := .name -}}
@@ -157,8 +162,8 @@ emptyDir: {}
 {{- else if eq $name "AT_EMAIL_ADMIN_CONTROL_API_BASE_URL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (printf "http://%s:8081" $root.Values.names.mailControlService))) -}}
 {{- else if eq $name "AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_BASE_URL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (printf "http://%s:%v" $root.Values.names.webServer $root.Values.service.webServer.port))) -}}
 {{- else if eq $name "AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.controlApi.controlToWebToken "name" "controlApi.controlToWebToken") -}}
-{{- else if eq $name "AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (include "agentteam-email.mongodbUri" (dict "root" $root "database" "wildduck" "options" "maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000")))) -}}
-{{- else if eq $name "AT_EMAIL_ADMIN_CONTROL_MONGODB_URI" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (include "agentteam-email.mongodbUri" (dict "root" $root "database" "agent_mail_control" "options" "maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000")))) -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (include "agentteam-email.mongodbUri" (dict "root" $root "database" "wildduck" "options" (include "agentteam-email.mongodbClientOptions" (dict "pool" $root.Values.mongodb.clientPools.wildduck)))))) -}}
+{{- else if eq $name "AT_EMAIL_ADMIN_CONTROL_MONGODB_URI" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (include "agentteam-email.mongodbUri" (dict "root" $root "database" "agent_mail_control" "options" (include "agentteam-email.mongodbClientOptions" (dict "pool" $root.Values.mongodb.clientPools.control)))))) -}}
 {{- else if eq $name "AT_EMAIL_ADMIN_TRIAL_ENABLED" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.trial.enabled) -}}
 {{- else if eq $name "AT_EMAIL_ADMIN_TRIAL_ORGANIZATION_ID" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.trial.organizationId) -}}
 {{- else if eq $name "AT_EMAIL_ADMIN_TRIAL_DOMAIN" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.trial.domain) -}}

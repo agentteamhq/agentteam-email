@@ -70,9 +70,24 @@ webServer:
 mailControlService: {}
 
 mongodb:
+  clientPools:
+    control:
+      maxIdleTimeMS: 60000
+      maxPoolSize: 4
+      minPoolSize: 0
+    wildduck:
+      maxIdleTimeMS: 60000
+      maxPoolSize: 4
+      minPoolSize: 0
+  diagnosticDataCollectionEnabled: false
   maxIncomingConnections: 128
+  nofile: 20000
   replicaSetName: rs0
+  shutdownTimeoutMillisForSignaledShutdown: 120000
   terminationGracePeriodSeconds: 120
+  wiredTiger:
+    cacheSizeGB: 0.256
+    configString: 'eviction=(threads_min=1,threads_max=1),prefetch=(available=false,default=false)'
 
 controlApi:
   controlToWebToken: {}

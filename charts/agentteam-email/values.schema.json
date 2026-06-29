@@ -18,6 +18,14 @@
       "required": ["name", "key"],
       "type": "object"
     },
+    "mongodbClientPool": {
+      "properties": {
+        "maxIdleTimeMS": { "minimum": 0, "type": "integer" },
+        "maxPoolSize": { "minimum": 1, "type": "integer" },
+        "minPoolSize": { "minimum": 0, "type": "integer" }
+      },
+      "type": "object"
+    },
     "persistentService": {
       "properties": {
         "accessModes": {
@@ -194,9 +202,26 @@
     },
     "mongodb": {
       "properties": {
+        "clientPools": {
+          "properties": {
+            "control": { "$ref": "#/$defs/mongodbClientPool" },
+            "wildduck": { "$ref": "#/$defs/mongodbClientPool" }
+          },
+          "type": "object"
+        },
+        "diagnosticDataCollectionEnabled": { "type": "boolean" },
         "maxIncomingConnections": { "minimum": 1, "type": "integer" },
+        "nofile": { "minimum": 1, "type": "integer" },
         "replicaSetName": { "minLength": 1, "type": "string" },
-        "terminationGracePeriodSeconds": { "minimum": 1, "type": "integer" }
+        "shutdownTimeoutMillisForSignaledShutdown": { "minimum": 1, "type": "integer" },
+        "terminationGracePeriodSeconds": { "minimum": 1, "type": "integer" },
+        "wiredTiger": {
+          "properties": {
+            "cacheSizeGB": { "minimum": 0.256, "type": "number" },
+            "configString": { "minLength": 1, "type": "string" }
+          },
+          "type": "object"
+        }
       },
       "type": "object"
     },

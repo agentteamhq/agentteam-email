@@ -36,6 +36,10 @@ services:
     configs:
       - source: mongodb-mongod-conf
         target: /etc/mongod.conf
+    ulimits:
+      nofile:
+        soft: ${AT_EMAIL_ADMIN_MONGODB_NOFILE_SOFT:-20000}
+        hard: ${AT_EMAIL_ADMIN_MONGODB_NOFILE_HARD:-40000}
     healthcheck:
       test:
         - CMD
@@ -44,7 +48,7 @@ services:
         - |
           mongosh --host 127.0.0.1:27017 --quiet --eval '
             const config = {
-              _id: "rs0",
+              _id: "${AT_EMAIL_ADMIN_MONGODB_REPLICA_SET_NAME:-rs0}",
               members: [{ _id: 0, host: "mongodb:27017" }]
             };
             try {
@@ -62,7 +66,7 @@ services:
       timeout: 10s
       retries: 30
       start_period: 10s
-    stop_grace_period: 2m
+    stop_grace_period: '${AT_EMAIL_ADMIN_MONGODB_STOP_GRACE_PERIOD:-2m}'
     restart: unless-stopped
 
   redis:
@@ -210,7 +214,7 @@ services:
       APPCONF_api_accessControl_secret: '${AT_EMAIL_ADMIN_WILDDUCK_ACCESS_CONTROL_SECRET:?missing AT_EMAIL_ADMIN_WILDDUCK_ACCESS_CONTROL_SECRET}'
       APPCONF_api_host: 0.0.0.0
       APPCONF_api_port: '8080'
-      APPCONF_dbs_mongo: '${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI:-mongodb://mongodb:27017/wildduck?replicaSet=rs0&maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000}'
+      APPCONF_dbs_mongo: '${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI:-mongodb://mongodb:27017/wildduck?replicaSet=${AT_EMAIL_ADMIN_MONGODB_REPLICA_SET_NAME:-rs0}&maxPoolSize=${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_MAX_POOL_SIZE:-4}&minPoolSize=${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_MIN_POOL_SIZE:-0}&maxIdleTimeMS=${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_MAX_IDLE_TIME_MS:-60000}}'
       APPCONF_dbs_redis: '${AT_EMAIL_ADMIN_REDIS_URL:-redis://redis:6379/3}'
       APPCONF_imap_host: 0.0.0.0
       APPCONF_imap_port: '10143'
@@ -256,8 +260,8 @@ services:
       AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN: '${AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN:?missing AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN}'
       AT_EMAIL_ADMIN_ZONEMTA_RELAY_PASSWORD: '${AT_EMAIL_ADMIN_ZONEMTA_RELAY_PASSWORD:?missing AT_EMAIL_ADMIN_ZONEMTA_RELAY_PASSWORD}'
       AT_EMAIL_ADMIN_FEEDBACK_MAILBOX_PASSWORD: '${AT_EMAIL_ADMIN_FEEDBACK_MAILBOX_PASSWORD:?missing AT_EMAIL_ADMIN_FEEDBACK_MAILBOX_PASSWORD}'
-      AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI: '${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI:-mongodb://mongodb:27017/wildduck?replicaSet=rs0&maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000}'
-      AT_EMAIL_ADMIN_CONTROL_MONGODB_URI: '${AT_EMAIL_ADMIN_CONTROL_MONGODB_URI:-mongodb://mongodb:27017/agent_mail_control?replicaSet=rs0&maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000}'
+      AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI: '${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI:-mongodb://mongodb:27017/wildduck?replicaSet=${AT_EMAIL_ADMIN_MONGODB_REPLICA_SET_NAME:-rs0}&maxPoolSize=${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_MAX_POOL_SIZE:-4}&minPoolSize=${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_MIN_POOL_SIZE:-0}&maxIdleTimeMS=${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_MAX_IDLE_TIME_MS:-60000}}'
+      AT_EMAIL_ADMIN_CONTROL_MONGODB_URI: '${AT_EMAIL_ADMIN_CONTROL_MONGODB_URI:-mongodb://mongodb:27017/agent_mail_control?replicaSet=${AT_EMAIL_ADMIN_MONGODB_REPLICA_SET_NAME:-rs0}&maxPoolSize=${AT_EMAIL_ADMIN_CONTROL_MONGODB_MAX_POOL_SIZE:-4}&minPoolSize=${AT_EMAIL_ADMIN_CONTROL_MONGODB_MIN_POOL_SIZE:-0}&maxIdleTimeMS=${AT_EMAIL_ADMIN_CONTROL_MONGODB_MAX_IDLE_TIME_MS:-60000}}'
       AT_EMAIL_ADMIN_CF_API_BASE_URL: '${AT_EMAIL_ADMIN_CF_API_BASE_URL:-https://api.cloudflare.com/client/v4}'
       AT_EMAIL_ADMIN_WILDDUCK_API_BASE_URL: '${AT_EMAIL_ADMIN_WILDDUCK_API_BASE_URL:-http://wildduck:8080}'
       AT_EMAIL_ADMIN_WILDDUCK_IMAP_ADDRESS: '${AT_EMAIL_ADMIN_WILDDUCK_IMAP_ADDRESS:-wildduck:10143}'
@@ -295,7 +299,7 @@ services:
       PORT: '4321'
       FRONTEND_HOST: 0.0.0.0
       PUBLIC_HOSTNAME: '${AT_EMAIL_ADMIN_PUBLIC_HOSTNAME:?missing AT_EMAIL_ADMIN_PUBLIC_HOSTNAME}'
-      DATABASE_URL: '${AT_EMAIL_ADMIN_APP_MONGODB_URI:-mongodb://mongodb:27017/agentteam_email?replicaSet=rs0}'
+      DATABASE_URL: '${AT_EMAIL_ADMIN_APP_MONGODB_URI:-mongodb://mongodb:27017/agentteam_email?replicaSet=${AT_EMAIL_ADMIN_MONGODB_REPLICA_SET_NAME:-rs0}}'
       DATABASE_MAX_POOL_SIZE: '${AT_EMAIL_ADMIN_DATABASE_MAX_POOL_SIZE:-8}'
       TMP_DIR: '${AT_EMAIL_ADMIN_TMP_DIR:-/tmp/agentteam-email}'
       BETTER_AUTH_SECRET: '${AT_EMAIL_ADMIN_BETTER_AUTH_SECRET:?missing AT_EMAIL_ADMIN_BETTER_AUTH_SECRET}'
@@ -358,23 +362,23 @@ configs:
         dbPath: /data/db
         wiredTiger:
           engineConfig:
-            cacheSizeGB: 0.256
-            configString: "eviction=(threads_min=1,threads_max=1),prefetch=(available=false,default=false)"
+            cacheSizeGB: ${AT_EMAIL_ADMIN_MONGODB_WIREDTIGER_CACHE_SIZE_GB:-0.256}
+            configString: "${AT_EMAIL_ADMIN_MONGODB_WIREDTIGER_CONFIG_STRING:-eviction=(threads_min=1,threads_max=1),prefetch=(available=false,default=false)}"
 
       net:
         bindIpAll: true
         # Sized above the summed Agent Mail client pools so diagnostics and burst
         # work can connect while ZoneMTA, Haraka, WildDuck, and atemail-mail-control-service run.
-        maxIncomingConnections: 64
+        maxIncomingConnections: ${AT_EMAIL_ADMIN_MONGODB_MAX_INCOMING_CONNECTIONS:-64}
         unixDomainSocket:
           enabled: false
 
       replication:
-        replSetName: "rs0"
+        replSetName: "${AT_EMAIL_ADMIN_MONGODB_REPLICA_SET_NAME:-rs0}"
 
       setParameter:
-        diagnosticDataCollectionEnabled: false
-        shutdownTimeoutMillisForSignaledShutdown: 120000
+        diagnosticDataCollectionEnabled: ${AT_EMAIL_ADMIN_MONGODB_DIAGNOSTIC_DATA_COLLECTION_ENABLED:-false}
+        shutdownTimeoutMillisForSignaledShutdown: ${AT_EMAIL_ADMIN_MONGODB_SHUTDOWN_TIMEOUT_MILLIS:-120000}
 
   redis-conf:
     content: |
@@ -565,7 +569,7 @@ configs:
       redis: '${AT_EMAIL_ADMIN_REDIS_URL:-redis://redis:6379/3}'
 
       mongo:
-        url: '${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI:-mongodb://mongodb:27017/wildduck?replicaSet=rs0&maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000}'
+        url: '${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI:-mongodb://mongodb:27017/wildduck?replicaSet=${AT_EMAIL_ADMIN_MONGODB_REPLICA_SET_NAME:-rs0}&maxPoolSize=${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_MAX_POOL_SIZE:-4}&minPoolSize=${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_MIN_POOL_SIZE:-0}&maxIdleTimeMS=${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_MAX_IDLE_TIME_MS:-60000}}'
         # Regression guard: Haraka performs inbound storage and native forwarding.
         # Its outbound sender DB must match ZoneMTA [dbs].sender, or WildDuck target
         # forwarding is queued into an undrained upstream-default database.
@@ -646,7 +650,7 @@ configs:
 
   zonemta-dbs-production:
     content: |
-      mongo = "${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI:-mongodb://mongodb:27017/wildduck?replicaSet=rs0&maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000}"
+      mongo = "${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI:-mongodb://mongodb:27017/wildduck?replicaSet=${AT_EMAIL_ADMIN_MONGODB_REPLICA_SET_NAME:-rs0}&maxPoolSize=${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_MAX_POOL_SIZE:-4}&minPoolSize=${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_MIN_POOL_SIZE:-0}&maxIdleTimeMS=${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_MAX_IDLE_TIME_MS:-60000}}"
       redis = "${AT_EMAIL_ADMIN_REDIS_URL:-redis://redis:6379/3}"
       sender = "wildduck"
 

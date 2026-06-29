@@ -1,4 +1,4 @@
-mongo = "{{ include "agentteam-email.mongodbUri" (dict "root" . "database" "wildduck" "options" "maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000") }}"
+mongo = "{{ include "agentteam-email.mongodbUri" (dict "root" . "database" "wildduck" "options" (include "agentteam-email.mongodbClientOptions" (dict "pool" .Values.mongodb.clientPools.wildduck))) }}"
 sender = "wildduck"
 
 [redis]

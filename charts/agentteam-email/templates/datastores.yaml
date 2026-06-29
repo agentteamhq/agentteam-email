@@ -49,9 +49,11 @@ spec:
           imagePullPolicy: {{ .Values.images.mongodb.pullPolicy }}
 {{ include "agentteam-email.bundledSecurityContext" . | nindent 10 }}
           command:
-            - mongod
-            - --config
-            - /etc/mongod.conf
+            - /bin/sh
+            - -ec
+            - |
+              ulimit -n {{ .Values.mongodb.nofile }}
+              exec mongod --config /etc/mongod.conf
           lifecycle:
             postStart:
               exec:
