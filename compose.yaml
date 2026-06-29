@@ -26,6 +26,8 @@ services:
     user: '${AT_EMAIL_ADMIN_UID:-1000}:${AT_EMAIL_ADMIN_GID:-1000}'
     pull_policy: '${AT_EMAIL_ADMIN_PULL_POLICY:-always}'
     image: 'docker.io/library/mongo:8.3.2'
+    networks:
+      - agentteam-email-network
     command:
       - mongod
       - --config
@@ -68,6 +70,8 @@ services:
     user: '${AT_EMAIL_ADMIN_UID:-1000}:${AT_EMAIL_ADMIN_GID:-1000}'
     pull_policy: '${AT_EMAIL_ADMIN_PULL_POLICY:-always}'
     image: 'docker.io/library/redis:8.6.3'
+    networks:
+      - agentteam-email-network
     command:
       - redis-server
       - /usr/local/etc/redis/redis.conf
@@ -88,6 +92,8 @@ services:
     user: '${AT_EMAIL_ADMIN_UID:-1000}:${AT_EMAIL_ADMIN_GID:-1000}'
     pull_policy: '${AT_EMAIL_ADMIN_PULL_POLICY:-always}'
     image: 'docker.io/rspamd/rspamd:4.1.0'
+    networks:
+      - agentteam-email-network
     volumes:
       - rspamd-data:/var/lib/rspamd
     configs:
@@ -109,6 +115,8 @@ services:
     user: '${AT_EMAIL_ADMIN_UID:-1000}:${AT_EMAIL_ADMIN_GID:-1000}'
     pull_policy: '${AT_EMAIL_ADMIN_PULL_POLICY:-always}'
     image: 'ghcr.io/zone-eu/zonemta-wildduck:1.32.30'
+    networks:
+      - agentteam-email-network
     environment:
       NODE_ENV: production
     configs:
@@ -157,6 +165,8 @@ services:
     user: '${AT_EMAIL_ADMIN_UID:-1000}:${AT_EMAIL_ADMIN_GID:-1000}'
     pull_policy: '${AT_EMAIL_ADMIN_PULL_POLICY:-always}'
     image: 'ghcr.io/zone-eu/haraka-plugin-wildduck:5.8.41'
+    networks:
+      - agentteam-email-network
     volumes:
       - haraka-queue:/app/queue
     configs:
@@ -199,6 +209,8 @@ services:
     user: '${AT_EMAIL_ADMIN_UID:-1000}:${AT_EMAIL_ADMIN_GID:-1000}'
     pull_policy: '${AT_EMAIL_ADMIN_PULL_POLICY:-always}'
     image: 'ghcr.io/zone-eu/wildduck:1.48.2'
+    networks:
+      - agentteam-email-network
     environment:
       APPCONF_api_accessToken: '${AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN:?missing AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN}'
       APPCONF_api_accessControl_secret: '${AT_EMAIL_ADMIN_WILDDUCK_ACCESS_CONTROL_SECRET:?missing AT_EMAIL_ADMIN_WILDDUCK_ACCESS_CONTROL_SECRET}'
@@ -236,6 +248,8 @@ services:
     user: '${AT_EMAIL_ADMIN_UID:-1000}:${AT_EMAIL_ADMIN_GID:-1000}'
     pull_policy: '${AT_EMAIL_ADMIN_PULL_POLICY:-always}'
     image: 'ghcr.io/agentteamhq/agentteam-email/atemail-mail-control-service:${AT_EMAIL_ADMIN_VERSION:-latest}'
+    networks:
+      - agentteam-email-network
     environment:
       AT_EMAIL_ADMIN_R2_ACCOUNT_ID: '${AT_EMAIL_ADMIN_R2_ACCOUNT_ID:?missing AT_EMAIL_ADMIN_R2_ACCOUNT_ID}'
       AT_EMAIL_ADMIN_R2_API_TOKEN: '${AT_EMAIL_ADMIN_R2_API_TOKEN:?missing AT_EMAIL_ADMIN_R2_API_TOKEN}'
@@ -278,6 +292,8 @@ services:
     user: '${AT_EMAIL_ADMIN_UID:-1000}:${AT_EMAIL_ADMIN_GID:-1000}'
     pull_policy: '${AT_EMAIL_ADMIN_PULL_POLICY:-always}'
     image: 'ghcr.io/agentteamhq/agentteam-email/atemail-web-server:${AT_EMAIL_ADMIN_VERSION:-latest}'
+    networks:
+      - agentteam-email-network
     ports:
       - '${AT_EMAIL_ADMIN_FRONTEND_PORT:-23100}:4321'
     environment:
@@ -811,3 +827,7 @@ volumes:
   redis-data:
   rspamd-data:
   haraka-queue:
+
+networks:
+  agentteam-email-network:
+    external: true

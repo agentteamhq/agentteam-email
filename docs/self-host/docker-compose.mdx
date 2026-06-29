@@ -4,7 +4,7 @@ sidebarTitle: 'Docker Compose'
 description: 'Run AgentTeam Email on one host with the root Docker Compose files.'
 ---
 
-Docker Compose is the supported single-host deployment path. The root `compose.yaml` runs the web server, mail control service, MongoDB, Redis, WildDuck, Haraka, Rspamd, and ZoneMTA on one Compose network. Only the web server port is published.
+Docker Compose is the supported single-host deployment path. The root `compose.yaml` runs the web server, mail control service, MongoDB, Redis, WildDuck, Haraka, Rspamd, and ZoneMTA on the external `agentteam-email-network` Compose network. Only the web server port is published.
 
 Complete the [Self-Host Setup Guide](/self-host/setup) before starting the stack.
 
@@ -31,6 +31,12 @@ Use the [Environment Variables](/reference/environment-variables) reference for 
 The bundled MongoDB runs as a single-node replica set named `rs0`, matching the Helm chart runtime and supporting MongoDB transactions and oplog-based logical backups.
 
 ## Start the stack
+
+Create the external Compose network, or let your deployment platform provide it:
+
+```bash
+docker network create agentteam-email-network
+```
 
 Run Compose from the repository root:
 
