@@ -1,4 +1,5 @@
 [tools]
+node = "24.18.0"
 "npm:mint" = "4.2.632"
 
 [tasks.dev]

@@ -194,7 +194,8 @@
     "mongodb": {
       "properties": {
         "maxIncomingConnections": { "minimum": 1, "type": "integer" },
-        "replicaSetName": { "minLength": 1, "type": "string" }
+        "replicaSetName": { "minLength": 1, "type": "string" },
+        "terminationGracePeriodSeconds": { "minimum": 1, "type": "integer" }
       },
       "type": "object"
     },

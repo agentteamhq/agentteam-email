@@ -36,11 +36,32 @@ services:
       - source: mongodb-mongod-conf
         target: /etc/mongod.conf
     healthcheck:
-      test: ['CMD', 'sh', '-c', "mongosh --quiet --eval 'db.adminCommand({ ping: 1 })'"]
+      test:
+        - CMD
+        - sh
+        - -ec
+        - |
+          mongosh --host 127.0.0.1:27017 --quiet --eval '
+            const config = {
+              _id: "rs0",
+              members: [{ _id: 0, host: "mongodb:27017" }]
+            };
+            try {
+              const status = rs.status();
+              quit(status.ok === 1 && status.myState === 1 ? 0 : 1);
+            } catch (error) {
+              if (error.codeName === "NotYetInitialized" || /no replset config/i.test(String(error))) {
+                rs.initiate(config);
+                quit(1);
+              }
+              throw error;
+            }
+          '
       interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+    stop_grace_period: 2m
     restart: unless-stopped
 
   redis:
@@ -77,7 +98,7 @@ services:
       - source: rspamd-worker-proxy
         target: /etc/rspamd/local.d/worker-proxy.inc
     healthcheck:
-      test: ['CMD', 'sh', '-c', 'rspamc -h localhost:11333 </dev/null || exit 1']
+      test: ['CMD', 'sh', '-c', 'rspamc -h 127.0.0.1:11333 </dev/null || exit 1']
       interval: 5s
       timeout: 3s
       retries: 10
@@ -183,7 +204,7 @@ services:
       APPCONF_api_accessControl_secret: '${AT_EMAIL_ADMIN_WILDDUCK_ACCESS_CONTROL_SECRET:?missing AT_EMAIL_ADMIN_WILDDUCK_ACCESS_CONTROL_SECRET}'
       APPCONF_api_host: 0.0.0.0
       APPCONF_api_port: '8080'
-      APPCONF_dbs_mongo: '${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI:-mongodb://mongodb:27017/wildduck?directConnection=true&maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000}'
+      APPCONF_dbs_mongo: '${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI:-mongodb://mongodb:27017/wildduck?replicaSet=rs0&maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000}'
       APPCONF_dbs_redis: '${AT_EMAIL_ADMIN_REDIS_URL:-redis://redis:6379/3}'
       APPCONF_imap_host: 0.0.0.0
       APPCONF_imap_port: '10143'
@@ -227,8 +248,8 @@ services:
       AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN: '${AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN:?missing AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN}'
       AT_EMAIL_ADMIN_ZONEMTA_RELAY_PASSWORD: '${AT_EMAIL_ADMIN_ZONEMTA_RELAY_PASSWORD:?missing AT_EMAIL_ADMIN_ZONEMTA_RELAY_PASSWORD}'
       AT_EMAIL_ADMIN_FEEDBACK_MAILBOX_PASSWORD: '${AT_EMAIL_ADMIN_FEEDBACK_MAILBOX_PASSWORD:?missing AT_EMAIL_ADMIN_FEEDBACK_MAILBOX_PASSWORD}'
-      AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI: '${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI:-mongodb://mongodb:27017/wildduck?directConnection=true&maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000}'
-      AT_EMAIL_ADMIN_CONTROL_MONGODB_URI: '${AT_EMAIL_ADMIN_CONTROL_MONGODB_URI:-mongodb://mongodb:27017/agent_mail_control?directConnection=true&maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000}'
+      AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI: '${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI:-mongodb://mongodb:27017/wildduck?replicaSet=rs0&maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000}'
+      AT_EMAIL_ADMIN_CONTROL_MONGODB_URI: '${AT_EMAIL_ADMIN_CONTROL_MONGODB_URI:-mongodb://mongodb:27017/agent_mail_control?replicaSet=rs0&maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000}'
       AT_EMAIL_ADMIN_CF_API_BASE_URL: '${AT_EMAIL_ADMIN_CF_API_BASE_URL:-https://api.cloudflare.com/client/v4}'
       AT_EMAIL_ADMIN_WILDDUCK_API_BASE_URL: '${AT_EMAIL_ADMIN_WILDDUCK_API_BASE_URL:-http://wildduck:8080}'
       AT_EMAIL_ADMIN_WILDDUCK_IMAP_ADDRESS: '${AT_EMAIL_ADMIN_WILDDUCK_IMAP_ADDRESS:-wildduck:10143}'
@@ -246,7 +267,7 @@ services:
       haraka:
         condition: service_healthy
     healthcheck:
-      test: ['CMD', 'sh', '-c', 'wget -qO- http://localhost:8081/healthz >/dev/null || exit 1']
+      test: ['CMD', 'sh', '-c', 'wget -qO- http://127.0.0.1:8081/healthz >/dev/null || exit 1']
       interval: 5s
       timeout: 3s
       retries: 20
@@ -264,7 +285,7 @@ services:
       PORT: '4321'
       FRONTEND_HOST: 0.0.0.0
       PUBLIC_HOSTNAME: '${AT_EMAIL_ADMIN_PUBLIC_HOSTNAME:?missing AT_EMAIL_ADMIN_PUBLIC_HOSTNAME}'
-      DATABASE_URL: '${AT_EMAIL_ADMIN_APP_MONGODB_URI:-mongodb://mongodb:27017/agentteam_email?directConnection=true}'
+      DATABASE_URL: '${AT_EMAIL_ADMIN_APP_MONGODB_URI:-mongodb://mongodb:27017/agentteam_email?replicaSet=rs0}'
       DATABASE_MAX_POOL_SIZE: '${AT_EMAIL_ADMIN_DATABASE_MAX_POOL_SIZE:-8}'
       TMP_DIR: '${AT_EMAIL_ADMIN_TMP_DIR:-/tmp/agentteam-email}'
       BETTER_AUTH_SECRET: '${AT_EMAIL_ADMIN_BETTER_AUTH_SECRET:?missing AT_EMAIL_ADMIN_BETTER_AUTH_SECRET}'
@@ -338,8 +359,12 @@ configs:
         unixDomainSocket:
           enabled: false
 
+      replication:
+        replSetName: "rs0"
+
       setParameter:
         diagnosticDataCollectionEnabled: false
+        shutdownTimeoutMillisForSignaledShutdown: 120000
 
   redis-conf:
     content: |
@@ -530,7 +555,7 @@ configs:
       redis: '${AT_EMAIL_ADMIN_REDIS_URL:-redis://redis:6379/3}'
 
       mongo:
-        url: '${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI:-mongodb://mongodb:27017/wildduck?directConnection=true&maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000}'
+        url: '${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI:-mongodb://mongodb:27017/wildduck?replicaSet=rs0&maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000}'
         # Regression guard: Haraka performs inbound storage and native forwarding.
         # Its outbound sender DB must match ZoneMTA [dbs].sender, or WildDuck target
         # forwarding is queued into an undrained upstream-default database.
@@ -611,7 +636,7 @@ configs:
 
   zonemta-dbs-production:
     content: |
-      mongo = "${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI:-mongodb://mongodb:27017/wildduck?directConnection=true&maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000}"
+      mongo = "${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI:-mongodb://mongodb:27017/wildduck?replicaSet=rs0&maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000}"
       redis = "${AT_EMAIL_ADMIN_REDIS_URL:-redis://redis:6379/3}"
       sender = "wildduck"
 

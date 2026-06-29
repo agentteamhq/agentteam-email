@@ -187,6 +187,7 @@ Do not expose the internal control API, WildDuck, MongoDB, Redis, Haraka, ZoneMT
 ## Persistence
 
 The chart renders PersistentVolumeClaims for MongoDB, Redis, Rspamd, and the Haraka queue.
+The bundled MongoDB runs as a single-node replica set named `rs0`, supporting MongoDB transactions and oplog-based logical backups.
 
 ```yaml
 persistence:

@@ -42,6 +42,7 @@ spec:
         options:
           - name: ndots
             value: "1"
+      terminationGracePeriodSeconds: {{ .Values.mongodb.terminationGracePeriodSeconds }}
       containers:
         - name: mongodb
           image: {{ include "agentteam-email.image" .Values.images.mongodb | quote }}

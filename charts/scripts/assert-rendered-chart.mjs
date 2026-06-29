@@ -19,7 +19,12 @@ const documents = parseAllDocuments(manifest).map((document) => {
 
 const webServer = requireDeployment('atemail-web-server')
 const mailControl = requireDeployment('atemail-mail-control-service')
+const mongodb = requireDeployment('mongodb')
 const mailControlService = requireResource('Service', 'atemail-mail-control-service')
+const mongodbConfig = requireConfigMap('atemail-mongodb-config')
+const harakaConfig = requireConfigMap('atemail-haraka-config')
+const wildduckConfig = requireConfigMap('atemail-wildduck-config')
+const zonemtaRootConfig = requireConfigMap('atemail-zonemta-root-config')
 const webEnv = containerEnv(webServer, 'web-server')
 const controlEnv = containerEnv(mailControl, 'mail-control-service')
 
@@ -57,6 +62,7 @@ requireEnv(webEnv, 'STRIPE_PUBLISHABLE_KEY')
 requireEnv(webEnv, 'STRIPE_SECRET_KEY')
 requireEnv(webEnv, 'SMTP_ADDRESS')
 requireEnv(webEnv, 'SMTP_PORT')
+requireEnvValueContains(webEnv, 'DATABASE_URL', 'replicaSet=rs0')
 forbidEnv(webEnv, 'AT_EMAIL_ADMIN_R2_API_TOKEN')
 
 requireEnv(controlEnv, 'AT_EMAIL_ADMIN_CONTROL_MONGODB_URI')
@@ -65,15 +71,29 @@ requireEnv(controlEnv, 'AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN')
 requireEnv(controlEnv, 'AT_EMAIL_ADMIN_CF_API_BASE_URL')
 requireEnv(controlEnv, 'AT_EMAIL_ADMIN_R2_ACCOUNT_ID')
 requireEnv(controlEnv, 'AT_EMAIL_ADMIN_R2_API_TOKEN')
+requireEnvValueContains(controlEnv, 'AT_EMAIL_ADMIN_CONTROL_MONGODB_URI', 'replicaSet=rs0')
 forbidEnv(controlEnv, 'CLOUDFLARE_OAUTH_CLIENT_ID')
 
 requireServicePort(mailControlService, 'admin', 8081)
 requireServicePort(mailControlService, 'smtp', 2587)
+requireTerminationGracePeriod(mongodb, 120)
+requireConfigDataIncludes(mongodbConfig, 'mongod.conf', 'replSetName: "rs0"')
+requireConfigDataIncludes(mongodbConfig, 'mongod.conf', 'shutdownTimeoutMillisForSignaledShutdown: 120000')
+requireConfigDataIncludes(wildduckConfig, 'dbs.toml', 'replicaSet=rs0')
+requireConfigDataExcludes(wildduckConfig, 'dbs.toml', 'directConnection=true')
+requireConfigDataIncludes(harakaConfig, 'wildduck.yaml', 'replicaSet=rs0')
+requireConfigDataExcludes(harakaConfig, 'wildduck.yaml', 'directConnection=true')
+requireConfigDataIncludes(zonemtaRootConfig, 'dbs-production.toml', 'replicaSet=rs0')
+requireConfigDataExcludes(zonemtaRootConfig, 'dbs-production.toml', 'directConnection=true')
 
 console.log(`${manifestPath} render invariants passed`)
 
 function requireDeployment(name) {
   return requireResource('Deployment', name)
+}
+
+function requireConfigMap(name) {
+  return requireResource('ConfigMap', name)
 }
 
 function requireResource(kind, name) {
@@ -109,6 +129,13 @@ function requireEnv(env, name) {
   }
 }
 
+function requireEnvValueContains(env, name, expected) {
+  const entry = env.get(name)
+  if (!entry?.value?.includes(expected)) {
+    throw new Error(`rendered env ${name} must include ${expected}`)
+  }
+}
+
 function forbidEnv(env, name) {
   if (env.has(name)) {
     throw new Error(`rendered chart must not put ${name} in the web-server environment`)
@@ -124,4 +151,35 @@ function requireServicePort(service, name, port) {
   if (!rendered || rendered.port !== port) {
     throw new Error(`Service/${service.metadata.name} must expose ${name} port ${port}`)
   }
+}
+
+function requireTerminationGracePeriod(deployment, seconds) {
+  const rendered = deployment.spec?.template?.spec?.terminationGracePeriodSeconds
+  if (rendered !== seconds) {
+    throw new Error(
+      `Deployment/${deployment.metadata.name} must set terminationGracePeriodSeconds to ${seconds}`
+    )
+  }
+}
+
+function requireConfigDataIncludes(configMap, key, expected) {
+  const value = configDataValue(configMap, key)
+  if (!value.includes(expected)) {
+    throw new Error(`ConfigMap/${configMap.metadata.name} data ${key} must include ${expected}`)
+  }
+}
+
+function requireConfigDataExcludes(configMap, key, forbidden) {
+  const value = configDataValue(configMap, key)
+  if (value.includes(forbidden)) {
+    throw new Error(`ConfigMap/${configMap.metadata.name} data ${key} must not include ${forbidden}`)
+  }
+}
+
+function configDataValue(configMap, key) {
+  const value = configMap.data?.[key]
+  if (typeof value !== 'string') {
+    throw new Error(`ConfigMap/${configMap.metadata.name} is missing string data ${key}`)
+  }
+  return value
 }

@@ -72,6 +72,7 @@ mailControlService: {}
 mongodb:
   maxIncomingConnections: 128
   replicaSetName: rs0
+  terminationGracePeriodSeconds: 120
 
 controlApi:
   controlToWebToken: {}

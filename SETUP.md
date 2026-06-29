@@ -275,16 +275,8 @@ engine:
 ```bash
 podman-compose --env-file docs/examples/compose/.env.example -f compose.yaml config
 docker compose --env-file docs/examples/compose/.env.example -f compose.yaml config
-AT_EMAIL_ADMIN_APP_MONGODB_URI=mongodb://external-mongodb:27017/agentteam_email \
-AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI=mongodb://external-mongodb:27017/wildduck \
-AT_EMAIL_ADMIN_CONTROL_MONGODB_URI=mongodb://external-mongodb:27017/agent_mail_control \
-AT_EMAIL_ADMIN_REDIS_URL=redis://external-redis:6379/3 \
-  podman-compose --env-file docs/examples/compose/.env.example -f compose.no-db.yaml config
-AT_EMAIL_ADMIN_APP_MONGODB_URI=mongodb://external-mongodb:27017/agentteam_email \
-AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI=mongodb://external-mongodb:27017/wildduck \
-AT_EMAIL_ADMIN_CONTROL_MONGODB_URI=mongodb://external-mongodb:27017/agent_mail_control \
-AT_EMAIL_ADMIN_REDIS_URL=redis://external-redis:6379/3 \
-  docker compose --env-file docs/examples/compose/.env.example -f compose.no-db.yaml config
+podman-compose --env-file docs/examples/compose/.env.example -f compose.yaml -f compose.build.yaml config
+docker compose --env-file docs/examples/compose/.env.example -f compose.yaml -f compose.build.yaml config
 ```
 
 Run all end-to-end suites through the aggregate root task:

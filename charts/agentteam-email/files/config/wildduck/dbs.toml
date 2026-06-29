@@ -1,4 +1,4 @@
-mongo = "mongodb://{{ .Values.names.mongodb }}:27017/wildduck?directConnection=true&maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000"
+mongo = "{{ include "agentteam-email.mongodbUri" (dict "root" . "database" "wildduck" "options" "maxPoolSize=4&minPoolSize=0&maxIdleTimeMS=60000") }}"
 sender = "wildduck"
 
 [redis]

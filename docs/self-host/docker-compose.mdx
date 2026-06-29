@@ -28,6 +28,7 @@ Use the [Environment Variables](/reference/environment-variables) reference for 
 - mail runtime secrets
 
 `compose.yaml` defaults MongoDB, Redis, WildDuck, Haraka, ZoneMTA, and the internal control URLs to services on the Compose network.
+The bundled MongoDB runs as a single-node replica set named `rs0`, matching the Helm chart runtime and supporting MongoDB transactions and oplog-based logical backups.
 
 ## Start the stack
 
@@ -71,6 +72,13 @@ Control pull behavior with:
 AT_EMAIL_ADMIN_PULL_POLICY=always
 ```
 
+To build the first-party images from the checked-out repository instead of
+pulling GHCR images, overlay `compose.build.yaml`:
+
+```bash
+docker compose -f compose.yaml -f compose.build.yaml up -d --build
+```
+
 ## Persistent volumes
 
 The default Compose stack creates named volumes for runtime data:
@@ -83,24 +91,5 @@ The default Compose stack creates named volumes for runtime data:
 | `haraka-queue` | Haraka inbound mail queue            |
 
 Back up these volumes before upgrades. Data remains across `docker compose down` unless you pass `--volumes`.
-
-## External databases
-
-Use `compose.no-db.yaml` when MongoDB and Redis are supplied outside the Compose stack:
-
-```bash
-docker compose -f compose.no-db.yaml up -d
-```
-
-Set all database variables explicitly:
-
-```dotenv
-AT_EMAIL_ADMIN_APP_MONGODB_URI=mongodb://user:password@mongodb.example:27017/agentteam_email?authSource=admin&tls=true
-AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI=mongodb://user:password@mongodb.example:27017/wildduck?authSource=admin&tls=true
-AT_EMAIL_ADMIN_CONTROL_MONGODB_URI=mongodb://user:password@mongodb.example:27017/agent_mail_control?authSource=admin&tls=true
-AT_EMAIL_ADMIN_REDIS_URL=rediss://:password@redis.example:6379/3
-```
-
-Each MongoDB URI must point to a distinct logical database.
 
 <Warning>Never commit `.env`. It contains secrets, credentials, and API tokens.</Warning>

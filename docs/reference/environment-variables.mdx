@@ -6,7 +6,7 @@ description: 'Operator-facing Docker Compose environment variables for AgentTeam
 
 This page documents the public Docker Compose environment variable contract. The Compose files map these `AT_EMAIL_ADMIN_*` variables into service-native container environment variables. Helm deployments use equivalent values documented in [Deploy with Helm](/self-host/helm).
 
-The default `compose.yaml` stack provides MongoDB, Redis, WildDuck, Haraka, ZoneMTA, and internal service URLs on the Compose network. Set the defaulted variables below only when you are changing that topology, using `compose.no-db.yaml`, or enabling an optional integration.
+The default `compose.yaml` stack provides MongoDB, Redis, WildDuck, Haraka, ZoneMTA, and internal service URLs on the Compose network. Set the defaulted variables below only when you are changing that topology or enabling an optional integration.
 
 <Warning>
   Never commit secrets to version control. Every secret, token, key, and password below must be generated per
@@ -117,28 +117,30 @@ These values are defaulted by the Compose files. Leave them unset unless you are
 
 ## Databases
 
-AgentTeam Email requires three MongoDB databases and one Redis instance. The default `compose.yaml` stack supplies them with bundled services. Set these variables only when using `compose.no-db.yaml` or an equivalent external data-service deployment.
+AgentTeam Email requires three MongoDB databases and one Redis instance. The default `compose.yaml` stack supplies them with bundled services. Set these variables only when using an equivalent external data-service deployment.
+
+The bundled MongoDB deployment runs as a single-node replica set named `rs0`. Custom MongoDB URIs must point at a replica set because application flows use MongoDB transactions.
 
 Even when sharing a single MongoDB server, each URI must point to a distinct logical database.
 
 <ParamField path="AT_EMAIL_ADMIN_APP_MONGODB_URI" type="string">
   MongoDB connection URI for the main web application database.
 
-**Example:** `mongodb://user:password@mongodb.example:27017/agentteam_email?authSource=admin&tls=true`
+**Example:** `mongodb://user:password@mongodb.example:27017/agentteam_email?authSource=admin&replicaSet=rs0&tls=true`
 
 </ParamField>
 
 <ParamField path="AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI" type="string">
   MongoDB connection URI for the WildDuck mail server database.
 
-**Example:** `mongodb://user:password@mongodb.example:27017/wildduck?authSource=admin&tls=true`
+**Example:** `mongodb://user:password@mongodb.example:27017/wildduck?authSource=admin&replicaSet=rs0&tls=true`
 
 </ParamField>
 
 <ParamField path="AT_EMAIL_ADMIN_CONTROL_MONGODB_URI" type="string">
   MongoDB connection URI for the mail-control-service operational database. This must be a dedicated database, such as `agent_mail_control`; it must not share collections with the WildDuck database.
 
-**Example:** `mongodb://user:password@mongodb.example:27017/agent_mail_control?authSource=admin&tls=true`
+**Example:** `mongodb://user:password@mongodb.example:27017/agent_mail_control?authSource=admin&replicaSet=rs0&tls=true`
 
 </ParamField>
 
