@@ -234,7 +234,7 @@ describe('mailbox admin controller view mapping', () => {
 })
 
 describe('mail client controller view mapping', () => {
-  it('prompts mailbox setup when the workspace has no accounts', () => {
+  it('prompts Cloudflare onboarding when the workspace has no accounts', () => {
     expect.hasAssertions()
     const view = toSidebarView(
       mailWorkspace({
@@ -252,13 +252,11 @@ describe('mail client controller view mapping', () => {
     )
 
     expect(view.state).toBe('empty')
-    expect(view.emptyTitle).toBe('No mailbox accounts')
-    expect(view.emptyDescription).toBe(
-      'Create a mailbox account in Accounts to start sending and receiving mail.'
-    )
+    expect(view.emptyTitle).toBe('No mailbox yet')
+    expect(view.emptyDescription).toBe('Connect Cloudflare to add the first mailbox.')
   })
 
-  it('keeps mailbox setup copy when a no-account workspace has stale filters', () => {
+  it('keeps Cloudflare onboarding copy when a no-account workspace has stale filters', () => {
     expect.hasAssertions()
     const view = toSidebarView(
       mailWorkspace({
@@ -276,10 +274,8 @@ describe('mail client controller view mapping', () => {
     )
 
     expect(view.state).toBe('empty')
-    expect(view.emptyTitle).toBe('No mailbox accounts')
-    expect(view.emptyDescription).toBe(
-      'Create a mailbox account in Accounts to start sending and receiving mail.'
-    )
+    expect(view.emptyTitle).toBe('No mailbox yet')
+    expect(view.emptyDescription).toBe('Connect Cloudflare to add the first mailbox.')
   })
 
   it('uses filter-specific empty copy for server-side empty search results', () => {

@@ -158,8 +158,8 @@ function emptyMailboxCopy(
 ): { description: string; title: string } {
   if (!workspace || workspace.accounts.length === 0) {
     return {
-      description: 'Create a mailbox account in Accounts to start sending and receiving mail.',
-      title: 'No mailbox accounts'
+      description: 'Connect Cloudflare to add the first mailbox.',
+      title: 'No mailbox yet'
     }
   }
 
