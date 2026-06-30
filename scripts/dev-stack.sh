@@ -45,6 +45,15 @@ read_compose_command() {
   mapfile -t compose_cmd < <(compose_command)
 }
 
+container_engine() {
+  if [[ "${compose_cmd[0]}" == "podman-compose" ]]; then
+    printf '%s\n' podman
+    return
+  fi
+
+  printf '%s\n' docker
+}
+
 first_env() {
   local fallback="$1"
   shift
@@ -120,6 +129,29 @@ run_compose() {
   "${compose_cmd[@]}" -p "${project}" "${args[@]}" "$@"
 }
 
+support_container_id() {
+  local service="$1"
+
+  if [[ "${compose_cmd[0]}" == "podman-compose" ]]; then
+    printf '%s_%s_1\n' "${project}" "${service}"
+    return
+  fi
+
+  run_compose ps -q "${service}" 2>/dev/null | head -n 1
+}
+
+remove_support_containers() {
+  if [[ "${compose_cmd[0]}" == "podman-compose" ]]; then
+    local service
+    for service in "${support_services[@]}"; do
+      podman rm -f "${project}_${service}_1" >/dev/null 2>&1 || true
+    done
+    return
+  fi
+
+  run_compose rm -sf "${support_services[@]}"
+}
+
 kill_log_tails() {
   local pid_file pid
   shopt -s nullglob
@@ -160,6 +192,83 @@ start_log_tail() {
   local run_dir="$1"
   run_compose logs -f --no-color "${support_services[@]}" >"${run_dir}/logs/containers.log" 2>&1 &
   printf '%s\n' "$!" >"${run_dir}/logs/containers.pid"
+}
+
+verify_support_containers_running() {
+  local engine
+  engine="$(container_engine)"
+
+  local failures=()
+  local service container_id status
+  for service in "${support_services[@]}"; do
+    container_id="$(support_container_id "${service}")"
+    if [[ -z "${container_id}" ]]; then
+      failures+=("${service}: missing")
+      continue
+    fi
+
+    status="$("${engine}" inspect --format '{{.State.Status}}' "${container_id}" 2>/dev/null || true)"
+    if [[ "${status}" != "running" ]]; then
+      failures+=("${service}: ${status:-missing}")
+    fi
+  done
+
+  if ((${#failures[@]} > 0)); then
+    printf 'dev-stack: incomplete support stack:\n' >&2
+    printf '  - %s\n' "${failures[@]}" >&2
+    return 1
+  fi
+}
+
+write_start_diagnostics() {
+  local run_dir="$1"
+  local label="$2"
+  local engine
+  engine="$(container_engine)"
+
+  {
+    printf 'Compose status\n'
+    printf '==============\n'
+    run_compose ps || true
+
+    printf '\nContainer state\n'
+    printf '===============\n'
+    local service container_id
+    for service in "${support_services[@]}"; do
+      container_id="$(support_container_id "${service}")"
+      printf '\n[%s]\n' "${service}"
+      if [[ -z "${container_id}" ]]; then
+        printf 'missing\n'
+        continue
+      fi
+      "${engine}" inspect --format 'name={{.Name}} status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{end}}' "${container_id}" || true
+    done
+
+    printf '\nCompose logs\n'
+    printf '============\n'
+    run_compose logs --no-color "${support_services[@]}" || true
+  } >"${run_dir}/logs/${label}-diagnostics.log" 2>&1
+}
+
+start_support_containers() {
+  local run_dir="$1"
+
+  if run_compose up -d --no-deps --remove-orphans "${support_services[@]}" &&
+    verify_support_containers_running; then
+    return
+  fi
+
+  write_start_diagnostics "${run_dir}" "start-failed"
+  printf 'dev-stack: initial start incomplete; recreating support containers and retrying once\n' >&2
+  remove_support_containers
+
+  if run_compose up -d --no-deps --remove-orphans --force-recreate "${support_services[@]}" &&
+    verify_support_containers_running; then
+    return
+  fi
+
+  write_start_diagnostics "${run_dir}" "start-retry-failed"
+  fail "support stack did not start all services; diagnostics: ${run_dir}/logs/start-retry-failed-diagnostics.log"
 }
 
 wait_http() {
@@ -212,7 +321,7 @@ start_stack() {
   printf 'Run id: %s\n' "${run_id}"
   printf 'Run directory: %s\n' "${run_dir}"
   render_runtime_configs "${run_dir}"
-  run_compose up -d --no-deps --remove-orphans "${support_services[@]}"
+  start_support_containers "${run_dir}"
   start_log_tail "${run_dir}"
 
   wait_http 'Mailpit' "http://127.0.0.1:${AT_EMAIL_ADMIN_DEV_MAILPIT_HTTP_PORT:-8025}/api/v1/info"
@@ -229,17 +338,14 @@ start_stack() {
 stop_stack() {
   kill_log_tails
   read_compose_command
+  prepare_compose_env
   if [[ "${compose_cmd[0]}" == "podman-compose" ]]; then
-    prepare_compose_env
-    local service
-    for service in "${support_services[@]}"; do
-      podman rm -f "${project}_${service}_1" >/dev/null 2>&1 || true
-    done
+    remove_support_containers
     podman network rm "${AT_EMAIL_ADMIN_DEV_NETWORK}" >/dev/null 2>&1 || true
     return
   fi
 
-  run_compose rm -sf "${support_services[@]}"
+  remove_support_containers
 }
 
 status_stack() {
