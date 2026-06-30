@@ -1,4 +1,4 @@
-import { deriveDashboardMailWorkspaceScreenModel } from '../screens/dashboard-mail-screen-model'
+import { agentAccessActionableState } from './agent-access-fixtures'
 import { storyAuthClient } from './auth-client-fixtures'
 import {
   domainSettingsAddDomainAuthorizeCloudflareState,
@@ -8,13 +8,13 @@ import {
   domainSettingsDomainProvisioningState
 } from './authenticated-section-fixtures'
 import { mailWorkspaceEmptyView } from './mail-workspace-fixtures'
-import { mailboxAdminReadyView } from './mailbox-admin-fixtures'
 import { authenticatedSettingsRouteState, storyPublicEnv } from './screen-fixtures'
 import type { DashboardSearch } from '../lib/dashboard-search'
-import type { DashboardScreenProps } from '../screens/dashboard-screen'
+import type { MailWorkspaceQuery } from '../lib/mail-rpc'
 import type { SettingsSectionId } from '../partials/authenticated/settings-dialog-sections'
 import type { DomainSettingsState } from '../partials/authenticated/settings-dialog'
-import type { AgentMailWebWorkspace } from '@main/backend'
+import type { DashboardMailControllerStoryFrameProps } from './stories/story-frames'
+import type { AgentMailAdminNavigation, AgentMailWebWorkspace } from '@main/backend'
 
 interface ProductOnboardingScenario {
   defaultSettingsOpen?: boolean
@@ -25,7 +25,7 @@ interface ProductOnboardingScenario {
   workspace: AgentMailWebWorkspace
 }
 
-type ProductOnboardingStoryHandlers = Pick<DashboardScreenProps, 'onDashboardOnboardingConnect'>
+type ProductOnboardingStoryHandlers = Pick<DomainSettingsState, 'onStartOAuth'>
 
 const firstUseWorkspace = {
   ...mailWorkspaceEmptyView,
@@ -36,6 +36,10 @@ const firstUseWorkspace = {
 } satisfies AgentMailWebWorkspace
 
 const configuredMailboxWorkspace = mailWorkspaceEmptyView
+
+const onboardingMailboxAdminNavigation = {
+  allowedSections: ['accounts', 'groups', 'agents']
+} satisfies AgentMailAdminNavigation
 
 const cloudflareConnectingState = {
   ...domainSettingsAddDomainAuthorizeCloudflareState,
@@ -95,37 +99,58 @@ export const productOnboardingScenarios = {
   }
 } satisfies Record<string, ProductOnboardingScenario>
 
-export function buildProductOnboardingScreenArgs(
+export function buildProductOnboardingControllerArgs(
   scenario: ProductOnboardingScenario,
   handlers: ProductOnboardingStoryHandlers = {}
-): DashboardScreenProps {
+): DashboardMailControllerStoryFrameProps {
   const routeSearch = scenario.routeSearch ?? {}
-  const screenModel = deriveDashboardMailWorkspaceScreenModel({
-    allowedMailboxAdminSections: mailboxAdminReadyView.allowedSections,
-    domainSettingsState: scenario.domainSettingsState,
-    folderCreate: { name: '', state: 'closed' },
-    folderDelete: { state: 'closed' },
-    folderRename: { name: '', state: 'closed' },
-    routeSearch,
-    sidebarError: null,
-    sidebarStatus: 'success',
-    workspace: scenario.workspace,
-    workspaceError: null,
-    workspaceStatus: 'success'
-  })
+  const domainSettingsState = {
+    ...scenario.domainSettingsState,
+    ...handlers
+  } satisfies DomainSettingsState
 
   return {
+    agentAccessViewLoader: createProductOnboardingAgentAccessViewLoader(),
     authClient: storyAuthClient,
     defaultSettingsOpen: scenario.defaultSettingsOpen,
     defaultSettingsSection: 'domains',
-    domainSettingsState: scenario.domainSettingsState,
+    domainSettingsState,
+    mailWorkspaceLoader: createProductOnboardingMailWorkspaceLoader(scenario.workspace),
+    mailboxAdminNavigationLoader: createProductOnboardingMailboxAdminNavigationLoader(),
     publicEnv: storyPublicEnv,
     routeSearch,
     routeState: authenticatedSettingsRouteState,
     sessionCleanupEnabled: false,
     settingsOpen: scenario.settingsOpen,
-    settingsSection: scenario.settingsSection,
-    ...screenModel,
-    ...handlers
+    settingsSection: scenario.settingsSection
+  }
+}
+
+function createProductOnboardingAgentAccessViewLoader() {
+  return async () => agentAccessActionableState.view
+}
+
+function createProductOnboardingMailboxAdminNavigationLoader() {
+  return async () => onboardingMailboxAdminNavigation
+}
+
+function createProductOnboardingMailWorkspaceLoader(workspace: AgentMailWebWorkspace) {
+  return async (query: MailWorkspaceQuery) => mailWorkspaceForQuery(workspace, query)
+}
+
+function mailWorkspaceForQuery(
+  workspace: AgentMailWebWorkspace,
+  query: MailWorkspaceQuery
+): AgentMailWebWorkspace {
+  const activeAccountId = query.accountId ?? workspace.activeAccountId
+  const activeFolderId = query.folderId ?? workspace.activeFolderId
+  const selectedMessage =
+    query.messageId && workspace.selectedMessage?.id !== query.messageId ? null : workspace.selectedMessage
+
+  return {
+    ...workspace,
+    activeAccountId,
+    activeFolderId,
+    selectedMessage
   }
 }
