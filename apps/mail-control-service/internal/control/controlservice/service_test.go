@@ -23,6 +23,7 @@ import (
 )
 
 func TestRuntimeSecretsFromEnvRequiresRelayPassword(t *testing.T) {
+	clearRuntimeSecretEnv(t)
 	t.Setenv("AT_EMAIL_ADMIN_FEEDBACK_MAILBOX_PASSWORD", "feedback-password")
 
 	_, err := runtimeSecretsFromEnv()
@@ -35,6 +36,7 @@ func TestRuntimeSecretsFromEnvRequiresRelayPassword(t *testing.T) {
 }
 
 func TestRuntimeSecretsFromEnvRequiresFeedbackMailboxPassword(t *testing.T) {
+	clearRuntimeSecretEnv(t)
 	t.Setenv("AT_EMAIL_ADMIN_ZONEMTA_RELAY_PASSWORD", "relay-password")
 
 	_, err := runtimeSecretsFromEnv()
@@ -44,6 +46,13 @@ func TestRuntimeSecretsFromEnvRequiresFeedbackMailboxPassword(t *testing.T) {
 	if !strings.Contains(err.Error(), "AT_EMAIL_ADMIN_FEEDBACK_MAILBOX_PASSWORD") {
 		t.Fatalf("error = %q, want missing feedback mailbox password", err)
 	}
+}
+
+func clearRuntimeSecretEnv(t *testing.T) {
+	t.Helper()
+
+	t.Setenv("AT_EMAIL_ADMIN_ZONEMTA_RELAY_PASSWORD", "")
+	t.Setenv("AT_EMAIL_ADMIN_FEEDBACK_MAILBOX_PASSWORD", "")
 }
 
 func TestCanonicalModuleConfigUsesRuntimeSecrets(t *testing.T) {
