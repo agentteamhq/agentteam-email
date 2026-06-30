@@ -35,19 +35,17 @@ fi
 repo_root="$(git rev-parse --show-toplevel)"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-container_engine="${CONTAINER_ENGINE:-${CONTAINER_BUILD_ENGINE:-podman}}"
-case "${container_engine}" in
-  podman|docker) ;;
-  *)
-    echo "[go-testing-container] CONTAINER_BUILD_ENGINE must be podman or docker: ${container_engine}" >&2
-    exit 2
-    ;;
-esac
-
-if [ "${container_engine}" = "docker" ]; then
-  container_sock="${DOCKER_HOST:-unix:///var/run/docker.sock}"
-else
-  container_sock="${PODMAN_SOCK:-unix://${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock}"
+container_engine="${CONTAINER_ENGINE:?missing CONTAINER_ENGINE}"
+container_sock="${CONTAINER_ENGINE_HOST:-${DOCKER_HOST:-}}"
+if [ -z "${container_sock}" ]; then
+  remote_socket_path="$("${container_engine}" info --format '{{ .Host.RemoteSocket.Path }}' 2>/dev/null || true)"
+  if [ -n "${remote_socket_path}" ]; then
+    container_sock="unix://${remote_socket_path}"
+  fi
+fi
+if [ -z "${container_sock}" ]; then
+  echo "[go-testing-container] missing CONTAINER_ENGINE_HOST" >&2
+  exit 1
 fi
 
 case "${container_sock}" in
@@ -69,11 +67,7 @@ sanitize() {
 
 ensure_volume() {
   local volume="$1"
-  if [ "${container_engine}" = "docker" ]; then
-    docker volume inspect "${volume}" >/dev/null 2>&1 || docker volume create "${volume}" >/dev/null
-  else
-    podman volume exists "${volume}" || podman volume create "${volume}" >/dev/null
-  fi
+  "${container_engine}" volume inspect "${volume}" >/dev/null 2>&1 || "${container_engine}" volume create "${volume}" >/dev/null
 }
 
 run_id="$(date +%Y%m%d-%H%M%S)"
@@ -137,10 +131,8 @@ done
 printf '[%s:test:%s] run directory: %s\n' "${suite_name}" "$(date +%Y-%m-%dT%H:%M:%S%z)" "${TEST_RUN_DIR}"
 
 container_run_args=(run --rm)
-if [ "${container_engine}" = "podman" ]; then
-  container_run_args+=(--security-opt label=disable)
-fi
 container_run_args+=(
+  --security-opt label=disable
   --network host
   --env "DOCKER_HOST=${container_sock}"
   --env "GOCACHE=/root/.cache/go-build"

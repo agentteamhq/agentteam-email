@@ -70,6 +70,7 @@ jobs:
       - name: Run CI validation
         env:
           CONTAINER_ENGINE: docker
+          CONTAINER_ENGINE_HOST: unix:///var/run/docker.sock
           MISE_TASK_OUTPUT: prefix
         run: mise run test:ci
 
