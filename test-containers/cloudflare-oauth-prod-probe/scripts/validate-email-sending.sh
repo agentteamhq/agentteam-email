@@ -27,13 +27,9 @@ redirect_uri="https://${cloudflare_tunnel_hostname}${callback_path}"
 cloudflare_api_base_url="${AT_EMAIL_ADMIN_CF_API_BASE_URL:-https://api.cloudflare.com/client/v4}"
 cloudflare_oauth_authorization_url="${AT_EMAIL_ADMIN_CF_OAUTH_AUTHORIZATION_URL:-https://dash.cloudflare.com/oauth2/auth}"
 cloudflare_oauth_scopes="${AT_EMAIL_ADMIN_CF_OAUTH_SCOPES:-workers-r2.read workers-r2.write workers-scripts.read workers-scripts.write dns.read dns.write zone.read cloud-email-security.read email-routing-address.read email-routing-address.write email-routing-rule.read email-routing-rule.write email-routing-suppression.read email-security-dmarcreports.read email-sending.read email-sending.write offline_access}"
-cloudflare_oauth_token_auth_method="${AT_EMAIL_ADMIN_CF_OAUTH_TOKEN_AUTH_METHOD:-client_secret_basic}"
 cloudflare_oauth_token_url="${AT_EMAIL_ADMIN_CF_OAUTH_TOKEN_URL:-https://dash.cloudflare.com/oauth2/token}"
 
 : "${AT_EMAIL_ADMIN_CF_OAUTH_CLIENT_ID:?AT_EMAIL_ADMIN_CF_OAUTH_CLIENT_ID is required}"
-if [ "${cloudflare_oauth_token_auth_method}" != "none" ]; then
-  : "${AT_EMAIL_ADMIN_CF_OAUTH_CLIENT_SECRET:?AT_EMAIL_ADMIN_CF_OAUTH_CLIENT_SECRET is required unless AT_EMAIL_ADMIN_CF_OAUTH_TOKEN_AUTH_METHOD is none}"
-fi
 : "${PROBE_EMAIL_FROM:?PROBE_EMAIL_FROM is required for real Email Sending validation}"
 : "${PROBE_EMAIL_TO:?PROBE_EMAIL_TO is required for real Email Sending validation}"
 : "${PROBE_REAL_EMAIL_SEND_CONFIRM:?PROBE_REAL_EMAIL_SEND_CONFIRM=send-real-email is required for real Email Sending validation}"
@@ -73,9 +69,7 @@ echo "[cloudflare-oauth-prod-probe] running real Email Sending validation"
   -e PROBE_REFRESH_TOKEN_STORE_PATH="${oauth_token_store_path}" \
   -e PROBE_EVENTS_PATH=/test-run/email-sending-validation-events.jsonl \
   -e CLOUDFLARE_OAUTH_CLIENT_ID="${AT_EMAIL_ADMIN_CF_OAUTH_CLIENT_ID}" \
-  -e CLOUDFLARE_OAUTH_CLIENT_SECRET="${AT_EMAIL_ADMIN_CF_OAUTH_CLIENT_SECRET:-}" \
   -e CLOUDFLARE_OAUTH_AUTHORIZATION_URL="${cloudflare_oauth_authorization_url}" \
-  -e CLOUDFLARE_OAUTH_TOKEN_AUTH_METHOD="${cloudflare_oauth_token_auth_method}" \
   -e CLOUDFLARE_OAUTH_TOKEN_URL="${cloudflare_oauth_token_url}" \
   -e CLOUDFLARE_API_BASE_URL="${cloudflare_api_base_url}" \
   -e CLOUDFLARE_OAUTH_SCOPES="${cloudflare_oauth_scopes}" \

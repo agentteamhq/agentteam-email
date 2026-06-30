@@ -5,7 +5,6 @@ import Provider from 'oidc-provider'
 const port = Number(process.env.PORT || '8788')
 const issuer = requiredEnv('OAUTH_ISSUER')
 const clientId = process.env.OAUTH_CLIENT_ID || 'agentteam-email-cloudflare-test'
-const clientSecret = process.env.OAUTH_CLIENT_SECRET || 'agentteam-email-cloudflare-secret'
 const redirectUris = splitList(process.env.OAUTH_REDIRECT_URIS || process.env.OAUTH_REDIRECT_URI)
 const cloudflareScopes = splitList(
   process.env.CLOUDFLARE_OAUTH_SCOPES ||
@@ -42,11 +41,10 @@ const provider = new Provider(issuer, {
   clients: [
     {
       client_id: clientId,
-      client_secret: clientSecret,
       grant_types: ['authorization_code', 'refresh_token'],
       redirect_uris: redirectUris,
       response_types: ['code'],
-      token_endpoint_auth_method: 'client_secret_basic'
+      token_endpoint_auth_method: 'none'
     }
   ],
   claims: {

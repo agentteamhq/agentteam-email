@@ -67,7 +67,6 @@
               "properties": {
                 "authorizationUrl": { "$ref": "#/$defs/valueSource" },
                 "clientId": { "$ref": "#/$defs/valueSource" },
-                "clientSecret": { "$ref": "#/$defs/valueSource" },
                 "issuer": { "$ref": "#/$defs/valueSource" },
                 "revokeUrl": { "$ref": "#/$defs/valueSource" },
                 "scopes": { "$ref": "#/$defs/valueSource" },

@@ -108,7 +108,6 @@ admin:
       authorizationUrl:
         value: ''
       clientId: {}
-      clientSecret: {}
       issuer:
         value: ''
       revokeUrl:

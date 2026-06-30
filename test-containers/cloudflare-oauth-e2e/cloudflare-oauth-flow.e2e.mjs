@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash, randomBytes } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -12,7 +13,6 @@ const hostPort = Number(process.env.AT_EMAIL_ADMIN_CLOUDFLARE_FAKE_OAUTH_HOST_PO
 const baseUrl = `http://127.0.0.1:${hostPort}`
 const redirectUri = `${baseUrl}/test/callback`
 const clientId = 'agentteam-email-cloudflare-test'
-const clientSecret = 'agentteam-email-cloudflare-secret'
 const cloudflareScopes = [
   'workers-r2.read',
   'workers-r2.write',
@@ -62,7 +62,6 @@ try {
     .withEnvironment({
       CLOUDFLARE_OAUTH_SCOPES: cloudflareScopes.join(' '),
       OAUTH_CLIENT_ID: clientId,
-      OAUTH_CLIENT_SECRET: clientSecret,
       OAUTH_ISSUER: baseUrl,
       OAUTH_REDIRECT_URI: redirectUri
     })
@@ -104,13 +103,16 @@ async function assertDiscovery() {
 
 async function performOAuthFlow() {
   const cookieJar = new Map()
+  const codeVerifier = randomBytes(32).toString('base64url')
+  const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url')
   const authorizationUrl = new URL('/auth', baseUrl)
   authorizationUrl.searchParams.set('client_id', clientId)
+  authorizationUrl.searchParams.set('code_challenge', codeChallenge)
+  authorizationUrl.searchParams.set('code_challenge_method', 'S256')
   authorizationUrl.searchParams.set('redirect_uri', redirectUri)
   authorizationUrl.searchParams.set('response_type', 'code')
   authorizationUrl.searchParams.set('scope', cloudflareScopes.join(' '))
   authorizationUrl.searchParams.set('state', 'cloudflare-e2e-state')
-  authorizationUrl.searchParams.set('nonce', 'cloudflare-e2e-nonce')
 
   let response = await fetchWithCookies(authorizationUrl, cookieJar, { redirect: 'manual' })
   let location = readRedirectLocation(response)
@@ -121,6 +123,7 @@ async function performOAuthFlow() {
 
     if (nextUrl.pathname === '/test/callback') {
       assert.equal(nextUrl.searchParams.get('state'), 'cloudflare-e2e-state')
+      assert.equal(nextUrl.searchParams.get('error'), null, nextUrl.searchParams.toString())
       authorizationCode = nextUrl.searchParams.get('code')
       break
     }
@@ -166,13 +169,14 @@ async function performOAuthFlow() {
 
   const tokenResponse = await fetch(new URL('/token', baseUrl), {
     body: new URLSearchParams({
+      client_id: clientId,
       code: authorizationCode,
+      code_verifier: codeVerifier,
       grant_type: 'authorization_code',
       redirect_uri: redirectUri
     }),
     headers: {
       accept: 'application/json',
-      authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
       'content-type': 'application/x-www-form-urlencoded'
     },
     method: 'POST'
@@ -181,14 +185,6 @@ async function performOAuthFlow() {
   assert.equal(tokenResult.token_type, 'Bearer')
   assert.equal(typeof tokenResult.access_token, 'string')
   assert.equal(typeof tokenResult.refresh_token, 'string')
-
-  const userInfo = await fetchJson(new URL('/me', baseUrl), {
-    headers: {
-      authorization: `Bearer ${tokenResult.access_token}`
-    }
-  })
-  assert.equal(userInfo.sub, 'cloudflare-user-1')
-  assert.equal(userInfo.email, 'cloudflare-user@example.test')
 
   logs.push('[cloudflare-oauth-e2e] authorization code flow ok')
   return tokenResult

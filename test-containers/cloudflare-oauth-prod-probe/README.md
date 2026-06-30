@@ -31,10 +31,9 @@ access token available, classifies the result, and never sends email.
 
 The same binary also owns the follow-up procedures validated by this harness:
 
-- `serve`: browser OAuth callback flow, Authorization Code + PKCE when
-  `AT_EMAIL_ADMIN_CF_OAUTH_TOKEN_AUTH_METHOD=none`, refresh-token persistence,
-  immediate refresh-token exchange, account discovery, and non-sending
-  invalid-body `send`/`send_raw` auth probes.
+- `serve`: browser OAuth callback flow, Authorization Code + PKCE,
+  refresh-token persistence, immediate refresh-token exchange, account
+  discovery, and non-sending invalid-body `send`/`send_raw` auth probes.
 - `offline-refresh`: reads the persisted refresh token, exchanges it for a new
   access token, persists a rotated refresh token when Cloudflare returns one,
   lists Cloudflare accounts, and runs the same non-sending Email Sending auth
@@ -62,8 +61,6 @@ Required values:
 - `CLOUDFLARE_TUNNEL`
 - `CLOUDFLARE_TUNNEL_HOSTNAME`
 - `AT_EMAIL_ADMIN_CF_OAUTH_CLIENT_ID`
-- `AT_EMAIL_ADMIN_CF_OAUTH_CLIENT_SECRET` only when
-  `AT_EMAIL_ADMIN_CF_OAUTH_TOKEN_AUTH_METHOD` is not `none`
 
 The `.env` file is sourced by shell scripts. Quote values that contain spaces,
 `#`, `$`, quotes, or other shell-significant characters.
@@ -84,16 +81,11 @@ Configure the public client with:
   exposes it in the UI/API. The probe requests `offline_access` and validates
   `grant_type=refresh_token`.
 - response type: `code`
-- token endpoint auth method: `none` for the validated probe path. This still
-  uses Authorization Code with PKCE and keeps `response_type=code`. If the
-  Cloudflare client is intentionally configured as `client_secret_basic` or
-  `client_secret_post` for diagnostics, set
-  `AT_EMAIL_ADMIN_CF_OAUTH_TOKEN_AUTH_METHOD` to match the OAuth client record.
+- token endpoint auth method: `none`. This uses Authorization Code with PKCE
+  and keeps `response_type=code`.
 - OAuth client type: server-side web app / backend-service client. The browser
   only follows redirects. The probe server exchanges the returned authorization
-  code from the backend boundary. In the validated `none` path, that exchange
-  sends the PKCE verifier and no client secret; client-secret modes are retained
-  only for targeted diagnostics.
+  code from the backend boundary with the PKCE verifier and no client secret.
 - client URL / `client_uri`: a stable HTTPS app/publisher URL on a domain you
   control and can verify in DNS
 - redirect URI: `https://${CLOUDFLARE_TUNNEL_HOSTNAME}${PROBE_CALLBACK_PATH}`
@@ -121,13 +113,9 @@ take that as an admin setup variable; it discovers accounts through the user's
 OAuth grant and stores the selected account on the Cloudflare connection. This
 probe does the same thing in-memory.
 
-For the currently validated Cloudflare OAuth client shape, use
-`AT_EMAIL_ADMIN_CF_OAUTH_TOKEN_AUTH_METHOD=none`. The harness sends
-Authorization Code + PKCE for the browser flow and sends `grant_type=refresh_token`,
-`refresh_token`, and `client_id` for refresh. It does not send a client secret
-or Basic auth in this mode. In the validation run that established this harness,
-Cloudflare consistently rejected `client_secret_basic` and
-`client_secret_post`; `none` + PKCE is the validated path.
+The harness sends Authorization Code + PKCE for the browser flow and sends
+`grant_type=refresh_token`, `refresh_token`, and `client_id` for refresh. It
+does not send a client secret or Basic auth.
 
 ## Run
 

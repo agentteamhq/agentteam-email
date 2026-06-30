@@ -33,8 +33,6 @@ admin:
     oauth:
       clientId:
         value: '<cloudflare-oauth-client-id>'
-      clientSecret:
-        value: '<cloudflare-oauth-client-secret>'
     r2:
       accountId:
         value: '<cloudflare-account-id>'
