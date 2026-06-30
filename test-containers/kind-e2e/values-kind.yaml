@@ -44,8 +44,6 @@ admin:
     oauth:
       clientId:
         value: kind-e2e-cloudflare-oauth-client-id
-      clientSecret:
-        value: kind-e2e-cloudflare-oauth-client-secret
     r2:
       accountId:
         value: kind-e2e-cloudflare-account-id

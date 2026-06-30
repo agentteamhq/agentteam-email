@@ -38,11 +38,7 @@ connect_url="https://${cloudflare_tunnel_hostname}/"
 cloudflare_api_base_url="${AT_EMAIL_ADMIN_CF_API_BASE_URL:-https://api.cloudflare.com/client/v4}"
 cloudflare_oauth_authorization_url="${AT_EMAIL_ADMIN_CF_OAUTH_AUTHORIZATION_URL:-https://dash.cloudflare.com/oauth2/auth}"
 cloudflare_oauth_scopes="${AT_EMAIL_ADMIN_CF_OAUTH_SCOPES:-workers-r2.read workers-r2.write workers-scripts.read workers-scripts.write dns.read dns.write zone.read cloud-email-security.read email-routing-address.read email-routing-address.write email-routing-rule.read email-routing-rule.write email-routing-suppression.read email-security-dmarcreports.read email-sending.read email-sending.write offline_access}"
-cloudflare_oauth_token_auth_method="${AT_EMAIL_ADMIN_CF_OAUTH_TOKEN_AUTH_METHOD:-client_secret_basic}"
 cloudflare_oauth_token_url="${AT_EMAIL_ADMIN_CF_OAUTH_TOKEN_URL:-https://dash.cloudflare.com/oauth2/token}"
-if [ "${cloudflare_oauth_token_auth_method}" != "none" ]; then
-  : "${AT_EMAIL_ADMIN_CF_OAUTH_CLIENT_SECRET:?AT_EMAIL_ADMIN_CF_OAUTH_CLIENT_SECRET is required unless AT_EMAIL_ADMIN_CF_OAUTH_TOKEN_AUTH_METHOD is none}"
-fi
 
 run_id="${TEST_RUN_ID:-$(date +%Y%m%d-%H%M%S)}"
 run_dir="${root_dir}/tmp/run-${run_id}"
@@ -63,7 +59,7 @@ write_summary() {
   "status": "${status}",
   "connect_url": "${connect_url}",
   "callback_uri": "${redirect_uri}",
-  "token_auth_method": "${cloudflare_oauth_token_auth_method}",
+  "uses_pkce": true,
   "server_container": "${server_name}",
   "cloudflared_container": "${cloudflared_name}",
   "oauth_token_store_volume": "${oauth_token_store_volume}"
@@ -117,9 +113,7 @@ fi
   -e TEST_ARTIFACTS_DIR=/test-run \
   -e TEST_RUN_ID="${run_id}" \
   -e CLOUDFLARE_OAUTH_CLIENT_ID="${AT_EMAIL_ADMIN_CF_OAUTH_CLIENT_ID}" \
-  -e CLOUDFLARE_OAUTH_CLIENT_SECRET="${AT_EMAIL_ADMIN_CF_OAUTH_CLIENT_SECRET:-}" \
   -e CLOUDFLARE_OAUTH_AUTHORIZATION_URL="${cloudflare_oauth_authorization_url}" \
-  -e CLOUDFLARE_OAUTH_TOKEN_AUTH_METHOD="${cloudflare_oauth_token_auth_method}" \
   -e CLOUDFLARE_OAUTH_TOKEN_URL="${cloudflare_oauth_token_url}" \
   -e CLOUDFLARE_API_BASE_URL="${cloudflare_api_base_url}" \
   -e CLOUDFLARE_OAUTH_SCOPES="${cloudflare_oauth_scopes}" \

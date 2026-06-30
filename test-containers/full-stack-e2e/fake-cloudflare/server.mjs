@@ -1,8 +1,5 @@
-import { createHash } from 'node:crypto'
+import { createHash, createHmac } from 'node:crypto'
 import http from 'node:http'
-import { Webhook } from 'standardwebhooks'
-
-import { parse as parseContentType } from 'content-type'
 
 const port = Number(process.env.PORT || '8788')
 const oauthEmail = process.env.AT_EMAIL_ADMIN_FAKE_CF_OAUTH_EMAIL || 'cloudflare-user@example.test'
@@ -354,8 +351,7 @@ function handleWorkerNotificationSigning(response, body) {
     sendJson(response, 404, { error: 'worker_not_found' })
     return
   }
-  const timestampDate = new Date(timestamp * 1000)
-  const signature = new Webhook(worker.webhookSigningSecret).sign(webhookId, timestampDate, bodyText)
+  const signature = signStandardWebhook(worker.webhookSigningSecret, webhookId, timestamp, bodyText)
   sendJson(response, 200, {
     connectionId: worker.connectionId,
     headers: {
@@ -366,6 +362,20 @@ function handleWorkerNotificationSigning(response, body) {
     signature,
     timestamp: String(timestamp)
   })
+}
+
+function signStandardWebhook(secret, webhookId, timestamp, bodyText) {
+  const key = decodeStandardWebhookSecret(secret)
+  const signedContent = `${webhookId}.${timestamp}.${bodyText}`
+  const signature = createHmac('sha256', key).update(signedContent).digest('base64')
+  return `v1,${signature}`
+}
+
+function decodeStandardWebhookSecret(secret) {
+  if (typeof secret !== 'string' || !secret.startsWith('whsec_')) {
+    throw new Error('Worker webhook signing secret must use Standard Webhooks format')
+  }
+  return Buffer.from(secret.slice('whsec_'.length), 'base64')
 }
 
 function hasBearerAuth(request) {
@@ -515,11 +525,25 @@ function requestContentType(header) {
   if (typeof header !== 'string') {
     return null
   }
-  try {
-    return { ...parseContentType(header), header }
-  } catch {
+  const [rawType, ...rawParameters] = header.split(';')
+  const type = rawType.trim().toLowerCase()
+  if (!type) {
     return null
   }
+  const parameters = {}
+  for (const rawParameter of rawParameters) {
+    const separatorIndex = rawParameter.indexOf('=')
+    if (separatorIndex === -1) {
+      continue
+    }
+    const key = rawParameter.slice(0, separatorIndex).trim().toLowerCase()
+    const rawValue = rawParameter.slice(separatorIndex + 1).trim()
+    if (!key) {
+      continue
+    }
+    parameters[key] = rawValue.startsWith('"') && rawValue.endsWith('"') ? rawValue.slice(1, -1) : rawValue
+  }
+  return { header, parameters, type }
 }
 
 function topLevelJsonKeys(body) {

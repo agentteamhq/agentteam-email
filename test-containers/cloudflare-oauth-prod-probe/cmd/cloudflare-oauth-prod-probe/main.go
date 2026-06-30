@@ -37,7 +37,6 @@ const (
 	defaultListenAddr       = "127.0.0.1:9003"
 	defaultScopes           = "workers-r2.read workers-r2.write workers-scripts.read workers-scripts.write dns.read dns.write zone.read cloud-email-security.read email-routing-address.read email-routing-address.write email-routing-rule.read email-routing-rule.write email-routing-suppression.read email-security-dmarcreports.read email-sending.read email-sending.write offline_access"
 	defaultEventsPath       = "tmp/run/current/events.jsonl"
-	defaultTokenAuthMethod  = "client_secret_basic"
 	probeSessionTTL         = 15 * time.Minute
 	refreshTokenStoreSchema = "cloudflare-oauth-prod-probe.refresh-token.v1"
 )
@@ -47,13 +46,11 @@ type config struct {
 	authorizationURL string
 	callbackPath     string
 	clientID         string
-	clientSecret     string
 	eventsPath       string
 	listenAddr       string
 	redirectURI      string
 	refreshStorePath string
 	scopes           []string
-	tokenAuthMethod  string
 	tokenURL         string
 }
 
@@ -114,7 +111,6 @@ type refreshTokenStoreDocument struct {
 	Source                      string `json:"source"`
 	StoredAt                    string `json:"stored_at"`
 	ClientIDHash                string `json:"client_id_hash"`
-	TokenAuthMethod             string `json:"token_auth_method"`
 	Scope                       string `json:"scope,omitempty"`
 	AccessTokenExpiresInSeconds int    `json:"access_token_expires_in_seconds,omitempty"`
 }
@@ -262,10 +258,7 @@ func serveProbe(cfg config) error {
 	if err != nil {
 		return fmt.Errorf("state error: %w", err)
 	}
-	pkceVerifier := ""
-	if cfg.usesPKCE() {
-		pkceVerifier = oauth2.GenerateVerifier()
-	}
+	pkceVerifier := oauth2.GenerateVerifier()
 
 	events := &eventLogger{filePath: cfg.eventsPath}
 	if err := events.log("probe_started", map[string]any{
@@ -315,13 +308,11 @@ func loadConfig() (config, error) {
 		authorizationURL: envDefault("CLOUDFLARE_OAUTH_AUTHORIZATION_URL", defaultAuthorizationURL),
 		callbackPath:     envDefault("PROBE_CALLBACK_PATH", defaultCallbackPath),
 		clientID:         strings.TrimSpace(os.Getenv("CLOUDFLARE_OAUTH_CLIENT_ID")),
-		clientSecret:     strings.TrimSpace(os.Getenv("CLOUDFLARE_OAUTH_CLIENT_SECRET")),
 		eventsPath:       envDefault("PROBE_EVENTS_PATH", defaultEventsPath),
 		listenAddr:       envDefault("PROBE_LISTEN_ADDR", defaultListenAddr),
 		redirectURI:      strings.TrimSpace(os.Getenv("PROBE_REDIRECT_URI")),
 		refreshStorePath: strings.TrimSpace(os.Getenv("PROBE_REFRESH_TOKEN_STORE_PATH")),
 		scopes:           splitList(envDefault("CLOUDFLARE_OAUTH_SCOPES", defaultScopes)),
-		tokenAuthMethod:  envDefault("CLOUDFLARE_OAUTH_TOKEN_AUTH_METHOD", defaultTokenAuthMethod),
 		tokenURL:         envDefault("CLOUDFLARE_OAUTH_TOKEN_URL", defaultTokenURL),
 	}
 
@@ -333,14 +324,6 @@ func loadConfig() (config, error) {
 	}
 	if len(cfg.scopes) == 0 {
 		return config{}, errors.New("CLOUDFLARE_OAUTH_SCOPES must include at least one scope")
-	}
-	switch cfg.tokenAuthMethod {
-	case "client_secret_basic", "client_secret_post", "none":
-	default:
-		return config{}, errors.New("CLOUDFLARE_OAUTH_TOKEN_AUTH_METHOD must be client_secret_basic, client_secret_post, or none")
-	}
-	if cfg.usesClientSecretAuth() && cfg.clientSecret == "" {
-		return config{}, errors.New("CLOUDFLARE_OAUTH_CLIENT_SECRET is required unless CLOUDFLARE_OAUTH_TOKEN_AUTH_METHOD is none")
 	}
 	if !strings.HasPrefix(cfg.callbackPath, "/") {
 		return config{}, errors.New("PROBE_CALLBACK_PATH must start with /")
@@ -495,15 +478,10 @@ func addAuthorizationTrace(trace map[string]any, authorization string, cfg confi
 	}
 	firstPart, secondPart, ok := strings.Cut(string(decoded), ":")
 	escapedClientID := url.QueryEscape(cfg.clientID)
-	escapedCredential := url.QueryEscape(cfg.clientSecret)
 	trace["basic_decoded_has_separator"] = ok
 	trace["basic_first_part_length"] = len(firstPart)
 	trace["basic_second_part_length"] = len(secondPart)
 	trace["basic_first_part_matches_escaped_client_id"] = firstPart == escapedClientID
-	trace["basic_second_part_matches_escaped_client_credential"] = secondPart == escapedCredential
-	trace["basic_pair_matches_config"] = ok &&
-		firstPart == escapedClientID &&
-		secondPart == escapedCredential
 }
 
 func readAndRestoreRequestBody(request *http.Request, limit int64) ([]byte, error) {
@@ -529,22 +507,22 @@ func summarizeTokenForm(form url.Values, cfg config) map[string]any {
 	code := form.Get("code")
 	renewalValue := form.Get("refresh_token")
 	return map[string]any{
-		"client_credential_length":         len(clientCredential),
-		"client_credential_present":        clientCredential != "",
-		"client_credential_matches_config": clientCredential != "" && clientCredential == cfg.clientSecret,
-		"client_id_length":                 len(clientID),
-		"client_id_matches_config":         clientID != "" && clientID == cfg.clientID,
-		"client_id_present":                clientID != "",
-		"code_length":                      len(code),
-		"code_present":                     code != "",
-		"fields":                           summarizeURLValueFields(form),
-		"grant_type":                       form.Get("grant_type"),
-		"key_count":                        len(keys),
-		"keys":                             keys,
-		"redirect_uri":                     form.Get("redirect_uri"),
-		"renewal_value_length":             len(renewalValue),
-		"renewal_value_present":            renewalValue != "",
-		"sanitized_fields":                 collectSensitiveURLValueFields(form),
+		"client_credential_length":  len(clientCredential),
+		"client_credential_present": clientCredential != "",
+		"client_id_length":          len(clientID),
+		"client_id_matches_config":  clientID != "" && clientID == cfg.clientID,
+		"client_id_present":         clientID != "",
+		"code_length":               len(code),
+		"code_present":              code != "",
+		"code_verifier_present":     form.Get("code_verifier") != "",
+		"fields":                    summarizeURLValueFields(form),
+		"grant_type":                form.Get("grant_type"),
+		"key_count":                 len(keys),
+		"keys":                      keys,
+		"redirect_uri":              form.Get("redirect_uri"),
+		"renewal_value_length":      len(renewalValue),
+		"renewal_value_present":     renewalValue != "",
+		"sanitized_fields":          collectSensitiveURLValueFields(form),
 	}
 }
 
@@ -898,10 +876,7 @@ func newState() (string, error) {
 
 func (s *server) authorizationURL() string {
 	oauthConfig := s.oauth2Config()
-	options := []oauth2.AuthCodeOption{}
-	if s.cfg.usesPKCE() {
-		options = append(options, oauth2.S256ChallengeOption(s.pkceVerifier))
-	}
+	options := []oauth2.AuthCodeOption{oauth2.S256ChallengeOption(s.pkceVerifier)}
 	return oauthConfig.AuthCodeURL(s.state, options...)
 }
 
@@ -1017,7 +992,6 @@ func (s *server) handleCallback(response http.ResponseWriter, request *http.Requ
 		}
 		var endpointError tokenEndpointHTTPError
 		if errors.As(err, &endpointError) {
-			fields["token_auth_method"] = s.cfg.effectiveTokenAuthMethod()
 			fields["token_endpoint_status"] = endpointError.Status
 			fields["token_endpoint_error"] = endpointError.ErrorCode
 			fields["token_endpoint_error_description"] = endpointError.Description
@@ -1141,14 +1115,12 @@ func (s *server) authorizationRequestSummary() map[string]any {
 	redirectURI, redirectErr := url.Parse(s.cfg.redirectURI)
 
 	summary := map[string]any{
-		"client_id_hash":     shortHash(s.cfg.clientID),
-		"client_id_length":   len(s.cfg.clientID),
-		"response_type":      "code",
-		"scope_count":        len(s.cfg.scopes),
-		"scopes":             s.cfg.scopes,
-		"token_auth_method":  s.cfg.effectiveTokenAuthMethod(),
-		"uses_client_secret": s.cfg.usesClientSecretAuth(),
-		"uses_pkce":          s.cfg.usesPKCE(),
+		"client_id_hash":   shortHash(s.cfg.clientID),
+		"client_id_length": len(s.cfg.clientID),
+		"response_type":    "code",
+		"scope_count":      len(s.cfg.scopes),
+		"scopes":           s.cfg.scopes,
+		"uses_pkce":        true,
 	}
 	if authorizationErr == nil {
 		summary["authorization_host"] = authorizationURL.Host
@@ -1166,41 +1138,11 @@ func shortHash(value string) string {
 	return hex.EncodeToString(sum[:])[:16]
 }
 
-func (cfg config) effectiveTokenAuthMethod() string {
-	if cfg.tokenAuthMethod == "" {
-		return defaultTokenAuthMethod
-	}
-	return cfg.tokenAuthMethod
-}
-
-func (cfg config) usesClientSecretAuth() bool {
-	return cfg.effectiveTokenAuthMethod() != "none"
-}
-
-func (cfg config) usesPKCE() bool {
-	return cfg.effectiveTokenAuthMethod() == "none"
-}
-
-func (cfg config) oauth2ClientSecret() string {
-	if !cfg.usesClientSecretAuth() {
-		return ""
-	}
-	return cfg.clientSecret
-}
-
-func (cfg config) oauth2AuthStyle() oauth2.AuthStyle {
-	if cfg.effectiveTokenAuthMethod() == "client_secret_post" || cfg.effectiveTokenAuthMethod() == "none" {
-		return oauth2.AuthStyleInParams
-	}
-	return oauth2.AuthStyleInHeader
-}
-
 func (s *server) oauth2Config() oauth2.Config {
 	return oauth2.Config{
-		ClientID:     s.cfg.clientID,
-		ClientSecret: s.cfg.oauth2ClientSecret(),
+		ClientID: s.cfg.clientID,
 		Endpoint: oauth2.Endpoint{
-			AuthStyle: s.cfg.oauth2AuthStyle(),
+			AuthStyle: oauth2.AuthStyleInParams,
 			AuthURL:   s.cfg.authorizationURL,
 			TokenURL:  s.cfg.tokenURL,
 		},
@@ -1218,13 +1160,10 @@ func (s *server) oauth2Context(ctx context.Context) context.Context {
 
 func (s *server) exchangeCode(ctx context.Context, code string) (tokenResult, error) {
 	oauthConfig := s.oauth2Config()
-	options := []oauth2.AuthCodeOption{}
-	if s.cfg.usesPKCE() {
-		if s.pkceVerifier == "" {
-			return tokenResult{}, errors.New("PKCE verifier is required when CLOUDFLARE_OAUTH_TOKEN_AUTH_METHOD is none")
-		}
-		options = append(options, oauth2.VerifierOption(s.pkceVerifier))
+	if s.pkceVerifier == "" {
+		return tokenResult{}, errors.New("PKCE verifier is required")
 	}
+	options := []oauth2.AuthCodeOption{oauth2.VerifierOption(s.pkceVerifier)}
 	token, err := oauthConfig.Exchange(s.oauth2Context(ctx), code, options...)
 	if err != nil {
 		return tokenResult{}, normalizeTokenEndpointError(err)
@@ -1384,7 +1323,6 @@ func (s *server) storeRefreshToken(refreshToken string, source string, token tok
 		Source:                      source,
 		StoredAt:                    time.Now().UTC().Format(time.RFC3339Nano),
 		ClientIDHash:                shortHash(s.cfg.clientID),
-		TokenAuthMethod:             s.cfg.effectiveTokenAuthMethod(),
 		Scope:                       token.Scope,
 		AccessTokenExpiresInSeconds: token.ExpiresIn,
 	})
@@ -2219,7 +2157,7 @@ func sanitizeFields(fields map[string]any) map[string]any {
 func sanitizeFieldValue(key string, value any) any {
 	keyLower := strings.ToLower(key)
 	switch keyLower {
-	case "authorization_host", "authorization_path", "token_auth_method", "token_endpoint_error", "token_endpoint_error_description", "token_endpoint_status", "uses_client_secret":
+	case "authorization_host", "authorization_path", "token_endpoint_error", "token_endpoint_error_description", "token_endpoint_status", "uses_pkce":
 		return value
 	case "authorization_header":
 		return redactedValueSummary(value)

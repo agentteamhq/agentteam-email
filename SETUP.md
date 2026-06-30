@@ -26,43 +26,50 @@ app database names the same suffix, for example:
 
 ```dotenv
 WT=feature-mailbox
-MONGODB_URI=mongodb://localhost:27017/agentteam_email_feature_mailbox
+MONGODB_URI=mongodb://127.0.0.1:27017/agentteam_email_feature_mailbox?directConnection=true
 MONGODB_DATABASE=agentteam_email_feature_mailbox
-DATABASE_URL=mongodb://localhost:27017/agentteam_email_feature_mailbox
+DATABASE_URL=mongodb://127.0.0.1:27017/agentteam_email_feature_mailbox?directConnection=true
 ```
 
-`mise run db:start` intentionally reuses the same local MongoDB container across
-worktrees. The database name is the isolation boundary.
+`mise run dev:start` uses `WT` to scope local container names and volumes. The
+database name and support service ports in `.env` are the worktree isolation
+boundary when multiple dev stacks run on one host.
 
 ## Local Runtime
 
-Start the lightweight source-development support services through repo-owned
-tasks:
+Start the source-development support stack through the repo-owned task:
 
 ```bash
-mise run db:start
-mise run mail:start
+mise run dev:start
 ```
 
-Inspect or stop them with:
+This starts the local containers required by source development: MongoDB, Redis,
+Mailpit, MinIO, WildDuck, Rspamd, Haraka, and ZoneMTA. It writes a run directory
+under `tmp/run-<id>/` and prints that run id. Container logs are written to
+`tmp/run-<id>/logs/containers.log`.
+
+Run the Mail Control Service from source against that stack with:
 
 ```bash
-mise run db:status
-mise run db:logs
-mise run db:stop
-mise run mail:status
-mise run mail:logs
-mise run mail:stop
+mise run dev:mail-control
 ```
 
 Run the local frontend and backend source-development graph with:
 
 ```bash
-mise run dev
+pnpm dev
 ```
 
-This starts package-local development processes. It does not start the full
-mail runtime stack.
+Inspect or stop the source-development support stack with:
+
+```bash
+mise run dev:status
+mise run dev:logs
+mise run dev:stop
+```
+
+The source-development stack reads configuration from the repo-root `.env`.
+Docker Compose self-hosting uses `.env.compose` and the `stack:*` tasks instead.
 
 Run the production-like local stack through the Compose-backed stack tasks:
 

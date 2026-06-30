@@ -3429,8 +3429,7 @@ function redactText(value) {
     ['full-stack-e2e-wildduck-admin-token', '<redacted-wildduck-admin-token>'],
     ['full-stack-e2e-wildduck-access-control-secret', '<redacted-wildduck-access-control-secret>'],
     ['full-stack-e2e-zonemta-relay-password', '<redacted-zonemta-relay-password>'],
-    ['full-stack-e2e-feedback-mailbox-password', '<redacted-feedback-mailbox-password>'],
-    ['full-stack-e2e-cloudflare-client-secret', '<redacted-cloudflare-client-secret>']
+    ['full-stack-e2e-feedback-mailbox-password', '<redacted-feedback-mailbox-password>']
   ])
   for (const [needle, replacement] of dynamicRedactions) {
     replacements.set(needle, replacement)

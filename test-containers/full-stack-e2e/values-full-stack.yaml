@@ -42,10 +42,18 @@ admin:
   cloudflare:
     apiBaseUrl: http://fake-cloudflare:8080/client/v4
     oauth:
+      authorizationUrl:
+        value: http://fake-cloudflare:8080/oauth2/auth
       clientId:
         value: full-stack-e2e-cloudflare-client
-      clientSecret:
-        value: full-stack-e2e-cloudflare-client-secret
+      issuer:
+        value: http://fake-cloudflare:8080
+      revokeUrl:
+        value: http://fake-cloudflare:8080/oauth2/revoke
+      tokenUrl:
+        value: http://fake-cloudflare:8080/oauth2/token
+      userInfoUrl:
+        value: http://fake-cloudflare:8080/oauth2/userinfo
     r2:
       accountId:
         value: full-stack-e2e-cloudflare-account-id
@@ -70,6 +78,21 @@ admin:
       value: noreply@example.test
     replyToEmail:
       value: support@example.test
+  trial:
+    enabled:
+      value: 'true'
+    organizationId:
+      value: '01960000-0000-7000-8000-00000000e2e1'
+    domain:
+      value: trial.example.test
+    admissionToken:
+      value: full-stack-e2e-trial-admission-token
+    capabilities:
+      value: email.message.send
+    dailySendLimit:
+      value: '5'
+    totalSendLimit:
+      value: '10'
 
 ingress:
   enabled: false
@@ -90,33 +113,3 @@ extraEnv:
       value: 'true'
     - name: E2E_TEST_SUPPORT_TOKEN
       value: full-stack-e2e-support-token
-    - name: CLOUDFLARE_API_BASE_URL
-      value: http://fake-cloudflare:8080/client/v4
-    - name: CLOUDFLARE_OAUTH_CLIENT_ID
-      value: full-stack-e2e-cloudflare-client
-    - name: CLOUDFLARE_OAUTH_CLIENT_SECRET
-      value: full-stack-e2e-cloudflare-client-secret
-    - name: CLOUDFLARE_OAUTH_AUTHORIZATION_URL
-      value: http://fake-cloudflare:8080/oauth2/auth
-    - name: CLOUDFLARE_OAUTH_TOKEN_URL
-      value: http://fake-cloudflare:8080/oauth2/token
-    - name: CLOUDFLARE_OAUTH_USERINFO_URL
-      value: http://fake-cloudflare:8080/oauth2/userinfo
-    - name: CLOUDFLARE_OAUTH_REVOKE_URL
-      value: http://fake-cloudflare:8080/oauth2/revoke
-    - name: CLOUDFLARE_OAUTH_ISSUER
-      value: http://fake-cloudflare:8080
-    - name: AT_EMAIL_ADMIN_TRIAL_ENABLED
-      value: 'true'
-    - name: AT_EMAIL_ADMIN_TRIAL_ORGANIZATION_ID
-      value: '01960000-0000-7000-8000-00000000e2e1'
-    - name: AT_EMAIL_ADMIN_TRIAL_DOMAIN
-      value: trial.example.test
-    - name: AT_EMAIL_ADMIN_TRIAL_ADMISSION_TOKEN
-      value: full-stack-e2e-trial-admission-token
-    - name: AT_EMAIL_ADMIN_TRIAL_CAPABILITIES
-      value: email.message.send
-    - name: AT_EMAIL_ADMIN_TRIAL_DAILY_SEND_LIMIT
-      value: '5'
-    - name: AT_EMAIL_ADMIN_TRIAL_TOTAL_SEND_LIMIT
-      value: '10'

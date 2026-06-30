@@ -123,11 +123,11 @@ func TestConnectRedirectLogsAndRedirectsToCloudflare(t *testing.T) {
 	probeServer := newTestServer(t)
 	probeServer.cfg.authorizationURL = "https://dash.cloudflare.com/oauth2/auth"
 	probeServer.cfg.clientID = "client-id"
-	probeServer.cfg.clientSecret = "client-secret"
 	probeServer.cfg.eventsPath = eventsPath
 	probeServer.cfg.redirectURI = "https://callback.example/oauth/callback/cloudflare"
 	probeServer.cfg.scopes = []string{"offline_access", "email-sending.write"}
 	probeServer.events = &eventLogger{filePath: eventsPath}
+	probeServer.pkceVerifier = "pkce-verifier"
 
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "https://callback.example/connect/cloudflare", nil)
@@ -144,43 +144,6 @@ func TestConnectRedirectLogsAndRedirectsToCloudflare(t *testing.T) {
 	if !strings.Contains(location, "response_type=code") {
 		t.Fatalf("redirect location missing response_type: %s", location)
 	}
-
-	content, err := os.ReadFile(eventsPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	text := string(content)
-	if !strings.Contains(text, "oauth_authorization_redirect_issued") {
-		t.Fatalf("event log missing connect event: %s", text)
-	}
-	if strings.Contains(text, "client-secret") || strings.Contains(text, "client-id\"") {
-		t.Fatalf("event log exposed client credentials: %s", text)
-	}
-}
-
-func TestConnectRedirectUsesPKCEForTokenAuthNone(t *testing.T) {
-	t.Parallel()
-
-	eventsPath := filepath.Join(t.TempDir(), "events.jsonl")
-	probeServer := newTestServer(t)
-	probeServer.cfg.authorizationURL = "https://dash.cloudflare.com/oauth2/auth"
-	probeServer.cfg.clientID = "client-id"
-	probeServer.cfg.eventsPath = eventsPath
-	probeServer.cfg.redirectURI = "https://callback.example/oauth/callback/cloudflare"
-	probeServer.cfg.scopes = []string{"offline_access", "email-sending.write"}
-	probeServer.cfg.tokenAuthMethod = "none"
-	probeServer.events = &eventLogger{filePath: eventsPath}
-	probeServer.pkceVerifier = "pkce-verifier"
-
-	response := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "https://callback.example/connect/cloudflare", nil)
-
-	probeServer.ServeHTTP(response, request)
-
-	if response.Code != http.StatusFound {
-		t.Fatalf("status = %d, want %d", response.Code, http.StatusFound)
-	}
-	location := response.Header().Get("location")
 	parsedLocation, err := url.Parse(location)
 	if err != nil {
 		t.Fatalf("redirect location is invalid: %v", err)
@@ -207,7 +170,13 @@ func TestConnectRedirectUsesPKCEForTokenAuthNone(t *testing.T) {
 	if strings.Contains(text, "pkce-verifier") || strings.Contains(text, "code_verifier") {
 		t.Fatalf("event log exposed PKCE verifier: %s", text)
 	}
-	if !strings.Contains(text, `"uses_pkce":true`) || !strings.Contains(text, `"uses_client_secret":false`) {
+	if !strings.Contains(text, "oauth_authorization_redirect_issued") {
+		t.Fatalf("event log missing connect event: %s", text)
+	}
+	if strings.Contains(text, "client-secret") || strings.Contains(text, "client-id\"") {
+		t.Fatalf("event log exposed client credentials: %s", text)
+	}
+	if !strings.Contains(text, `"uses_pkce":true`) {
 		t.Fatalf("event log missing PKCE summary: %s", text)
 	}
 }
@@ -266,9 +235,20 @@ func TestCallbackReportsTokenEndpointOAuthErrorWithoutLeakingCode(t *testing.T) 
 		if request.Method != http.MethodPost {
 			t.Fatalf("token method = %s, want POST", request.Method)
 		}
-		username, password, ok := request.BasicAuth()
-		if !ok || username != "client-id" || password != "client-secret" {
-			t.Fatalf("token basic auth = %q/%q ok=%v", username, password, ok)
+		if request.Header.Get("authorization") != "" {
+			t.Fatalf("PKCE request included authorization header")
+		}
+		if err := request.ParseForm(); err != nil {
+			t.Fatal(err)
+		}
+		if request.PostForm.Get("client_id") != "client-id" {
+			t.Fatalf("client_id form value = %q", request.PostForm.Get("client_id"))
+		}
+		if request.PostForm.Get("client_secret") != "" {
+			t.Fatalf("client_secret form value = %q, want empty", request.PostForm.Get("client_secret"))
+		}
+		if request.PostForm.Get("code_verifier") != "pkce-verifier" {
+			t.Fatalf("code_verifier form value = %q", request.PostForm.Get("code_verifier"))
 		}
 		response.Header().Set("content-type", "application/json")
 		response.WriteHeader(http.StatusUnauthorized)
@@ -283,15 +263,15 @@ func TestCallbackReportsTokenEndpointOAuthErrorWithoutLeakingCode(t *testing.T) 
 		cfg: config{
 			callbackPath: "/oauth/callback/cloudflare",
 			clientID:     "client-id",
-			clientSecret: "client-secret",
 			eventsPath:   eventsPath,
 			redirectURI:  "https://callback.example/oauth/callback/cloudflare",
 			tokenURL:     tokenServer.URL,
 		},
-		client:   tokenServer.Client(),
-		events:   &eventLogger{filePath: eventsPath},
-		state:    "expected-state",
-		sessions: make(map[string]probeSession),
+		client:       tokenServer.Client(),
+		events:       &eventLogger{filePath: eventsPath},
+		pkceVerifier: "pkce-verifier",
+		state:        "expected-state",
+		sessions:     make(map[string]probeSession),
 	}
 
 	response := httptest.NewRecorder()
@@ -314,9 +294,6 @@ func TestCallbackReportsTokenEndpointOAuthErrorWithoutLeakingCode(t *testing.T) 
 	if !strings.Contains(text, `"token_endpoint_status":401`) || !strings.Contains(text, `"token_endpoint_error":"invalid_client"`) {
 		t.Fatalf("event log did not include token endpoint details: %s", text)
 	}
-	if !strings.Contains(text, `"token_auth_method":"client_secret_basic"`) {
-		t.Fatalf("event log did not include token auth method: %s", text)
-	}
 	if strings.Contains(text, `"token_endpoint_error":"[redacted]"`) {
 		t.Fatalf("event log redacted safe token endpoint details: %s", text)
 	}
@@ -325,55 +302,7 @@ func TestCallbackReportsTokenEndpointOAuthErrorWithoutLeakingCode(t *testing.T) 
 	}
 }
 
-func TestExchangeTokenUsesClientSecretPostWhenConfigured(t *testing.T) {
-	t.Parallel()
-
-	tokenServer := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		if request.Header.Get("authorization") != "" {
-			t.Fatalf("client_secret_post request included authorization header")
-		}
-		if err := request.ParseForm(); err != nil {
-			t.Fatal(err)
-		}
-		if request.PostForm.Get("client_id") != "client-id" {
-			t.Fatalf("client_id form value = %q", request.PostForm.Get("client_id"))
-		}
-		if request.PostForm.Get("client_secret") != "client-secret" {
-			t.Fatalf("client_secret form value = %q", request.PostForm.Get("client_secret"))
-		}
-		if request.PostForm.Get("grant_type") != "authorization_code" {
-			t.Fatalf("grant_type = %q", request.PostForm.Get("grant_type"))
-		}
-		response.Header().Set("content-type", "application/json")
-		_ = json.NewEncoder(response).Encode(map[string]any{
-			"access_token": "access-token",
-			"expires_in":   3600,
-			"token_type":   "bearer",
-		})
-	}))
-	defer tokenServer.Close()
-
-	probeServer := &server{
-		cfg: config{
-			clientID:        "client-id",
-			clientSecret:    "client-secret",
-			redirectURI:     "https://callback.example/oauth/callback/cloudflare",
-			tokenAuthMethod: "client_secret_post",
-			tokenURL:        tokenServer.URL,
-		},
-		client: tokenServer.Client(),
-	}
-
-	token, err := probeServer.exchangeCode(context.Background(), "auth-code")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if token.AccessToken != "access-token" {
-		t.Fatalf("access token = %q", token.AccessToken)
-	}
-}
-
-func TestExchangeTokenUsesPKCEWithoutClientSecretWhenConfigured(t *testing.T) {
+func TestExchangeTokenUsesPKCEWithoutClientSecret(t *testing.T) {
 	t.Parallel()
 
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
@@ -406,11 +335,9 @@ func TestExchangeTokenUsesPKCEWithoutClientSecretWhenConfigured(t *testing.T) {
 
 	probeServer := &server{
 		cfg: config{
-			clientID:        "client-id",
-			clientSecret:    "ignored-client-secret",
-			redirectURI:     "https://callback.example/oauth/callback/cloudflare",
-			tokenAuthMethod: "none",
-			tokenURL:        tokenServer.URL,
+			clientID:    "client-id",
+			redirectURI: "https://callback.example/oauth/callback/cloudflare",
+			tokenURL:    tokenServer.URL,
 		},
 		client:       tokenServer.Client(),
 		pkceVerifier: "pkce-verifier",
@@ -435,11 +362,10 @@ func TestSanitizedLoggingRedactsSecretsAndKeepsErrorCodes(t *testing.T) {
 		"authorization_header":             "Bearer secret-access-token",
 		"cloudflare_error_code":            "10103",
 		"endpoint":                         "send_raw",
-		"token_auth_method":                "client_secret_basic",
 		"token_endpoint_error":             "invalid_client",
 		"token_endpoint_error_description": "Client authentication failed",
 		"token_endpoint_status":            401,
-		"uses_client_secret":               true,
+		"uses_pkce":                        true,
 	})
 
 	requireRedactedSummary(t, fields["access_token"], len("secret-access-token"))
@@ -456,9 +382,6 @@ func TestSanitizedLoggingRedactsSecretsAndKeepsErrorCodes(t *testing.T) {
 	if fields["endpoint"] != "send_raw" {
 		t.Fatalf("endpoint was changed: %#v", fields["endpoint"])
 	}
-	if fields["token_auth_method"] != "client_secret_basic" {
-		t.Fatalf("token auth method was redacted: %#v", fields["token_auth_method"])
-	}
 	if fields["token_endpoint_error"] != "invalid_client" {
 		t.Fatalf("token endpoint error was redacted: %#v", fields["token_endpoint_error"])
 	}
@@ -468,8 +391,8 @@ func TestSanitizedLoggingRedactsSecretsAndKeepsErrorCodes(t *testing.T) {
 	if fields["token_endpoint_status"] != 401 {
 		t.Fatalf("token endpoint status was redacted: %#v", fields["token_endpoint_status"])
 	}
-	if fields["uses_client_secret"] != true {
-		t.Fatalf("uses client secret metadata was redacted: %#v", fields["uses_client_secret"])
+	if fields["uses_pkce"] != true {
+		t.Fatalf("PKCE metadata was redacted: %#v", fields["uses_pkce"])
 	}
 }
 
@@ -519,8 +442,7 @@ func TestTokenFormTraceReportsAllFieldLengthsAndSanitizedFields(t *testing.T) {
 	form.Set("client_secret", "client-secret")
 
 	summary := summarizeTokenForm(form, config{
-		clientID:     "client-id",
-		clientSecret: "client-secret",
+		clientID: "client-id",
 	})
 	encoded, err := json.Marshal(summary)
 	if err != nil {
@@ -591,12 +513,17 @@ func TestCallbackRefreshesDiscoversAccountsAndUsesRefreshedTokenForSendProbes(t 
 		if request.Method != http.MethodPost {
 			t.Fatalf("token method = %s, want POST", request.Method)
 		}
-		username, password, ok := request.BasicAuth()
-		if !ok || username != "client-id" || password != "client-secret" {
-			t.Fatalf("token basic auth = %q/%q ok=%v", username, password, ok)
+		if request.Header.Get("authorization") != "" {
+			t.Fatalf("token request included authorization header")
 		}
 		if err := request.ParseForm(); err != nil {
 			t.Fatal(err)
+		}
+		if request.PostForm.Get("client_id") != "client-id" {
+			t.Fatalf("client_id form value = %q", request.PostForm.Get("client_id"))
+		}
+		if request.PostForm.Get("client_secret") != "" {
+			t.Fatalf("client_secret form value = %q, want empty", request.PostForm.Get("client_secret"))
 		}
 		grantType := request.PostForm.Get("grant_type")
 		tokenGrantTypes = append(tokenGrantTypes, grantType)
@@ -605,6 +532,9 @@ func TestCallbackRefreshesDiscoversAccountsAndUsesRefreshedTokenForSendProbes(t 
 		case "authorization_code":
 			if request.PostForm.Get("code") != "auth-code" {
 				t.Fatalf("authorization code = %q", request.PostForm.Get("code"))
+			}
+			if request.PostForm.Get("code_verifier") != "pkce-verifier" {
+				t.Fatalf("code_verifier form value = %q", request.PostForm.Get("code_verifier"))
 			}
 			_ = json.NewEncoder(response).Encode(map[string]any{
 				"access_token":  "initial-access-token",
@@ -659,7 +589,6 @@ func TestCallbackRefreshesDiscoversAccountsAndUsesRefreshedTokenForSendProbes(t 
 			apiBaseURL:       apiServer.URL,
 			callbackPath:     "/oauth/callback/cloudflare",
 			clientID:         "client-id",
-			clientSecret:     "client-secret",
 			eventsPath:       eventsPath,
 			refreshStorePath: tokenStorePath,
 			redirectURI:      "https://callback.example/oauth/callback/cloudflare",
@@ -667,10 +596,11 @@ func TestCallbackRefreshesDiscoversAccountsAndUsesRefreshedTokenForSendProbes(t 
 			authorizationURL: "https://dash.cloudflare.com/oauth2/auth",
 			scopes:           []string{"offline_access", "email-sending.write"},
 		},
-		client:   tokenServer.Client(),
-		events:   &eventLogger{filePath: eventsPath},
-		state:    "expected-state",
-		sessions: make(map[string]probeSession),
+		client:       tokenServer.Client(),
+		events:       &eventLogger{filePath: eventsPath},
+		pkceVerifier: "pkce-verifier",
+		state:        "expected-state",
+		sessions:     make(map[string]probeSession),
 	}
 
 	response := httptest.NewRecorder()
@@ -709,9 +639,6 @@ func TestCallbackRefreshesDiscoversAccountsAndUsesRefreshedTokenForSendProbes(t 
 	}
 	if stored.Source != "refresh_token" {
 		t.Fatalf("stored source = %q, want refresh_token", stored.Source)
-	}
-	if stored.TokenAuthMethod != "client_secret_basic" {
-		t.Fatalf("stored token auth method = %q", stored.TokenAuthMethod)
 	}
 	if stored.ClientIDHash != shortHash("client-id") {
 		t.Fatalf("stored client id hash = %q", stored.ClientIDHash)
@@ -816,7 +743,6 @@ func TestRefreshAccessTokenFromStoreRotatesAndPersists(t *testing.T) {
 		cfg: config{
 			clientID:         "client-id",
 			refreshStorePath: tokenStorePath,
-			tokenAuthMethod:  "none",
 			tokenURL:         tokenServer.URL,
 		},
 		client: tokenServer.Client(),
@@ -988,7 +914,6 @@ func TestRunEmailSendingValidationCommandSendsStructuredAndRawPayloads(t *testin
 		clientID:         "client-id",
 		eventsPath:       filepath.Join(t.TempDir(), "events.jsonl"),
 		refreshStorePath: tokenStorePath,
-		tokenAuthMethod:  "none",
 		tokenURL:         tokenServer.URL,
 	}, &output)
 	if err != nil {

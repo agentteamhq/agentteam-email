@@ -13,7 +13,6 @@ x-required-env:
   AT_EMAIL_ADMIN_ZONEMTA_RELAY_PASSWORD: '${AT_EMAIL_ADMIN_ZONEMTA_RELAY_PASSWORD:?missing AT_EMAIL_ADMIN_ZONEMTA_RELAY_PASSWORD}'
   AT_EMAIL_ADMIN_FEEDBACK_MAILBOX_PASSWORD: '${AT_EMAIL_ADMIN_FEEDBACK_MAILBOX_PASSWORD:?missing AT_EMAIL_ADMIN_FEEDBACK_MAILBOX_PASSWORD}'
   AT_EMAIL_ADMIN_CF_OAUTH_CLIENT_ID: '${AT_EMAIL_ADMIN_CF_OAUTH_CLIENT_ID:?missing AT_EMAIL_ADMIN_CF_OAUTH_CLIENT_ID}'
-  AT_EMAIL_ADMIN_CF_OAUTH_CLIENT_SECRET: '${AT_EMAIL_ADMIN_CF_OAUTH_CLIENT_SECRET:?missing AT_EMAIL_ADMIN_CF_OAUTH_CLIENT_SECRET}'
   AT_EMAIL_ADMIN_R2_ACCOUNT_ID: '${AT_EMAIL_ADMIN_R2_ACCOUNT_ID:?missing AT_EMAIL_ADMIN_R2_ACCOUNT_ID}'
   AT_EMAIL_ADMIN_R2_API_TOKEN: '${AT_EMAIL_ADMIN_R2_API_TOKEN:?missing AT_EMAIL_ADMIN_R2_API_TOKEN}'
   AT_EMAIL_ADMIN_R2_ENDPOINT: '${AT_EMAIL_ADMIN_R2_ENDPOINT:?missing AT_EMAIL_ADMIN_R2_ENDPOINT}'
@@ -322,7 +321,6 @@ services:
       CLOUDFLARE_API_BASE_URL: '${AT_EMAIL_ADMIN_CF_API_BASE_URL:-https://api.cloudflare.com/client/v4}'
       CLOUDFLARE_OAUTH_AUTHORIZATION_URL: '${AT_EMAIL_ADMIN_CF_OAUTH_AUTHORIZATION_URL:-}'
       CLOUDFLARE_OAUTH_CLIENT_ID: '${AT_EMAIL_ADMIN_CF_OAUTH_CLIENT_ID:?missing AT_EMAIL_ADMIN_CF_OAUTH_CLIENT_ID}'
-      CLOUDFLARE_OAUTH_CLIENT_SECRET: '${AT_EMAIL_ADMIN_CF_OAUTH_CLIENT_SECRET:?missing AT_EMAIL_ADMIN_CF_OAUTH_CLIENT_SECRET}'
       CLOUDFLARE_OAUTH_ISSUER: '${AT_EMAIL_ADMIN_CF_OAUTH_ISSUER:-}'
       CLOUDFLARE_OAUTH_REVOKE_URL: '${AT_EMAIL_ADMIN_CF_OAUTH_REVOKE_URL:-}'
       CLOUDFLARE_OAUTH_SCOPES: '${AT_EMAIL_ADMIN_CF_OAUTH_SCOPES:-}'
@@ -762,7 +760,7 @@ configs:
       processes = 1
       connections = 1
       pool = "default"
-      host = "atemail-mail-control-service"
+      host = "${AT_EMAIL_ADMIN_ZONEMTA_RELAY_HOST:-atemail-mail-control-service}"
       port = 2587
       ignoreTLS = true
       secure = false
@@ -779,7 +777,7 @@ configs:
       processes = 1
       connections = 1
       pool = "default"
-      host = "atemail-mail-control-service"
+      host = "${AT_EMAIL_ADMIN_ZONEMTA_RELAY_HOST:-atemail-mail-control-service}"
       port = 2587
       ignoreTLS = true
       secure = false
@@ -796,7 +794,7 @@ configs:
       processes = 1
       connections = 1
       pool = "default"
-      host = "atemail-mail-control-service"
+      host = "${AT_EMAIL_ADMIN_ZONEMTA_RELAY_HOST:-atemail-mail-control-service}"
       port = 2587
       ignoreTLS = true
       secure = false

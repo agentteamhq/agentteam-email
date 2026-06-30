@@ -1,0 +1,212 @@
+services:
+  mongodb:
+    ports:
+      - '127.0.0.1:${AT_EMAIL_ADMIN_DEV_MONGO_PORT:-27017}:27017'
+    volumes:
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/mongodb-mongod-conf'
+        target: /etc/mongod.conf
+        read_only: true
+
+  redis:
+    ports:
+      - '127.0.0.1:${AT_EMAIL_ADMIN_DEV_REDIS_PORT:-6379}:6379'
+    volumes:
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/redis-conf'
+        target: /usr/local/etc/redis/redis.conf
+        read_only: true
+
+  rspamd:
+    ports:
+      - '127.0.0.1:${AT_EMAIL_ADMIN_DEV_RSPAMD_PORT:-11333}:11333'
+    volumes:
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/rspamd-worker-controller'
+        target: /etc/rspamd/local.d/worker-controller.inc
+        read_only: true
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/rspamd-worker-normal'
+        target: /etc/rspamd/local.d/worker-normal.inc
+        read_only: true
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/rspamd-worker-proxy'
+        target: /etc/rspamd/local.d/worker-proxy.inc
+        read_only: true
+
+  wildduck:
+    ports:
+      - '127.0.0.1:${AT_EMAIL_ADMIN_DEV_WILDDUCK_API_PORT:-8080}:8080'
+      - '127.0.0.1:${AT_EMAIL_ADMIN_DEV_WILDDUCK_IMAP_PORT:-10143}:10143'
+
+  haraka:
+    ports:
+      - '127.0.0.1:${AT_EMAIL_ADMIN_DEV_HARAKA_SMTP_PORT:-10025}:10025'
+    volumes:
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/haraka-connection'
+        target: /app/config/connection.ini
+        read_only: true
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/haraka-databytes'
+        target: /app/config/databytes
+        read_only: true
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/haraka-host-list'
+        target: /app/config/host_list
+        read_only: true
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/haraka-log'
+        target: /app/config/log.ini
+        read_only: true
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/haraka-me'
+        target: /app/config/me
+        read_only: true
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/haraka-plugins'
+        target: /app/config/plugins
+        read_only: true
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/haraka-rspamd'
+        target: /app/config/rspamd.ini
+        read_only: true
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/haraka-smtp'
+        target: /app/config/smtp.ini
+        read_only: true
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/haraka-smtpgreeting'
+        target: /app/config/smtpgreeting
+        read_only: true
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/haraka-tls'
+        target: /app/config/tls.ini
+        read_only: true
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/haraka-wildduck'
+        target: /app/config/wildduck.yaml
+        read_only: true
+
+  zonemta:
+    ports:
+      - '127.0.0.1:${AT_EMAIL_ADMIN_DEV_ZONEMTA_DSN_PORT:-2526}:2526'
+    volumes:
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/zonemta-main'
+        target: /app/config/zonemta.toml
+        read_only: true
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/zonemta-dbs-production'
+        target: /app/config/dbs-production.toml
+        read_only: true
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/zonemta-dns'
+        target: /app/config/dns.toml
+        read_only: true
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/zonemta-domains'
+        target: /app/config/domains.toml
+        read_only: true
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/zonemta-pools'
+        target: /app/config/pools.toml
+        read_only: true
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/zonemta-queue'
+        target: /app/config/queue.toml
+        read_only: true
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/zonemta-interface-feeder'
+        target: /app/config/interfaces/feeder.toml
+        read_only: true
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/zonemta-interface-dsn'
+        target: /app/config/interfaces/dsn.toml
+        read_only: true
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/zonemta-plugin-agent-mail-provenance'
+        target: /app/config/plugins/agent-mail-provenance.toml
+        read_only: true
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/zonemta-plugin-default-headers'
+        target: /app/config/plugins/default-headers.toml
+        read_only: true
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/zonemta-plugin-email-bounce'
+        target: /app/config/plugins/email-bounce.toml
+        read_only: true
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/zonemta-plugin-wildduck'
+        target: /app/config/plugins/wildduck.toml
+        read_only: true
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/zonemta-zone-bounces'
+        target: /app/config/zones/bounces.toml
+        read_only: true
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/zonemta-zone-default'
+        target: /app/config/zones/default.toml
+        read_only: true
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/zonemta-zone-routed'
+        target: /app/config/zones/routed.toml
+        read_only: true
+      - type: bind
+        source: '${AT_EMAIL_ADMIN_DEV_CONFIG_DIR:?missing AT_EMAIL_ADMIN_DEV_CONFIG_DIR}/configs/zonemta-agent-mail-provenance-js'
+        target: /app/plugins/agent-mail-provenance.js
+        read_only: true
+
+  mailpit:
+    image: '${AT_EMAIL_ADMIN_DEV_MAILPIT_IMAGE:-docker.io/axllent/mailpit:v1.30.1}'
+    pull_policy: '${AT_EMAIL_ADMIN_PULL_POLICY:-missing}'
+    networks:
+      - agentteam-email-network
+    environment:
+      MP_MAX_MESSAGES: '500'
+      MP_DATABASE: /data/mailpit.db
+      MP_SMTP_AUTH_ACCEPT_ANY: '1'
+      MP_SMTP_AUTH_ALLOW_INSECURE: '1'
+    ports:
+      - '127.0.0.1:${AT_EMAIL_ADMIN_DEV_MAILPIT_SMTP_PORT:-1025}:1025'
+      - '127.0.0.1:${AT_EMAIL_ADMIN_DEV_MAILPIT_HTTP_PORT:-8025}:8025'
+    volumes:
+      - mailpit-data:/data
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:8025/api/v1/info']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+  minio:
+    image: '${AT_EMAIL_ADMIN_SMOKE_MINIO_IMAGE:-docker.io/minio/minio:RELEASE.2025-09-07T16-13-09Z}'
+    pull_policy: '${AT_EMAIL_ADMIN_PULL_POLICY:-missing}'
+    networks:
+      - agentteam-email-network
+    command: ['server', '/data', '--address', ':9000', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: '${AT_EMAIL_ADMIN_R2_ACCESS_KEY_ID:?missing AT_EMAIL_ADMIN_R2_ACCESS_KEY_ID}'
+      MINIO_ROOT_PASSWORD: '${AT_EMAIL_ADMIN_R2_SECRET_ACCESS_KEY:?missing AT_EMAIL_ADMIN_R2_SECRET_ACCESS_KEY}'
+    ports:
+      - '127.0.0.1:${AT_EMAIL_ADMIN_DEV_MINIO_PORT:-9000}:9000'
+      - '127.0.0.1:${AT_EMAIL_ADMIN_DEV_MINIO_CONSOLE_PORT:-9001}:9001'
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://127.0.0.1:9000/minio/health/ready']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  mailpit-data:
+  minio-data:
+
+networks:
+  agentteam-email-network:
+    name: '${AT_EMAIL_ADMIN_DEV_NETWORK:?missing AT_EMAIL_ADMIN_DEV_NETWORK}'
+    external: false
