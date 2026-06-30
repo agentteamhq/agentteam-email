@@ -22,10 +22,10 @@ import {
   PaperclipIcon,
   PencilSimpleIcon,
   PlusIcon,
-  RobotIcon,
   StarIcon,
   TrashIcon,
   TrayIcon,
+  UserIcon,
   UsersThreeIcon,
   WarningIcon,
   XIcon
@@ -1611,7 +1611,7 @@ const mailNavIcons = {
 
 const managementNavIcons = {
   accounts: AddressBookIcon,
-  agents: RobotIcon,
+  agents: UserIcon,
   groups: UsersThreeIcon
 } satisfies Record<AuthenticatedManagementNavIconKey, React.ComponentType<{ className?: string }>>
 
