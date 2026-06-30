@@ -1,5 +1,12 @@
 # Security Rules
 
+## Vulnerability Reports
+
+Report vulnerabilities, exploits, leaked secrets, and security-sensitive bugs
+through [GitHub Security Advisories](https://github.com/agentteamhq/agentteam-email/security/advisories/new),
+not public issues, discussions, pull requests, or announcements. Do not publicly
+disclose details until coordinated disclosure is complete.
+
 ## Approval
 
 - Agents must read this file before security-sensitive work.
