@@ -54,7 +54,7 @@ import {
 } from '../lib/mail-rpc'
 import { mailboxAddress } from '../lib/mail-addresses'
 import { isMailboxAdminSectionId } from '../partials/authenticated/mailbox-admin-models'
-import { findSystemFolder } from './dashboard-mail-sidebar-view'
+import { FIRST_USE_SETUP_NAV_ITEM_ID, findSystemFolder } from './dashboard-mail-sidebar-view'
 import { DashboardScreen } from './dashboard-screen'
 import { toMailboxAdminView } from './dashboard-mailbox-admin-view'
 import { invalidateMailboxAdminQueries } from './dashboard-mailbox-admin-query-cache'
@@ -1968,6 +1968,20 @@ export function DashboardMailController({
         runAsync(handleMailboxFolderRenameSubmit())
       }}
       onMailboxFolderSelect={(folderId) => {
+        if (folderId === FIRST_USE_SETUP_NAV_ITEM_ID) {
+          navigateMail({
+            accountId: undefined,
+            cursor: undefined,
+            direction: undefined,
+            folderId: undefined,
+            mailboxAdmin: undefined,
+            mailQuery: undefined,
+            messageId: undefined,
+            unreadOnly: undefined
+          })
+          return
+        }
+
         if (isMailboxAdminSectionId(folderId)) {
           navigateMail({
             cursor: undefined,

@@ -1,12 +1,13 @@
 export type AuthenticatedViewState = 'ready' | 'loading' | 'empty' | 'error'
 export type AuthenticatedMailNavIconKey = 'drafts' | 'folder' | 'inbox' | 'junk' | 'sent' | 'trash'
-export type AuthenticatedManagementNavIconKey = 'accounts' | 'agents' | 'groups'
+export type AuthenticatedManagementNavIconKey = 'accounts' | 'agents' | 'groups' | 'setup'
 export type AuthenticatedEmailBodySize = 'compact' | 'standard' | 'tall' | 'fill'
 export type AuthenticatedComposeMode = 'new' | 'reply' | 'reply-all' | 'forward' | 'draft'
 export type AuthenticatedComposeField = 'bcc' | 'body' | 'cc' | 'subject' | 'to'
 export type AuthenticatedMailFilterMode = 'client' | 'server'
 export type AuthenticatedMailActionDialogKind = 'delete' | 'move' | 'originalSource'
 export type AuthenticatedMailPageDirection = 'next' | 'previous'
+export type AuthenticatedSidebarMailboxMode = 'mailbox' | 'no-mailbox'
 
 export interface AuthenticatedMailAccount {
   address: string
@@ -49,8 +50,11 @@ export interface AuthenticatedMailPageChange {
 export interface AuthenticatedMailNavItem {
   actions?: ReadonlyArray<AuthenticatedMailFolderActionItem>
   badgeLabel?: string
+  disabled?: boolean
+  disabledReason?: string
   iconKey: AuthenticatedMailNavIconKey
   id: string
+  selectable?: boolean
   title: string
   url: string
 }
@@ -68,8 +72,14 @@ export interface AuthenticatedMailFolderActionItem {
 export interface AuthenticatedManagementNavItem {
   iconKey: AuthenticatedManagementNavIconKey
   id: string
+  tone?: 'accent'
   title: string
   url: string
+}
+
+export interface AuthenticatedManagementNavGroup {
+  id: string
+  items: ReadonlyArray<AuthenticatedManagementNavItem>
 }
 
 export interface AuthenticatedMailItem {
@@ -259,9 +269,12 @@ export interface AuthenticatedSidebarView {
   folderDelete?: AuthenticatedMailDeleteFolderView
   folderRename?: AuthenticatedMailRenameFolderView
   isRefreshing?: boolean
+  mailboxMode: AuthenticatedSidebarMailboxMode
   managementNav?: ReadonlyArray<AuthenticatedManagementNavItem>
+  managementNavGroups?: ReadonlyArray<AuthenticatedManagementNavGroup>
   mails: ReadonlyArray<AuthenticatedMailItem>
   navMain: ReadonlyArray<AuthenticatedMailNavItem>
+  paneTitle: string
   pagination?: AuthenticatedMailPagination
   refreshLabel?: string
   retryLabel?: string
@@ -402,6 +415,7 @@ export const defaultAuthenticatedSidebarView = {
   activeItemId: 'inbox',
   emptyDescription: 'Messages matching this mailbox view will appear here.',
   emptyTitle: 'No messages',
+  mailboxMode: 'mailbox',
   navMain: [
     {
       id: 'inbox',
@@ -435,6 +449,7 @@ export const defaultAuthenticatedSidebarView = {
     }
   ],
   mails: [],
+  paneTitle: 'Inbox',
   searchQuery: '',
   state: 'ready',
   workspaceSwitcher: {
@@ -539,8 +554,11 @@ export function withActiveSidebarItem(
   view: AuthenticatedSidebarView,
   activeItemId: string
 ): AuthenticatedSidebarView {
+  const activeMailItem = view.navMain.find((item) => item.id === activeItemId)
+
   return {
     ...view,
-    activeItemId
+    activeItemId,
+    paneTitle: view.mailboxMode === 'mailbox' && activeMailItem ? activeMailItem.title : view.paneTitle
   }
 }

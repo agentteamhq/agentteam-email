@@ -67,8 +67,8 @@ const mailWorkspaceMiddlePageView = {
 const mailWorkspaceFirstUseView = {
   ...mailWorkspaceEmptyView,
   accounts: [],
-  activeAccountId: '',
-  activeFolderId: '',
+  activeAccountId: null,
+  activeFolderId: null,
   folders: []
 } satisfies AgentMailWebWorkspace
 
@@ -143,14 +143,33 @@ export const WebmailFirstUseOnboarding: Story = {
     }),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
+    const body = within(canvasElement.ownerDocument.body)
 
     await expect(await canvas.findByText('Connect your domain', {}, { timeout: 15000 })).toBeInTheDocument()
     await expect(
       await canvas.findByText('Connect Cloudflare to choose the domain you want to use with AgentTeam Email.')
     ).toBeInTheDocument()
     await expect(await canvas.findByRole('button', { name: 'Continue with Cloudflare' })).toBeEnabled()
-    await expect(await canvas.findByText('No mailbox yet')).toBeInTheDocument()
+    expect((await canvas.findAllByText('No mailbox yet')).length).toBeGreaterThan(0)
+    for (const folderLabel of ['Inbox', 'Drafts', 'Sent', 'Junk', 'Trash']) {
+      expect((await canvas.findAllByText(folderLabel)).length).toBeGreaterThan(0)
+    }
+    await expect(canvas.queryByRole('button', { name: 'Continue setup' })).not.toBeInTheDocument()
+    await expect(canvas.queryByRole('button', { name: 'Create folder' })).not.toBeInTheDocument()
     await expect(canvas.queryByText('Choose a message from the mailbox to read it here.')).not.toBeInTheDocument()
+
+    const inboxButton = await canvas.findByRole('button', { name: 'Inbox' })
+    await userEvent.hover(inboxButton)
+    expect((await body.findAllByText('Inbox: Connect a mailbox before opening folders.')).length).toBeGreaterThan(0)
+
+    await userEvent.click(await canvas.findByRole('button', { name: 'Accounts' }))
+    await expect(await canvas.findByRole('button', { name: 'Continue setup' })).toBeInTheDocument()
+
+    await userEvent.click(await canvas.findByRole('button', { name: 'Continue setup' }))
+    await expect(await canvas.findByText('Connect your domain', {}, { timeout: 15000 })).toBeInTheDocument()
+    await waitFor(() => {
+      expect(canvas.queryByRole('button', { name: 'Continue setup' })).not.toBeInTheDocument()
+    })
   }
 }
 
@@ -609,6 +628,9 @@ function renderMailWorkspaceControllerStory(
       mailWorkspaceLoader={createStoryMailWorkspaceLoader(options)}
       mailboxAdminNavigationLoader={createStoryMailboxAdminNavigationLoader({
         allowedSections: mailboxAdminReadyView.allowedSections
+      })}
+      mailboxAdminViewLoader={createStoryMailboxAdminViewLoader({
+        view: mailboxAdminEmptyView
       })}
     />
   )

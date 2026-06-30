@@ -4,8 +4,6 @@ import {
   AuthenticatedShell
 } from '../partials/authenticated/authenticated-shell'
 import {
-  defaultAuthenticatedDashboardView,
-  defaultAuthenticatedSidebarView,
   withActiveSidebarItem
 } from '../partials/authenticated/authenticated-shell-models'
 import {
@@ -44,7 +42,7 @@ export interface DashboardScreenProps {
   authClient?: AuthProviderProps['authClient']
   agentAccessState?: AgentAccessSettingsState
   composeView?: AuthenticatedComposeView
-  dashboardView?: AuthenticatedDashboardView
+  dashboardView: AuthenticatedDashboardView
   defaultSettingsOpen?: boolean
   defaultSettingsSection?: SettingsSectionId
   emailPreviewsById?: Readonly<Record<string, AuthenticatedEmailPreview>>
@@ -99,14 +97,14 @@ export interface DashboardScreenProps {
   settingsOpen?: boolean
   settingsContentState?: SettingsDialogContentState
   settingsSection?: SettingsSectionId
-  sidebarView?: AuthenticatedSidebarView
+  sidebarView: AuthenticatedSidebarView
 }
 
 export function DashboardScreen({
   authClient,
   agentAccessState,
   composeView,
-  dashboardView = defaultAuthenticatedDashboardView,
+  dashboardView,
   defaultSettingsOpen,
   defaultSettingsSection,
   emailPreviewsById,
@@ -155,7 +153,7 @@ export function DashboardScreen({
   settingsOpen: settingsOpenProp,
   settingsContentState,
   settingsSection: settingsSectionProp,
-  sidebarView = defaultAuthenticatedSidebarView
+  sidebarView
 }: DashboardScreenProps) {
   const requestedSettingsSection =
     routeSearch?.settings === 'security'

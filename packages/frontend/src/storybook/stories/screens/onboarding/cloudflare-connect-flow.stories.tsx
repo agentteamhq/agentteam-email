@@ -75,6 +75,22 @@ export const Step07MailboxReady: Story = {
   args: buildProductOnboardingControllerArgs(productOnboardingScenarios.mailboxReady, onboardingHandlers)
 }
 
+export const Step08AgentsNoMailboxSetupReturn: Story = {
+  name: '08 agents no-mailbox setup return',
+  args: buildProductOnboardingControllerArgs(
+    productOnboardingScenarios.agentsNoMailboxSetupReturn,
+    onboardingHandlers
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+
+    await expect(await canvas.findByRole('heading', { name: 'Agents' }, { timeout: 15000 })).toBeInTheDocument()
+    await expect(await canvas.findByText('No agents')).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: 'Continue setup' })).toBeInTheDocument()
+    await expect(canvas.queryByRole('button', { name: 'Create folder' })).not.toBeInTheDocument()
+  }
+}
+
 export const CloudflareConnectMobile: Story = {
   name: 'Cloudflare connect - mobile',
   args: buildProductOnboardingControllerArgs(productOnboardingScenarios.connectCloudflare, onboardingHandlers),

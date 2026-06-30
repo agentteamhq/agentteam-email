@@ -15,6 +15,7 @@ import {
   DotsThreeIcon,
   EnvelopeSimpleIcon,
   FileIcon,
+  FlagPennantIcon,
   FolderIcon,
   ImageIcon,
   LinkIcon,
@@ -97,6 +98,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
+  SidebarSeparator,
   SidebarTrigger,
   useSidebar
 } from '../../components/ui/sidebar'
@@ -116,8 +118,7 @@ import { DomainSettingsPanel, SettingsDialog } from './settings-dialog'
 import { WorkspaceMailboxSwitcher } from './workspace-mailbox-switcher'
 import {
   defaultAuthenticatedDashboardView,
-  defaultAuthenticatedEmailToolbarActions,
-  defaultAuthenticatedSidebarView
+  defaultAuthenticatedEmailToolbarActions
 } from './authenticated-shell-models'
 import type { EmailIframeThemeMode } from '../../lib/email-safety'
 import type {
@@ -142,6 +143,7 @@ import type {
   AuthenticatedMailOriginalSourceView,
   AuthenticatedMailPageChange,
   AuthenticatedMailPagination,
+  AuthenticatedManagementNavGroup,
   AuthenticatedManagementNavIconKey,
   AuthenticatedManagementNavItem,
   AuthenticatedRemoteImage,
@@ -202,7 +204,7 @@ export interface AuthenticatedShellProps {
   settingsContentState?: SettingsDialogContentState
   settingsOpen: boolean
   settingsSection: SettingsSectionId
-  sidebarView?: AuthenticatedSidebarView
+  sidebarView: AuthenticatedSidebarView
   title?: string
 }
 
@@ -246,11 +248,13 @@ export function AuthenticatedShell({
   settingsContentState,
   settingsOpen,
   settingsSection,
-  sidebarView = defaultAuthenticatedSidebarView,
-  title = 'Inbox'
+  sidebarView,
+  title
 }: AuthenticatedShellProps) {
-  const hasActiveManagementItem =
-    sidebarView.managementNav?.some((item) => item.id === sidebarView.activeItemId) ?? false
+  const hasActiveManagementItem = getSidebarManagementNavItems(sidebarView).some(
+    (item) => item.id === sidebarView.activeItemId
+  )
+  const headerTitle = title ?? sidebarView.paneTitle
 
   return (
     <SidebarProvider
@@ -287,7 +291,7 @@ export function AuthenticatedShell({
       <SidebarInset>
         <header className='bg-background sticky top-0 flex h-14 shrink-0 items-center gap-2 border-b px-4'>
           <SidebarTrigger />
-          <span className='text-sm font-medium'>{title}</span>
+          <span className='text-sm font-medium'>{headerTitle}</span>
         </header>
         {children}
       </SidebarInset>
@@ -1131,7 +1135,7 @@ export interface AuthenticatedSidebarProps {
   onSearchChange?: (query: string) => void
   onSelectItem?: (itemId: string) => void
   onUnreadOnlyChange?: (unreadOnly: boolean) => void
-  view?: AuthenticatedSidebarView
+  view: AuthenticatedSidebarView
 }
 
 export function AuthenticatedSidebar({
@@ -1153,13 +1157,12 @@ export function AuthenticatedSidebar({
   onSearchChange,
   onSelectItem,
   onUnreadOnlyChange,
-  view = defaultAuthenticatedSidebarView
+  view
 }: AuthenticatedSidebarProps) {
   const { setOpen } = useSidebar()
-  const activeMailItem = view.navMain.find((item) => item.id === view.activeItemId)
-  const activeManagementItem = view.managementNav?.find((item) => item.id === view.activeItemId)
-  const activeItem = activeMailItem ?? activeManagementItem ?? view.navMain[0]
-  const hasExplicitlyNoAccounts = Boolean(view.accounts && view.accounts.length === 0)
+  const managementNavGroups = getSidebarManagementNavGroups(view)
+  const activeManagementItem = getSidebarManagementNavItems(view).find((item) => item.id === view.activeItemId)
+  const hasExplicitlyNoAccounts = view.mailboxMode === 'no-mailbox'
   const workspaceSwitcherWorkspaces = getSidebarWorkspaceSwitcherWorkspaces(view)
   const workspaceSwitcherActiveWorkspaceId =
     view.workspaceSwitcher?.activeWorkspaceId ?? workspaceSwitcherWorkspaces[0]?.id
@@ -1225,21 +1228,28 @@ export function AuthenticatedSidebar({
             </SidebarGroup>
           </SidebarContent>
           <SidebarFooter>
-            {view.managementNav?.length ? (
-              <SidebarMenu>
-                {view.managementNav.map((item) => (
-                  <SidebarMenuItem key={item.id}>
-                    <ManagementNavButton
-                      item={item}
-                      isActive={item.id === view.activeItemId}
-                      onSelect={() => {
-                        onSelectItem?.(item.id)
-                        setOpen(false)
-                      }}
-                    />
-                  </SidebarMenuItem>
+            {managementNavGroups.length ? (
+              <div className='grid gap-1'>
+                {managementNavGroups.map((group, index) => (
+                  <React.Fragment key={group.id}>
+                    {index > 0 ? <SidebarSeparator className='my-0.5' /> : null}
+                    <SidebarMenu>
+                      {group.items.map((item) => (
+                        <SidebarMenuItem key={item.id}>
+                          <ManagementNavButton
+                            item={item}
+                            isActive={item.id === view.activeItemId}
+                            onSelect={() => {
+                              onSelectItem?.(item.id)
+                              setOpen(false)
+                            }}
+                          />
+                        </SidebarMenuItem>
+                      ))}
+                    </SidebarMenu>
+                  </React.Fragment>
                 ))}
-              </SidebarMenu>
+              </div>
             ) : null}
             <UserButton
               align='start'
@@ -1258,7 +1268,7 @@ export function AuthenticatedSidebar({
               <div className='flex w-full items-center justify-between gap-2'>
                 <div className='flex min-w-0 items-center gap-1.5'>
                   <div className='text-foreground truncate text-base font-medium'>
-                    {activeItem?.title ?? 'Inbox'}
+                    {view.paneTitle}
                   </div>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -1612,7 +1622,8 @@ const mailNavIcons = {
 const managementNavIcons = {
   accounts: AddressBookIcon,
   agents: UserIcon,
-  groups: UsersThreeIcon
+  groups: UsersThreeIcon,
+  setup: FlagPennantIcon
 } satisfies Record<AuthenticatedManagementNavIconKey, React.ComponentType<{ className?: string }>>
 
 function MailNavButton({
@@ -1630,17 +1641,33 @@ function MailNavButton({
   onSelect: () => void
 }) {
   const Icon = mailNavIcons[item.iconKey]
+  const disabled = item.disabled || item.selectable === false
+  const tooltip = item.disabledReason ? `${item.title}: ${item.disabledReason}` : item.title
 
   return (
     <>
       <SidebarMenuButton
+        aria-disabled={disabled ? 'true' : undefined}
+        data-disabled={disabled ? 'true' : undefined}
         tooltip={{
-          children: item.title,
+          children: tooltip,
           hidden: false
         }}
-        onClick={onSelect}
+        onClick={(event) => {
+          if (disabled) {
+            event.preventDefault()
+            return
+          }
+          onSelect()
+        }}
         isActive={isActive}
-        className='px-2.5 md:px-2'
+        className={
+          disabled
+            ? 'cursor-not-allowed px-2.5 opacity-50 aria-disabled:pointer-events-auto hover:bg-transparent hover:text-sidebar-foreground active:bg-transparent active:text-sidebar-foreground md:px-2'
+            : 'px-2.5 md:px-2'
+        }
+        title={disabled ? tooltip : undefined}
+        type='button'
       >
         <Icon />
         <span>{item.title}</span>
@@ -1709,14 +1736,10 @@ const folderActionIcons = {
   React.ComponentType<{ 'data-icon'?: string; className?: string }>
 >
 
-const fallbackWorkspaceSwitcherWorkspaces = defaultAuthenticatedSidebarView.workspaceSwitcher.workspaces
-
 function getSidebarWorkspaceSwitcherWorkspaces(
   view: AuthenticatedSidebarView
 ): ReadonlyArray<AuthenticatedWorkspaceSwitcherWorkspace> {
-  return view.workspaceSwitcher?.workspaces.length
-    ? view.workspaceSwitcher.workspaces
-    : fallbackWorkspaceSwitcherWorkspaces
+  return view.workspaceSwitcher?.workspaces ?? []
 }
 
 function getSidebarWorkspaceSwitcherMailboxes(
@@ -1757,6 +1780,29 @@ function getSidebarWorkspaceSwitcherState(view: AuthenticatedSidebarView): Works
   return 'ready'
 }
 
+function getSidebarManagementNavGroups(
+  view: AuthenticatedSidebarView
+): ReadonlyArray<AuthenticatedManagementNavGroup> {
+  if (view.managementNavGroups) {
+    return view.managementNavGroups.filter((group) => group.items.length > 0)
+  }
+
+  return view.managementNav?.length
+    ? [
+        {
+          id: 'management',
+          items: view.managementNav
+        }
+      ]
+    : []
+}
+
+function getSidebarManagementNavItems(
+  view: AuthenticatedSidebarView
+): ReadonlyArray<AuthenticatedManagementNavItem> {
+  return getSidebarManagementNavGroups(view).flatMap((group) => group.items)
+}
+
 function ManagementNavButton({
   isActive,
   item,
@@ -1776,7 +1822,11 @@ function ManagementNavButton({
       }}
       onClick={onSelect}
       isActive={isActive}
-      className='px-2.5 md:px-2'
+      className={cn(
+        'px-2.5 md:px-2',
+        item.tone === 'accent' &&
+          'bg-transparent font-medium text-primary ring-1 ring-inset ring-primary/65 hover:bg-primary/5 hover:text-primary data-[active=true]:bg-transparent data-[active=true]:text-primary'
+      )}
     >
       <Icon />
       <span>{item.title}</span>

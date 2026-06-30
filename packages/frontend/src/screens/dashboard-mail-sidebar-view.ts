@@ -14,11 +14,33 @@ import type {
   AuthenticatedEmailAction,
   AuthenticatedEmailToolbarAction,
   AuthenticatedMailItem,
+  AuthenticatedMailNavItem,
   AuthenticatedMailNavIconKey,
+  AuthenticatedManagementNavGroup,
   AuthenticatedManagementNavItem,
   AuthenticatedSidebarView
 } from '../partials/authenticated/authenticated-shell-models'
 import type { MailboxAdminSectionId } from '../partials/authenticated/mailbox-admin-models'
+
+export const FIRST_USE_SETUP_NAV_ITEM_ID = 'continue-setup'
+
+const NO_MAILBOX_FOLDER_DISABLED_REASON = 'Connect a mailbox before opening folders.'
+
+const NO_MAILBOX_NAV_ITEMS = [
+  noMailboxNavItem('inbox', 'Inbox', 'inbox'),
+  noMailboxNavItem('drafts', 'Drafts', 'drafts'),
+  noMailboxNavItem('sent', 'Sent', 'sent'),
+  noMailboxNavItem('junk', 'Junk', 'junk'),
+  noMailboxNavItem('trash', 'Trash', 'trash')
+] satisfies ReadonlyArray<AuthenticatedMailNavItem>
+
+const FIRST_USE_SETUP_NAV_ITEM = {
+  iconKey: 'setup',
+  id: FIRST_USE_SETUP_NAV_ITEM_ID,
+  tone: 'accent',
+  title: 'Continue setup',
+  url: '#'
+} satisfies AuthenticatedManagementNavItem
 
 const MAILBOX_ADMIN_MANAGEMENT_NAV = [
   {
@@ -65,13 +87,19 @@ export function toSidebarView(
   allowedMailboxAdminSections: ReadonlyArray<MailboxAdminSectionId> | undefined
 ): AuthenticatedSidebarView {
   const activeManagementSection = routeSearch?.mailboxAdmin
-  const managementNav = mailboxAdminManagementNav(allowedMailboxAdminSections)
+  const firstUseWorkspace = isNoMailboxWorkspace(workspace)
+  const mailboxAdminNav = mailboxAdminManagementNav(allowedMailboxAdminSections)
+  const showFirstUseSetupNav =
+    firstUseWorkspace && Boolean(activeManagementSection) && mailboxAdminNav.length > 0
+  const managementNav = showFirstUseSetupNav ? [FIRST_USE_SETUP_NAV_ITEM, ...mailboxAdminNav] : mailboxAdminNav
+  const managementNavGroups = groupedManagementNav(showFirstUseSetupNav, mailboxAdminNav)
 
   if (status === 'pending') {
     return {
       ...defaultAuthenticatedSidebarView,
       activeItemId: activeManagementSection ?? defaultAuthenticatedSidebarView.activeItemId,
       managementNav,
+      managementNavGroups,
       state: 'loading'
     }
   }
@@ -83,15 +111,20 @@ export function toSidebarView(
       errorDescription: errorMessage(error, 'Mailbox data could not be loaded.'),
       errorTitle: 'Mailbox unavailable',
       managementNav,
+      managementNavGroups,
       retryLabel: 'Retry',
       state: 'error'
     }
   }
 
-  const activeFolderId = workspace?.activeFolderId ?? defaultAuthenticatedSidebarView.activeItemId
   const folders = workspace?.folders ?? []
   const messages = workspace?.messages ?? []
   const emptyMailbox = emptyMailboxCopy(workspace, routeSearch)
+  const navMain = firstUseWorkspace ? NO_MAILBOX_NAV_ITEMS : folders.map(toNavItem)
+  const activeFolderId = firstUseWorkspace
+    ? NO_MAILBOX_NAV_ITEMS[0].id
+    : workspace?.activeFolderId ?? defaultAuthenticatedSidebarView.activeItemId
+  const activeFolderItem = navMain.find((item) => item.id === activeFolderId)
 
   return {
     activeAccountId: workspace?.activeAccountId ?? undefined,
@@ -108,16 +141,18 @@ export function toSidebarView(
     emptyDescription: emptyMailbox.description,
     emptyTitle: emptyMailbox.title,
     filterMode: 'server',
-    folderCreate: {
-      errorMessage: folderCreate.errorMessage,
-      isSubmitting: folderCreate.isSubmitting,
-      name: folderCreate.name,
-      placeholder: 'Folder name',
-      state: folderCreate.state,
-      submitLabel: folderCreate.isSubmitting ? 'Creating folder' : 'Create folder',
-      title: 'Create folder',
-      triggerLabel: 'Create folder'
-    },
+    folderCreate: firstUseWorkspace
+      ? undefined
+      : {
+          errorMessage: folderCreate.errorMessage,
+          isSubmitting: folderCreate.isSubmitting,
+          name: folderCreate.name,
+          placeholder: 'Folder name',
+          state: folderCreate.state,
+          submitLabel: folderCreate.isSubmitting ? 'Creating folder' : 'Create folder',
+          title: 'Create folder',
+          triggerLabel: 'Create folder'
+        },
     folderDelete: folderDelete.folderId
       ? {
           description: 'This deletes the selected WildDuck folder.',
@@ -141,15 +176,66 @@ export function toSidebarView(
         }
       : undefined,
     mails: messages.map(toMailItem),
+    mailboxMode: firstUseWorkspace ? 'no-mailbox' : 'mailbox',
     managementNav,
-    navMain: folders.map(toNavItem),
+    managementNavGroups,
+    navMain,
+    paneTitle: firstUseWorkspace ? 'No mailbox yet' : (activeFolderItem?.title ?? emptyMailbox.title),
     pagination: toPagination(workspace),
     refreshLabel: 'Refresh',
     retryLabel: 'Retry',
-    searchQuery: routeSearch?.mailQuery ?? '',
+    searchQuery: firstUseWorkspace ? '' : (routeSearch?.mailQuery ?? ''),
     selectedMailId: workspace?.selectedMessage?.id,
-    unreadOnly: routeSearch?.unreadOnly,
+    unreadOnly: firstUseWorkspace ? undefined : routeSearch?.unreadOnly,
     state: messages.length ? 'ready' : 'empty'
+  }
+}
+
+function groupedManagementNav(
+  showFirstUseSetupNav: boolean,
+  mailboxAdminNav: ReadonlyArray<AuthenticatedManagementNavItem>
+): ReadonlyArray<AuthenticatedManagementNavGroup> {
+  const groups: Array<AuthenticatedManagementNavGroup> = []
+
+  if (showFirstUseSetupNav) {
+    groups.push({
+      id: 'setup-return',
+      items: [FIRST_USE_SETUP_NAV_ITEM]
+    })
+  }
+
+  if (mailboxAdminNav.length) {
+    groups.push({
+      id: 'mailbox-admin',
+      items: mailboxAdminNav
+    })
+  }
+
+  return groups
+}
+
+function isNoMailboxWorkspace(workspace: AgentMailWebWorkspace | undefined) {
+  return Boolean(
+    workspace &&
+      workspace.accounts.length === 0 &&
+      workspace.activeAccountId === null &&
+      workspace.activeFolderId === null
+  )
+}
+
+function noMailboxNavItem(
+  id: AuthenticatedMailNavIconKey,
+  title: string,
+  iconKey: AuthenticatedMailNavIconKey
+): AuthenticatedMailNavItem {
+  return {
+    disabled: true,
+    disabledReason: NO_MAILBOX_FOLDER_DISABLED_REASON,
+    iconKey,
+    id: `placeholder:${id}`,
+    selectable: false,
+    title,
+    url: '#'
   }
 }
 

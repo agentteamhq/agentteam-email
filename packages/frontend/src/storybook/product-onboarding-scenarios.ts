@@ -7,14 +7,16 @@ import {
   domainSettingsDomainLiveState,
   domainSettingsDomainProvisioningState
 } from './authenticated-section-fixtures'
+import { mailboxAdminEmptyView } from './mailbox-admin-fixtures'
 import { mailWorkspaceEmptyView } from './mail-workspace-fixtures'
 import { authenticatedSettingsRouteState, storyPublicEnv } from './screen-fixtures'
 import type { DashboardSearch } from '../lib/dashboard-search'
+import type { MailboxAdminViewQuery } from '../lib/mail-admin-rpc'
 import type { MailWorkspaceQuery } from '../lib/mail-rpc'
 import type { SettingsSectionId } from '../partials/authenticated/settings-dialog-sections'
 import type { DomainSettingsState } from '../partials/authenticated/settings-dialog'
 import type { DashboardMailControllerStoryFrameProps } from './stories/story-frames'
-import type { AgentMailAdminNavigation, AgentMailWebWorkspace } from '@main/backend'
+import type { AgentMailAdminNavigation, AgentMailAdminView, AgentMailWebWorkspace } from '@main/backend'
 
 interface ProductOnboardingScenario {
   defaultSettingsOpen?: boolean
@@ -30,8 +32,8 @@ type ProductOnboardingStoryHandlers = Pick<DomainSettingsState, 'onStartOAuth'>
 const firstUseWorkspace = {
   ...mailWorkspaceEmptyView,
   accounts: [],
-  activeAccountId: '',
-  activeFolderId: '',
+  activeAccountId: null,
+  activeFolderId: null,
   folders: []
 } satisfies AgentMailWebWorkspace
 
@@ -58,6 +60,11 @@ const returningFromCloudflareState = {
 } satisfies DomainSettingsState
 
 export const productOnboardingScenarios = {
+  agentsNoMailboxSetupReturn: {
+    domainSettingsState: domainSettingsAddDomainAuthorizeCloudflareState,
+    routeSearch: { mailboxAdmin: 'agents' },
+    workspace: firstUseWorkspace
+  },
   chooseDomain: {
     domainSettingsState: domainSettingsAddDomainSelectZoneState,
     workspace: firstUseWorkspace
@@ -117,6 +124,7 @@ export function buildProductOnboardingControllerArgs(
     domainSettingsState,
     mailWorkspaceLoader: createProductOnboardingMailWorkspaceLoader(scenario.workspace),
     mailboxAdminNavigationLoader: createProductOnboardingMailboxAdminNavigationLoader(),
+    mailboxAdminViewLoader: createProductOnboardingMailboxAdminViewLoader(),
     publicEnv: storyPublicEnv,
     routeSearch,
     routeState: authenticatedSettingsRouteState,
@@ -132,6 +140,25 @@ function createProductOnboardingAgentAccessViewLoader() {
 
 function createProductOnboardingMailboxAdminNavigationLoader() {
   return async () => onboardingMailboxAdminNavigation
+}
+
+function createProductOnboardingMailboxAdminViewLoader() {
+  return async (query: MailboxAdminViewQuery) =>
+    ({
+      accounts: [],
+      agents: [],
+      allowedActions: mailboxAdminEmptyView.allowedActions,
+      allowedSections: onboardingMailboxAdminNavigation.allowedSections,
+      domain: mailboxAdminEmptyView.domain,
+      groups: [],
+      pendingEnrollments: [],
+      permissionCatalog: mailboxAdminEmptyView.permissionCatalog,
+      principals: [],
+      searchQuery: query.searchQuery,
+      section: query.section ?? 'accounts',
+      state: 'empty',
+      statusFilter: query.statusFilter
+    }) satisfies AgentMailAdminView
 }
 
 function createProductOnboardingMailWorkspaceLoader(workspace: AgentMailWebWorkspace) {
