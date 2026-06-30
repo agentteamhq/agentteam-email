@@ -13,6 +13,16 @@ encryption, sessions, cookies, API keys, tokens, JWT, OAuth, JWKS, secret
 storage, security-sensitive routes, or anything that could be security related,
 agents must stop, read [SECURITY.md](SECURITY.md), and follow it.
 
+## Fixes And Failures
+
+When fixing a bug, test failure, CI failure, or broken workflow, agents must
+restore the intended system contract at the layer that owns it. Agents must not
+infer the contract from the error message or current broken code alone; they must
+investigate the relevant requirements and architecture first. If the intended
+contract is unclear, agents must ask before editing. Agents must not use
+workarounds or weakened paths unless explicitly requested. Agents must verify
+through the canonical workflow that proves the contract.
+
 ## Open Source Boundary
 
 This repository is open source. Repository files must not contain secrets,
