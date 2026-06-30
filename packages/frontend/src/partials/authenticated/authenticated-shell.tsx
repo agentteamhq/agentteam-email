@@ -1324,14 +1324,16 @@ export function AuthenticatedSidebar({
                 value={view.searchQuery ?? ''}
               />
             </SidebarHeader>
-            <SidebarContent>
-              <SidebarGroup className='px-0'>
-                <SidebarGroupContent>
-                  <MailboxList
-                    onSelectMail={onMailSelect}
-                    onRetry={onRetry}
-                    view={view}
-                  />
+            <SidebarContent className='gap-0 overflow-hidden'>
+              <SidebarGroup className='min-h-0 flex-1 p-0'>
+                <SidebarGroupContent className='flex min-h-0 flex-1 flex-col'>
+                  <div className='min-h-0 flex-1 overflow-auto'>
+                    <MailboxList
+                      onSelectMail={onMailSelect}
+                      onRetry={onRetry}
+                      view={view}
+                    />
+                  </div>
                   <MailboxPagination
                     onPageChange={onPageChange}
                     pagination={view.pagination}
