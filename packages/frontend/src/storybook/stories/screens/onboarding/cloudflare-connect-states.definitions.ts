@@ -1,81 +1,69 @@
 import { fn } from 'storybook/test'
 
 import {
-  productOnboardingAuthenticatedShellArgs,
-  productOnboardingChooseDomainShellArgs,
-  productOnboardingConnectSelectedDomainShellArgs,
-  productOnboardingConnectingShellArgs,
-  productOnboardingErrorShellArgs,
-  productOnboardingMailboxReadyShellArgs,
-  productOnboardingProvisionDomainShellArgs,
-  productOnboardingReturningShellArgs,
-  productOnboardingSettingsOpenShellArgs
-} from 'src/storybook/product-onboarding-fixtures'
-import type { DashboardScreenProps } from 'src/screens/dashboard-screen'
+  buildProductOnboardingControllerArgs,
+  productOnboardingScenarios
+} from 'src/storybook/product-onboarding-scenarios'
+import type { DomainSettingsState } from 'src/partials/authenticated/settings-dialog'
+import type { DashboardMailControllerStoryFrameProps } from 'src/storybook/stories/story-frames'
 
 interface CloudflareConnectStateStoryDefinition {
-  args: Partial<DashboardScreenProps>
+  args: DashboardMailControllerStoryFrameProps
   name: string
 }
 
+const onboardingHandlers = {
+  onStartOAuth: fn()
+} satisfies Pick<DomainSettingsState, 'onStartOAuth'>
+
 export const cloudflareConnectStateMetaArgs = {
-  ...productOnboardingAuthenticatedShellArgs,
-  onDashboardOnboardingConnect: fn()
-} satisfies Partial<DashboardScreenProps>
+  ...buildProductOnboardingControllerArgs(productOnboardingScenarios.connectCloudflare, onboardingHandlers)
+} satisfies DashboardMailControllerStoryFrameProps
 
 export const cloudflareConnectStateStories = {
   chooseDomain: {
     name: 'Choose domain',
-    args: {
-      ...productOnboardingChooseDomainShellArgs
-    }
+    args: buildProductOnboardingControllerArgs(productOnboardingScenarios.chooseDomain, onboardingHandlers)
   },
   cloudflareError: {
     name: 'Cloudflare error',
-    args: {
-      ...productOnboardingErrorShellArgs
-    }
+    args: buildProductOnboardingControllerArgs(productOnboardingScenarios.cloudflareError, onboardingHandlers)
   },
   connectCloudflare: {
     name: 'Connect Cloudflare',
-    args: {
-      ...productOnboardingAuthenticatedShellArgs
-    }
+    args: buildProductOnboardingControllerArgs(
+      productOnboardingScenarios.connectCloudflare,
+      onboardingHandlers
+    )
   },
   connectingCloudflare: {
     name: 'Connecting Cloudflare',
-    args: {
-      ...productOnboardingConnectingShellArgs
-    }
+    args: buildProductOnboardingControllerArgs(
+      productOnboardingScenarios.connectingCloudflare,
+      onboardingHandlers
+    )
   },
   domainConnected: {
     name: 'Domain connected',
-    args: {
-      ...productOnboardingConnectSelectedDomainShellArgs
-    }
+    args: buildProductOnboardingControllerArgs(productOnboardingScenarios.domainConnected, onboardingHandlers)
   },
   mailboxReady: {
     name: 'Mailbox ready',
-    args: {
-      ...productOnboardingMailboxReadyShellArgs
-    }
+    args: buildProductOnboardingControllerArgs(productOnboardingScenarios.mailboxReady, onboardingHandlers)
   },
   provisionDomain: {
     name: 'Provision domain',
-    args: {
-      ...productOnboardingProvisionDomainShellArgs
-    }
+    args: buildProductOnboardingControllerArgs(productOnboardingScenarios.provisionDomain, onboardingHandlers)
   },
   returningFromCloudflare: {
     name: 'Returning from Cloudflare',
-    args: {
-      ...productOnboardingReturningShellArgs
-    }
+    args: buildProductOnboardingControllerArgs(
+      productOnboardingScenarios.returningFromCloudflare,
+      onboardingHandlers
+    )
   },
   settingsOpen: {
     name: 'Settings open',
-    args: {
-      ...productOnboardingSettingsOpenShellArgs
-    }
+    args: buildProductOnboardingControllerArgs(productOnboardingScenarios.settingsOpen, onboardingHandlers)
   }
 } satisfies Record<string, CloudflareConnectStateStoryDefinition>

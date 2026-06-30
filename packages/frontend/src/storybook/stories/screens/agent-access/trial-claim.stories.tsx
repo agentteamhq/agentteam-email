@@ -1,22 +1,23 @@
-import { expect, userEvent, within } from 'storybook/test'
+import { expect, fn, userEvent, within } from 'storybook/test'
 
 import { agentTrialClaimView } from 'src/storybook/agent-access-fixtures'
-import { AgentTrialClaimScreen } from 'src/screens/agent-trial-claim-screen'
+import { AgentTrialClaimRouteStoryFrame } from 'src/storybook/device-agent-route-frames'
+import type { AgentMailTrialClaimDecisionResult } from '@main/backend'
 import type { Meta, StoryObj } from '@storybook/react'
+
+const storyClaimToken = 'trial-claim-token'
 
 const meta = {
   title: 'Screens/Agent Access/Trial Claim',
-  component: AgentTrialClaimScreen,
+  component: AgentTrialClaimRouteStoryFrame,
   args: {
-    claim: agentTrialClaimView,
-    onApprove: async () => {},
-    onDeny: async () => {},
-    userEmail: 'operator@example.com'
+    fetchAgentMailTrialClaimResult: agentTrialClaimView,
+    token: storyClaimToken
   },
   parameters: {
     layout: 'fullscreen'
   }
-} satisfies Meta<typeof AgentTrialClaimScreen>
+} satisfies Meta<typeof AgentTrialClaimRouteStoryFrame>
 
 export default meta
 
@@ -29,7 +30,7 @@ export const Ready: Story = {
 export const NarrowPostClaimAccess: Story = {
   name: 'Narrower post-claim access',
   args: {
-    claim: {
+    fetchAgentMailTrialClaimResult: {
       ...agentTrialClaimView,
       post_claim_capabilities: ['email.status', 'email.message.read']
     }
@@ -39,73 +40,41 @@ export const NarrowPostClaimAccess: Story = {
 export const Loading: Story = {
   name: 'Loading',
   args: {
-    claim: null,
-    loading: true
+    fetchAgentMailTrialClaimLoading: true,
+    fetchAgentMailTrialClaimResult: null
   }
 }
 
 export const LoadError: Story = {
-  name: 'Error',
+  name: 'Expired route error',
   args: {
-    claim: null,
-    loadError: 'Trial claim has expired.'
+    fetchAgentMailTrialClaimError: 'Trial claim has expired.',
+    fetchAgentMailTrialClaimResult: null
   }
 }
 
 export const Approved: Story = {
   name: 'Approved',
-  play: async ({ canvasElement }) => {
+  args: {
+    decideAgentMailTrialClaim: fn(async () => createTrialClaimDecisionResult('approve'))
+  },
+  play: async ({ args, canvasElement }) => {
     const canvas = within(canvasElement)
 
     await userEvent.click(await canvas.findByRole('button', { name: /^claim agent$/i }))
+    await expect(args.decideAgentMailTrialClaim).toHaveBeenCalledWith({
+      action: 'approve',
+      targetOrganizationId: 'org_story',
+      token: storyClaimToken
+    })
     await expect(await canvas.findByText('Agent claimed. Return to the agent client.')).toBeInTheDocument()
-  }
-}
-
-export const AlreadyApproved: Story = {
-  name: 'Already approved',
-  args: {
-    claim: {
-      ...agentTrialClaimView,
-      claim: {
-        ...agentTrialClaimView.claim,
-        status: 'approved'
-      }
-    }
-  },
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-
-    await expect(await canvas.findByText('Agent claimed. Return to the agent client.')).toBeInTheDocument()
-    await expect(await canvas.findByRole('button', { name: /^claim agent$/i })).toBeDisabled()
-    await expect(await canvas.findByRole('button', { name: /^deny$/i })).toBeDisabled()
-  }
-}
-
-export const Expired: Story = {
-  name: 'Expired',
-  args: {
-    claim: {
-      ...agentTrialClaimView,
-      claim: {
-        expires_at: '2026-06-20T18:00:00.000Z',
-        status: 'expired'
-      }
-    }
-  },
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-
-    await expect(await canvas.findByText('Trial claim has expired.')).toBeInTheDocument()
-    await expect(await canvas.findByRole('button', { name: /^claim agent$/i })).toBeDisabled()
-    await expect(await canvas.findByRole('button', { name: /^deny$/i })).toBeDisabled()
   }
 }
 
 export const TargetOrganizationChoice: Story = {
   name: 'Target organization choice',
   args: {
-    claim: {
+    fetchAgentMailTrialClaimResult: {
       ...agentTrialClaimView,
       target_organizations: [
         {
@@ -136,10 +105,17 @@ export const TargetOrganizationChoice: Story = {
 
 export const Denied: Story = {
   name: 'Denied',
-  play: async ({ canvasElement }) => {
+  args: {
+    decideAgentMailTrialClaim: fn(async () => createTrialClaimDecisionResult('deny'))
+  },
+  play: async ({ args, canvasElement }) => {
     const canvas = within(canvasElement)
 
     await userEvent.click(await canvas.findByRole('button', { name: /^deny$/i }))
+    await expect(args.decideAgentMailTrialClaim).toHaveBeenCalledWith({
+      action: 'deny',
+      token: storyClaimToken
+    })
     await expect(await canvas.findByText('Agent claim denied.')).toBeInTheDocument()
   }
 }
@@ -147,7 +123,7 @@ export const Denied: Story = {
 export const ActionError: Story = {
   name: 'Action error',
   args: {
-    onApprove: async () => {
+    decideAgentMailTrialClaim: async () => {
       throw new Error('Trial claim approval failed by policy.')
     }
   },
@@ -157,4 +133,23 @@ export const ActionError: Story = {
     await userEvent.click(await canvas.findByRole('button', { name: /^claim agent$/i }))
     await expect(await canvas.findByText('Trial claim approval failed by policy.')).toBeInTheDocument()
   }
+}
+
+function createTrialClaimDecisionResult(action: 'approve' | 'deny') {
+  const status = action === 'approve' ? 'approved' : 'denied'
+
+  return {
+    action,
+    claim: {
+      status
+    },
+    success: true,
+    view: {
+      ...agentTrialClaimView,
+      claim: {
+        ...agentTrialClaimView.claim,
+        status
+      }
+    }
+  } satisfies AgentMailTrialClaimDecisionResult
 }

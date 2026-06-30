@@ -1,29 +1,25 @@
 import { expect, fn, within } from 'storybook/test'
 
 import {
-  productOnboardingAuthenticatedShellArgs,
-  productOnboardingChooseDomainShellArgs,
-  productOnboardingConnectSelectedDomainShellArgs,
-  productOnboardingConnectingShellArgs,
-  productOnboardingMailboxReadyShellArgs,
-  productOnboardingProvisionDomainShellArgs,
-  productOnboardingReturningShellArgs
-} from 'src/storybook/product-onboarding-fixtures'
-import { DashboardScreen } from 'src/screens/dashboard-screen'
+  buildProductOnboardingControllerArgs,
+  productOnboardingScenarios
+} from 'src/storybook/product-onboarding-scenarios'
+import { DashboardMailControllerStoryFrame } from 'src/storybook/stories/story-frames'
+import type { DomainSettingsState } from 'src/partials/authenticated/settings-dialog'
 import type { Meta, StoryObj } from '@storybook/react'
+
+const onboardingHandlers = {
+  onStartOAuth: fn()
+} satisfies Pick<DomainSettingsState, 'onStartOAuth'>
 
 const meta = {
   title: 'Screens/Onboarding/Flows/Cloudflare Connect',
-  component: DashboardScreen,
-  tags: ['mock'],
-  args: {
-    ...productOnboardingAuthenticatedShellArgs,
-    onDashboardOnboardingConnect: fn()
-  },
+  component: DashboardMailControllerStoryFrame,
+  args: buildProductOnboardingControllerArgs(productOnboardingScenarios.connectCloudflare, onboardingHandlers),
   parameters: {
     layout: 'fullscreen'
   }
-} satisfies Meta<typeof DashboardScreen>
+} satisfies Meta<typeof DashboardMailControllerStoryFrame>
 
 export default meta
 
@@ -31,30 +27,28 @@ type Story = StoryObj<typeof meta>
 
 export const Step01ConnectCloudflare: Story = {
   name: '01 connect Cloudflare',
-  args: {
-    ...productOnboardingAuthenticatedShellArgs
-  }
+  args: buildProductOnboardingControllerArgs(productOnboardingScenarios.connectCloudflare, onboardingHandlers)
 }
 
 export const Step02StartingCloudflareOAuth: Story = {
   name: '02 starting Cloudflare OAuth',
-  args: {
-    ...productOnboardingConnectingShellArgs
-  }
+  args: buildProductOnboardingControllerArgs(
+    productOnboardingScenarios.connectingCloudflare,
+    onboardingHandlers
+  )
 }
 
 export const Step03ReturningFromCloudflare: Story = {
   name: '03 returning from Cloudflare',
-  args: {
-    ...productOnboardingReturningShellArgs
-  }
+  args: buildProductOnboardingControllerArgs(
+    productOnboardingScenarios.returningFromCloudflare,
+    onboardingHandlers
+  )
 }
 
 export const Step04ChooseDomain: Story = {
   name: '04 choose domain',
-  args: {
-    ...productOnboardingChooseDomainShellArgs
-  },
+  args: buildProductOnboardingControllerArgs(productOnboardingScenarios.chooseDomain, onboardingHandlers),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
 
@@ -68,30 +62,22 @@ export const Step04ChooseDomain: Story = {
 
 export const Step05ConnectSelectedDomain: Story = {
   name: '05 connect selected domain',
-  args: {
-    ...productOnboardingConnectSelectedDomainShellArgs
-  }
+  args: buildProductOnboardingControllerArgs(productOnboardingScenarios.domainConnected, onboardingHandlers)
 }
 
 export const Step06ProvisionDomain: Story = {
   name: '06 provision domain',
-  args: {
-    ...productOnboardingProvisionDomainShellArgs
-  }
+  args: buildProductOnboardingControllerArgs(productOnboardingScenarios.provisionDomain, onboardingHandlers)
 }
 
 export const Step07MailboxReady: Story = {
   name: '07 mailbox ready',
-  args: {
-    ...productOnboardingMailboxReadyShellArgs
-  }
+  args: buildProductOnboardingControllerArgs(productOnboardingScenarios.mailboxReady, onboardingHandlers)
 }
 
 export const CloudflareConnectMobile: Story = {
   name: 'Cloudflare connect - mobile',
-  args: {
-    ...productOnboardingAuthenticatedShellArgs
-  },
+  args: buildProductOnboardingControllerArgs(productOnboardingScenarios.connectCloudflare, onboardingHandlers),
   globals: {
     viewport: {
       value: 'mobile1',

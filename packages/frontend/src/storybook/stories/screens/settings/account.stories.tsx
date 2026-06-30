@@ -1,10 +1,10 @@
-import { Account as AccountStory, settingsDialogStoryMeta } from '../../settings-dialog.definitions'
+import { Account as AccountStory, settingsScreenStoryMeta } from '../../settings-dialog.definitions'
 import type { Meta, StoryObj } from '@storybook/react'
 
 const meta = {
-  ...settingsDialogStoryMeta,
+  ...settingsScreenStoryMeta,
   title: 'Screens/Settings/Account'
-} satisfies Meta<typeof settingsDialogStoryMeta.component>
+} satisfies Meta<typeof settingsScreenStoryMeta.component>
 
 export default meta
 

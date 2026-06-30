@@ -1,14 +1,14 @@
 import {
   DraftEditing as DraftEditingStory,
   DraftToolbarActions as DraftToolbarActionsStory,
-  mailWorkspaceStoryMeta
+  mailWorkspaceControllerStoryMeta
 } from '../../mail-workspace.definitions'
 import type { Meta, StoryObj } from '@storybook/react'
 
 const meta = {
-  ...mailWorkspaceStoryMeta,
+  ...mailWorkspaceControllerStoryMeta,
   title: 'Screens/Mail Workspace/Message - Drafts'
-} satisfies Meta<typeof mailWorkspaceStoryMeta.component>
+} satisfies Meta<typeof mailWorkspaceControllerStoryMeta.component>
 
 export default meta
 

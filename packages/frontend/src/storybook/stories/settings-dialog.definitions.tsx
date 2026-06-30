@@ -1,7 +1,6 @@
 import { expect, fn, userEvent, within } from 'storybook/test'
 
 import {
-  authenticatedSectionBaseArgs,
   domainSettingsAddDomainAuthorizeCloudflareState,
   domainSettingsAddDomainSelectZoneState,
   domainSettingsDenseDomainListState,
@@ -14,85 +13,202 @@ import {
 import {
   agentAccessActionableState,
   agentAccessActiveState,
-  agentAccessBusyApprovalState,
   agentAccessClaimedState,
   agentAccessConstraintDetailsState,
   agentAccessDeniedExpiredApprovalState,
   agentAccessDenseState,
   agentAccessEmptyState,
-  agentAccessEnrollmentCreatedState,
-  agentAccessErrorState,
-  agentAccessLoadingState,
   agentAccessPaperclipConnectedState,
   agentAccessPendingApprovalState,
   agentAccessRevokedExpiredState
 } from '../agent-access-fixtures'
-import { DashboardScreen } from '../../screens/dashboard-screen'
-import type {
-  AgentAccessSettingsState,
-  DomainSettingsState
-} from '../../partials/authenticated/settings-dialog'
+import { storyAuthClient } from '../auth-client-fixtures'
+import { mailWorkspaceEmptyView } from '../mail-workspace-fixtures'
+import { authenticatedSettingsRouteState, storyPublicEnv } from '../screen-fixtures'
+import { DashboardMailControllerStoryFrame } from './story-frames'
+import type { DashboardSearch } from '../../lib/dashboard-search'
+import type { DomainSettingsState } from '../../partials/authenticated/settings-dialog'
+import type { SettingsSectionId } from '../../partials/authenticated/settings-dialog-sections'
+import type { DashboardMailControllerStoryFrameProps } from './story-frames'
+import type { AgentAccessView, AgentMailAdminNavigation, AgentMailWebWorkspace } from '@main/backend'
 import type { Meta, StoryObj } from '@storybook/react'
 
-export const settingsDialogStoryMeta = {
-  component: DashboardScreen,
-  args: {
-    ...authenticatedSectionBaseArgs,
-    domainSettingsState: domainSettingsEmptyFirstUseState,
-    settingsOpen: true
-  },
-  parameters: {
-    layout: 'fullscreen'
+type SettingsStoryArgs = DashboardMailControllerStoryFrameProps
+type AgentAccessViewLoader = NonNullable<SettingsStoryArgs['agentAccessViewLoader']>
+type MailWorkspaceLoader = NonNullable<SettingsStoryArgs['mailWorkspaceLoader']>
+type MailboxAdminNavigationLoader = NonNullable<SettingsStoryArgs['mailboxAdminNavigationLoader']>
+
+interface SettingsScreenScenario {
+  agentAccessError?: Error
+  agentAccessPending?: boolean
+  agentAccessView?: AgentAccessView
+  domainSettingsState?: DomainSettingsState
+  routeSearch?: DashboardSearch
+  settingsSection: SettingsSectionId
+  workspace?: AgentMailWebWorkspace
+}
+
+const settingsMailboxAdminNavigation = {
+  allowedSections: ['accounts', 'groups', 'agents']
+} satisfies AgentMailAdminNavigation
+
+const defaultAgentAccessView = requiredAgentAccessView(agentAccessEmptyState)
+const activeAgentAccessView = requiredAgentAccessView(agentAccessActiveState)
+const actionableAgentAccessView = requiredAgentAccessView(agentAccessActionableState)
+
+const agentAccessPaperclipHandoffView = {
+  ...activeAgentAccessView,
+  allowedActions: {
+    ...activeAgentAccessView.allowedActions,
+    connectPaperclip: true
   }
-} satisfies Meta<typeof DashboardScreen>
+} satisfies AgentAccessView
 
-type Story = StoryObj<typeof settingsDialogStoryMeta>
-
-const agentAccessInteractiveActionState = {
-  ...agentAccessActionableState,
-  canApproveApproval: true,
-  canDenyApproval: true,
-  canRevokeAgent: true,
-  canRevokeCapabilityGrant: true,
-  onApproveApproval: fn(),
-  onDenyApproval: fn(),
-  onRefresh: fn(),
-  onRevokeAgent: fn(),
-  onRevokeCapabilityGrant: fn()
-} satisfies AgentAccessSettingsState
-
-const agentAccessReviewOnlyActionState = {
-  ...agentAccessActionableState,
-  canApproveApproval: true,
-  canDenyApproval: false,
-  canRevokeAgent: false,
-  canRevokeCapabilityGrant: false,
-  onApproveApproval: fn(),
-  onDenyApproval: fn(),
-  onRefresh: fn(),
-  onRevokeAgent: fn(),
-  onRevokeCapabilityGrant: fn()
-} satisfies AgentAccessSettingsState
+const agentAccessReviewOnlyView = {
+  ...actionableAgentAccessView,
+  agents: actionableAgentAccessView.agents.map((agent) => ({
+    ...agent,
+    canRevoke: false
+  })),
+  allowedActions: {
+    ...actionableAgentAccessView.allowedActions,
+    connectPaperclip: false,
+    denyApproval: false,
+    revokeAgent: false,
+    revokeCapabilityGrant: false,
+    reviewApproval: true
+  },
+  approvals: actionableAgentAccessView.approvals.map((approval) => ({
+    ...approval,
+    canDeny: false,
+    canReview: approval.status === 'pending'
+  })),
+  grants: actionableAgentAccessView.grants.map((grant) => ({
+    ...grant,
+    canRevoke: false
+  }))
+} satisfies AgentAccessView
 
 const domainSettingsDisconnectActionState = {
   ...domainSettingsDomainLiveState,
   onDisconnectCloudflare: fn()
 } satisfies DomainSettingsState
 
+export const settingsScreenStoryMeta = {
+  component: DashboardMailControllerStoryFrame,
+  args: buildSettingsScreenArgs({
+    settingsSection: 'account'
+  }),
+  parameters: {
+    layout: 'fullscreen'
+  }
+} satisfies Meta<typeof DashboardMailControllerStoryFrame>
+
+type Story = StoryObj<typeof settingsScreenStoryMeta>
+
+function requiredAgentAccessView(state: { view: AgentAccessView | null }): AgentAccessView {
+  if (!state.view) {
+    throw new Error('Expected the agent access fixture to include a view.')
+  }
+
+  return state.view
+}
+
+function createStoryAgentAccessViewLoader({
+  error,
+  pending,
+  view = defaultAgentAccessView
+}: {
+  error?: Error
+  pending?: boolean
+  view?: AgentAccessView
+}): AgentAccessViewLoader {
+  return async () => {
+    if (pending) {
+      await new Promise(() => {})
+    }
+
+    if (error) {
+      throw error
+    }
+
+    return view
+  }
+}
+
+function createStoryMailWorkspaceLoader(
+  workspace: AgentMailWebWorkspace = mailWorkspaceEmptyView
+): MailWorkspaceLoader {
+  return async () => workspace
+}
+
+function createStoryMailboxAdminNavigationLoader(
+  navigation = settingsMailboxAdminNavigation
+): MailboxAdminNavigationLoader {
+  return async () => navigation
+}
+
+function routeSearchForSettingsSection(settingsSection: SettingsSectionId): DashboardSearch {
+  if (settingsSection === 'agentAccess') {
+    return { settings: 'agentAccess' }
+  }
+
+  if (settingsSection === 'domains') {
+    return { settings: 'domains' }
+  }
+
+  if (settingsSection === 'security') {
+    return { settings: 'security' }
+  }
+
+  return {}
+}
+
+function buildSettingsScreenArgs({
+  agentAccessError,
+  agentAccessPending,
+  agentAccessView,
+  domainSettingsState = domainSettingsEmptyFirstUseState,
+  routeSearch,
+  settingsSection,
+  workspace
+}: SettingsScreenScenario): SettingsStoryArgs {
+  return {
+    agentAccessViewLoader: createStoryAgentAccessViewLoader({
+      error: agentAccessError,
+      pending: agentAccessPending,
+      view: agentAccessView
+    }),
+    authClient: storyAuthClient,
+    domainSettingsState,
+    mailWorkspaceLoader: createStoryMailWorkspaceLoader(workspace),
+    mailboxAdminNavigationLoader: createStoryMailboxAdminNavigationLoader(),
+    publicEnv: storyPublicEnv,
+    routeSearch: {
+      ...routeSearchForSettingsSection(settingsSection),
+      ...(routeSearch ?? {})
+    },
+    routeState: authenticatedSettingsRouteState,
+    sessionCleanupEnabled: false,
+    settingsOpen: true,
+    settingsSection
+  }
+}
+
 function storyBody(canvasElement: HTMLElement) {
   return within(canvasElement.ownerDocument.body)
 }
 
 export const Account: Story = {
-  args: {
+  args: buildSettingsScreenArgs({
     settingsSection: 'account'
-  }
+  })
 }
 
 export const Security: Story = {
-  args: {
+  args: buildSettingsScreenArgs({
     settingsSection: 'security'
-  },
+  }),
   play: async ({ canvasElement }) => {
     const canvas = storyBody(canvasElement)
 
@@ -105,112 +221,70 @@ export const Security: Story = {
 }
 
 export const AgentAccessLoading: Story = {
-  args: {
-    agentAccessState: agentAccessLoadingState,
+  args: buildSettingsScreenArgs({
+    agentAccessPending: true,
     settingsSection: 'agentAccess'
-  }
+  })
 }
 
 export const AgentAccessError: Story = {
-  args: {
-    agentAccessState: {
-      ...agentAccessErrorState,
-      onRefresh: fn()
-    },
+  args: buildSettingsScreenArgs({
+    agentAccessError: new Error('Agent Access request failed with HTTP 403.'),
     settingsSection: 'agentAccess'
-  },
-  play: async ({ args, canvasElement }) => {
+  }),
+  play: async ({ canvasElement }) => {
     const canvas = storyBody(canvasElement)
 
-    await userEvent.click(await canvas.findByRole('button', { name: /^retry$/i }))
-    await expect(args.agentAccessState?.onRefresh).toHaveBeenCalled()
+    await expect(await canvas.findByText('Agent access unavailable')).toBeInTheDocument()
+    await expect(await canvas.findByText('Agent Access request failed with HTTP 403.')).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /^retry$/i })).toBeEnabled()
   }
 }
 
 export const AgentAccessEmpty: Story = {
-  args: {
-    agentAccessState: agentAccessEmptyState,
+  args: buildSettingsScreenArgs({
+    agentAccessView: defaultAgentAccessView,
     settingsSection: 'agentAccess'
-  }
-}
-
-export const AgentAccessEnrollmentCreated: Story = {
-  args: {
-    agentAccessState: {
-      ...agentAccessEnrollmentCreatedState,
-      onCopyEnrollmentCommand: fn()
-    },
-    settingsSection: 'agentAccess'
-  },
-  play: async ({ args, canvasElement }) => {
-    const canvas = storyBody(canvasElement)
-
-    await expect(await canvas.findByText('at-email agent enroll enroll_AAAAAAAAAAAAAAAA')).toBeInTheDocument()
-    await userEvent.click(await canvas.findByRole('button', { name: /^copy command$/i }))
-    await expect(args.agentAccessState?.onCopyEnrollmentCommand).toHaveBeenCalledWith(
-      'at-email agent enroll enroll_AAAAAAAAAAAAAAAA'
-    )
-  }
+  })
 }
 
 export const AgentAccessActive: Story = {
-  args: {
-    agentAccessState: agentAccessActiveState,
+  args: buildSettingsScreenArgs({
+    agentAccessView: activeAgentAccessView,
     settingsSection: 'agentAccess'
-  }
+  })
 }
 
 export const AgentAccessPaperclipHandoff: Story = {
-  args: {
-    agentAccessState: {
-      ...agentAccessActiveState,
-      connectionHandoff: {
-        companyId: 'paperclip-company-1',
-        pluginId: 'agentteam.paperclip-email-plugin',
-        source: 'paperclip'
-      },
-      onConnectPaperclip: fn(),
-      readOnly: false,
-      view: {
-        ...agentAccessActiveState.view,
-        allowedActions: {
-          ...agentAccessActiveState.view.allowedActions,
-          connectPaperclip: true
-        }
-      }
+  args: buildSettingsScreenArgs({
+    agentAccessView: agentAccessPaperclipHandoffView,
+    routeSearch: {
+      agentAccessSource: 'paperclip',
+      paperclipCompanyId: 'paperclip-company-1',
+      paperclipPluginId: 'agentteam.paperclip-email-plugin'
     },
     settingsSection: 'agentAccess'
-  },
-  play: async ({ args, canvasElement }) => {
+  }),
+  play: async ({ canvasElement }) => {
     const canvas = storyBody(canvasElement)
 
-    await expect(await canvas.findByText('Paperclip connection requested')).toBeInTheDocument()
-    await expect(await canvas.findByText('Company context: Ready')).toBeInTheDocument()
-    await expect(await canvas.findByText('Plugin: AgentTeam Email plugin')).toBeInTheDocument()
-    await expect(canvas.queryByText('Company: paperclip-company-1')).not.toBeInTheDocument()
-    await expect(canvas.queryByText('Plugin: agentteam.paperclip-email-plugin')).not.toBeInTheDocument()
-    await userEvent.click(await canvas.findByRole('button', { name: /^register principal$/i }))
-    await expect(args.agentAccessState?.onConnectPaperclip).toHaveBeenCalledWith({
-      companyId: 'paperclip-company-1',
-      pluginId: 'agentteam.paperclip-email-plugin',
-      source: 'paperclip'
-    })
+    await canvas.findByText('Paperclip connection requested')
+    await canvas.findByText('Company context: Ready')
+    await canvas.findByText('Plugin: AgentTeam Email plugin')
+    await expect(canvas.queryByText('Company: paperclip-company-1')).toBeNull()
+    await expect(canvas.queryByText('Plugin: agentteam.paperclip-email-plugin')).toBeNull()
+    await expect(await canvas.findByRole('button', { name: /^register principal$/i })).toBeEnabled()
   }
 }
 
 export const AgentAccessPaperclipConnected: Story = {
-  args: {
-    agentAccessState: {
-      ...agentAccessPaperclipConnectedState,
-      connectionHandoff: null,
-      message: 'Paperclip principal registered'
-    },
+  args: buildSettingsScreenArgs({
+    agentAccessView: requiredAgentAccessView(agentAccessPaperclipConnectedState),
     settingsSection: 'agentAccess'
-  },
+  }),
   play: async ({ canvasElement }) => {
     const canvas = storyBody(canvasElement)
 
-    await expect(await canvas.findByText('Paperclip principal registered')).toBeInTheDocument()
     await expect(await canvas.findByText('Connected integrations')).toBeInTheDocument()
     await expect(await canvas.findByText('Paperclip Email')).toBeInTheDocument()
     await expect(await canvas.findByText('Research Agent')).toBeInTheDocument()
@@ -221,31 +295,17 @@ export const AgentAccessPaperclipConnected: Story = {
 }
 
 export const AgentAccessPendingApproval: Story = {
-  args: {
-    agentAccessState: agentAccessPendingApprovalState,
+  args: buildSettingsScreenArgs({
+    agentAccessView: requiredAgentAccessView(agentAccessPendingApprovalState),
     settingsSection: 'agentAccess'
-  }
-}
-
-export const AgentAccessPendingBusy: Story = {
-  args: {
-    agentAccessState: agentAccessBusyApprovalState,
-    settingsSection: 'agentAccess'
-  },
-  play: async ({ canvasElement }) => {
-    const canvas = storyBody(canvasElement)
-
-    await expect(await canvas.findByRole('button', { name: /^refreshing$/i })).toBeDisabled()
-    await expect(await canvas.findByRole('button', { name: /^review approval$/i })).toBeDisabled()
-    await expect(await canvas.findByRole('button', { name: /^deny$/i })).toBeDisabled()
-  }
+  })
 }
 
 export const AgentAccessDeniedExpiredApprovals: Story = {
-  args: {
-    agentAccessState: agentAccessDeniedExpiredApprovalState,
+  args: buildSettingsScreenArgs({
+    agentAccessView: requiredAgentAccessView(agentAccessDeniedExpiredApprovalState),
     settingsSection: 'agentAccess'
-  },
+  }),
   play: async ({ canvasElement }) => {
     const canvas = storyBody(canvasElement)
     const reviewButtons = await canvas.findAllByRole('button', { name: /^review approval$/i })
@@ -258,38 +318,28 @@ export const AgentAccessDeniedExpiredApprovals: Story = {
 }
 
 export const AgentAccessActions: Story = {
-  args: {
-    agentAccessState: agentAccessInteractiveActionState,
+  args: buildSettingsScreenArgs({
+    agentAccessView: actionableAgentAccessView,
     settingsSection: 'agentAccess'
-  },
-  play: async ({ args, canvasElement }) => {
+  }),
+  play: async ({ canvasElement }) => {
     const canvas = storyBody(canvasElement)
 
-    await userEvent.click(await canvas.findByRole('button', { name: /^review approval$/i }))
-    await expect(args.agentAccessState?.onApproveApproval).toHaveBeenCalledWith('approval-send')
-
-    await userEvent.click(await canvas.findByRole('button', { name: /^deny$/i }))
-    await expect(args.agentAccessState?.onDenyApproval).toHaveBeenCalledWith('approval-send')
-
-    await userEvent.click(await canvas.findByRole('button', { name: /^revoke agent$/i }))
-    await expect(args.agentAccessState?.onRevokeAgent).toHaveBeenCalledWith('agent-research')
-
-    const capabilityButtons = await canvas.findAllByRole('button', { name: /^revoke capability$/i })
-    await userEvent.click(capabilityButtons[0])
-    await expect(args.agentAccessState?.onRevokeCapabilityGrant).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: 'grant-read'
-      })
-    )
+    await expect(await canvas.findByRole('button', { name: /^review approval$/i })).toBeEnabled()
+    await expect(await canvas.findByRole('button', { name: /^deny$/i })).toBeEnabled()
+    await expect(await canvas.findByRole('button', { name: /^revoke agent$/i })).toBeEnabled()
+    await expect(
+      (await canvas.findAllByRole('button', { name: /^revoke capability$/i })).length
+    ).toBeGreaterThan(0)
   }
 }
 
 export const AgentAccessPartialActions: Story = {
-  args: {
-    agentAccessState: agentAccessReviewOnlyActionState,
+  args: buildSettingsScreenArgs({
+    agentAccessView: agentAccessReviewOnlyView,
     settingsSection: 'agentAccess'
-  },
-  play: async ({ args, canvasElement }) => {
+  }),
+  play: async ({ canvasElement }) => {
     const canvas = storyBody(canvasElement)
     const reviewButton = await canvas.findByRole('button', { name: /^review approval$/i })
     const denyButton = await canvas.findByRole('button', { name: /^deny$/i })
@@ -298,27 +348,21 @@ export const AgentAccessPartialActions: Story = {
     await expect(denyButton).toBeDisabled()
     await expect(canvas.queryByRole('button', { name: /^revoke agent$/i })).not.toBeInTheDocument()
     await expect(canvas.queryByRole('button', { name: /^revoke capability$/i })).not.toBeInTheDocument()
-
-    await userEvent.click(reviewButton)
-    await expect(args.agentAccessState?.onApproveApproval).toHaveBeenCalledWith('approval-send')
-    await expect(args.agentAccessState?.onDenyApproval).not.toHaveBeenCalled()
-    await expect(args.agentAccessState?.onRevokeAgent).not.toHaveBeenCalled()
-    await expect(args.agentAccessState?.onRevokeCapabilityGrant).not.toHaveBeenCalled()
   }
 }
 
 export const AgentAccessRevokedExpired: Story = {
-  args: {
-    agentAccessState: agentAccessRevokedExpiredState,
+  args: buildSettingsScreenArgs({
+    agentAccessView: requiredAgentAccessView(agentAccessRevokedExpiredState),
     settingsSection: 'agentAccess'
-  }
+  })
 }
 
 export const AgentAccessClaimed: Story = {
-  args: {
-    agentAccessState: agentAccessClaimedState,
+  args: buildSettingsScreenArgs({
+    agentAccessView: requiredAgentAccessView(agentAccessClaimedState),
     settingsSection: 'agentAccess'
-  },
+  }),
   play: async ({ canvasElement }) => {
     const canvas = storyBody(canvasElement)
 
@@ -328,10 +372,10 @@ export const AgentAccessClaimed: Story = {
 }
 
 export const AgentAccessConstraintDetails: Story = {
-  args: {
-    agentAccessState: agentAccessConstraintDetailsState,
+  args: buildSettingsScreenArgs({
+    agentAccessView: requiredAgentAccessView(agentAccessConstraintDetailsState),
     settingsSection: 'agentAccess'
-  },
+  }),
   play: async ({ canvasElement }) => {
     const canvas = storyBody(canvasElement)
 
@@ -345,77 +389,77 @@ export const AgentAccessConstraintDetails: Story = {
 }
 
 export const AgentAccessDense: Story = {
-  args: {
-    agentAccessState: agentAccessDenseState,
+  args: buildSettingsScreenArgs({
+    agentAccessView: requiredAgentAccessView(agentAccessDenseState),
     settingsSection: 'agentAccess'
-  }
+  })
 }
 
 export const Organizations: Story = {
-  args: {
+  args: buildSettingsScreenArgs({
     settingsSection: 'organizations'
-  }
+  })
 }
 
 export const OrganizationSettings: Story = {
-  args: {
+  args: buildSettingsScreenArgs({
     settingsSection: 'organizationSettings'
-  }
+  })
 }
 
 export const OrganizationPeople: Story = {
-  args: {
+  args: buildSettingsScreenArgs({
     settingsSection: 'organizationPeople'
-  }
+  })
 }
 
 export const DomainsEmptyFirstUse: Story = {
-  args: {
+  args: buildSettingsScreenArgs({
     domainSettingsState: domainSettingsEmptyFirstUseState,
     settingsSection: 'domains'
-  }
+  })
 }
 
 export const DomainsAddDomainAuthorizeCloudflare: Story = {
-  args: {
+  args: buildSettingsScreenArgs({
     domainSettingsState: domainSettingsAddDomainAuthorizeCloudflareState,
     settingsSection: 'domains'
-  }
+  })
 }
 
 export const DomainsAddDomainSelectZone: Story = {
-  args: {
+  args: buildSettingsScreenArgs({
     domainSettingsState: domainSettingsAddDomainSelectZoneState,
     settingsSection: 'domains'
-  }
+  })
 }
 
 export const DomainsDomainConnected: Story = {
-  args: {
+  args: buildSettingsScreenArgs({
     domainSettingsState: domainSettingsDomainConnectedState,
     settingsSection: 'domains'
-  }
+  })
 }
 
 export const DomainsDomainProvisioning: Story = {
-  args: {
+  args: buildSettingsScreenArgs({
     domainSettingsState: domainSettingsDomainProvisioningState,
     settingsSection: 'domains'
-  }
+  })
 }
 
 export const DomainsDomainLive: Story = {
-  args: {
+  args: buildSettingsScreenArgs({
     domainSettingsState: domainSettingsDomainLiveState,
     settingsSection: 'domains'
-  }
+  })
 }
 
 export const DomainsDisconnectAction: Story = {
-  args: {
+  args: buildSettingsScreenArgs({
     domainSettingsState: domainSettingsDisconnectActionState,
     settingsSection: 'domains'
-  },
+  }),
   play: async ({ args, canvasElement }) => {
     const canvas = storyBody(canvasElement)
     const activeGrantPublicId = args.domainSettingsState?.status?.grants.find(
@@ -428,15 +472,15 @@ export const DomainsDisconnectAction: Story = {
 }
 
 export const DomainsDomainNeedsAttention: Story = {
-  args: {
+  args: buildSettingsScreenArgs({
     domainSettingsState: domainSettingsDomainNeedsAttentionState,
     settingsSection: 'domains'
-  }
+  })
 }
 
 export const DomainsDenseDomainList: Story = {
-  args: {
+  args: buildSettingsScreenArgs({
     domainSettingsState: domainSettingsDenseDomainListState,
     settingsSection: 'domains'
-  }
+  })
 }

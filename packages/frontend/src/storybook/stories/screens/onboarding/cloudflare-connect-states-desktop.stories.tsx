@@ -1,4 +1,4 @@
-import { DashboardScreen } from 'src/screens/dashboard-screen'
+import { DashboardMailControllerStoryFrame } from 'src/storybook/stories/story-frames'
 
 import {
   cloudflareConnectStateMetaArgs,
@@ -8,13 +8,12 @@ import type { Meta, StoryObj } from '@storybook/react'
 
 const meta = {
   title: 'Screens/Onboarding/States - Desktop',
-  component: DashboardScreen,
-  tags: ['mock'],
+  component: DashboardMailControllerStoryFrame,
   args: cloudflareConnectStateMetaArgs,
   parameters: {
     layout: 'fullscreen'
   }
-} satisfies Meta<typeof DashboardScreen>
+} satisfies Meta<typeof DashboardMailControllerStoryFrame>
 
 export default meta
 

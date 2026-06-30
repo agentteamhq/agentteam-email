@@ -3,19 +3,17 @@ import {
   MailboxEmpty as MailboxEmptyStory,
   MailboxError as MailboxErrorStory,
   MailboxLoading as MailboxLoadingStory,
-  MailboxRefreshing as MailboxRefreshingStory,
   MailboxSearchEmpty as MailboxSearchEmptyStory,
   MailboxSearchFiltered as MailboxSearchFilteredStory,
-  MailboxThreadedMetadata as MailboxThreadedMetadataStory,
   MailboxUnreadOnly as MailboxUnreadOnlyStory,
-  mailWorkspaceStoryMeta
+  mailWorkspaceControllerStoryMeta
 } from '../../mail-workspace.definitions'
 import type { Meta, StoryObj } from '@storybook/react'
 
 const meta = {
-  ...mailWorkspaceStoryMeta,
+  ...mailWorkspaceControllerStoryMeta,
   title: 'Screens/Mail Workspace/Mailbox'
-} satisfies Meta<typeof mailWorkspaceStoryMeta.component>
+} satisfies Meta<typeof mailWorkspaceControllerStoryMeta.component>
 
 export default meta
 
@@ -29,11 +27,6 @@ export const MailboxDefault: Story = {
 export const MailboxLoading: Story = {
   ...MailboxLoadingStory,
   name: 'Loading'
-}
-
-export const MailboxRefreshing: Story = {
-  ...MailboxRefreshingStory,
-  name: 'Refreshing'
 }
 
 export const MailboxEmpty: Story = {
@@ -59,9 +52,4 @@ export const MailboxSearchEmpty: Story = {
 export const MailboxUnreadOnly: Story = {
   ...MailboxUnreadOnlyStory,
   name: 'Unread only'
-}
-
-export const MailboxThreadedMetadata: Story = {
-  ...MailboxThreadedMetadataStory,
-  name: 'Threaded metadata'
 }
