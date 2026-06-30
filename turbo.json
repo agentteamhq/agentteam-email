@@ -60,6 +60,16 @@
       "outputs": [],
       "persistent": true
     },
+    "storybook:build": {
+      "dependsOn": ["^build"],
+      "env": ["STORYBOOK_BUILD_OUTPUT_DIR"],
+      "outputs": ["storybook-static/**", "tmp/storybook-build/**"]
+    },
+    "storybook:test": {
+      "dependsOn": ["^build"],
+      "env": ["STORYBOOK_PORT", "STORYBOOK_URL"],
+      "outputs": []
+    },
     "test": {
       "dependsOn": ["^build"],
       "outputs": []

@@ -28,6 +28,7 @@ node_modules/
 .vite-temp/
 .vitest/
 .playwright-cli/
+storybook-static/
 
 # Python
 __pycache__/

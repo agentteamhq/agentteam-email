@@ -41,12 +41,10 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Test Storybook
-        working-directory: packages/frontend
-        run: pnpm run storybook:test
+        run: pnpm exec turbo run storybook:test --filter=@main/frontend --output-logs=full --log-order=stream --ui=stream --summarize=false
 
       - name: Build Storybook
-        working-directory: packages/frontend
-        run: pnpm run storybook:build
+        run: pnpm exec turbo run storybook:build --filter=@main/frontend --output-logs=full --log-order=stream --ui=stream --summarize=false
 
       - name: Upload Storybook artifact
         uses: actions/upload-artifact@v4

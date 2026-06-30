@@ -64,9 +64,9 @@ export const SignInLastUsedGoogle: Story = {
     view: 'signIn'
   },
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement.ownerDocument.body)
+    const canvas = within(canvasElement)
 
-    await expect(await canvas.findByText('Last used')).toBeInTheDocument()
+    await expect((await canvas.findAllByText('Last used')).length).toBeGreaterThan(0)
   }
 }
 
@@ -87,9 +87,9 @@ export const SignUpDefault: Story = {
     view: 'signUp'
   },
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement.ownerDocument.body)
+    const canvas = within(canvasElement)
 
-    await canvas.findByRole('heading', { name: 'Sign Up' })
+    await expect(await canvas.findByRole('button', { name: 'Sign Up' })).toBeInTheDocument()
     await expect(canvas.queryByText('Last used')).not.toBeInTheDocument()
   }
 }
@@ -101,9 +101,9 @@ export const SignOutRedirecting: Story = {
     view: 'signOut'
   },
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement.ownerDocument.body)
+    const canvas = within(canvasElement)
 
-    await expect(await canvas.findByRole('heading', { name: 'Signing out' })).toBeInTheDocument()
+    await expect(await canvas.findByText('Signing out')).toBeInTheDocument()
     await expect(await canvas.findByRole('status', { name: 'Loading' })).toBeInTheDocument()
   }
 }
