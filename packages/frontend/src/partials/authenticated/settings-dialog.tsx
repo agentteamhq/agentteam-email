@@ -4,6 +4,7 @@ import {
   ArrowsLeftRightIcon,
   CheckCircleIcon,
   CloudIcon,
+  GlobeHemisphereWestIcon,
   IdentificationCardIcon,
   LockIcon,
   PlusCircleIcon,
@@ -1403,15 +1404,6 @@ function AddDomainPanel({ settings }: { settings: DomainSettingsController }) {
     )
   }
 
-  if (settings.busy && hasDomains && selectedDomainName) {
-    return (
-      <DomainSetupProgressCard
-        domain={selectedDomainName}
-        message={settings.message}
-      />
-    )
-  }
-
   return (
     <Card className='mx-auto w-full max-w-md overflow-hidden shadow-none'>
       <CardHeader className='items-center justify-items-center px-6 text-center'>
@@ -1428,11 +1420,12 @@ function AddDomainPanel({ settings }: { settings: DomainSettingsController }) {
           <p className='text-sm font-medium'>Domain</p>
           {hasDomains ? (
             <Select
-              disabled={settings.readOnly}
+              disabled={settings.readOnly || settings.busy}
               value={settings.selectedZoneId || undefined}
               onValueChange={settings.onSelectZone}
             >
               <SelectTrigger
+                aria-label='Domain'
                 className='w-full'
                 id='domain-cloudflare-zone'
               >
@@ -1501,54 +1494,6 @@ function AddDomainPanel({ settings }: { settings: DomainSettingsController }) {
         >
           {settings.busy ? <Spinner data-icon='inline-start' /> : null}
           {hasDomains ? `Adopt ${selectedDomainName || 'domain'}` : 'Load Cloudflare domains'}
-        </Button>
-      </CardFooter>
-    </Card>
-  )
-}
-
-function DomainSetupProgressCard({ domain, message }: { domain: string; message?: string | null }) {
-  return (
-    <Card className='mx-auto w-full max-w-md gap-0 overflow-hidden py-6 shadow-none'>
-      <CardHeader className='items-center justify-items-center px-6 text-center'>
-        <DomainSetupConnectionVisual domain={domain} />
-        <Badge variant='secondary'>Cloudflare connected</Badge>
-        <CardTitle className='text-xl'>Setting up {domain}</CardTitle>
-        <CardDescription className='max-w-md'>
-          AgentTeam Email is configuring Cloudflare-routed send and receive mail for this domain.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className='grid gap-5 px-6'>
-        <DomainSetupChecklist
-          items={[
-            {
-              label: 'Cloudflare access approved',
-              state: 'complete'
-            },
-            {
-              label: `${domain} selected`,
-              state: 'complete'
-            },
-            {
-              label: 'Set Cloudflare routing',
-              state: 'current'
-            },
-            {
-              label: 'Enable send and receive mail',
-              state: 'pending'
-            }
-          ]}
-        />
-        {message ? <p className='text-muted-foreground text-sm'>{message}</p> : null}
-      </CardContent>
-      <CardFooter className='px-6 pt-4'>
-        <Button
-          className='w-full'
-          disabled
-          type='button'
-        >
-          <Spinner data-icon='inline-start' />
-          Setting up domain
         </Button>
       </CardFooter>
     </Card>

@@ -1975,8 +1975,9 @@ function FirstMailboxSetupCard({ state }: { state?: FirstMailboxSetupState }) {
   const address = state?.addressLocalPart ? `${state.addressLocalPart}@${state.domain}` : `@${state?.domain ?? ''}`
 
   return (
-    <Card className='w-full max-w-xl gap-0 overflow-hidden py-6 shadow-none'>
+    <Card className='mx-auto w-full max-w-md overflow-hidden shadow-none'>
       <form
+        className='flex flex-col gap-6'
         onSubmit={(event) => {
           event.preventDefault()
           if (state?.canSubmit && !isCreating && !state.readOnly) {
@@ -2037,7 +2038,7 @@ function FirstMailboxSetupCard({ state }: { state?: FirstMailboxSetupState }) {
             </div>
           ) : null}
         </CardContent>
-        <CardFooter className='border-t px-6 pt-4'>
+        <CardFooter className='flex-col gap-2'>
           <Button
             className='w-full'
             disabled={!state?.canSubmit || isCreating || state?.readOnly}

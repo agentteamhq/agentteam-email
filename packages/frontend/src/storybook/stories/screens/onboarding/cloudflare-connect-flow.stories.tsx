@@ -38,7 +38,7 @@ export const Step02SelectDomain: Story = {
 
     await expect(await canvas.findByText('Set up email for your domain')).toBeInTheDocument()
     await expect(await canvas.findByText('Cloudflare connected')).toBeInTheDocument()
-    await expect(await canvas.findByRole('button', { name: 'Connect agentteam.example' })).toBeEnabled()
+    await expect(await canvas.findByRole('button', { name: 'Adopt agentteam.example' })).toBeEnabled()
     await expect(canvas.queryByRole('button', { name: 'Setting up domain' })).not.toBeInTheDocument()
     await expect(canvas.queryByRole('button', { name: 'Continue with Cloudflare' })).not.toBeInTheDocument()
     await expect(canvas.queryByText('Choose a message from the mailbox to read it here.')).not.toBeInTheDocument()
@@ -50,10 +50,14 @@ export const Step03SettingUpDomain: Story = {
   args: buildProductOnboardingControllerArgs(productOnboardingScenarios.settingUpDomain, onboardingHandlers),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
+    const adoptButton = await canvas.findByRole('button', { name: /Adopt agentteam\.example/i })
 
-    await expect(await canvas.findByText('Setting up agentteam.example')).toBeInTheDocument()
-    await expect((await canvas.findByText('Setting up domain')).closest('button')).toBeDisabled()
-    await expect(canvas.queryByRole('button', { name: 'Connect agentteam.example' })).not.toBeInTheDocument()
+    await expect(await canvas.findByText('Set up email for your domain')).toBeInTheDocument()
+    await expect(await canvas.findByRole('combobox', { name: 'Domain' })).toBeDisabled()
+    await expect(adoptButton).toBeDisabled()
+    await expect(within(adoptButton).getByRole('status', { name: 'Loading' })).toBeInTheDocument()
+    await expect(canvas.queryByText('Setting up agentteam.example')).not.toBeInTheDocument()
+    await expect(canvas.queryByRole('button', { name: 'Setting up domain' })).not.toBeInTheDocument()
   }
 }
 
