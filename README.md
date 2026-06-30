@@ -37,41 +37,51 @@
   <a href="https://agentteamemail.mintlify.com/self-host/helm"><img src="https://img.shields.io/badge/helm-OCI-0f1689.svg" alt="Helm OCI chart" /></a>
 </p>
 
-## What It Provides
+## Core Capabilities
 
-- Dedicated mailboxes for agents, teams, and automation workflows.
-- Authenticated web administration for domains, mailboxes, credentials, and
-  message review.
-- Cloudflare Email Routing and Email Worker integration for inbound capture.
-- R2-compatible archive storage for raw inbound and outbound message evidence.
-- Safe message review with archive-backed provenance and mail authentication
-  evidence.
-- Outbound mail delivery through WildDuck, ZoneMTA, and the Mail Control
-  Service relay path.
+- Create mailboxes for people and agents, then control routing, groups, and
+  permissions from one admin surface.
+- Full web email client for everyday work mail, startup team inboxes, and
+  agent-operated accounts.
+- Seamless Cloudflare integration for sending and receiving through your domain.
+- Authenticated and secure message review for agents, with untrusted mail kept
+  inside a controlled viewing surface.
 - Docker Compose and Helm deployment surfaces for self-hosted installs.
 - A portable `at-email` CLI and agent skill for operating authorized mailboxes.
 
+## Use Cases
+
+- **Shared inbox triage:** route support, hiring, press, keyword alerts, and
+  partner mail to agents that can summarize, classify, and surface what needs
+  attention.
+- **Human-reviewed sending:** let agents draft replies or outbound mail while
+  people approve, edit, or restrict what actually gets sent.
+- **Agent-owned operations:** give long-running agents their own addresses for
+  vendor accounts, research workflows, outreach, and follow-up.
+
 ## How It Works
 
-AgentTeam Email has one public boundary: the web server in `apps/web-server`.
-Browsers, API clients, CLI clients, and agent tools authenticate there. Internal
-mail services stay behind the deployment network.
+AgentTeam Email is built for operators running mail for AI agents.
 
-Inbound mail follows this path:
+- **Agent mailboxes:** each agent gets a real mailbox for receiving, reviewing,
+  and sending mail.
+- **Operator-first self-hosting:** you expose the web app, while mail servers,
+  queues, databases, and credentials stay on your internal network.
+- **Bucket-first receive path:** inbound mail lands in R2 before AgentTeam Email
+  processes it, so downtime or backlog delays mailbox delivery instead of
+  making receive-time capture depend on the app server.
 
-```text
-Cloudflare Email Routing -> Email Worker -> R2 archive -> web ingest -> mail control -> Haraka/WildDuck -> mailbox
-```
-
-Outbound mail follows this path:
-
-```text
-agent or user -> web server -> WildDuck -> ZoneMTA -> mail control relay -> outbound provider or local domain
+```mermaid
+%%{init: {"flowchart": {"curve": "basis"}}}%%
+flowchart TB
+  mail["Inbound mail<br/><small>(Cloudflare)</small>"] --> bucket[(R2 bucket)]
+  bucket --> app[AgentTeam Email]
+  app --> bucket
 ```
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full architecture contract and
 [Mail Flow](https://agentteamemail.mintlify.com/how-it-works/mail-flow) for the
-message-flow guide.
+complete inbound and outbound paths.
 
 ## Get Started
 
