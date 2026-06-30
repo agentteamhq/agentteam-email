@@ -175,6 +175,7 @@ const showcaseLongMailboxListSidebarView = {
 
 const meta = {
   title: 'Showcase/Screenshot Assets',
+  tags: ['mock'],
   component: DashboardScreen,
   args: {
     ...authenticatedSectionBaseArgs,
@@ -204,15 +205,15 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 export const OgImage: Story = {
-  name: 'Mail workspace OG image'
+  name: 'Mock mail workspace OG image'
 }
 
 export const HomeMailWorkspace: Story = {
-  name: 'Home mail workspace'
+  name: 'Mock home mail workspace'
 }
 
 export const HomeMailboxSwitcher: Story = {
-  name: 'Home mailbox switcher',
+  name: 'Mock home mailbox switcher',
   args: {
     sidebarView: showcaseLongMailboxListSidebarView
   },
@@ -224,7 +225,7 @@ export const HomeMailboxSwitcher: Story = {
 }
 
 export const HomeMailboxAdmin: Story = {
-  name: 'Home mailbox admin',
+  name: 'Mock home mailbox admin',
   args: {
     mailboxAdminView: mailboxAdminReadyView,
     sidebarView: mailboxAdminSidebarView('accounts')
@@ -232,7 +233,7 @@ export const HomeMailboxAdmin: Story = {
 }
 
 export const HomeAgentAccess: Story = {
-  name: 'Home agent access',
+  name: 'Mock home agent access',
   args: {
     agentAccessState: agentAccessActiveState,
     settingsOpen: true,
