@@ -1,7 +1,7 @@
 ---
 name: at-email-cli
-description: Use the AgentTeam Email CLI command `at-email` to operate an agent mailbox. Use when the user wants to check mailbox status, list inbox messages, read safe message content, search mail, mark messages read, archive messages, send email, reply to email, use JSON output for automation, check CLI version/update status, or install/launch the CLI when the skill is available but `at-email` is not installed.
-version: 1.0.1
+description: Use the AgentTeam Email CLI command `at-email` to operate an agent mailbox. Use when the user wants to check mailbox status, list inbox messages, read safe message content, search mail, mark messages read, archive messages, send email, reply to email, use JSON output for automation, check CLI version/update status, or run the bundled wrapper helper when the skill is available but `at-email` is not on PATH.
+version: 1.0.4
 metadata:
   openclaw:
     requires:
@@ -31,7 +31,8 @@ command -v at-email
 at-email --version
 ```
 
-If `at-email` is missing, see **Install Or Run If Missing** at the end of this skill.
+If `at-email` is missing, see **Run Through Package Wrapper If Missing** at
+the end of this skill.
 
 ## Runtime Configuration
 
@@ -168,10 +169,6 @@ at-email version
 at-email self-update
 ```
 
-When installed through npm, `self-update` is disabled because npm owns the
-installed package version. Update notices still tell the user how to update the
-npm package.
-
 ## Workflow Patterns
 
 For "check my mail", run:
@@ -199,28 +196,28 @@ at-email reply <message_id> --body "<reply>"
 For automation, prefer `--json`, parse the returned IDs, then call the
 follow-up command with the selected `message_id`.
 
-## Install Or Run If Missing
+## Run Through Package Wrapper If Missing
 
-Prefer the npm package for the easiest bootstrap:
-
-```bash
-npx --yes @agentteamhq/email@latest --version
-```
-
-For one-off use, prefix the intended command with `npx --yes`:
+If `at-email` is missing, run the same command through the bundled helper
+script at `scripts/at-email` relative to this skill file. The helper invokes
+the published executable wrapper, which selects the matching platform binary and
+passes CLI arguments through to it.
 
 ```bash
-npx --yes @agentteamhq/email@latest inbox --unseen
+scripts/at-email --version
 ```
 
-For a persistent install, ask before modifying the user's global tools, then run:
+For any command in this skill, keep the arguments unchanged and replace only the
+leading `at-email` command with:
 
 ```bash
-npm install -g @agentteamhq/email
-at-email --version
+scripts/at-email
 ```
 
-If npm is unavailable or a standalone binary is required, download the matching
-`at-email_X.Y.Z_<os>_<arch>[.exe]` asset and `checksums.txt` from the
-`agentteamhq/agentteam-email` GitHub Release, verify the checksum, place the
-binary on `PATH`, and run `at-email --version`.
+For example:
+
+```bash
+scripts/at-email inbox --unseen
+```
+
+The bundled helper is the only fallback path defined by this skill.
