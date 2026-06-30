@@ -4,7 +4,6 @@ const backendPackageHandlersTestState = vi.hoisted(() => ({
   backendRpcHandle: vi.fn(),
   handleAgentAuthConfigurationRequest: vi.fn(),
   handleAtEmailMetadataRequest: vi.fn(),
-  handleCloudflareOAuthCallbackRequest: vi.fn(),
   handleEmailVerifiedRedirect: vi.fn(),
   handleOAuthMetadataRequest: vi.fn(),
   handleStripeCheckoutRedirect: vi.fn(),
@@ -18,11 +17,9 @@ vi.mock('@main/backend', () => ({
   },
   handleAgentAuthConfigurationRequest: backendPackageHandlersTestState.handleAgentAuthConfigurationRequest,
   handleAtEmailMetadataRequest: backendPackageHandlersTestState.handleAtEmailMetadataRequest,
-  handleCloudflareOAuthCallbackRequest: backendPackageHandlersTestState.handleCloudflareOAuthCallbackRequest,
   handleOAuthMetadataRequest: backendPackageHandlersTestState.handleOAuthMetadataRequest,
   isAgentAuthConfigurationRequestPath: (pathname: string) => pathname === '/.well-known/agent-configuration',
   isAtEmailMetadataRequestPath: (pathname: string) => pathname === '/.well-known/at-email',
-  isCloudflareOAuthCallbackRequestPath: (pathname: string) => pathname === '/cloudflare/oauth/callback',
   isOAuthMetadataRequestPath: (pathname: string) =>
     pathname === '/.well-known/oauth-authorization-server' || pathname === '/.well-known/openid-configuration'
 }))
@@ -39,7 +36,6 @@ describe('backend package request handler', () => {
     backendPackageHandlersTestState.backendRpcHandle.mockReset()
     backendPackageHandlersTestState.handleAgentAuthConfigurationRequest.mockReset()
     backendPackageHandlersTestState.handleAtEmailMetadataRequest.mockReset()
-    backendPackageHandlersTestState.handleCloudflareOAuthCallbackRequest.mockReset()
     backendPackageHandlersTestState.handleEmailVerifiedRedirect.mockReset()
     backendPackageHandlersTestState.handleOAuthMetadataRequest.mockReset()
     backendPackageHandlersTestState.handleStripeCheckoutRedirect.mockReset()
@@ -173,6 +169,72 @@ describe('backend package request handler', () => {
       path: '/rpc/agent-mail/ingest/v1/conn_public_test'
     })
     expect(backendPackageHandlersTestState.backendRpcHandle).toHaveBeenCalledTimes(1)
+  })
+
+  it('routes Cloudflare generic OAuth callbacks through the mounted Better Auth RPC path', async () => {
+    expect.hasAssertions()
+    backendPackageHandlersTestState.backendRpcHandle.mockImplementation(async (request: Request) =>
+      Response.json({
+        path: new URL(request.url).pathname,
+        query: new URL(request.url).search
+      })
+    )
+    const { handleBackendPackageRequest } = await import('./backend-package-handlers')
+
+    const response = await handleBackendPackageRequest(
+      new Request('https://mail.example.com/rpc/auth/api/oauth2/callback/cloudflare?code=code-1&state=state-1')
+    )
+
+    await expect(response?.json()).resolves.toStrictEqual({
+      path: '/rpc/auth/api/oauth2/callback/cloudflare',
+      query: '?code=code-1&state=state-1'
+    })
+    expect(backendPackageHandlersTestState.backendRpcHandle).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not special-case legacy Cloudflare OAuth callback paths outside the RPC mount', async () => {
+    expect.hasAssertions()
+    const { handleBackendPackageRequest } = await import('./backend-package-handlers')
+
+    await expect(
+      handleBackendPackageRequest(
+        new Request('https://mail.example.com/api/oauth2/callback/cloudflare?code=code-1&state=state-1')
+      )
+    ).resolves.toBeNull()
+    expect(backendPackageHandlersTestState.backendRpcHandle).not.toHaveBeenCalled()
+  })
+
+  it('delegates mounted Better Auth error paths through the backend RPC app', async () => {
+    expect.hasAssertions()
+    backendPackageHandlersTestState.backendRpcHandle.mockImplementation(async (request: Request) =>
+      Response.json({
+        path: new URL(request.url).pathname,
+        query: new URL(request.url).search
+      })
+    )
+    const { handleBackendPackageRequest } = await import('./backend-package-handlers')
+
+    const response = await handleBackendPackageRequest(
+      new Request('https://mail.example.com/rpc/auth/api/error?error=invalid_request')
+    )
+
+    await expect(response?.json()).resolves.toStrictEqual({
+      path: '/rpc/auth/api/error',
+      query: '?error=invalid_request'
+    })
+    expect(backendPackageHandlersTestState.backendRpcHandle).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves the app-owned redirect error route to the frontend router', async () => {
+    expect.hasAssertions()
+    const { handleBackendPackageRequest } = await import('./backend-package-handlers')
+
+    await expect(
+      handleBackendPackageRequest(
+        new Request('https://mail.example.com/redirect/error?provider=cloudflare&error=invalid_request')
+      )
+    ).resolves.toBeNull()
+    expect(backendPackageHandlersTestState.backendRpcHandle).not.toHaveBeenCalled()
   })
 
   it('returns null for non-backend paths', async () => {

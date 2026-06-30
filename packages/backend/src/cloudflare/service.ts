@@ -13,6 +13,7 @@ import {
   syncAgentMailRuntimeProjection
 } from '../agent-mail/runtime-projection'
 import { isAgentMailAccessError, requireAgentMailOrganizationContext } from '../agent-mail/service'
+import { AUTH_REDIRECT_ERROR_ROUTE } from '../auth/auth-routes'
 import { decryptSecretValue, encryptSecretValue } from '../lib/secret-box'
 import { PUBLIC_VARS } from '../vars.public'
 
@@ -25,6 +26,7 @@ import {
 } from './client'
 import {
   CLOUDFLARE_OAUTH_PROVIDER_ID,
+  createCloudflareOAuthRedirectURI,
   getCloudflareRequiredOAuthScopes,
   isCloudflareOAuthConfigured
 } from './config'
@@ -156,7 +158,7 @@ export async function startCloudflareOAuth(headers: Headers): Promise<StartCloud
     body: {
       providerId: CLOUDFLARE_OAUTH_PROVIDER_ID,
       callbackURL,
-      errorCallbackURL: createOAuthCallbackURL(intentView.publicId, '1'),
+      errorCallbackURL: createOAuthErrorCallbackURL(intentView.publicId),
       scopes: getCloudflareRequiredOAuthScopes()
     },
     headers,
@@ -1382,17 +1384,19 @@ function domainFromAddress(address: string): string {
   return normalizeDomain(match[1])
 }
 
-function createOAuthCallbackURL(
-  intentPublicId: CloudflareOAuthConnectionIntentPublicId,
-  error?: string
-): string {
+function createOAuthCallbackURL(intentPublicId: CloudflareOAuthConnectionIntentPublicId): string {
   const url = new URL('/dashboard/', PUBLIC_VARS.PUBLIC_HOSTNAME)
   url.searchParams.set('settings', 'connectedAccounts')
   url.searchParams.set('cloudflareIntentId', intentPublicId)
 
-  if (error) {
-    url.searchParams.set('cloudflareOAuthError', error)
-  }
+  return url.toString()
+}
 
+function createOAuthErrorCallbackURL(intentPublicId: CloudflareOAuthConnectionIntentPublicId): string {
+  const url = new URL(AUTH_REDIRECT_ERROR_ROUTE)
+  url.searchParams.set('provider', CLOUDFLARE_OAUTH_PROVIDER_ID)
+  url.searchParams.set('flow', 'connected-account')
+  url.searchParams.set('cloudflareIntentId', intentPublicId)
+  url.searchParams.set('callbackUri', createCloudflareOAuthRedirectURI())
   return url.toString()
 }

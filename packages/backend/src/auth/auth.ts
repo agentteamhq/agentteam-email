@@ -38,6 +38,12 @@ import { sendUserVerificationEmail } from '../user/send-user-verification-email'
 
 import { WEBAPP_JWT_SIGNING_OPTIONS } from './jwt-config'
 import { AGENT_AUTH_PUBLIC_RATE_LIMIT_RULES, createAgentAuthOptions } from './agent-auth-config'
+import {
+  AUTH_REDIRECT_ERROR_ROUTE,
+  BETTER_AUTH_BASE_PATH,
+  BETTER_AUTH_MANUAL_BASE_PATH,
+  BETTER_AUTH_ROUTE
+} from './auth-routes'
 import { createAuthUrlComparisonLogDetails } from './auth-url-logging'
 import {
   AGENTTEAM_API_OAUTH_AUDIENCE,
@@ -62,10 +68,6 @@ export const BETTER_AUTH_SESSION_EXPIRES_IN = 60 * 60 * 24 * 180 // 180 days
 
 const DEFAULT_ORGANIZATION_SLUG_MAX_ATTEMPTS = 16
 const AT_EMAIL_CLI_DEVICE_CLIENT_ID = 'at-email-cli'
-
-const BETTER_AUTH_ROUTE = `${PUBLIC_VARS.PUBLIC_HOSTNAME}/rpc/auth/api`
-const BETTER_AUTH_BASE_PATH = '/api'
-const MANUAL_BASE_PATH = '/rpc/auth/api'
 
 const atEmailCliDeviceAuthorizationOptions = {
   schema: {},
@@ -319,7 +321,7 @@ function compareAuthUrls(betterAuthUrl: string, manualUrl: string) {
     createAuthUrlComparisonLogDetails({
       betterAuthBasePath: BETTER_AUTH_BASE_PATH,
       betterAuthUrl,
-      manualBasePath: MANUAL_BASE_PATH,
+      manualBasePath: BETTER_AUTH_MANUAL_BASE_PATH,
       manualUrl
     })
   )
@@ -476,7 +478,10 @@ export function createGlobalAuth(db: Database): GlobalAuth {
     // Manual redirect URLs use BETTER_AUTH_ROUTE and compareAuthUrls verifies
     // they still match the Better Auth-generated path after stripping each
     // mount prefix.
-    basePath: '/api',
+    basePath: BETTER_AUTH_BASE_PATH,
+    onAPIError: {
+      errorURL: AUTH_REDIRECT_ERROR_ROUTE
+    },
     secret: PRIVATE_VARS.BETTER_AUTH_SECRET,
     secondaryStorage: createMongoSecondaryStorage(db),
     rateLimit: {
