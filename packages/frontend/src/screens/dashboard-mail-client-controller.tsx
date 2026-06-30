@@ -52,9 +52,9 @@ import {
   sendMailMessage,
   updateMailMessage
 } from '../lib/mail-rpc'
-import { mailboxAddress } from '../lib/mail-addresses'
+import { mailboxAddress, mailboxLocalPart } from '../lib/mail-addresses'
 import { isMailboxAdminSectionId } from '../partials/authenticated/mailbox-admin-models'
-import { findSystemFolder } from './dashboard-mail-sidebar-view'
+import { FIRST_USE_SETUP_NAV_ITEM_ID, findSystemFolder } from './dashboard-mail-sidebar-view'
 import { DashboardScreen } from './dashboard-screen'
 import { toMailboxAdminView } from './dashboard-mailbox-admin-view'
 import { invalidateMailboxAdminQueries } from './dashboard-mailbox-admin-query-cache'
@@ -394,6 +394,24 @@ function useDomainSettingsController({
   const selectedAccount = runtimeAccounts.find((account) => account.id === runtimeSelectedAccountId) ?? null
   const selectedZone = runtimeZones.find((zone) => zone.id === runtimeSelectedZoneId) ?? null
 
+  const loadCloudflareDomainsForStatus = React.useCallback(
+    async (statusForEligibility: CloudflareStatusResult | null) => {
+      const accounts = await fetchCloudflareAccounts()
+      const zoneResults = await Promise.allSettled(accounts.map((account) => fetchCloudflareZones(account.id)))
+      const zones = zoneResults.flatMap((result) => (result.status === 'fulfilled' ? [...result.value] : []))
+      const firstZone = firstEligibleCloudflareZone(zones, statusForEligibility)
+
+      setRuntimeAccounts([...accounts])
+      setRuntimeZones(zones)
+      setRuntimeSelectedAccountId(firstZone?.accountId ?? accounts[0]?.id ?? '')
+      setRuntimeSelectedZoneId(firstZone?.id ?? '')
+      setRuntimeDraftDomain(firstZone?.name ?? '')
+
+      return zones
+    },
+    []
+  )
+
   const refreshStatus = React.useCallback(async () => {
     if (isInjectedState) {
       return null
@@ -445,6 +463,36 @@ function useDomainSettingsController({
   }, [isInjectedState, refreshMailStatus, refreshStatus])
 
   React.useEffect(() => {
+    if (
+      isInjectedState ||
+      readOnly ||
+      runtimeBusy ||
+      runtimeAccounts.length > 0 ||
+      runtimeZones.length > 0 ||
+      !(runtimeStatus?.grants.some((grant) => grant.status === 'active') ?? false)
+    ) {
+      return
+    }
+
+    setRuntimeBusy(true)
+    loadCloudflareDomainsForStatus(runtimeStatus)
+      .catch((error: unknown) => {
+        setRuntimeMessage(errorMessage(error, 'Failed to load Cloudflare domains.'))
+      })
+      .finally(() => {
+        setRuntimeBusy(false)
+      })
+  }, [
+    isInjectedState,
+    loadCloudflareDomainsForStatus,
+    readOnly,
+    runtimeAccounts.length,
+    runtimeBusy,
+    runtimeStatus,
+    runtimeZones.length
+  ])
+
+  React.useEffect(() => {
     if (isInjectedState) {
       return
     }
@@ -476,7 +524,13 @@ function useDomainSettingsController({
         search: {},
         replace: true
       })
-      await Promise.allSettled([refreshStatus(), refreshMailStatus()])
+      const [cloudflareStatus, mailStatus] = await Promise.allSettled([refreshStatus(), refreshMailStatus()])
+      if (cloudflareStatus.status === 'fulfilled' && cloudflareStatus.value) {
+        await loadCloudflareDomainsForStatus(cloudflareStatus.value)
+      }
+      if (mailStatus.status === 'rejected') {
+        setRuntimeMailStatusMessage(errorMessage(mailStatus.reason, 'Failed to load mail runtime status.'))
+      }
       setRuntimeMode('addDomain')
     }
 
@@ -492,6 +546,7 @@ function useDomainSettingsController({
     cloudflareOAuthCallback?.intentPublicId,
     cloudflareOAuthCallback?.oauthError,
     isInjectedState,
+    loadCloudflareDomainsForStatus,
     refreshStatus,
     refreshMailStatus,
     router
@@ -521,15 +576,13 @@ function useDomainSettingsController({
     setRuntimeBusy(true)
     setRuntimeMessage(null)
     try {
-      const accounts = await fetchCloudflareAccounts()
-      setRuntimeAccounts([...accounts])
-      setRuntimeSelectedAccountId(accounts[0]?.id ?? '')
+      await loadCloudflareDomainsForStatus(runtimeStatus)
     } catch (error) {
-      setRuntimeMessage(errorMessage(error, 'Failed to load Cloudflare accounts.'))
+      setRuntimeMessage(errorMessage(error, 'Failed to load Cloudflare domains.'))
     } finally {
       setRuntimeBusy(false)
     }
-  }, [isInjectedState, readOnly])
+  }, [isInjectedState, loadCloudflareDomainsForStatus, readOnly, runtimeStatus])
 
   const loadZones = React.useCallback(async () => {
     if (isInjectedState || readOnly || !runtimeSelectedAccountId) {
@@ -540,15 +593,16 @@ function useDomainSettingsController({
     setRuntimeMessage(null)
     try {
       const zones = await fetchCloudflareZones(runtimeSelectedAccountId)
+      const firstZone = firstEligibleCloudflareZone(zones, runtimeStatus)
       setRuntimeZones([...zones])
-      setRuntimeSelectedZoneId(zones[0]?.id ?? '')
-      setRuntimeDraftDomain(zones[0]?.name ?? '')
+      setRuntimeSelectedZoneId(firstZone?.id ?? '')
+      setRuntimeDraftDomain(firstZone?.name ?? '')
     } catch (error) {
       setRuntimeMessage(errorMessage(error, 'Failed to load Cloudflare zones.'))
     } finally {
       setRuntimeBusy(false)
     }
-  }, [isInjectedState, readOnly, runtimeSelectedAccountId])
+  }, [isInjectedState, readOnly, runtimeSelectedAccountId, runtimeStatus])
 
   const connectDomain = React.useCallback(async () => {
     if (isInjectedState || readOnly) {
@@ -615,6 +669,60 @@ function useDomainSettingsController({
     },
     [isInjectedState, readOnly, refreshMailStatus]
   )
+
+  const setupDomain = React.useCallback(async () => {
+    if (isInjectedState || readOnly) {
+      return
+    }
+
+    if (!selectedAccount || !selectedZone || !runtimeDraftDomain) {
+      setRuntimeMessage('Select a Cloudflare domain')
+      return
+    }
+
+    setRuntimeBusy(true)
+    setRuntimeMessage(null)
+    try {
+      const connectedStatus = await connectCloudflareDomain({
+        cloudflareAccountId: selectedAccount.id,
+        cloudflareAccountName: selectedAccount.name,
+        cloudflareZoneId: selectedZone.id,
+        cloudflareZoneName: selectedZone.name,
+        domain: runtimeDraftDomain
+      })
+      const connectionPublicId = findCloudflareConnectionPublicId(
+        connectedStatus,
+        selectedAccount.id,
+        selectedZone.id,
+        runtimeDraftDomain
+      )
+
+      if (!connectionPublicId) {
+        throw new Error('Cloudflare connection was not returned.')
+      }
+
+      setRuntimeStatus(connectedStatus)
+      setRuntimeSelectedDomainPublicId(connectionPublicId)
+      setRuntimeMode('domain')
+
+      const provisionedStatus = await provisionCloudflareConnection(connectionPublicId)
+      setRuntimeStatus(provisionedStatus)
+      setRuntimeSelectedDomainPublicId(selectCloudflareConnectionPublicId(provisionedStatus, connectionPublicId))
+      setRuntimeMessage('Domain setup complete')
+      await refreshMailStatus().catch(() => null)
+    } catch (error) {
+      setRuntimeMessage(errorMessage(error, 'Failed to set up Cloudflare domain.'))
+    } finally {
+      setRuntimeBusy(false)
+    }
+  }, [
+    isInjectedState,
+    readOnly,
+    refreshMailStatus,
+    runtimeDraftDomain,
+    selectedAccount,
+    selectedZone
+  ])
 
   const disconnectCloudflare = React.useCallback(
     async (grantPublicId?: string) => {
@@ -703,7 +811,11 @@ function useDomainSettingsController({
       }
       const nextZone = runtimeZones.find((zone) => zone.id === zoneId) ?? null
       setRuntimeSelectedZoneId(zoneId)
+      setRuntimeSelectedAccountId(nextZone?.accountId ?? '')
       setRuntimeDraftDomain(nextZone?.name ?? '')
+    },
+    onSetupDomain: () => {
+      setupDomain().catch(handleUnexpectedCloudflareActionError)
     },
     onStartOAuth: () => {
       startOAuth().catch(handleUnexpectedCloudflareActionError)
@@ -738,6 +850,50 @@ function selectCloudflareConnectionPublicId(
     status.connections[0]?.publicId ??
     null
   )
+}
+
+function firstEligibleCloudflareZone(
+  zones: readonly CloudflareZoneSummary[],
+  status: CloudflareStatusResult | null
+) {
+  return zones.find((zone) => !isCloudflareZoneConnected(zone, status)) ?? null
+}
+
+function isCloudflareZoneConnected(zone: CloudflareZoneSummary, status: CloudflareStatusResult | null) {
+  return (
+    status?.connections.some(
+      (connection) =>
+        connection.status !== 'disconnected' &&
+        (connection.cloudflareZoneId === zone.id ||
+          connection.domain.toLowerCase() === zone.name.toLowerCase())
+    ) ?? false
+  )
+}
+
+function findCloudflareConnectionPublicId(
+  status: CloudflareStatusResult,
+  accountId: string,
+  zoneId: string,
+  domain: string
+) {
+  return status.connections.find(
+    (connection) =>
+      connection.cloudflareAccountId === accountId &&
+      connection.cloudflareZoneId === zoneId &&
+      connection.domain === domain
+  )?.publicId
+}
+
+function readyCloudflareDomain(domainSettingsState: DomainSettingsState) {
+  return (
+    domainSettingsState.status?.connections.find(
+      (connection) => connection.status === 'active' && connection.provisioningStatus === 'succeeded'
+    )?.domain ?? null
+  )
+}
+
+function firstNameMailboxLocalPart(name: string) {
+  return mailboxLocalPart(name.trim().split(/\s+/u)[0] ?? '')
 }
 
 function agentAccessStatusLabel(value: string): string {
@@ -808,6 +964,7 @@ interface DashboardMailControllerProps extends Pick<
   | 'defaultSettingsOpen'
   | 'defaultSettingsSection'
   | 'domainSettingsState'
+  | 'firstMailboxSetupState'
   | 'publicEnv'
   | 'routeState'
   | 'sessionCleanupEnabled'
@@ -826,6 +983,7 @@ interface DashboardMailControllerProps extends Pick<
 
 export function DashboardMailController({
   agentAccessViewLoader = fetchAgentAccessView,
+  firstMailboxSetupState: providedFirstMailboxSetupState,
   domainSettingsState: providedDomainSettingsState,
   mailWorkspaceLoader = fetchMailWorkspace,
   mailboxAdminNavigationLoader = fetchMailboxAdminNavigation,
@@ -880,6 +1038,12 @@ export function DashboardMailController({
   const [mailboxAdminDialog, setMailboxAdminDialog] = React.useState<MailboxAdminDialogState | null>(null)
   const [createdAgentEnrollment, setCreatedAgentEnrollment] =
     React.useState<MailboxAdminAgentEnrollment | null>(null)
+  const [firstMailboxDraft, setFirstMailboxDraft] = React.useState({
+    addressLocalPart: '',
+    displayName: '',
+    key: ''
+  })
+  const [firstMailboxError, setFirstMailboxError] = React.useState<string | null>(null)
   const handleCopyAgentEnrollmentCommand = React.useCallback((command: string) => {
     const clipboard = globalThis.navigator?.clipboard ?? null
     if (!clipboard) {
@@ -1226,11 +1390,111 @@ export function DashboardMailController({
     }
   })
 
+  const firstMailboxDomain = readyCloudflareDomain(domainSettingsState)
+  const firstMailboxDefaultDisplayName = screenProps.routeState.user?.name?.trim() ?? ''
+  const firstMailboxDefaultLocalPart = firstNameMailboxLocalPart(firstMailboxDefaultDisplayName)
+  const firstMailboxDraftKey = firstMailboxDomain
+    ? `${screenProps.routeState.user?.id ?? 'user'}:${firstMailboxDomain}`
+    : ''
+
+  React.useEffect(() => {
+    if (!firstMailboxDraftKey || !firstMailboxDomain) {
+      return
+    }
+
+    setFirstMailboxDraft((current) =>
+      current.key === firstMailboxDraftKey
+        ? current
+        : {
+            addressLocalPart: firstMailboxDefaultLocalPart,
+            displayName: firstMailboxDefaultDisplayName,
+            key: firstMailboxDraftKey
+          }
+    )
+    setFirstMailboxError(null)
+  }, [
+    firstMailboxDefaultDisplayName,
+    firstMailboxDefaultLocalPart,
+    firstMailboxDomain,
+    firstMailboxDraftKey
+  ])
+
+  const firstMailboxAddress =
+    firstMailboxDomain && firstMailboxDraft.addressLocalPart
+      ? `${firstMailboxDraft.addressLocalPart}@${firstMailboxDomain}`
+      : ''
+  const normalizedFirstMailboxAddress = mailboxAddress(firstMailboxAddress)
+  const firstMailboxSetupState = React.useMemo<DashboardScreenProps['firstMailboxSetupState']>(
+    () =>
+      providedFirstMailboxSetupState ??
+      (firstMailboxDomain && workspace?.accounts.length === 0
+        ? {
+            addressLocalPart: firstMailboxDraft.addressLocalPart,
+            canSubmit: Boolean(
+              normalizedFirstMailboxAddress &&
+                normalizedFirstMailboxAddress === firstMailboxAddress &&
+                firstMailboxDraft.displayName.trim() &&
+                !isSavingAccount
+            ),
+            displayName: firstMailboxDraft.displayName,
+            domain: firstMailboxDomain,
+            errorDescription: firstMailboxError,
+            onAddressLocalPartChange: (localPart) => {
+              setFirstMailboxDraft((current) => ({
+                ...current,
+                addressLocalPart: mailboxLocalPart(localPart)
+              }))
+              setFirstMailboxError(null)
+            },
+            onDisplayNameChange: (displayName) => {
+              setFirstMailboxDraft((current) => ({
+                ...current,
+                displayName
+              }))
+              setFirstMailboxError(null)
+            },
+            onSubmit: () => {
+              if (!normalizedFirstMailboxAddress || !firstMailboxDraft.displayName.trim()) {
+                setFirstMailboxError('Enter a mailbox address and display name.')
+                return
+              }
+
+              runAsync(
+                saveAccount({
+                  input: {
+                    address: normalizedFirstMailboxAddress,
+                    name: firstMailboxDraft.displayName.trim(),
+                    type: 'mailbox'
+                  }
+                }).catch((error: unknown) => {
+                  setFirstMailboxError(errorMessage(error, 'Mailbox account could not be created.'))
+                })
+              )
+            },
+            readOnly: false,
+            state: isSavingAccount ? 'creating' : firstMailboxError ? 'error' : 'ready'
+          }
+        : undefined),
+    [
+      firstMailboxAddress,
+      firstMailboxDomain,
+      firstMailboxDraft.addressLocalPart,
+      firstMailboxDraft.displayName,
+      firstMailboxError,
+      isSavingAccount,
+      normalizedFirstMailboxAddress,
+      providedFirstMailboxSetupState,
+      saveAccount,
+      workspace?.accounts.length
+    ]
+  )
+
   const workspaceScreenModel = React.useMemo(
     () =>
       deriveDashboardMailWorkspaceScreenModel({
         allowedMailboxAdminSections,
         domainSettingsState,
+        firstMailboxSetupState,
         folderCreate,
         folderDelete,
         folderRename,
@@ -1245,6 +1509,7 @@ export function DashboardMailController({
       activeMailboxAdminSection,
       allowedMailboxAdminSections,
       domainSettingsState,
+      firstMailboxSetupState,
       folderCreate,
       folderDelete,
       folderRename,
@@ -1876,6 +2141,7 @@ export function DashboardMailController({
       dashboardView={dashboardView}
       domainSettingsState={domainSettingsState}
       emailPreviewsById={emailPreviewsById}
+      firstMailboxSetupState={firstMailboxSetupState}
       mailboxAdminView={mailboxAdminView}
       mailActionView={mailActionView}
       onComposeDiscardDraft={() => {
@@ -1968,6 +2234,20 @@ export function DashboardMailController({
         runAsync(handleMailboxFolderRenameSubmit())
       }}
       onMailboxFolderSelect={(folderId) => {
+        if (folderId === FIRST_USE_SETUP_NAV_ITEM_ID) {
+          navigateMail({
+            accountId: undefined,
+            cursor: undefined,
+            direction: undefined,
+            folderId: undefined,
+            mailboxAdmin: undefined,
+            mailQuery: undefined,
+            messageId: undefined,
+            unreadOnly: undefined
+          })
+          return
+        }
+
         if (isMailboxAdminSectionId(folderId)) {
           navigateMail({
             cursor: undefined,

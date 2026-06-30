@@ -15,6 +15,7 @@ import {
   DotsThreeIcon,
   EnvelopeSimpleIcon,
   FileIcon,
+  FlagPennantIcon,
   FolderIcon,
   ImageIcon,
   LinkIcon,
@@ -97,6 +98,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
+  SidebarSeparator,
   SidebarTrigger,
   useSidebar
 } from '../../components/ui/sidebar'
@@ -116,8 +118,7 @@ import { DomainSettingsPanel, SettingsDialog } from './settings-dialog'
 import { WorkspaceMailboxSwitcher } from './workspace-mailbox-switcher'
 import {
   defaultAuthenticatedDashboardView,
-  defaultAuthenticatedEmailToolbarActions,
-  defaultAuthenticatedSidebarView
+  defaultAuthenticatedEmailToolbarActions
 } from './authenticated-shell-models'
 import type { EmailIframeThemeMode } from '../../lib/email-safety'
 import type {
@@ -142,11 +143,13 @@ import type {
   AuthenticatedMailOriginalSourceView,
   AuthenticatedMailPageChange,
   AuthenticatedMailPagination,
+  AuthenticatedManagementNavGroup,
   AuthenticatedManagementNavIconKey,
   AuthenticatedManagementNavItem,
   AuthenticatedRemoteImage,
   AuthenticatedSidebarView,
-  AuthenticatedWorkspaceSwitcherWorkspace
+  AuthenticatedWorkspaceSwitcherWorkspace,
+  FirstMailboxSetupState
 } from './authenticated-shell-models'
 import type {
   WorkspaceMailboxSwitcherMailbox,
@@ -202,7 +205,7 @@ export interface AuthenticatedShellProps {
   settingsContentState?: SettingsDialogContentState
   settingsOpen: boolean
   settingsSection: SettingsSectionId
-  sidebarView?: AuthenticatedSidebarView
+  sidebarView: AuthenticatedSidebarView
   title?: string
 }
 
@@ -246,11 +249,13 @@ export function AuthenticatedShell({
   settingsContentState,
   settingsOpen,
   settingsSection,
-  sidebarView = defaultAuthenticatedSidebarView,
-  title = 'Inbox'
+  sidebarView,
+  title
 }: AuthenticatedShellProps) {
-  const hasActiveManagementItem =
-    sidebarView.managementNav?.some((item) => item.id === sidebarView.activeItemId) ?? false
+  const hasActiveManagementItem = getSidebarManagementNavItems(sidebarView).some(
+    (item) => item.id === sidebarView.activeItemId
+  )
+  const headerTitle = title ?? sidebarView.paneTitle
 
   return (
     <SidebarProvider
@@ -287,7 +292,7 @@ export function AuthenticatedShell({
       <SidebarInset>
         <header className='bg-background sticky top-0 flex h-14 shrink-0 items-center gap-2 border-b px-4'>
           <SidebarTrigger />
-          <span className='text-sm font-medium'>{title}</span>
+          <span className='text-sm font-medium'>{headerTitle}</span>
         </header>
         {children}
       </SidebarInset>
@@ -1131,7 +1136,7 @@ export interface AuthenticatedSidebarProps {
   onSearchChange?: (query: string) => void
   onSelectItem?: (itemId: string) => void
   onUnreadOnlyChange?: (unreadOnly: boolean) => void
-  view?: AuthenticatedSidebarView
+  view: AuthenticatedSidebarView
 }
 
 export function AuthenticatedSidebar({
@@ -1153,13 +1158,12 @@ export function AuthenticatedSidebar({
   onSearchChange,
   onSelectItem,
   onUnreadOnlyChange,
-  view = defaultAuthenticatedSidebarView
+  view
 }: AuthenticatedSidebarProps) {
   const { setOpen } = useSidebar()
-  const activeMailItem = view.navMain.find((item) => item.id === view.activeItemId)
-  const activeManagementItem = view.managementNav?.find((item) => item.id === view.activeItemId)
-  const activeItem = activeMailItem ?? activeManagementItem ?? view.navMain[0]
-  const hasExplicitlyNoAccounts = Boolean(view.accounts && view.accounts.length === 0)
+  const managementNavGroups = getSidebarManagementNavGroups(view)
+  const activeManagementItem = getSidebarManagementNavItems(view).find((item) => item.id === view.activeItemId)
+  const hasExplicitlyNoAccounts = view.mailboxMode === 'no-mailbox'
   const workspaceSwitcherWorkspaces = getSidebarWorkspaceSwitcherWorkspaces(view)
   const workspaceSwitcherActiveWorkspaceId =
     view.workspaceSwitcher?.activeWorkspaceId ?? workspaceSwitcherWorkspaces[0]?.id
@@ -1225,21 +1229,28 @@ export function AuthenticatedSidebar({
             </SidebarGroup>
           </SidebarContent>
           <SidebarFooter>
-            {view.managementNav?.length ? (
-              <SidebarMenu>
-                {view.managementNav.map((item) => (
-                  <SidebarMenuItem key={item.id}>
-                    <ManagementNavButton
-                      item={item}
-                      isActive={item.id === view.activeItemId}
-                      onSelect={() => {
-                        onSelectItem?.(item.id)
-                        setOpen(false)
-                      }}
-                    />
-                  </SidebarMenuItem>
+            {managementNavGroups.length ? (
+              <div className='grid gap-1'>
+                {managementNavGroups.map((group, index) => (
+                  <React.Fragment key={group.id}>
+                    {index > 0 ? <SidebarSeparator className='my-0.5' /> : null}
+                    <SidebarMenu>
+                      {group.items.map((item) => (
+                        <SidebarMenuItem key={item.id}>
+                          <ManagementNavButton
+                            item={item}
+                            isActive={item.id === view.activeItemId}
+                            onSelect={() => {
+                              onSelectItem?.(item.id)
+                              setOpen(false)
+                            }}
+                          />
+                        </SidebarMenuItem>
+                      ))}
+                    </SidebarMenu>
+                  </React.Fragment>
                 ))}
-              </SidebarMenu>
+              </div>
             ) : null}
             <UserButton
               align='start'
@@ -1258,7 +1269,7 @@ export function AuthenticatedSidebar({
               <div className='flex w-full items-center justify-between gap-2'>
                 <div className='flex min-w-0 items-center gap-1.5'>
                   <div className='text-foreground truncate text-base font-medium'>
-                    {activeItem?.title ?? 'Inbox'}
+                    {view.paneTitle}
                   </div>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -1313,14 +1324,16 @@ export function AuthenticatedSidebar({
                 value={view.searchQuery ?? ''}
               />
             </SidebarHeader>
-            <SidebarContent>
-              <SidebarGroup className='px-0'>
-                <SidebarGroupContent>
-                  <MailboxList
-                    onSelectMail={onMailSelect}
-                    onRetry={onRetry}
-                    view={view}
-                  />
+            <SidebarContent className='gap-0 overflow-hidden'>
+              <SidebarGroup className='min-h-0 flex-1 p-0'>
+                <SidebarGroupContent className='flex min-h-0 flex-1 flex-col'>
+                  <div className='min-h-0 flex-1 overflow-auto'>
+                    <MailboxList
+                      onSelectMail={onMailSelect}
+                      onRetry={onRetry}
+                      view={view}
+                    />
+                  </div>
                   <MailboxPagination
                     onPageChange={onPageChange}
                     pagination={view.pagination}
@@ -1612,7 +1625,8 @@ const mailNavIcons = {
 const managementNavIcons = {
   accounts: AddressBookIcon,
   agents: UserIcon,
-  groups: UsersThreeIcon
+  groups: UsersThreeIcon,
+  setup: FlagPennantIcon
 } satisfies Record<AuthenticatedManagementNavIconKey, React.ComponentType<{ className?: string }>>
 
 function MailNavButton({
@@ -1630,17 +1644,33 @@ function MailNavButton({
   onSelect: () => void
 }) {
   const Icon = mailNavIcons[item.iconKey]
+  const disabled = item.disabled || item.selectable === false
+  const tooltip = item.disabledReason ? `${item.title}: ${item.disabledReason}` : item.title
 
   return (
     <>
       <SidebarMenuButton
+        aria-disabled={disabled ? 'true' : undefined}
+        data-disabled={disabled ? 'true' : undefined}
         tooltip={{
-          children: item.title,
+          children: tooltip,
           hidden: false
         }}
-        onClick={onSelect}
+        onClick={(event) => {
+          if (disabled) {
+            event.preventDefault()
+            return
+          }
+          onSelect()
+        }}
         isActive={isActive}
-        className='px-2.5 md:px-2'
+        className={
+          disabled
+            ? 'cursor-not-allowed px-2.5 opacity-50 aria-disabled:pointer-events-auto hover:bg-transparent hover:text-sidebar-foreground active:bg-transparent active:text-sidebar-foreground md:px-2'
+            : 'px-2.5 md:px-2'
+        }
+        title={disabled ? tooltip : undefined}
+        type='button'
       >
         <Icon />
         <span>{item.title}</span>
@@ -1709,14 +1739,10 @@ const folderActionIcons = {
   React.ComponentType<{ 'data-icon'?: string; className?: string }>
 >
 
-const fallbackWorkspaceSwitcherWorkspaces = defaultAuthenticatedSidebarView.workspaceSwitcher.workspaces
-
 function getSidebarWorkspaceSwitcherWorkspaces(
   view: AuthenticatedSidebarView
 ): ReadonlyArray<AuthenticatedWorkspaceSwitcherWorkspace> {
-  return view.workspaceSwitcher?.workspaces.length
-    ? view.workspaceSwitcher.workspaces
-    : fallbackWorkspaceSwitcherWorkspaces
+  return view.workspaceSwitcher?.workspaces ?? []
 }
 
 function getSidebarWorkspaceSwitcherMailboxes(
@@ -1757,6 +1783,29 @@ function getSidebarWorkspaceSwitcherState(view: AuthenticatedSidebarView): Works
   return 'ready'
 }
 
+function getSidebarManagementNavGroups(
+  view: AuthenticatedSidebarView
+): ReadonlyArray<AuthenticatedManagementNavGroup> {
+  if (view.managementNavGroups) {
+    return view.managementNavGroups.filter((group) => group.items.length > 0)
+  }
+
+  return view.managementNav?.length
+    ? [
+        {
+          id: 'management',
+          items: view.managementNav
+        }
+      ]
+    : []
+}
+
+function getSidebarManagementNavItems(
+  view: AuthenticatedSidebarView
+): ReadonlyArray<AuthenticatedManagementNavItem> {
+  return getSidebarManagementNavGroups(view).flatMap((group) => group.items)
+}
+
 function ManagementNavButton({
   isActive,
   item,
@@ -1776,7 +1825,11 @@ function ManagementNavButton({
       }}
       onClick={onSelect}
       isActive={isActive}
-      className='px-2.5 md:px-2'
+      className={cn(
+        'px-2.5 md:px-2',
+        item.tone === 'accent' &&
+          'bg-transparent font-medium text-primary ring-1 ring-inset ring-primary/65 hover:bg-primary/5 hover:text-primary data-[active=true]:bg-transparent data-[active=true]:text-primary'
+      )}
     >
       <Icon />
       <span>{item.title}</span>
@@ -1785,6 +1838,7 @@ function ManagementNavButton({
 }
 
 export function AuthenticatedDashboardContent({
+  firstMailboxSetupState,
   onAttachmentPreview,
   onEmailAction,
   domainSettingsState,
@@ -1792,6 +1846,7 @@ export function AuthenticatedDashboardContent({
   onRetry,
   view = defaultAuthenticatedDashboardView
 }: {
+  firstMailboxSetupState?: FirstMailboxSetupState
   onAttachmentPreview?: (attachment: AuthenticatedEmailAttachment, email: AuthenticatedEmailPreview) => void
   domainSettingsState?: DomainSettingsState
   onEmailAction?: (action: AuthenticatedEmailAction, email: AuthenticatedEmailPreview) => void
@@ -1819,6 +1874,7 @@ export function AuthenticatedDashboardContent({
       return (
         <DashboardOnboardingPrompt
           domainSettingsState={domainSettingsState}
+          firstMailboxSetupState={firstMailboxSetupState}
           onConnect={onOnboardingConnect}
           view={view.onboardingPrompt}
         />
@@ -1853,14 +1909,24 @@ export function AuthenticatedDashboardContent({
 
 function DashboardOnboardingPrompt({
   domainSettingsState,
+  firstMailboxSetupState,
   onConnect,
   view
 }: {
   domainSettingsState?: DomainSettingsState
+  firstMailboxSetupState?: FirstMailboxSetupState
   onConnect?: () => void
   view: NonNullable<AuthenticatedDashboardView['onboardingPrompt']>
 }) {
   const isConnecting = view.state === 'connecting'
+
+  if (view.mode === 'createMailbox') {
+    return (
+      <div className='flex min-h-[calc(100dvh-3.5rem)] items-center justify-center p-6'>
+        <FirstMailboxSetupCard state={firstMailboxSetupState} />
+      </div>
+    )
+  }
 
   if (view.mode === 'configureDomain') {
     return (
@@ -1903,6 +1969,89 @@ function DashboardOnboardingPrompt({
         </CardFooter>
       </Card>
     </div>
+  )
+}
+
+function FirstMailboxSetupCard({ state }: { state?: FirstMailboxSetupState }) {
+  const isCreating = state?.state === 'creating'
+  const address = state?.addressLocalPart ? `${state.addressLocalPart}@${state.domain}` : `@${state?.domain ?? ''}`
+
+  return (
+    <Card className='mx-auto w-full max-w-md overflow-hidden shadow-none'>
+      <form
+        className='flex flex-col gap-6'
+        onSubmit={(event) => {
+          event.preventDefault()
+          if (state?.canSubmit && !isCreating && !state.readOnly) {
+            state.onSubmit?.()
+          }
+        }}
+      >
+        <CardHeader className='flex flex-col items-center px-6 text-center'>
+          <div className='bg-primary/10 text-primary flex size-14 items-center justify-center rounded-full border'>
+            <UserIcon className='size-7' />
+          </div>
+          <Badge variant='secondary'>Domain ready</Badge>
+          <CardTitle className='text-xl'>Create your first mailbox</CardTitle>
+          <CardDescription className='max-w-md'>
+            Start with your owner mailbox. You can add team and agent mailboxes later.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className='grid gap-5 px-6'>
+          <div className='grid gap-2'>
+            <Label htmlFor='first-mailbox-address'>Mailbox address</Label>
+            <div className='grid grid-cols-[minmax(0,1fr)_auto] items-center overflow-hidden rounded-md border'>
+              <Input
+                aria-label='Mailbox local part'
+                className='border-0 shadow-none focus-visible:ring-0'
+                disabled={isCreating || state?.readOnly}
+                id='first-mailbox-address'
+                value={state?.addressLocalPart ?? ''}
+                onChange={(event) => {
+                  state?.onAddressLocalPartChange?.(event.currentTarget.value)
+                }}
+              />
+              <span className='text-muted-foreground bg-muted/50 border-l px-3 py-2 text-sm'>
+                @{state?.domain ?? 'domain'}
+              </span>
+            </div>
+          </div>
+          <div className='grid gap-2'>
+            <Label htmlFor='first-mailbox-name'>Display name</Label>
+            <Input
+              disabled={isCreating || state?.readOnly}
+              id='first-mailbox-name'
+              value={state?.displayName ?? ''}
+              onChange={(event) => {
+                state?.onDisplayNameChange?.(event.currentTarget.value)
+              }}
+            />
+          </div>
+          <div className='rounded-md border px-4 py-3 text-sm'>
+            <p className='font-medium'>{address}</p>
+            <p className='text-muted-foreground mt-1'>
+              This mailbox becomes the first active account for the domain.
+            </p>
+          </div>
+          {state?.errorDescription ? (
+            <div className='text-destructive flex items-start gap-2 text-sm'>
+              <WarningIcon data-icon='inline-start' />
+              <span>{state.errorDescription}</span>
+            </div>
+          ) : null}
+        </CardContent>
+        <CardFooter className='flex-col gap-2'>
+          <Button
+            className='w-full'
+            disabled={!state?.canSubmit || isCreating || state?.readOnly}
+            type='submit'
+          >
+            {isCreating ? <Spinner data-icon='inline-start' /> : null}
+            {isCreating ? 'Creating mailbox' : 'Create mailbox'}
+          </Button>
+        </CardFooter>
+      </form>
+    </Card>
   )
 }
 

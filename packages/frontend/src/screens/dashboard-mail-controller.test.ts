@@ -4,7 +4,11 @@ import { QueryClient } from '@tanstack/react-query'
 import { invalidateMailboxAdminQueries } from './dashboard-mailbox-admin-query-cache'
 import { toDashboardView } from './dashboard-mail-dashboard-view'
 import { mailboxAdminViewQueryForSection } from './dashboard-mailbox-admin-query'
-import { actionsForMessage, toSidebarView } from './dashboard-mail-sidebar-view'
+import {
+  FIRST_USE_SETUP_NAV_ITEM_ID,
+  actionsForMessage,
+  toSidebarView
+} from './dashboard-mail-sidebar-view'
 import { toMailboxAdminView } from './dashboard-mailbox-admin-view'
 import type { AgentMailWebWorkspace } from '@main/backend'
 import type { MailboxAdminView } from '../partials/authenticated/mailbox-admin-models'
@@ -242,11 +246,7 @@ describe('mail client controller view mapping', () => {
       'success',
       null,
       undefined,
-      mailWorkspace({
-        accounts: [],
-        folders: [],
-        messages: []
-      }),
+      firstUseMailWorkspace(),
       domainSettings()
     )
 
@@ -265,11 +265,7 @@ describe('mail client controller view mapping', () => {
       'success',
       null,
       undefined,
-      mailWorkspace({
-        accounts: [],
-        folders: [],
-        messages: []
-      }),
+      firstUseMailWorkspace(),
       domainSettings({
         accounts: [cloudflareAccount()],
         draftDomain: 'agentteam.example',
@@ -285,7 +281,7 @@ describe('mail client controller view mapping', () => {
 
     expect(view.state).toBe('empty')
     expect(view.onboardingPrompt).toMatchObject({
-      actionLabel: 'Continue setup',
+      actionLabel: 'Connect domain',
       mode: 'configureDomain',
       state: 'ready',
       title: 'Choose your domain'
@@ -298,11 +294,7 @@ describe('mail client controller view mapping', () => {
       'success',
       null,
       undefined,
-      mailWorkspace({
-        accounts: [],
-        folders: [],
-        messages: []
-      }),
+      firstUseMailWorkspace(),
       domainSettings({
         mode: 'domain',
         selectedDomainPublicId: cloudflareConnection().publicId,
@@ -320,12 +312,149 @@ describe('mail client controller view mapping', () => {
     })
   })
 
+  it('advances first-use dashboard onboarding to first mailbox creation after domain setup succeeds', () => {
+    expect.hasAssertions()
+    const view = toDashboardView(
+      'success',
+      null,
+      undefined,
+      firstUseMailWorkspace(),
+      domainSettings({
+        mode: 'domain',
+        selectedDomainPublicId: cloudflareConnection().publicId,
+        status: {
+          connections: [
+            cloudflareConnection({
+              provisioningStatus: 'succeeded',
+              status: 'active'
+            })
+          ],
+          grants: [cloudflareGrant()]
+        }
+      }),
+      {
+        addressLocalPart: 'marin',
+        canSubmit: true,
+        displayName: 'Marin Patel',
+        domain: 'agentteam.example',
+        state: 'ready'
+      }
+    )
+
+    expect(view.state).toBe('empty')
+    expect(view.onboardingPrompt).toMatchObject({
+      actionLabel: 'Create mailbox',
+      mode: 'createMailbox',
+      state: 'ready',
+      title: 'Create your first mailbox'
+    })
+  })
+
   it('prompts Cloudflare onboarding when the workspace has no accounts', () => {
     expect.hasAssertions()
     const view = toSidebarView(
+      firstUseMailWorkspace(),
+      'success',
+      null,
+      { name: '', state: 'closed' },
+      { state: 'closed' },
+      { name: '', state: 'closed' },
+      undefined,
+      ['accounts', 'groups', 'agents']
+    )
+
+    expect(view.state).toBe('empty')
+    expect(view.mailboxMode).toBe('no-mailbox')
+    expect(view.paneTitle).toBe('No mailbox yet')
+    expect(view.emptyTitle).toBe('No mailbox yet')
+    expect(view.emptyDescription).toBe('Connect Cloudflare to add the first mailbox.')
+    expect(view.activeAccountId).toBeUndefined()
+    expect(view.activeItemId).toBe('placeholder:inbox')
+    expect(view.navMain.map((item) => item.title)).toStrictEqual(['Inbox', 'Drafts', 'Sent', 'Junk', 'Trash'])
+    expect(
+      view.navMain.every(
+        (item) =>
+          item.disabled === true &&
+          item.selectable === false &&
+          item.disabledReason === 'Connect a mailbox before opening folders.'
+      )
+    ).toBe(true)
+    expect(view.folderCreate).toBeUndefined()
+    expect(view.managementNav?.map((item) => item.id)).toStrictEqual(['accounts', 'groups', 'agents'])
+    expect(view.managementNavGroups?.map((group) => group.id)).toStrictEqual(['mailbox-admin'])
+    expect(view.managementNavGroups?.[0]?.items.map((item) => item.id)).toStrictEqual([
+      'accounts',
+      'groups',
+      'agents'
+    ])
+  })
+
+  it('shows first-use setup navigation after leaving the no-mailbox CTA', () => {
+    expect.hasAssertions()
+    const view = toSidebarView(
+      firstUseMailWorkspace(),
+      'success',
+      null,
+      { name: '', state: 'closed' },
+      { state: 'closed' },
+      { name: '', state: 'closed' },
+      { mailboxAdmin: 'accounts' },
+      ['accounts', 'groups', 'agents']
+    )
+
+    expect(view.state).toBe('empty')
+    expect(view.mailboxMode).toBe('no-mailbox')
+    expect(view.activeItemId).toBe('accounts')
+    expect(view.folderCreate).toBeUndefined()
+    expect(view.managementNav?.[0]).toMatchObject({
+      id: FIRST_USE_SETUP_NAV_ITEM_ID,
+      tone: 'accent',
+      title: 'Continue setup'
+    })
+    expect(view.managementNav?.map((item) => item.id)).toStrictEqual([
+      FIRST_USE_SETUP_NAV_ITEM_ID,
+      'accounts',
+      'groups',
+      'agents'
+    ])
+    expect(view.managementNavGroups?.map((group) => group.id)).toStrictEqual([
+      'setup-return',
+      'mailbox-admin'
+    ])
+    expect(view.managementNavGroups?.[0]?.items.map((item) => item.id)).toStrictEqual([
+      FIRST_USE_SETUP_NAV_ITEM_ID
+    ])
+    expect(view.managementNavGroups?.[1]?.items.map((item) => item.id)).toStrictEqual([
+      'accounts',
+      'groups',
+      'agents'
+    ])
+  })
+
+  it('does not show first-use setup navigation when no mailbox admin sections are allowed', () => {
+    expect.hasAssertions()
+    const view = toSidebarView(
+      firstUseMailWorkspace(),
+      'success',
+      null,
+      { name: '', state: 'closed' },
+      { state: 'closed' },
+      { name: '', state: 'closed' },
+      { mailboxAdmin: 'accounts' },
+      []
+    )
+
+    expect(view.mailboxMode).toBe('no-mailbox')
+    expect(view.managementNav).toStrictEqual([])
+    expect(view.managementNavGroups).toStrictEqual([])
+  })
+
+  it('does not show first-use setup navigation for configured mailbox workspaces', () => {
+    expect.hasAssertions()
+    const view = toSidebarView(
       mailWorkspace({
-        accounts: [],
-        folders: [],
+        accounts: [mailAccount()],
+        folders: [inboxFolder()],
         messages: []
       }),
       'success',
@@ -333,23 +462,19 @@ describe('mail client controller view mapping', () => {
       { name: '', state: 'closed' },
       { state: 'closed' },
       { name: '', state: 'closed' },
-      undefined,
-      undefined
+      { mailboxAdmin: 'accounts' },
+      ['accounts', 'groups', 'agents']
     )
 
-    expect(view.state).toBe('empty')
-    expect(view.emptyTitle).toBe('No mailbox yet')
-    expect(view.emptyDescription).toBe('Connect Cloudflare to add the first mailbox.')
+    expect(view.mailboxMode).toBe('mailbox')
+    expect(view.managementNav?.map((item) => item.id)).toStrictEqual(['accounts', 'groups', 'agents'])
+    expect(view.managementNavGroups?.map((group) => group.id)).toStrictEqual(['mailbox-admin'])
   })
 
   it('keeps Cloudflare onboarding copy when a no-account workspace has stale filters', () => {
     expect.hasAssertions()
     const view = toSidebarView(
-      mailWorkspace({
-        accounts: [],
-        folders: [],
-        messages: []
-      }),
+      firstUseMailWorkspace(),
       'success',
       null,
       { name: '', state: 'closed' },
@@ -360,8 +485,12 @@ describe('mail client controller view mapping', () => {
     )
 
     expect(view.state).toBe('empty')
+    expect(view.mailboxMode).toBe('no-mailbox')
     expect(view.emptyTitle).toBe('No mailbox yet')
     expect(view.emptyDescription).toBe('Connect Cloudflare to add the first mailbox.')
+    expect(view.activeItemId).toBe('placeholder:inbox')
+    expect(view.searchQuery).toBe('')
+    expect(view.unreadOnly).toBeUndefined()
   })
 
   it('uses filter-specific empty copy for server-side empty search results', () => {
@@ -519,6 +648,17 @@ function mailWorkspace(overrides: Partial<AgentMailWebWorkspace> = {}): AgentMai
   }
 }
 
+function firstUseMailWorkspace(overrides: Partial<AgentMailWebWorkspace> = {}): AgentMailWebWorkspace {
+  return mailWorkspace({
+    accounts: [],
+    activeAccountId: null,
+    activeFolderId: null,
+    folders: [],
+    messages: [],
+    ...overrides
+  })
+}
+
 function mailMessage(
   overrides: Partial<AgentMailWebWorkspace['messages'][number]> = {}
 ): AgentMailWebWorkspace['messages'][number] {
@@ -580,7 +720,9 @@ function cloudflareGrant(): DomainSettingsStatus['grants'][number] {
   }
 }
 
-function cloudflareConnection(): DomainSettingsStatus['connections'][number] {
+function cloudflareConnection(
+  overrides: Partial<DomainSettingsStatus['connections'][number]> = {}
+): DomainSettingsStatus['connections'][number] {
   return {
     cloudflareAccountId: 'cloudflare-account-id',
     cloudflareAccountName: 'AgentTeam Production',
@@ -593,7 +735,8 @@ function cloudflareConnection(): DomainSettingsStatus['connections'][number] {
     publicId: 'connection-public-id' as DomainSettingsStatus['connections'][number]['publicId'],
     status: 'connected',
     updatedAt: new Date('2026-06-21T16:16:00.000Z'),
-    workerScriptName: null
+    workerScriptName: null,
+    ...overrides
   }
 }
 

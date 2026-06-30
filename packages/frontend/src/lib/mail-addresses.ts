@@ -52,6 +52,17 @@ export function mailboxDisplayName(value: string | null | undefined) {
   return parsed?.name || parsed?.address || value?.trim() || ''
 }
 
+export function mailboxLocalPart(value: string | null | undefined) {
+  return (value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/^@/u, '')
+    .replace(/@.*$/u, '')
+    .replace(/[^a-z0-9._+-]+/gu, '.')
+    .replace(/^[._+-]+|[._+-]+$/gu, '')
+    .slice(0, 64)
+}
+
 function domainToASCII(value: string) {
   try {
     return new URL(`http://${value}/`).hostname.toLowerCase()

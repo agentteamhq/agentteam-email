@@ -7,7 +7,10 @@ import {
 } from './dashboard-mail-sidebar-view'
 import { toDashboardView } from './dashboard-mail-dashboard-view'
 import type { DashboardSearch } from '../lib/dashboard-search'
-import type { AuthenticatedEmailPreview } from '../partials/authenticated/authenticated-shell-models'
+import type {
+  AuthenticatedEmailPreview,
+  FirstMailboxSetupState
+} from '../partials/authenticated/authenticated-shell-models'
 import type { MailboxAdminSectionId } from '../partials/authenticated/mailbox-admin-models'
 import type { DomainSettingsState } from '../partials/authenticated/settings-dialog'
 import type {
@@ -46,6 +49,7 @@ export interface DashboardMailFolderRenameState {
 export interface DashboardMailWorkspaceScreenModelInput {
   allowedMailboxAdminSections: ReadonlyArray<MailboxAdminSectionId> | undefined
   domainSettingsState: DomainSettingsState
+  firstMailboxSetupState?: FirstMailboxSetupState
   folderCreate: DashboardMailFolderCreateState
   folderDelete: DashboardMailFolderDeleteState
   folderRename: DashboardMailFolderRenameState
@@ -60,6 +64,7 @@ export interface DashboardMailWorkspaceScreenModelInput {
 export function deriveDashboardMailWorkspaceScreenModel({
   allowedMailboxAdminSections,
   domainSettingsState,
+  firstMailboxSetupState,
   folderCreate,
   folderDelete,
   folderRename,
@@ -80,7 +85,8 @@ export function deriveDashboardMailWorkspaceScreenModel({
       workspaceError,
       selectedPreview,
       workspace,
-      domainSettingsState
+      domainSettingsState,
+      firstMailboxSetupState
     ),
     emailPreviewsById: selectedPreview ? { [selectedPreview.id]: selectedPreview } : {},
     sidebarView: toSidebarView(

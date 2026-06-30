@@ -43,22 +43,28 @@ export const cloudflareConnectStateStories = {
       onboardingHandlers
     )
   },
-  domainConnected: {
-    name: 'Domain connected',
-    args: buildProductOnboardingControllerArgs(productOnboardingScenarios.domainConnected, onboardingHandlers)
+  createFirstMailbox: {
+    name: 'Create first mailbox',
+    args: buildProductOnboardingControllerArgs(
+      productOnboardingScenarios.createFirstMailbox,
+      onboardingHandlers
+    )
+  },
+  creatingFirstMailbox: {
+    name: 'Creating first mailbox',
+    args: buildProductOnboardingControllerArgs(
+      productOnboardingScenarios.creatingFirstMailbox,
+      onboardingHandlers
+    )
   },
   mailboxReady: {
     name: 'Mailbox ready',
     args: buildProductOnboardingControllerArgs(productOnboardingScenarios.mailboxReady, onboardingHandlers)
   },
-  provisionDomain: {
-    name: 'Provision domain',
-    args: buildProductOnboardingControllerArgs(productOnboardingScenarios.provisionDomain, onboardingHandlers)
-  },
-  returningFromCloudflare: {
-    name: 'Returning from Cloudflare',
+  settingUpDomain: {
+    name: 'Setting up domain',
     args: buildProductOnboardingControllerArgs(
-      productOnboardingScenarios.returningFromCloudflare,
+      productOnboardingScenarios.settingUpDomain,
       onboardingHandlers
     )
   },

@@ -4,8 +4,6 @@ import {
   AuthenticatedShell
 } from '../partials/authenticated/authenticated-shell'
 import {
-  defaultAuthenticatedDashboardView,
-  defaultAuthenticatedSidebarView,
   withActiveSidebarItem
 } from '../partials/authenticated/authenticated-shell-models'
 import {
@@ -25,7 +23,8 @@ import type {
   AuthenticatedMailFolderAction,
   AuthenticatedMailItem,
   AuthenticatedMailPageChange,
-  AuthenticatedSidebarView
+  AuthenticatedSidebarView,
+  FirstMailboxSetupState
 } from '../partials/authenticated/authenticated-shell-models'
 import type { DashboardSearch } from '../lib/dashboard-search'
 import type { AuthProviderProps } from '@better-auth-ui/react'
@@ -44,10 +43,11 @@ export interface DashboardScreenProps {
   authClient?: AuthProviderProps['authClient']
   agentAccessState?: AgentAccessSettingsState
   composeView?: AuthenticatedComposeView
-  dashboardView?: AuthenticatedDashboardView
+  dashboardView: AuthenticatedDashboardView
   defaultSettingsOpen?: boolean
   defaultSettingsSection?: SettingsSectionId
   emailPreviewsById?: Readonly<Record<string, AuthenticatedEmailPreview>>
+  firstMailboxSetupState?: FirstMailboxSetupState
   mailboxAdminView?: MailboxAdminView
   mailActionView?: AuthenticatedMailActionView
   onComposeAttachmentAdd?: (files: ReadonlyArray<File>) => void
@@ -99,17 +99,18 @@ export interface DashboardScreenProps {
   settingsOpen?: boolean
   settingsContentState?: SettingsDialogContentState
   settingsSection?: SettingsSectionId
-  sidebarView?: AuthenticatedSidebarView
+  sidebarView: AuthenticatedSidebarView
 }
 
 export function DashboardScreen({
   authClient,
   agentAccessState,
   composeView,
-  dashboardView = defaultAuthenticatedDashboardView,
+  dashboardView,
   defaultSettingsOpen,
   defaultSettingsSection,
   emailPreviewsById,
+  firstMailboxSetupState,
   mailboxAdminView,
   mailActionView,
   onComposeAttachmentRemove,
@@ -155,7 +156,7 @@ export function DashboardScreen({
   settingsOpen: settingsOpenProp,
   settingsContentState,
   settingsSection: settingsSectionProp,
-  sidebarView = defaultAuthenticatedSidebarView
+  sidebarView
 }: DashboardScreenProps) {
   const requestedSettingsSection =
     routeSearch?.settings === 'security'
@@ -367,6 +368,7 @@ export function DashboardScreen({
         ) : (
           <AuthenticatedDashboardContent
             domainSettingsState={domainSettingsState}
+            firstMailboxSetupState={firstMailboxSetupState}
             onAttachmentPreview={onEmailAttachmentPreview}
             onEmailAction={handleEmailAction}
             onOnboardingConnect={onDashboardOnboardingConnect}

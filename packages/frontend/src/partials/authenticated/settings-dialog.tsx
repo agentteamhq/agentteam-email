@@ -1,7 +1,9 @@
 import * as React from 'react'
 import {
   ArrowClockwiseIcon,
+  ArrowsLeftRightIcon,
   CheckCircleIcon,
+  CloudIcon,
   GlobeHemisphereWestIcon,
   IdentificationCardIcon,
   LockIcon,
@@ -30,6 +32,7 @@ import {
   Card,
   CardAction,
   CardContent,
+  CardFooter,
   CardDescription,
   CardHeader,
   CardTitle
@@ -41,10 +44,16 @@ import {
   DialogTitle,
   DialogTrigger
 } from '../../components/ui/dialog'
-import { Input } from '../../components/ui/input'
-import { Label } from '../../components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select'
-import { Separator } from '../../components/ui/separator'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue
+} from '../../components/ui/select'
 import { Skeleton } from '../../components/ui/skeleton'
 import { Spinner } from '../../components/ui/spinner'
 import {
@@ -131,6 +140,7 @@ export interface DomainSettingsState {
   onSelectAccount?: (accountId: string) => void
   onSelectDomain?: (connectionPublicId: CloudflareConnectionView['publicId']) => void
   onSelectZone?: (zoneId: string) => void
+  onSetupDomain?: () => void
   onStartOAuth?: () => void
   readOnly?: boolean
   selectedAccountId?: string
@@ -1148,6 +1158,7 @@ interface DomainSettingsController {
   onSelectAccount: (accountId: string) => void
   onSelectDomain: (connectionPublicId: DomainPublicId) => void
   onSelectZone: (zoneId: string) => void
+  onSetupDomain: () => void
   onStartOAuth: () => void
   readOnly: boolean
   selectedAccountId: string
@@ -1209,6 +1220,7 @@ function domainSettingsControllerFromState(state?: DomainSettingsState): DomainS
     onSelectAccount: action(state?.onSelectAccount),
     onSelectDomain: action(state?.onSelectDomain),
     onSelectZone: action(state?.onSelectZone),
+    onSetupDomain: action(state?.onSetupDomain),
     onStartOAuth: action(state?.onStartOAuth),
     readOnly,
     selectedAccountId,
@@ -1348,13 +1360,16 @@ function MailRuntimeStatusPanel({ settings }: { settings: DomainSettingsControll
 
 function AddDomainPanel({ settings }: { settings: DomainSettingsController }) {
   const activeGrant = settings.activeGrant
-  const connectDisabled =
+  const selectedZone = selectedCloudflareZone(settings)
+  const selectedDomainName = selectedZone?.name ?? settings.draftDomain
+  const zoneGroups = groupCloudflareZonesByAccount(settings.zones)
+  const hasDomains = settings.zones.length > 0
+  const primaryAction = hasDomains ? settings.onSetupDomain : settings.onLoadAccounts
+  const primaryDisabled =
     settings.busy ||
     settings.readOnly ||
     settings.missingScopes.length > 0 ||
-    !settings.selectedAccountId ||
-    !settings.selectedZoneId ||
-    !settings.draftDomain
+    (hasDomains && (!selectedZone || !selectedDomainName))
 
   if (!activeGrant) {
     return (
@@ -1390,143 +1405,98 @@ function AddDomainPanel({ settings }: { settings: DomainSettingsController }) {
   }
 
   return (
-    <div className='grid max-w-3xl gap-3'>
-      <div className='flex items-start justify-between gap-3'>
-        <div className='min-w-0'>
-          <p className='font-medium'>Add domain</p>
-          <p className='text-muted-foreground text-sm'>
-            Select the Cloudflare account and zone that should receive AgentTeam Email.
-          </p>
-        </div>
+    <Card className='mx-auto w-full max-w-md overflow-hidden shadow-none'>
+      <CardHeader className='items-center justify-items-center px-6 text-center'>
+        <DomainSetupConnectionVisual domain={selectedDomainName} />
         <Badge variant='secondary'>Cloudflare connected</Badge>
-      </div>
-
-      <div className='grid gap-2 text-sm'>
-        <div className='flex items-center justify-between gap-4'>
-          <span className='text-muted-foreground'>Cloudflare user</span>
-          <span className='min-w-0 truncate font-medium'>
-            {activeGrant.cloudflareEmail ?? activeGrant.cloudflareUserId}
-          </span>
-        </div>
-        <div className='flex items-center justify-between gap-4'>
-          <span className='text-muted-foreground'>Permissions</span>
-          <span className='font-medium'>
-            {settings.missingScopes.length === 0 ? 'Complete' : `${settings.missingScopes.length} missing`}
-          </span>
-        </div>
-        <div className='flex items-center justify-between gap-4'>
-          <span className='text-muted-foreground'>Last token check</span>
-          <span className='font-medium'>{formatDateTime(activeGrant.lastTokenCheckAt)}</span>
-        </div>
-      </div>
-
-      {settings.missingScopes.length > 0 ? (
-        <div className='border-destructive/40 text-destructive rounded-lg border p-3 text-sm'>
-          Missing Cloudflare scopes: {settings.missingScopes.join(', ')}
-        </div>
-      ) : null}
-
-      <div className='grid gap-3 border-t pt-3'>
-        <div className='grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]'>
-          <label className='grid gap-1.5'>
-            <Label htmlFor='domain-cloudflare-account'>Cloudflare account</Label>
+        <CardTitle className='text-xl font-bold'>Set up email for your domain</CardTitle>
+        <CardDescription className='max-w-md'>
+          AgentTeam Email will set up this domain for Cloudflare email routing. This will override any
+          existing mail routing DNS records on the domain, including MX records.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className='grid gap-5 px-6'>
+        <div className='grid gap-2'>
+          <p className='text-sm font-medium'>Domain</p>
+          {hasDomains ? (
             <Select
-              disabled={settings.readOnly}
-              value={settings.selectedAccountId || undefined}
-              onValueChange={settings.onSelectAccount}
-            >
-              <SelectTrigger
-                className='w-full'
-                id='domain-cloudflare-account'
-              >
-                <SelectValue placeholder='Select account' />
-              </SelectTrigger>
-              <SelectContent>
-                {settings.accounts.map((account) => (
-                  <SelectItem
-                    key={account.id}
-                    value={account.id}
-                  >
-                    {account.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </label>
-          <div className='flex items-end'>
-            <Button
-              disabled={settings.busy || settings.readOnly}
-              onClick={settings.onLoadAccounts}
-              size='sm'
-              variant='outline'
-            >
-              {settings.accounts.length > 0 ? 'Refresh accounts' : 'Load accounts'}
-            </Button>
-          </div>
-        </div>
-
-        <div className='grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]'>
-          <label className='grid gap-1.5'>
-            <Label htmlFor='domain-cloudflare-zone'>Cloudflare zone</Label>
-            <Select
-              disabled={settings.readOnly}
+              disabled={settings.readOnly || settings.busy}
               value={settings.selectedZoneId || undefined}
               onValueChange={settings.onSelectZone}
             >
               <SelectTrigger
+                aria-label='Domain'
                 className='w-full'
                 id='domain-cloudflare-zone'
               >
-                <SelectValue placeholder='Select zone' />
+                <SelectValue placeholder='Select a Cloudflare domain' />
               </SelectTrigger>
               <SelectContent>
-                {settings.zones.map((zone) => (
-                  <SelectItem
-                    key={zone.id}
-                    value={zone.id}
-                  >
-                    {zone.name}
-                  </SelectItem>
+                {zoneGroups.map((group, index) => (
+                  <React.Fragment key={group.accountId}>
+                    {index > 0 ? <SelectSeparator /> : null}
+                    <SelectGroup>
+                      <SelectLabel>{group.accountName}</SelectLabel>
+                      {group.zones.map((zone) => (
+                        <SelectItem
+                          key={zone.id}
+                          value={zone.id}
+                        >
+                          {zone.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </React.Fragment>
                 ))}
               </SelectContent>
             </Select>
-          </label>
-          <div className='flex items-end'>
-            <Button
-              disabled={!settings.selectedAccountId || settings.busy || settings.readOnly}
-              onClick={settings.onLoadZones}
-              size='sm'
-              variant='outline'
-            >
-              {settings.zones.length > 0 ? 'Refresh zones' : 'Load zones'}
-            </Button>
-          </div>
+          ) : (
+            <div className='text-muted-foreground rounded-md border border-dashed px-3 py-2 text-sm'>
+              Load the Cloudflare domains available to this connection.
+            </div>
+          )}
         </div>
 
-        <label className='grid gap-1.5'>
-          <Label htmlFor='domain-name'>Domain</Label>
-          <Input
-            id='domain-name'
-            disabled={settings.readOnly}
-            value={settings.draftDomain}
-            onChange={(event) => {
-              settings.onDraftDomainChange(event.currentTarget.value)
-            }}
-          />
-        </label>
+        <DomainSetupChecklist
+          items={[
+            {
+              label: 'Cloudflare authorization confirmed',
+              state: settings.missingScopes.length > 0 ? 'error' : 'complete'
+            },
+            {
+              label: 'Route incoming mail through AgentTeam Email',
+              state: 'complete'
+            },
+            {
+              label: 'Enable outbound sending for the domain',
+              state: 'complete'
+            },
+            {
+              label: 'Create team and agent mailboxes after setup',
+              state: 'complete'
+            }
+          ]}
+        />
 
+        {settings.missingScopes.length > 0 ? (
+          <div className='border-destructive/40 text-destructive rounded-lg border p-3 text-sm'>
+            Missing Cloudflare scopes: {settings.missingScopes.join(', ')}
+          </div>
+        ) : null}
+        {settings.message ? <p className='text-muted-foreground text-sm'>{settings.message}</p> : null}
+      </CardContent>
+      <CardFooter className='flex-col gap-2'>
         <Button
-          className='w-fit'
-          disabled={connectDisabled}
-          onClick={settings.onConnectDomain}
-          size='sm'
+          className='w-full'
+          disabled={primaryDisabled}
+          onClick={primaryAction}
+          type='button'
         >
-          Connect domain
+          {settings.busy ? <Spinner data-icon='inline-start' /> : null}
+          {hasDomains ? `Adopt ${selectedDomainName || 'domain'}` : 'Load Cloudflare domains'}
         </Button>
-      </div>
-
-      {settings.message ? <p className='text-muted-foreground text-sm'>{settings.message}</p> : null}
-    </div>
+      </CardFooter>
+    </Card>
   )
 }
 
@@ -1538,104 +1508,239 @@ function DomainDetailPanel({ settings }: { settings: DomainSettingsController })
   }
 
   const provisionVisible = domain.status !== 'active' || domain.provisioningStatus !== 'succeeded'
+  const isProvisioning = domain.status === 'provisioning' || domain.provisioningStatus === 'pending'
   const provisionLabel =
     domain.status === 'degraded' || domain.provisioningStatus === 'failed'
-      ? 'Retry provisioning'
+      ? 'Retry email setup'
       : domain.provisioningStatus === 'not_started'
-        ? 'Provision domain'
-        : 'Provisioning'
+        ? 'Set up email routing'
+        : 'Setting up email routing'
   const disconnectDisabled =
     settings.busy || settings.readOnly || !settings.activeGrant || domain.status === 'disconnected'
 
   return (
-    <section className='max-w-2xl space-y-3'>
-      <div className='flex items-start justify-between gap-3'>
-        <div className='min-w-0'>
-          <h2 className='truncate text-sm font-semibold'>{domain.domain}</h2>
-        </div>
+    <Card className='mx-auto w-full max-w-md gap-0 overflow-hidden py-6 shadow-none'>
+      <CardHeader className='items-center justify-items-center px-6 text-center'>
+        <DomainSetupConnectionVisual domain={domain.domain} />
         <Badge variant={getDomainStatusBadgeVariant(domain)}>{formatDomainStateLabel(domain)}</Badge>
-      </div>
+        <CardTitle className='text-xl'>{domain.domain}</CardTitle>
+        <CardDescription className='max-w-md'>
+          {domain.status === 'active' && domain.provisioningStatus === 'succeeded'
+            ? 'Send and receive mail are ready through Cloudflare.'
+            : 'AgentTeam Email will configure Cloudflare routing for send and receive mail.'}
+        </CardDescription>
+      </CardHeader>
 
-      <Card className='p-0'>
-        <CardContent className='p-0'>
-          <DomainDetailRow
-            label='Email routing'
-            value={domain.domain}
-          />
-          <Separator />
-          <DomainDetailRow
-            label='Cloudflare account'
-            value={domain.cloudflareAccountName ?? domain.cloudflareAccountId}
-          />
-          <Separator />
-          <DomainDetailRow
-            label='Cloudflare zone'
-            value={domain.cloudflareZoneName ?? domain.cloudflareZoneId}
-          />
-          <Separator />
-          <DomainDetailRow
-            label='Provisioning'
-            value={formatStatusLabel(domain.provisioningStatus)}
-          />
-          <Separator />
-          <DomainDetailRow
-            label='Worker'
-            value={domain.workerScriptName ?? 'Not provisioned'}
-          />
-          <Separator />
-          <DomainDetailRow
-            label='Last provisioned'
-            value={formatDateTime(domain.lastProvisionedAt)}
-          />
-        </CardContent>
-      </Card>
+      <CardContent className='grid gap-5 px-6'>
+        <DomainSetupChecklist
+          items={[
+            {
+              label: 'Cloudflare access approved',
+              state: settings.activeGrant ? 'complete' : 'pending'
+            },
+            {
+              label: `${domain.domain} selected`,
+              state: 'complete'
+            },
+            {
+              label: 'Email routing connected',
+              state: domain.status === 'disconnected' ? 'error' : 'complete'
+            },
+            {
+              label: 'Send and receive mail configured',
+              state:
+                domain.status === 'active' && domain.provisioningStatus === 'succeeded'
+                  ? 'complete'
+                  : domain.status === 'degraded' || domain.provisioningStatus === 'failed'
+                    ? 'error'
+                    : 'current'
+            }
+          ]}
+        />
 
-      {domain.lastErrorMessage ? <p className='text-destructive text-sm'>{domain.lastErrorMessage}</p> : null}
+        <div className='text-muted-foreground grid gap-1 text-sm'>
+          <div className='flex items-center justify-between gap-4'>
+            <span>Cloudflare account</span>
+            <span className='text-foreground min-w-0 truncate text-right font-medium'>
+              {domain.cloudflareAccountName ?? domain.cloudflareAccountId}
+            </span>
+          </div>
+          <div className='flex items-center justify-between gap-4'>
+            <span>Last setup</span>
+            <span className='text-foreground min-w-0 truncate text-right font-medium'>
+              {formatDateTime(domain.lastProvisionedAt)}
+            </span>
+          </div>
+        </div>
+
+        {domain.lastErrorMessage ? <p className='text-destructive text-sm'>{domain.lastErrorMessage}</p> : null}
+        {settings.message ? <p className='text-muted-foreground text-sm'>{settings.message}</p> : null}
+      </CardContent>
 
       {provisionVisible || settings.activeGrant ? (
-        <div className='flex flex-wrap gap-2'>
+        <CardFooter className='flex-col gap-2 border-t px-6 pt-4 sm:flex-row sm:justify-end'>
           {provisionVisible ? (
             <Button
-              disabled={settings.busy || settings.readOnly || domain.status === 'disconnected'}
+              className='w-full sm:w-auto'
+              disabled={settings.busy || settings.readOnly || isProvisioning || domain.status === 'disconnected'}
               onClick={() => {
                 settings.onProvisionDomain(domain.publicId)
               }}
-              size='sm'
               variant={
                 domain.status === 'degraded' || domain.provisioningStatus === 'failed' ? 'default' : 'outline'
               }
             >
+              {settings.busy || isProvisioning ? <Spinner data-icon='inline-start' /> : null}
               {provisionLabel}
             </Button>
           ) : null}
           {settings.activeGrant ? (
             <Button
+              className='w-full sm:w-auto'
               disabled={disconnectDisabled}
               onClick={() => {
                 settings.onDisconnectCloudflare(settings.activeGrant?.publicId)
               }}
-              size='sm'
               variant='outline'
             >
-              <TrashIcon />
+              <TrashIcon data-icon='inline-start' />
               Disconnect Cloudflare
             </Button>
           ) : null}
-        </div>
+        </CardFooter>
       ) : null}
-
-      {settings.message ? <p className='text-muted-foreground text-sm'>{settings.message}</p> : null}
-    </section>
+    </Card>
   )
 }
 
 function DomainDetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className='flex min-h-11 items-center justify-between gap-4 px-6 py-3 text-sm'>
+    <div className='flex min-h-11 items-center justify-between gap-4 rounded-md border px-4 py-3 text-sm'>
       <span className='text-muted-foreground shrink-0'>{label}</span>
       <span className='min-w-0 truncate text-right font-medium'>{value}</span>
     </div>
   )
+}
+
+type DomainSetupChecklistState = 'complete' | 'current' | 'error' | 'pending'
+
+interface DomainSetupChecklistItem {
+  label: string
+  state: DomainSetupChecklistState
+}
+
+function DomainSetupConnectionVisual({ domain }: { domain?: string }) {
+  return (
+    <div
+      aria-label={domain ? `AgentTeam Email connects to ${domain}` : 'AgentTeam Email connects to a domain'}
+      className='flex w-full justify-center py-2'
+    >
+      <div className='relative flex items-center justify-center gap-3'>
+        <DomainSetupLogoCircle label='AgentTeam Email'>
+          <img
+            alt=''
+            aria-hidden='true'
+            className='hidden size-11 rounded-xl dark:block'
+            draggable={false}
+            src='/agentteam-email-dark-logo.svg'
+          />
+          <img
+            alt=''
+            aria-hidden='true'
+            className='block size-11 rounded-xl dark:hidden'
+            draggable={false}
+            src='/agentteam-email-light-logo.svg'
+          />
+        </DomainSetupLogoCircle>
+        <span
+          aria-hidden='true'
+          className='text-muted-foreground flex size-7 items-center justify-center'
+        >
+          <ArrowsLeftRightIcon
+            className='size-5'
+            weight='bold'
+          />
+        </span>
+        <DomainSetupLogoCircle label={domain ?? 'Cloudflare domain'}>
+          <CloudIcon className='text-foreground size-7' />
+        </DomainSetupLogoCircle>
+      </div>
+    </div>
+  )
+}
+
+function DomainSetupLogoCircle({
+  children,
+  label
+}: {
+  children: React.ReactNode
+  label: string
+}) {
+  return (
+    <span
+      aria-label={label}
+      className='bg-background flex size-14 items-center justify-center rounded-full border shadow-xs'
+      role='img'
+    >
+      {children}
+    </span>
+  )
+}
+
+function DomainSetupChecklist({ items }: { items: ReadonlyArray<DomainSetupChecklistItem> }) {
+  return (
+    <ul className='grid gap-3'>
+      {items.map((item) => (
+        <li
+          className='text-foreground flex items-center gap-3 text-sm'
+          key={item.label}
+        >
+          <DomainSetupChecklistIcon state={item.state} />
+          <span className='min-w-0 truncate'>{item.label}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function DomainSetupChecklistIcon({ state }: { state: DomainSetupChecklistState }) {
+  if (state === 'error') {
+    return <XCircleIcon className='text-destructive size-4 shrink-0' />
+  }
+
+  return <CheckCircleIcon className='text-primary size-4 shrink-0' />
+}
+
+function selectedCloudflareZone(settings: DomainSettingsController): CloudflareZoneSummary | null {
+  return settings.zones.find((zone) => zone.id === settings.selectedZoneId) ?? null
+}
+
+function groupCloudflareZonesByAccount(zones: readonly CloudflareZoneSummary[]) {
+  const groups = new Map<
+    string,
+    {
+      accountId: string
+      accountName: string
+      zones: CloudflareZoneSummary[]
+    }
+  >()
+
+  for (const zone of zones) {
+    const accountId = zone.accountId
+    const group = groups.get(accountId)
+    if (group) {
+      group.zones.push(zone)
+      continue
+    }
+
+    groups.set(accountId, {
+      accountId,
+      accountName: zone.accountName ?? accountId,
+      zones: [zone]
+    })
+  }
+
+  return Array.from(groups.values())
 }
 
 function getMissingScopes(grant: CloudflareGrantView): string[] {

@@ -40,6 +40,7 @@ const showcaseSidebarView = {
   ],
   emptyDescription: 'Messages matching this mailbox view will appear here.',
   emptyTitle: 'No messages',
+  mailboxMode: 'mailbox',
   mails: [
     {
       date: '08:42 AM',
@@ -103,6 +104,7 @@ const showcaseSidebarView = {
       url: '#'
     }
   ],
+  paneTitle: 'Inbox',
   refreshLabel: 'Refresh mailbox',
   searchQuery: '',
   selectedMailId: showcaseEmailId,
