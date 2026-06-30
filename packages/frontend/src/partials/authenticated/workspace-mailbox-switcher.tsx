@@ -99,7 +99,7 @@ export function WorkspaceMailboxSwitcher({
             <SidebarMenuButton
               aria-label='Open workspace and mailbox switcher'
               className={cn(
-                'focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground',
+                'group/workspace-switcher focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground',
                 className
               )}
               size='lg'
@@ -122,7 +122,7 @@ export function WorkspaceMailboxSwitcher({
                 />
                 <span
                   aria-hidden='true'
-                  className='pointer-events-none absolute inset-0 bg-black/5'
+                  className='pointer-events-none absolute inset-0 bg-black/5 opacity-100 transition-opacity duration-150 ease-out group-hover/workspace-switcher:opacity-0'
                 />
               </span>
               <div className='grid min-w-0 flex-1 text-left text-sm leading-tight'>
