@@ -18,6 +18,7 @@ describe('Cloudflare OAuth config', () => {
       clientId: 'cloudflare-client-id',
       pkce: true,
       providerId: 'cloudflare',
+      redirectURI: 'https://mail.example.test/rpc/auth/api/oauth2/callback/cloudflare',
       scopes: expect.arrayContaining(['email-sending.read', 'email-sending.write', 'offline_access'])
     })
     expect(config).not.toHaveProperty('authentication')

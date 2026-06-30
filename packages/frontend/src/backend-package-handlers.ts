@@ -2,11 +2,9 @@ import {
   backendRpcApp,
   handleAgentAuthConfigurationRequest,
   handleAtEmailMetadataRequest,
-  handleCloudflareOAuthCallbackRequest,
   handleOAuthMetadataRequest,
   isAgentAuthConfigurationRequestPath,
   isAtEmailMetadataRequestPath,
-  isCloudflareOAuthCallbackRequestPath,
   isOAuthMetadataRequestPath
 } from '@main/backend'
 import {
@@ -39,10 +37,6 @@ export async function handleBackendPackageRequest(request: Request): Promise<Res
 
   if (isAtEmailMetadataRequestPath(url.pathname)) {
     return handleAtEmailMetadataRequest(request)
-  }
-
-  if (isCloudflareOAuthCallbackRequestPath(url.pathname)) {
-    return handleCloudflareOAuthCallbackRequest(request)
   }
 
   if (isRoutePath(url.pathname, '/api/auth')) {

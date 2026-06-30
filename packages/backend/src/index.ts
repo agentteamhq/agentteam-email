@@ -19,10 +19,6 @@ export {
   isAgentAuthConfigurationRequestPath
 } from './auth/agent-auth-metadata'
 export { handleAtEmailMetadataRequest, isAtEmailMetadataRequestPath } from './auth/at-email-metadata'
-export {
-  handleCloudflareOAuthCallbackRequest,
-  isCloudflareOAuthCallbackRequestPath
-} from './auth/cloudflare-oauth-callback'
 export { handleAgentMailIngestRequest, isAgentMailIngestRequestPath } from './agent-mail/ingest'
 export type {
   AgentAccessAgent,

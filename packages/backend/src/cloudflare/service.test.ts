@@ -217,6 +217,61 @@ describe('Cloudflare public views', () => {
   })
 })
 
+describe('Cloudflare OAuth start service', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.stubEnv('CLOUDFLARE_OAUTH_CLIENT_ID', 'cloudflare-client-id')
+    vi.stubEnv('DATABASE_URL', 'mongodb://localhost:27017/app')
+    vi.stubEnv('ENCRYPT_SECRET_KEY', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
+    vi.stubEnv('NODE_ENV', 'test')
+    vi.stubEnv('PUBLIC_HOSTNAME', 'https://mail.example.test')
+    cloudflareServiceTestState.globals.mockReset()
+    cloudflareServiceTestState.requireAgentMailOrganizationContext.mockReset()
+  })
+
+  it('sends Cloudflare OAuth failures to the app-owned redirect error route', async () => {
+    expect.hasAssertions()
+    const { globals, mocks } = cloudflareOAuthStartGlobals()
+    const headers = new Headers({ cookie: 'session=abc' })
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    cloudflareServiceTestState.requireAgentMailOrganizationContext.mockResolvedValue({
+      ability: { cannot: vi.fn(() => false) },
+      organizationId: TEST_ORGANIZATION_ID
+    })
+    const { startCloudflareOAuth } = await import('./service')
+
+    const result = await startCloudflareOAuth(headers)
+    const oauthBody = mocks.authOAuth2LinkAccount.mock.calls[0]?.[0].body
+    const successUrl = new URL(String(oauthBody?.callbackURL))
+    const errorUrl = new URL(String(oauthBody?.errorCallbackURL))
+
+    expect(result.redirectUrl).toBe('https://dash.cloudflare.test/oauth/start')
+    expect(mocks.authOAuth2LinkAccount).toHaveBeenCalledWith({
+      body: expect.objectContaining({
+        providerId: 'cloudflare',
+        callbackURL: expect.any(String),
+        errorCallbackURL: expect.any(String),
+        scopes: expect.arrayContaining(['email-sending.write'])
+      }),
+      headers,
+      returnHeaders: true
+    })
+    expect(successUrl.origin).toBe('https://mail.example.test')
+    expect(successUrl.pathname).toBe('/dashboard/')
+    expect(successUrl.searchParams.get('settings')).toBe('connectedAccounts')
+    expect(successUrl.searchParams.get('cloudflareIntentId')).toBe(result.intent.publicId)
+    expect(errorUrl.origin).toBe('https://mail.example.test')
+    expect(errorUrl.pathname).toBe('/redirect/error')
+    expect(errorUrl.searchParams.get('provider')).toBe('cloudflare')
+    expect(errorUrl.searchParams.get('flow')).toBe('connected-account')
+    expect(errorUrl.searchParams.get('cloudflareIntentId')).toBe(result.intent.publicId)
+    expect(errorUrl.searchParams.get('callbackUri')).toBe(
+      'https://mail.example.test/rpc/auth/api/oauth2/callback/cloudflare'
+    )
+    expect(errorUrl.toString()).not.toContain('/rpc/auth/api/error')
+  })
+})
+
 describe('Cloudflare domain authorization', () => {
   beforeEach(() => {
     vi.resetModules()
@@ -583,6 +638,76 @@ describe('Cloudflare control raw sending', () => {
 
 const TEST_ORGANIZATION_ID = '01960000-0000-7000-8000-000000000010'
 const TEST_USER_ID = '01960000-0000-7000-8000-000000000011'
+
+function cloudflareOAuthStartGlobals() {
+  const mocks = {
+    authGetSession: vi.fn(() =>
+      Promise.resolve({
+        session: {
+          activeOrganizationId: TEST_ORGANIZATION_ID,
+          id: 'session-1'
+        },
+        user: {
+          id: TEST_USER_ID
+        }
+      })
+    ),
+    authOAuth2LinkAccount: vi.fn(
+      (_input: {
+        body: {
+          callbackURL?: string
+          errorCallbackURL?: string
+          providerId: string
+          scopes: string[]
+        }
+        headers: Headers
+        returnHeaders: boolean
+      }) =>
+      Promise.resolve({
+        headers: new Headers({ 'set-cookie': 'cloudflare-oauth-start=1' }),
+        response: {
+          url: 'https://dash.cloudflare.test/oauth/start'
+        }
+      })
+    ),
+    intentCreate: vi.fn((input: Record<string, unknown>) =>
+      Promise.resolve({
+        _id: '01960000-0000-7000-8000-000000000020',
+        createdAt: new Date('2026-06-23T10:00:00.000Z'),
+        errorCode: null,
+        errorMessage: null,
+        updatedAt: new Date('2026-06-23T10:00:00.000Z'),
+        ...input
+      })
+    ),
+    memberFindOne: vi.fn(() => execQuery({ role: 'owner' })),
+    organizationFindById: vi.fn(() => execQuery({ _id: TEST_ORGANIZATION_ID }))
+  }
+  return {
+    globals: {
+      auth: {
+        api: {
+          getSession: mocks.authGetSession,
+          oAuth2LinkAccount: mocks.authOAuth2LinkAccount
+        }
+      },
+      db: {
+        models: {
+          cloudflareOAuthConnectionIntent: {
+            create: mocks.intentCreate
+          },
+          member: {
+            findOne: mocks.memberFindOne
+          },
+          organization: {
+            findById: mocks.organizationFindById
+          }
+        }
+      }
+    },
+    mocks
+  }
+}
 
 function cloudflareControlSendGlobals({
   connection = controlSendConnection(),

@@ -1,7 +1,5 @@
 import { redirect } from '@tanstack/react-router'
 
-export const AUTH_REQUIRED_REDIRECT_STATUS_CODE = 403
-
 export interface RouteRedirectOptions {
   statusCode?: number
 }
@@ -14,15 +12,13 @@ export function createSignInRedirectHref(redirectPath: string): string {
 }
 
 export function throwAuthRequiredRedirect(redirectPath: string): never {
-  throwRouteRedirect(createSignInRedirectHref(redirectPath), {
-    statusCode: AUTH_REQUIRED_REDIRECT_STATUS_CODE
-  })
+  throwRouteRedirect(createSignInRedirectHref(redirectPath))
 }
 
 export function throwRouteRedirect(href: string, options: RouteRedirectOptions = {}): never {
   redirect({
     href,
-    statusCode: options.statusCode,
+    ...(options.statusCode === undefined ? {} : { statusCode: options.statusCode }),
     throw: true,
     to: undefined as never
   })

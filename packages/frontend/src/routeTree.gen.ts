@@ -25,6 +25,7 @@ import { Route as AdminRouteRouteImport } from './routes/admin/route'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
+import { Route as RedirectErrorRouteImport } from './routes/redirect/error'
 import { Route as DeviceCapabilitiesRouteImport } from './routes/device/capabilities'
 import { Route as DeviceApproveRouteImport } from './routes/device/approve'
 import { Route as AdminSetupRouteImport } from './routes/admin/setup'
@@ -113,6 +114,11 @@ const AdminIndexRoute = AdminIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const RedirectErrorRoute = RedirectErrorRouteImport.update({
+  id: '/redirect/error',
+  path: '/redirect/error',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DeviceCapabilitiesRoute = DeviceCapabilitiesRouteImport.update({
   id: '/capabilities',
   path: '/capabilities',
@@ -176,6 +182,7 @@ export interface FileRoutesByFullPath {
   '/admin/setup': typeof AdminSetupRoute
   '/device/approve': typeof DeviceApproveRoute
   '/device/capabilities': typeof DeviceCapabilitiesRoute
+  '/redirect/error': typeof RedirectErrorRoute
   '/admin/': typeof AdminIndexRoute
   '/organization/$section': typeof AuthenticatedOrganizationSectionRoute
   '/settings/$section': typeof AuthenticatedSettingsSectionRoute
@@ -200,6 +207,7 @@ export interface FileRoutesByTo {
   '/admin/setup': typeof AdminSetupRoute
   '/device/approve': typeof DeviceApproveRoute
   '/device/capabilities': typeof DeviceCapabilitiesRoute
+  '/redirect/error': typeof RedirectErrorRoute
   '/admin': typeof AdminIndexRoute
   '/organization/$section': typeof AuthenticatedOrganizationSectionRoute
   '/settings/$section': typeof AuthenticatedSettingsSectionRoute
@@ -227,6 +235,7 @@ export interface FileRoutesById {
   '/admin/setup': typeof AdminSetupRoute
   '/device/approve': typeof DeviceApproveRoute
   '/device/capabilities': typeof DeviceCapabilitiesRoute
+  '/redirect/error': typeof RedirectErrorRoute
   '/admin/': typeof AdminIndexRoute
   '/_authenticated/organization/$section': typeof AuthenticatedOrganizationSectionRoute
   '/_authenticated/settings/$section': typeof AuthenticatedSettingsSectionRoute
@@ -254,6 +263,7 @@ export interface FileRouteTypes {
     | '/admin/setup'
     | '/device/approve'
     | '/device/capabilities'
+    | '/redirect/error'
     | '/admin/'
     | '/organization/$section'
     | '/settings/$section'
@@ -278,6 +288,7 @@ export interface FileRouteTypes {
     | '/admin/setup'
     | '/device/approve'
     | '/device/capabilities'
+    | '/redirect/error'
     | '/admin'
     | '/organization/$section'
     | '/settings/$section'
@@ -304,6 +315,7 @@ export interface FileRouteTypes {
     | '/admin/setup'
     | '/device/approve'
     | '/device/capabilities'
+    | '/redirect/error'
     | '/admin/'
     | '/_authenticated/organization/$section'
     | '/_authenticated/settings/$section'
@@ -326,6 +338,7 @@ export interface RootRouteChildren {
   SignoutRoute: typeof SignoutRoute
   SignupRoute: typeof SignupRoute
   VerificationEmailSentRoute: typeof VerificationEmailSentRoute
+  RedirectErrorRoute: typeof RedirectErrorRoute
   AgentClaimTokenRoute: typeof AgentClaimTokenRoute
 }
 
@@ -442,6 +455,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/'
       preLoaderRoute: typeof AdminIndexRouteImport
       parentRoute: typeof AdminRouteRoute
+    }
+    '/redirect/error': {
+      id: '/redirect/error'
+      path: '/redirect/error'
+      fullPath: '/redirect/error'
+      preLoaderRoute: typeof RedirectErrorRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/device/capabilities': {
       id: '/device/capabilities'
@@ -573,6 +593,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignoutRoute: SignoutRoute,
   SignupRoute: SignupRoute,
   VerificationEmailSentRoute: VerificationEmailSentRoute,
+  RedirectErrorRoute: RedirectErrorRoute,
   AgentClaimTokenRoute: AgentClaimTokenRoute,
 }
 export const routeTree = rootRouteImport

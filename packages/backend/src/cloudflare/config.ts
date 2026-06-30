@@ -1,4 +1,5 @@
 import { PRIVATE_VARS } from '../vars.private'
+import { BETTER_AUTH_ROUTE } from '../auth/auth-routes'
 import type { GenericOAuthConfig } from 'better-auth/plugins'
 
 export const CLOUDFLARE_OAUTH_PROVIDER_ID = 'cloudflare'
@@ -49,6 +50,10 @@ export function isCloudflareOAuthConfigured(): boolean {
   return Boolean(PRIVATE_VARS.CLOUDFLARE_OAUTH_CLIENT_ID)
 }
 
+export function createCloudflareOAuthRedirectURI(): string {
+  return `${BETTER_AUTH_ROUTE}/oauth2/callback/${CLOUDFLARE_OAUTH_PROVIDER_ID}`
+}
+
 export function getCloudflareApiBaseUrl(): string {
   return PRIVATE_VARS.CLOUDFLARE_API_BASE_URL ?? CLOUDFLARE_OAUTH_DEFAULTS.apiBaseUrl
 }
@@ -76,6 +81,7 @@ export function createCloudflareGenericOAuthConfig(): GenericOAuthConfig | null 
     userInfoUrl: PRIVATE_VARS.CLOUDFLARE_OAUTH_USERINFO_URL ?? CLOUDFLARE_OAUTH_DEFAULTS.userInfoUrl,
     issuer: PRIVATE_VARS.CLOUDFLARE_OAUTH_ISSUER,
     clientId,
+    redirectURI: createCloudflareOAuthRedirectURI(),
     scopes: getCloudflareRequiredOAuthScopes(),
     pkce: true,
     disableImplicitSignUp: true,

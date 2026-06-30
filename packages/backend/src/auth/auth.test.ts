@@ -107,6 +107,24 @@ describe('Better Auth organization API-key configuration', () => {
     expect(hasAgentTeamApiOAuthScope(['openid', 'email'], AGENTTEAM_MAIL_API_OAUTH_SCOPE)).toBe(false)
   })
 
+  it('uses the app-owned redirect route for browser-facing auth errors', async () => {
+    expect.hasAssertions()
+
+    const {
+      AUTH_REDIRECT_ERROR_PATH,
+      AUTH_REDIRECT_ERROR_ROUTE,
+      BETTER_AUTH_BASE_PATH,
+      BETTER_AUTH_MANUAL_BASE_PATH,
+      BETTER_AUTH_ROUTE
+    } = await import('./auth-routes')
+
+    expect(BETTER_AUTH_BASE_PATH).toBe('/api')
+    expect(BETTER_AUTH_MANUAL_BASE_PATH).toBe('/rpc/auth/api')
+    expect(BETTER_AUTH_ROUTE).toBe('https://mail.example.com/rpc/auth/api')
+    expect(AUTH_REDIRECT_ERROR_PATH).toBe('/redirect/error')
+    expect(AUTH_REDIRECT_ERROR_ROUTE).toBe('https://mail.example.com/redirect/error')
+  })
+
   it('gates OAuth client management through CASL OAuthConnection ability', async () => {
     expect.hasAssertions()
 

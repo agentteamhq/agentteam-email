@@ -884,7 +884,7 @@ async function checkCloudflareOAuthConnectionThroughWeb() {
   assert(providerRedirect.status === 302, `fake Cloudflare provider auth returned ${providerRedirect.status}`)
   const callbackUrl = providerRedirect.headers.location
   assert(
-    callbackUrl?.includes('/api/oauth2/callback/cloudflare'),
+    callbackUrl?.includes('/rpc/auth/api/oauth2/callback/cloudflare'),
     'provider did not redirect to web callback'
   )
 

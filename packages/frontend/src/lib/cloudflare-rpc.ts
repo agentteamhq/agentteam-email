@@ -24,7 +24,7 @@ export async function fetchCloudflareStatus(): Promise<CloudflareStatusResult> {
 
 export async function startCloudflareOAuth(): Promise<{ redirectUrl: string }> {
   const result = await rpc.cloudflare.oauth.start.post()
-  return readCloudflareRpcResult<{ redirectUrl: string }>(result)
+  return readCloudflareOAuthStartResult(result)
 }
 
 export async function finalizeCloudflareOAuth(
@@ -92,6 +92,42 @@ function readCloudflareRpcResult<TResult>(
   }
 
   return result.data
+}
+
+function readCloudflareOAuthStartResult(
+  result:
+    | {
+        data: unknown
+        error: null
+        status: number
+      }
+    | {
+        data: null
+        error: unknown
+        status: number
+      }
+): { redirectUrl: string } {
+  const data = readCloudflareRpcResult<unknown>(result)
+
+  if (!data || typeof data !== 'object' || !('redirectUrl' in data)) {
+    throw new CloudflareRPCError('Cloudflare OAuth start returned an invalid redirect URL', result.status)
+  }
+
+  const redirectUrl = data.redirectUrl
+  if (typeof redirectUrl !== 'string' || !isHttpUrl(redirectUrl)) {
+    throw new CloudflareRPCError('Cloudflare OAuth start returned an invalid redirect URL', result.status)
+  }
+
+  return { redirectUrl }
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' || url.protocol === 'http:'
+  } catch {
+    return false
+  }
 }
 
 function readRpcErrorMessage(error: unknown): string | null {
