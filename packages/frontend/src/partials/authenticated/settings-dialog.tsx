@@ -1,10 +1,10 @@
 import * as React from 'react'
 import {
   ArrowClockwiseIcon,
+  ArrowsLeftRightIcon,
   CheckCircleIcon,
-  GlobeHemisphereWestIcon,
+  CloudIcon,
   IdentificationCardIcon,
-  LinkIcon,
   LockIcon,
   PlusCircleIcon,
   RobotIcon,
@@ -1413,23 +1413,19 @@ function AddDomainPanel({ settings }: { settings: DomainSettingsController }) {
   }
 
   return (
-    <Card className='max-w-xl gap-0 overflow-hidden py-6 shadow-none'>
-      <CardHeader className='items-center px-6 text-center'>
+    <Card className='mx-auto w-full max-w-md overflow-hidden shadow-none'>
+      <CardHeader className='items-center justify-items-center px-6 text-center'>
         <DomainSetupConnectionVisual domain={selectedDomainName} />
         <Badge variant='secondary'>Cloudflare connected</Badge>
-        <CardTitle className='text-xl'>Set up email for your domain</CardTitle>
+        <CardTitle className='text-xl font-bold'>Set up email for your domain</CardTitle>
         <CardDescription className='max-w-md'>
-          AgentTeam Email will direct this domain's Cloudflare-routed send and receive mail.
+          AgentTeam Email will set up this domain for Cloudflare email routing. This will override any
+          existing mail routing DNS records on the domain, including MX records.
         </CardDescription>
       </CardHeader>
       <CardContent className='grid gap-5 px-6'>
         <div className='grid gap-2'>
-          <div className='flex items-center justify-between gap-3'>
-            <p className='text-sm font-medium'>Domain</p>
-            <span className='text-muted-foreground truncate text-xs'>
-              {activeGrant.cloudflareEmail ?? activeGrant.cloudflareUserId}
-            </span>
-          </div>
+          <p className='text-sm font-medium'>Domain</p>
           {hasDomains ? (
             <Select
               disabled={settings.readOnly}
@@ -1471,20 +1467,20 @@ function AddDomainPanel({ settings }: { settings: DomainSettingsController }) {
         <DomainSetupChecklist
           items={[
             {
-              label: 'Cloudflare access approved',
+              label: 'Cloudflare authorization confirmed',
               state: settings.missingScopes.length > 0 ? 'error' : 'complete'
             },
             {
-              label: selectedDomainName ? `${selectedDomainName} selected` : 'Choose a domain',
-              state: selectedDomainName ? 'complete' : 'current'
+              label: 'Route incoming mail through AgentTeam Email',
+              state: 'complete'
             },
             {
-              label: 'Receive mail through Cloudflare',
-              state: 'pending'
+              label: 'Enable outbound sending for the domain',
+              state: 'complete'
             },
             {
-              label: 'Send mail through Cloudflare',
-              state: 'pending'
+              label: 'Create team and agent mailboxes after setup',
+              state: 'complete'
             }
           ]}
         />
@@ -1496,7 +1492,7 @@ function AddDomainPanel({ settings }: { settings: DomainSettingsController }) {
         ) : null}
         {settings.message ? <p className='text-muted-foreground text-sm'>{settings.message}</p> : null}
       </CardContent>
-      <CardFooter className='flex-col gap-2 border-t px-6 pt-4'>
+      <CardFooter className='flex-col gap-2'>
         <Button
           className='w-full'
           disabled={primaryDisabled}
@@ -1504,11 +1500,8 @@ function AddDomainPanel({ settings }: { settings: DomainSettingsController }) {
           type='button'
         >
           {settings.busy ? <Spinner data-icon='inline-start' /> : null}
-          {hasDomains ? `Connect ${selectedDomainName || 'domain'}` : 'Load Cloudflare domains'}
+          {hasDomains ? `Adopt ${selectedDomainName || 'domain'}` : 'Load Cloudflare domains'}
         </Button>
-        <p className='text-muted-foreground text-center text-xs'>
-          This setup does not support another email provider on the selected domain yet.
-        </p>
       </CardFooter>
     </Card>
   )
@@ -1516,8 +1509,8 @@ function AddDomainPanel({ settings }: { settings: DomainSettingsController }) {
 
 function DomainSetupProgressCard({ domain, message }: { domain: string; message?: string | null }) {
   return (
-    <Card className='max-w-xl gap-0 overflow-hidden py-6 shadow-none'>
-      <CardHeader className='items-center px-6 text-center'>
+    <Card className='mx-auto w-full max-w-md gap-0 overflow-hidden py-6 shadow-none'>
+      <CardHeader className='items-center justify-items-center px-6 text-center'>
         <DomainSetupConnectionVisual domain={domain} />
         <Badge variant='secondary'>Cloudflare connected</Badge>
         <CardTitle className='text-xl'>Setting up {domain}</CardTitle>
@@ -1548,7 +1541,7 @@ function DomainSetupProgressCard({ domain, message }: { domain: string; message?
         />
         {message ? <p className='text-muted-foreground text-sm'>{message}</p> : null}
       </CardContent>
-      <CardFooter className='border-t px-6 pt-4'>
+      <CardFooter className='px-6 pt-4'>
         <Button
           className='w-full'
           disabled
@@ -1581,8 +1574,8 @@ function DomainDetailPanel({ settings }: { settings: DomainSettingsController })
     settings.busy || settings.readOnly || !settings.activeGrant || domain.status === 'disconnected'
 
   return (
-    <Card className='max-w-xl gap-0 overflow-hidden py-6 shadow-none'>
-      <CardHeader className='items-center px-6 text-center'>
+    <Card className='mx-auto w-full max-w-md gap-0 overflow-hidden py-6 shadow-none'>
+      <CardHeader className='items-center justify-items-center px-6 text-center'>
         <DomainSetupConnectionVisual domain={domain.domain} />
         <Badge variant={getDomainStatusBadgeVariant(domain)}>{formatDomainStateLabel(domain)}</Badge>
         <CardTitle className='text-xl'>{domain.domain}</CardTitle>
@@ -1695,38 +1688,36 @@ function DomainSetupConnectionVisual({ domain }: { domain?: string }) {
   return (
     <div
       aria-label={domain ? `AgentTeam Email connects to ${domain}` : 'AgentTeam Email connects to a domain'}
-      className='flex justify-center py-2'
+      className='flex w-full justify-center py-2'
     >
-      <div className='relative flex items-center justify-center gap-5'>
+      <div className='relative flex items-center justify-center gap-3'>
         <DomainSetupLogoCircle label='AgentTeam Email'>
           <img
             alt=''
             aria-hidden='true'
-            className='hidden size-9 rounded-lg dark:block'
+            className='hidden size-11 rounded-xl dark:block'
             draggable={false}
             src='/agentteam-email-dark-logo.svg'
           />
           <img
             alt=''
             aria-hidden='true'
-            className='block size-9 rounded-lg dark:hidden'
+            className='block size-11 rounded-xl dark:hidden'
             draggable={false}
             src='/agentteam-email-light-logo.svg'
           />
         </DomainSetupLogoCircle>
         <span
           aria-hidden='true'
-          className='bg-border h-px w-14'
-        />
-        <span
-          aria-hidden='true'
-          className='bg-card text-muted-foreground absolute left-1/2 top-1/2 flex size-8 -translate-x-1/2
-            -translate-y-1/2 items-center justify-center rounded-full border shadow-xs'
+          className='text-muted-foreground flex size-7 items-center justify-center'
         >
-          <LinkIcon className='size-4' />
+          <ArrowsLeftRightIcon
+            className='size-5'
+            weight='bold'
+          />
         </span>
         <DomainSetupLogoCircle label={domain ?? 'Cloudflare domain'}>
-          <GlobeHemisphereWestIcon className='text-foreground size-8' />
+          <CloudIcon className='text-foreground size-7' />
         </DomainSetupLogoCircle>
       </div>
     </div>
@@ -1743,7 +1734,7 @@ function DomainSetupLogoCircle({
   return (
     <span
       aria-label={label}
-      className='bg-background flex size-16 items-center justify-center rounded-full border shadow-xs'
+      className='bg-background flex size-14 items-center justify-center rounded-full border shadow-xs'
       role='img'
     >
       {children}
@@ -1768,19 +1759,11 @@ function DomainSetupChecklist({ items }: { items: ReadonlyArray<DomainSetupCheck
 }
 
 function DomainSetupChecklistIcon({ state }: { state: DomainSetupChecklistState }) {
-  if (state === 'complete') {
-    return <CheckCircleIcon className='text-primary size-4 shrink-0' />
-  }
-
-  if (state === 'current') {
-    return <Spinner className='text-muted-foreground shrink-0' />
-  }
-
   if (state === 'error') {
     return <XCircleIcon className='text-destructive size-4 shrink-0' />
   }
 
-  return <span className='border-muted-foreground/40 size-4 shrink-0 rounded-full border' />
+  return <CheckCircleIcon className='text-primary size-4 shrink-0' />
 }
 
 function selectedCloudflareZone(settings: DomainSettingsController): CloudflareZoneSummary | null {
