@@ -1,14 +1,14 @@
 import {
   MailboxPaginationLoading as MailboxPaginationLoadingStory,
   MailboxPagination as MailboxPaginationStory,
-  mailWorkspaceStoryMeta
+  mailWorkspaceControllerStoryMeta
 } from '../../mail-workspace.definitions'
 import type { Meta, StoryObj } from '@storybook/react'
 
 const meta = {
-  ...mailWorkspaceStoryMeta,
+  ...mailWorkspaceControllerStoryMeta,
   title: 'Screens/Mail Workspace/Mailbox - Pagination'
-} satisfies Meta<typeof mailWorkspaceStoryMeta.component>
+} satisfies Meta<typeof mailWorkspaceControllerStoryMeta.component>
 
 export default meta
 

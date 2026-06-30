@@ -1,723 +1,159 @@
-import * as React from 'react'
-import { expect, fireEvent, fn, userEvent, waitFor, within } from 'storybook/test'
+/* eslint-disable react-refresh/only-export-components */
+import { expect, userEvent, waitFor, within } from 'storybook/test'
 
+import { agentAccessActionableState } from '../agent-access-fixtures'
 import {
-  accountPermissionsSidebarView,
-  accountScopedRemoteImagesSidebarView,
-  accountSwitchingSidebarView,
-  archiveActionEmailPreviewsById,
-  attachmentEmailPreviewsById,
-  attachmentSidebarView,
   authenticatedSectionBaseArgs,
-  blockedImagesSidebarView,
-  composeAttachmentUploadStatusView,
-  composeDraftSaveErrorView,
-  composeDraftView,
-  composeForwardView,
-  composeReplyAllView,
-  composeSavedDraftView,
-  composeSavingDraftView,
-  composeSelectedAccountView,
-  composeSendingView,
-  composeValidationErrorView,
-  composeWithAttachmentsView,
-  conversationThreadSidebarView,
-  customFolderEmailPreviewsById,
-  customFolderSidebarView,
-  deleteMessageActionView,
-  deleteMessageSubmittingActionView,
-  disabledToolbarActionSidebarView,
-  disabledToolbarEmailPreviewsById,
-  documentResourceEmailPreviewsById,
-  documentResourceSidebarView,
-  draftEmailPreviewsById,
-  draftSidebarView,
-  draftToolbarEmailPreviewsById,
-  emailPreviewSidebarView,
-  emailPreviewsById,
-  emptyAuthenticatedDashboardView,
-  emptyAuthenticatedSidebarView,
-  errorAuthenticatedDashboardView,
-  errorAuthenticatedSidebarView,
-  externalLinkCollisionEmailPreviewsById,
-  externalLinkCollisionSidebarView,
-  folderCreateErrorSidebarView,
-  folderCreateOpenSidebarView,
-  folderCreateSidebarView,
-  folderCreateSubmittingSidebarView,
-  folderDeleteErrorSidebarView,
-  folderDeleteOpenSidebarView,
-  folderDeleteSubmittingSidebarView,
-  folderRenameErrorSidebarView,
-  folderRenameOpenSidebarView,
-  folderRenameSubmittingSidebarView,
-  formEmailPreviewsById,
-  formEmailSidebarView,
-  inlineAttachmentEmailPreviewsById,
-  inlineAttachmentSidebarView,
-  junkActionEmailPreviewsById,
-  junkMailboxSidebarView,
-  loadingAuthenticatedDashboardView,
-  loadingAuthenticatedSidebarView,
-  mailtoLinkEmailPreviewsById,
-  mailtoLinkSidebarView,
-  moveActionErrorView,
-  moveActionSubmittingView,
-  moveDisabledTargetActionView,
-  moveToSpamActionView,
-  originalSourceActionView,
-  originalSourceErrorActionView,
-  originalSourceEvidenceActionView,
-  originalSourceLoadingActionView,
-  paginatedMailboxLoadingSidebarView,
-  paginatedMailboxSidebarView,
-  pendingActionEmailPreviewsById,
-  pendingActionSidebarView,
-  protectedFolderActionSidebarView,
-  refreshingMailboxSidebarView,
-  remoteBackgroundImagesEmailPreviewsById,
-  remoteBackgroundImagesSidebarView,
-  searchEmptySidebarView,
-  searchFilteredSidebarView,
-  sentEmailPreviewsById,
-  sentMailboxSidebarView,
-  starredEmailPreviewsById,
-  starredMessageSidebarView,
-  threadedMailboxSidebarView,
-  trashActionEmailPreviewsById,
-  trashEmailPreviewsById,
-  trashMailboxSidebarView,
-  unreadMessageEmailPreviewsById,
-  unreadOnlySidebarView,
-  unsafeExternalLinkEmailPreviewsById,
-  welcomeEmailSidebarView
+  domainSettingsEmptyFirstUseState
 } from '../authenticated-section-fixtures'
-import { DashboardScreen } from '../../screens/dashboard-screen'
+import {
+  mailWorkspaceScreenAccountPermissionsView,
+  mailWorkspaceScreenAccountSwitchingView,
+  mailWorkspaceScreenAttachmentView,
+  mailWorkspaceScreenBillingAccountView,
+  mailWorkspaceScreenBlockedImagesView,
+  mailWorkspaceScreenConversationView,
+  mailWorkspaceScreenCustomFolderView,
+  mailWorkspaceScreenDocumentResourceView,
+  mailWorkspaceScreenDraftView,
+  mailWorkspaceScreenEmptyView,
+  mailWorkspaceScreenExternalLinkView,
+  mailWorkspaceScreenFolderIds,
+  mailWorkspaceScreenFormView,
+  mailWorkspaceScreenInlineAttachmentView,
+  mailWorkspaceScreenJunkView,
+  mailWorkspaceScreenLongMailboxListView,
+  mailWorkspaceScreenMailtoView,
+  mailWorkspaceScreenNoAccountsView,
+  mailWorkspaceScreenPaginatedView,
+  mailWorkspaceScreenReadyView,
+  mailWorkspaceScreenRemoteBackgroundView,
+  mailWorkspaceScreenSearchEmptyView,
+  mailWorkspaceScreenSearchFilteredView,
+  mailWorkspaceScreenSentView,
+  mailWorkspaceScreenTrashView,
+  mailWorkspaceScreenUnreadOnlyView,
+  mailWorkspaceScreenViewsByFolderId,
+  mailWorkspaceScreenViewsByMessageId
+} from '../mail-workspace-screen-fixtures'
+import { DashboardMailController } from '../../screens/dashboard-mail-client-controller'
+import { MailWorkspaceControllerStoryFrame } from './mail-workspace-story-frame'
+import type { MailWorkspaceQuery } from '../../lib/mail-rpc'
+import type { AgentMailAdminNavigation, AgentMailWebWorkspace } from '@main/backend'
 import type { Meta, StoryObj } from '@storybook/react'
+import type { ComponentProps } from 'react'
 
-export const mailWorkspaceStoryMeta = {
-  component: DashboardScreen,
+export const mailWorkspaceControllerStoryMeta = {
+  component: DashboardMailController,
   args: {
-    ...authenticatedSectionBaseArgs,
-    emailPreviewsById,
-    onComposeAttachmentAdd: fn(),
-    onComposeAttachmentRemove: fn(),
-    onComposeDiscardDraft: fn(),
-    onComposeFieldChange: fn(),
-    onComposeOpenChange: fn(),
-    onComposeSaveDraft: fn(),
-    onComposeSubmit: fn(),
-    onEmailAttachmentPreview: fn(),
-    onEmailAction: fn(),
-    onMailActionDialogOpenChange: fn(),
-    onMailDeleteConfirm: fn(),
-    onMailMoveSubmit: fn(),
-    onMailMoveTargetChange: fn(),
-    onMailOriginalSourceDownload: fn(),
-    onMailboxAccountSelect: fn(),
-    onMailboxFolderAction: fn(),
-    onMailboxFolderCreateNameChange: fn(),
-    onMailboxFolderCreateOpenChange: fn(),
-    onMailboxFolderCreateSubmit: fn(),
-    onMailboxFolderDeleteConfirm: fn(),
-    onMailboxFolderDeleteOpenChange: fn(),
-    onMailboxFolderRenameNameChange: fn(),
-    onMailboxFolderRenameOpenChange: fn(),
-    onMailboxFolderRenameSubmit: fn(),
-    onMailboxFolderSelect: fn(),
-    onMailboxMessageSelect: fn(),
-    onMailboxPageChange: fn(),
-    onMailboxRefresh: fn(),
-    onMailboxRetry: fn(),
-    onMailboxSearchChange: fn(),
-    onMailboxUnreadOnlyChange: fn(),
-    onMessageRetry: fn(),
-    sidebarView: emailPreviewSidebarView
+    authClient: authenticatedSectionBaseArgs.authClient,
+    domainSettingsState: domainSettingsEmptyFirstUseState,
+    publicEnv: authenticatedSectionBaseArgs.publicEnv,
+    routeSearch: {},
+    routeState: authenticatedSectionBaseArgs.routeState,
+    sessionCleanupEnabled: authenticatedSectionBaseArgs.sessionCleanupEnabled,
+    settingsOpen: false
   },
   parameters: {
     layout: 'fullscreen',
     docs: {
       description: {
         component:
-          'The production mail client workspace with mailbox navigation, message reading, conversation, security, and settings states.'
+          'Mail Workspace screen states rendered through DashboardMailController with route search and loader-shaped data.'
       }
     }
   }
-} satisfies Meta<typeof DashboardScreen>
+} satisfies Meta<typeof DashboardMailController>
 
-type Story = StoryObj<typeof mailWorkspaceStoryMeta>
+type Story = StoryObj<typeof mailWorkspaceControllerStoryMeta>
+type DashboardMailControllerArgs = ComponentProps<typeof DashboardMailController>
 
-function getContainingButton(element: HTMLElement) {
-  const button = element.closest('button')
-  if (!(button instanceof globalThis.HTMLButtonElement)) {
-    throw new TypeError('Expected text to be rendered inside a button')
-  }
-  return button
-}
-
-function getContainingMailRow(element: HTMLElement, id: string) {
-  const row = element.closest(`[data-mail-row-id="${id}"]`)
-  if (!(row instanceof globalThis.HTMLElement)) {
-    throw new TypeError(`Expected message row ${id} to contain the element`)
-  }
-  return row
-}
-
-async function openWorkspaceMailboxSwitcher(canvasElement: HTMLElement) {
-  const canvas = within(canvasElement)
-
-  await userEvent.click(await canvas.findByRole('button', { name: /open workspace and mailbox switcher/i }))
-
-  return within(canvasElement.ownerDocument.body)
-}
+const storyMailboxAdminNavigation = {
+  allowedSections: ['accounts', 'groups', 'agents']
+} satisfies AgentMailAdminNavigation
 
 export const MailboxDefault: Story = {
-  play: async ({ args, canvasElement }) => {
+  args: {
+    routeSearch: {}
+  },
+  render: (args) => renderMailWorkspaceStory(args),
+  play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
+    const body = within(canvasElement.ownerDocument.body)
 
+    await expect(await canvas.findByRole('heading', { name: /appointment alert/i })).toBeInTheDocument()
+    await expect(await canvas.findByText('4 shown')).toBeInTheDocument()
     await userEvent.click(await canvas.findByRole('button', { name: /^compose$/i }))
-    await expect(args.onComposeOpenChange).toHaveBeenCalledWith(true)
-    await userEvent.click(await canvas.findByRole('button', { name: /^refresh mailbox$/i }))
-    await expect(args.onMailboxRefresh).toHaveBeenCalled()
+    await expect(await body.findByRole('dialog')).toHaveTextContent(/new message/i)
   }
 }
 
 export const MailboxLoading: Story = {
   args: {
-    dashboardView: loadingAuthenticatedDashboardView,
-    sidebarView: loadingAuthenticatedSidebarView
-  }
-}
-
-export const MailboxRefreshing: Story = {
-  args: {
-    sidebarView: refreshingMailboxSidebarView
+    routeSearch: {}
   },
-  play: async ({ args, canvasElement }) => {
-    const canvas = within(canvasElement)
-
-    await expect(await canvas.findByRole('button', { name: /^refreshing mailbox$/i })).toBeDisabled()
-  }
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      pending: true
+    })
 }
 
 export const MailboxEmpty: Story = {
   args: {
-    dashboardView: emptyAuthenticatedDashboardView,
-    sidebarView: emptyAuthenticatedSidebarView
+    routeSearch: {}
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenEmptyView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+
+    await expect(await canvas.findByText(/inbox is empty/i)).toBeInTheDocument()
+    await expect(await canvas.findByText(/select a message/i)).toBeInTheDocument()
   }
 }
 
 export const MailboxError: Story = {
   args: {
-    dashboardView: emptyAuthenticatedDashboardView,
-    sidebarView: errorAuthenticatedSidebarView
+    routeSearch: {}
   },
-  play: async ({ args, canvasElement }) => {
-    const canvas = within(canvasElement)
-
-    await expect(await canvas.findByText(/mailbox failed to load/i)).toBeInTheDocument()
-    await userEvent.click(await canvas.findByRole('button', { name: /^retry mailbox$/i }))
-    await expect(args.onMailboxRetry).toHaveBeenCalled()
-  }
-}
-
-export const MessageAppointment: Story = {
-  args: {
-    sidebarView: emailPreviewSidebarView
-  }
-}
-
-export const MessageError: Story = {
-  args: {
-    dashboardView: errorAuthenticatedDashboardView,
-    emailPreviewsById: {},
-    sidebarView: emailPreviewSidebarView
-  },
-  play: async ({ args, canvasElement }) => {
-    const canvas = within(canvasElement)
-
-    await expect(await canvas.findByText(/message failed to load/i)).toBeInTheDocument()
-    await userEvent.click(await canvas.findByRole('button', { name: /^retry message$/i }))
-    await expect(args.onMessageRetry).toHaveBeenCalled()
-  }
-}
-
-export const MessageToolbarControllerActions: Story = {
-  args: {
-    sidebarView: emailPreviewSidebarView
-  },
-  play: async ({ args, canvasElement }) => {
-    const canvas = within(canvasElement)
-
-    await userEvent.click(await canvas.findByRole('button', { name: /^reply$/i }))
-    await expect(args.onEmailAction).toHaveBeenCalledWith(
-      'reply',
-      expect.objectContaining({ id: 'appointment-alert' })
-    )
-    await userEvent.click(await canvas.findByRole('button', { name: /^reply all$/i }))
-    await expect(args.onEmailAction).toHaveBeenCalledWith(
-      'reply-all',
-      expect.objectContaining({ id: 'appointment-alert' })
-    )
-    await userEvent.click(await canvas.findByRole('button', { name: /^forward$/i }))
-    await expect(args.onEmailAction).toHaveBeenCalledWith(
-      'forward',
-      expect.objectContaining({ id: 'appointment-alert' })
-    )
-    await userEvent.click(await canvas.findByRole('button', { name: /^star$/i }))
-    await expect(args.onEmailAction).toHaveBeenCalledWith(
-      'star',
-      expect.objectContaining({ id: 'appointment-alert' })
-    )
-    await userEvent.click(await canvas.findByRole('button', { name: /^mark as unread$/i }))
-    await expect(args.onEmailAction).toHaveBeenCalledWith(
-      'mark-unread',
-      expect.objectContaining({ id: 'appointment-alert' })
-    )
-    await userEvent.click(await canvas.findByRole('button', { name: /^move to folder$/i }))
-    await expect(args.onEmailAction).toHaveBeenCalledWith(
-      'move',
-      expect.objectContaining({ id: 'appointment-alert' })
-    )
-    await userEvent.click(await canvas.findByRole('button', { name: /^mark as spam$/i }))
-    await expect(args.onEmailAction).toHaveBeenCalledWith(
-      'mark-spam',
-      expect.objectContaining({ id: 'appointment-alert' })
-    )
-    await userEvent.click(await canvas.findByRole('button', { name: /^view original$/i }))
-    await expect(args.onEmailAction).toHaveBeenCalledWith(
-      'view-original',
-      expect.objectContaining({ id: 'appointment-alert' })
-    )
-    await userEvent.click(await canvas.findByRole('button', { name: /^delete$/i }))
-    await expect(args.onEmailAction).toHaveBeenCalledWith(
-      'delete',
-      expect.objectContaining({ id: 'appointment-alert' })
-    )
-    await userEvent.click(await canvas.findByRole('button', { name: /^close$/i }))
-    await expect(args.onEmailAction).toHaveBeenCalledWith(
-      'close',
-      expect.objectContaining({ id: 'appointment-alert' })
-    )
-  }
-}
-
-export const MessageArchiveAction: Story = {
-  args: {
-    emailPreviewsById: archiveActionEmailPreviewsById,
-    sidebarView: blockedImagesSidebarView
-  },
-  play: async ({ args, canvasElement }) => {
-    const canvas = within(canvasElement)
-
-    await userEvent.click(await canvas.findByRole('button', { name: /^archive$/i }))
-    await expect(args.onEmailAction).toHaveBeenCalledWith(
-      'archive',
-      expect.objectContaining({ id: 'blocked-images' })
-    )
-  }
-}
-
-export const MessageWelcome: Story = {
-  args: {
-    sidebarView: welcomeEmailSidebarView
-  }
-}
-
-export const MessageStarred: Story = {
-  args: {
-    emailPreviewsById: starredEmailPreviewsById,
-    sidebarView: starredMessageSidebarView
-  },
-  play: async ({ args, canvasElement }) => {
-    const canvas = within(canvasElement)
-
-    await expect(await canvas.findByRole('heading', { name: /welcome aboard/i })).toBeInTheDocument()
-    await expect((await canvas.findAllByText(/^starred$/i)).length).toBeGreaterThanOrEqual(2)
-    await userEvent.click(await canvas.findByRole('button', { name: /^unstar$/i }))
-    await expect(args.onEmailAction).toHaveBeenCalledWith(
-      'unstar',
-      expect.objectContaining({ id: 'welcome-email', isStarred: true })
-    )
-  }
-}
-
-export const MessageUnread: Story = {
-  args: {
-    emailPreviewsById: unreadMessageEmailPreviewsById,
-    sidebarView: emailPreviewSidebarView
-  },
-  play: async ({ args, canvasElement }) => {
-    const canvas = within(canvasElement)
-
-    await expect(await canvas.findByRole('heading', { name: /appointment alert/i })).toBeInTheDocument()
-    await expect((await canvas.findAllByText(/^unread$/i)).length).toBeGreaterThanOrEqual(1)
-    await userEvent.click(await canvas.findByRole('button', { name: /^mark as read$/i }))
-    await expect(args.onEmailAction).toHaveBeenCalledWith(
-      'mark-read',
-      expect.objectContaining({ id: 'appointment-alert', isUnread: true })
-    )
-  }
-}
-
-export const MessageDisabledActions: Story = {
-  args: {
-    emailPreviewsById: disabledToolbarEmailPreviewsById,
-    sidebarView: disabledToolbarActionSidebarView
-  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      error: new Error('The mail workspace RPC returned HTTP 403.')
+    }),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
 
-    await expect(await canvas.findByRole('button', { name: /^reply all$/i })).toBeDisabled()
-  }
-}
-
-export const ConversationThread: Story = {
-  args: {
-    sidebarView: conversationThreadSidebarView
-  },
-  play: async ({ args, canvasElement }) => {
-    const canvas = within(canvasElement)
-    const replyButtons = await canvas.findAllByRole('button', { name: /^reply$/i })
-    const forwardButtons = await canvas.findAllByRole('button', { name: /^forward$/i })
-    const threadReplyButton = replyButtons[replyButtons.length - 1]
-    const threadForwardButton = forwardButtons[forwardButtons.length - 1]
-
-    if (!threadReplyButton || !threadForwardButton) {
-      throw new Error('Expected conversation thread reply and forward controls')
-    }
-
-    await userEvent.click(threadReplyButton)
-    await expect(args.onEmailAction).toHaveBeenCalledWith(
-      'reply',
-      expect.objectContaining({ id: 'conversation-thread' })
-    )
-    await userEvent.click(threadForwardButton)
-    await expect(args.onEmailAction).toHaveBeenCalledWith(
-      'forward',
-      expect.objectContaining({ id: 'conversation-thread' })
-    )
-  }
-}
-
-export const ConversationThreadMessageActions: Story = {
-  args: {
-    sidebarView: conversationThreadSidebarView
-  },
-  play: async ({ args, canvasElement }) => {
-    const canvas = within(canvasElement)
-
-    await userEvent.click(await canvas.findByRole('button', { name: /^expand agentteam email message$/i }))
-    await expect(args.onEmailAction).toHaveBeenCalledWith(
-      'expand-thread-message',
-      expect.objectContaining({ id: 'thread-original' })
-    )
-    await userEvent.click(await canvas.findByRole('button', { name: /^collapse testing message$/i }))
-    await expect(args.onEmailAction).toHaveBeenCalledWith(
-      'collapse-thread-message',
-      expect.objectContaining({ id: 'thread-latest' })
-    )
-    await userEvent.click(await canvas.findByRole('button', { name: /^view message original$/i }))
-    await expect(args.onEmailAction).toHaveBeenCalledWith(
-      'view-original',
-      expect.objectContaining({ id: 'thread-latest' })
-    )
-    await userEvent.click(await canvas.findByRole('button', { name: /^send draft$/i }))
-    await expect(args.onEmailAction).toHaveBeenCalledWith(
-      'send-draft',
-      expect.objectContaining({ id: 'thread-draft-reply', isDraft: true })
-    )
-    await userEvent.click(await canvas.findByRole('button', { name: /^edit draft$/i }))
-    await expect(args.onEmailAction).toHaveBeenCalledWith(
-      'edit-draft',
-      expect.objectContaining({ id: 'thread-draft-reply', isDraft: true })
-    )
-    await userEvent.click(await canvas.findByRole('button', { name: /^discard draft$/i }))
-    await expect(args.onEmailAction).toHaveBeenCalledWith(
-      'discard-draft',
-      expect.objectContaining({ id: 'thread-draft-reply', isDraft: true })
-    )
-  }
-}
-
-export const SecurityRemoteContentBlocked: Story = {
-  args: {
-    sidebarView: blockedImagesSidebarView
-  }
-}
-
-export const SecurityRemoteContentInteraction: Story = {
-  args: {
-    sidebarView: blockedImagesSidebarView
-  },
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-
-    await expect(await canvas.findByText(/remote images blocked/i)).toBeInTheDocument()
-
-    const iframeElement = await canvas.findByTitle(/deployment checklist and routing review email body/i)
-    if (!(iframeElement instanceof globalThis.HTMLIFrameElement)) {
-      throw new TypeError('Expected email body to render in an iframe')
-    }
-    const iframeBody = iframeElement.contentDocument?.body
-    if (!iframeBody) {
-      throw new Error('Expected email iframe body to be readable')
-    }
-    await waitFor(async () => {
-      await expect(iframeBody.textContent ?? '').toContain('Remote image blocked')
-    })
-    await userEvent.click(await within(iframeBody).findByText(/provider portal/i))
-
-    const body = within(canvasElement.ownerDocument.body)
-    await expect(await body.findByRole('dialog')).toHaveTextContent(/dash.cloudflare.com/i)
-    await userEvent.click(await body.findByRole('button', { name: /^cancel$/i }))
-
-    await userEvent.click(await canvas.findByRole('button', { name: /show images/i }))
-    await expect(canvas.queryByText(/remote images blocked/i)).not.toBeInTheDocument()
-    await userEvent.click(await canvas.findByRole('button', { name: /dash.cloudflare.com/i }))
-
-    await expect(await body.findByRole('dialog')).toHaveTextContent(/dash.cloudflare.com/i)
-  }
-}
-
-export const SecurityRemoteContentAccountScoped: Story = {
-  args: {
-    sidebarView: accountScopedRemoteImagesSidebarView
-  },
-  render: function Render(args) {
-    const [activeAccountId, setActiveAccountId] = React.useState(
-      accountScopedRemoteImagesSidebarView.activeAccountId
-    )
-    const sidebarView = React.useMemo(
-      () => ({
-        ...accountScopedRemoteImagesSidebarView,
-        activeAccountId
-      }),
-      [activeAccountId]
-    )
-
-    return (
-      <DashboardScreen
-        {...args}
-        onMailboxAccountSelect={(accountId) => {
-          setActiveAccountId(accountId)
-          args.onMailboxAccountSelect?.(accountId)
-        }}
-        sidebarView={sidebarView}
-      />
-    )
-  },
-  play: async ({ args, canvasElement }) => {
-    const canvas = within(canvasElement)
-    const body = within(canvasElement.ownerDocument.body)
-
-    await expect(await canvas.findByText(/remote images blocked/i)).toBeInTheDocument()
-    await userEvent.click(await canvas.findByRole('button', { name: /show images/i }))
-    await waitFor(async () => {
-      await expect(canvas.queryByText(/remote images blocked/i)).not.toBeInTheDocument()
-    })
-
-    await openWorkspaceMailboxSwitcher(canvasElement)
-    await userEvent.click(await body.findByRole('menuitem', { name: /billing agent/i }))
-
-    await expect(args.onMailboxAccountSelect).toHaveBeenCalledWith('agent-billing')
-    await expect(await canvas.findByText(/remote images blocked/i)).toBeInTheDocument()
-  }
-}
-
-export const SecurityRemoteBackgroundImagesBlocked: Story = {
-  args: {
-    emailPreviewsById: remoteBackgroundImagesEmailPreviewsById,
-    sidebarView: remoteBackgroundImagesSidebarView
-  },
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-    const iframeElement = await canvas.findByTitle(/background image tracking email body/i)
-
-    await expect(await canvas.findByText(/remote images blocked from 2 sources/i)).toBeInTheDocument()
-
-    if (!(iframeElement instanceof globalThis.HTMLIFrameElement)) {
-      throw new TypeError('Expected background image email body to render in an iframe')
-    }
-
-    const iframeBody = iframeElement.contentDocument?.body
-    if (!iframeBody) {
-      throw new Error('Expected background image iframe body to be readable')
-    }
-
-    await waitFor(async () => {
-      await expect(iframeBody.textContent ?? '').toContain('Background image content')
-      await expect(iframeBody.innerHTML).not.toContain('assets.provider.example')
-      await expect(iframeBody.innerHTML).not.toContain('background-image')
-    })
-  }
-}
-
-export const SecurityDocumentResourceTagsBlocked: Story = {
-  args: {
-    emailPreviewsById: documentResourceEmailPreviewsById,
-    sidebarView: documentResourceSidebarView
-  },
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-    const iframeElement = await canvas.findByTitle(/document resource controls email body/i)
-
-    if (!(iframeElement instanceof globalThis.HTMLIFrameElement)) {
-      throw new TypeError('Expected document resource email body to render in an iframe')
-    }
-
-    const iframeBody = iframeElement.contentDocument?.body
-    if (!iframeBody) {
-      throw new Error('Expected document resource iframe body to be readable')
-    }
-
-    await waitFor(async () => {
-      await expect(iframeBody.textContent ?? '').toContain('Document resource content')
-      await expect(iframeBody.innerHTML).not.toContain('wildduck.example.test')
-      await expect(iframeBody.innerHTML).not.toContain('<base')
-      await expect(iframeBody.innerHTML).not.toContain('<meta')
-      await expect(iframeBody.innerHTML).not.toContain('<link')
-      await expect(iframeBody.innerHTML).not.toContain('<script')
-      await expect(iframeBody.innerHTML).not.toContain('<iframe')
-      await expect(iframeBody.innerHTML).not.toContain('<object')
-      await expect(iframeBody.innerHTML).not.toContain('<embed')
-      await expect(iframeBody.textContent ?? '').not.toContain('iframe fallback')
-      await expect(iframeBody.textContent ?? '').not.toContain('object fallback')
-    })
-  }
-}
-
-export const SecurityUnsafeControllerLink: Story = {
-  args: {
-    emailPreviewsById: unsafeExternalLinkEmailPreviewsById,
-    sidebarView: blockedImagesSidebarView
-  },
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-    const iframeElement = await canvas.findByTitle(/deployment checklist and routing review email body/i)
-    if (!(iframeElement instanceof globalThis.HTMLIFrameElement)) {
-      throw new TypeError('Expected email body to render in an iframe')
-    }
-    const iframeBody = iframeElement.contentDocument?.body
-    if (!iframeBody) {
-      throw new Error('Expected email iframe body to be readable')
-    }
-
-    await expect(await within(iframeBody).findByText(/provider portal/i)).toBeInTheDocument()
-
-    await userEvent.click(await canvas.findByRole('button', { name: /unsupported destination/i }))
-    const body = within(canvasElement.ownerDocument.body)
-    const dialog = await body.findByRole('dialog')
-    await expect(dialog).toHaveTextContent(/unsupported destination/i)
-    await expect(dialog).toHaveTextContent(/not a supported external URL/i)
-    await expect(within(dialog).queryByRole('link', { name: /^continue$/i })).not.toBeInTheDocument()
-  }
-}
-
-export const SecurityMailtoLinkInteraction: Story = {
-  args: {
-    emailPreviewsById: mailtoLinkEmailPreviewsById,
-    sidebarView: mailtoLinkSidebarView
-  },
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-    const iframeElement = await canvas.findByTitle(/contact support by email email body/i)
-
-    if (!(iframeElement instanceof globalThis.HTMLIFrameElement)) {
-      throw new TypeError('Expected mailto email body to render in an iframe')
-    }
-
-    const iframeBody = iframeElement.contentDocument?.body
-    if (!iframeBody) {
-      throw new Error('Expected mailto iframe body to be readable')
-    }
-
-    await userEvent.click(await within(iframeBody).findByText(/email support/i))
-
-    const body = within(canvasElement.ownerDocument.body)
-    const dialog = await body.findByRole('dialog')
-
-    await expect(dialog).toHaveTextContent(/support@example\.test/i)
-    await expect(dialog).toHaveTextContent(/mailto:support@example\.test/i)
-  }
-}
-
-export const SecurityExternalLinkGeneratedIdCollision: Story = {
-  args: {
-    emailPreviewsById: externalLinkCollisionEmailPreviewsById,
-    sidebarView: externalLinkCollisionSidebarView
-  },
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-    const body = within(canvasElement.ownerDocument.body)
-    const iframeElement = await canvas.findByTitle(/external link collision handling email body/i)
-
-    if (!(iframeElement instanceof globalThis.HTMLIFrameElement)) {
-      throw new TypeError('Expected external link collision email body to render in an iframe')
-    }
-
-    const iframeBody = iframeElement.contentDocument?.body
-    if (!iframeBody) {
-      throw new Error('Expected external link collision iframe body to be readable')
-    }
-
-    await userEvent.click(await within(iframeBody).findByText(/generated docs link/i))
-    await expect(await body.findByRole('dialog')).toHaveTextContent(/docs.example.test/i)
-    await userEvent.click(await body.findByRole('button', { name: /^cancel$/i }))
-
-    await userEvent.click(await within(iframeBody).findByText(/controller link/i))
-    await expect(await body.findByRole('dialog')).toHaveTextContent(/controller.example.test/i)
-    await userEvent.click(await body.findByRole('button', { name: /^cancel$/i }))
-  }
-}
-
-export const SecurityFormContentRemoved: Story = {
-  args: {
-    emailPreviewsById: formEmailPreviewsById,
-    sidebarView: formEmailSidebarView
-  },
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-    const iframeElement = await canvas.findByTitle(/form in email body email body/i)
-
-    if (!(iframeElement instanceof globalThis.HTMLIFrameElement)) {
-      throw new TypeError('Expected form email body to render in an iframe')
-    }
-
-    const iframeBody = iframeElement.contentDocument?.body
-    if (!iframeBody) {
-      throw new Error('Expected form iframe body to be readable')
-    }
-
-    await waitFor(async () => {
-      await expect(iframeBody.querySelector('form')).toBeNull()
-      await expect(iframeBody.querySelector('input')).toBeNull()
-      await expect(iframeBody.querySelector('button')).toBeNull()
-      await expect(iframeBody.querySelector('[data-agent-mail-inert-form]')).toBeNull()
-      await expect(iframeBody.innerHTML).not.toContain('phish.example.test')
-    })
+    await expect(await canvas.findByText(/mailbox unavailable/i)).toBeInTheDocument()
+    await expect(await canvas.findAllByText(/the mail workspace rpc returned http 403/i)).toHaveLength(2)
   }
 }
 
 export const MailboxSearchFiltered: Story = {
   args: {
-    sidebarView: searchFilteredSidebarView
+    routeSearch: { mailQuery: 'welcome' }
   },
-  play: async ({ args, canvasElement }) => {
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenSearchFilteredView
+    }),
+  play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    const search = await canvas.findByPlaceholderText(/type to search/i)
 
-    await userEvent.clear(search)
-    await userEvent.type(search, 'billing')
-    await expect(args.onMailboxSearchChange).toHaveBeenLastCalledWith('billing')
+    await expect(await canvas.findByRole('heading', { name: /welcome aboard/i })).toBeInTheDocument()
+    await expect(await canvas.findByPlaceholderText(/type to search/i)).toHaveValue('welcome')
   }
 }
 
 export const MailboxSearchEmpty: Story = {
   args: {
-    dashboardView: emptyAuthenticatedDashboardView,
-    sidebarView: searchEmptySidebarView
+    routeSearch: { mailQuery: 'missing provider invoice', unreadOnly: true }
   },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenSearchEmptyView
+    }),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
 
@@ -730,762 +166,128 @@ export const MailboxSearchEmpty: Story = {
 
 export const MailboxUnreadOnly: Story = {
   args: {
-    sidebarView: unreadOnlySidebarView
+    routeSearch: { unreadOnly: true }
   },
-  play: async ({ args, canvasElement }) => {
-    const canvas = within(canvasElement)
-
-    await userEvent.click(await canvas.findByRole('switch', { name: /show unread messages only/i }))
-    await expect(args.onMailboxUnreadOnlyChange).toHaveBeenCalledWith(false)
-  }
-}
-
-export const MailboxThreadedMetadata: Story = {
-  args: {
-    sidebarView: threadedMailboxSidebarView
-  },
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-    const row = await canvas.findByRole('button', { name: /agent mail smoke/i })
-
-    await expect(row).toHaveTextContent(/3/)
-    await expect(row).toHaveTextContent(/2 attachments/i)
-    await expect(row).toHaveTextContent(/draft in thread/i)
-    await expect(row).toHaveTextContent(/needs reply/i)
-  }
-}
-
-export const MailboxJunk: Story = {
-  args: {
-    sidebarView: junkMailboxSidebarView
-  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenUnreadOnlyView
+    }),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
 
-    await expect(await canvas.findByRole('button', { name: /^junk$/i })).toBeInTheDocument()
-    await expect(await canvas.findByRole('button', { name: /provider portal/i })).toBeInTheDocument()
-    await expect(await canvas.findByRole('heading', { name: /deployment checklist/i })).toBeInTheDocument()
-  }
-}
-
-export const MailboxSent: Story = {
-  args: {
-    emailPreviewsById: sentEmailPreviewsById,
-    sidebarView: sentMailboxSidebarView
-  },
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-
-    await expect(await canvas.findByRole('button', { name: /^sent$/i })).toBeInTheDocument()
-    await expect(await canvas.findByRole('button', { name: /support agent/i })).toBeInTheDocument()
-    await expect(await canvas.findByRole('heading', { name: /deployment checklist/i })).toBeInTheDocument()
-  }
-}
-
-export const MailboxTrash: Story = {
-  args: {
-    emailPreviewsById: trashEmailPreviewsById,
-    sidebarView: trashMailboxSidebarView
-  },
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-
-    await expect(await canvas.findByRole('button', { name: /^trash$/i })).toBeInTheDocument()
-    await expect(await canvas.findByRole('button', { name: /old alert/i })).toBeInTheDocument()
-    await expect(
-      await canvas.findByRole('heading', { name: /expired deployment alert/i })
-    ).toBeInTheDocument()
-  }
-}
-
-export const MessageMarkNotSpam: Story = {
-  args: {
-    emailPreviewsById: junkActionEmailPreviewsById,
-    sidebarView: junkMailboxSidebarView
-  },
-  play: async ({ args, canvasElement }) => {
-    const canvas = within(canvasElement)
-
-    await userEvent.click(await canvas.findByRole('button', { name: /^mark as not spam$/i }))
-    await expect(args.onEmailAction).toHaveBeenCalledWith(
-      'mark-not-spam',
-      expect.objectContaining({ folderId: 'junk', id: 'blocked-images' })
-    )
-  }
-}
-
-export const MessageRestoreFromTrash: Story = {
-  args: {
-    emailPreviewsById: trashActionEmailPreviewsById,
-    sidebarView: trashMailboxSidebarView
-  },
-  play: async ({ args, canvasElement }) => {
-    const canvas = within(canvasElement)
-
-    await userEvent.click(await canvas.findByRole('button', { name: /^restore$/i }))
-    await expect(args.onEmailAction).toHaveBeenCalledWith(
-      'restore',
-      expect.objectContaining({ folderId: 'trash', id: 'trash-archive' })
-    )
-  }
-}
-
-export const MailboxAccountSwitching: Story = {
-  args: {
-    sidebarView: accountSwitchingSidebarView
-  },
-  play: async ({ args, canvasElement }) => {
-    const canvas = within(canvasElement)
-
-    await expect(await canvas.findByText(/support agent/i)).toBeInTheDocument()
-
-    const body = await openWorkspaceMailboxSwitcher(canvasElement)
-    await userEvent.click(await body.findByRole('menuitem', { name: /billing agent/i }))
-    await expect(args.onMailboxAccountSelect).toHaveBeenCalledWith('agent-billing')
-
-    await openWorkspaceMailboxSwitcher(canvasElement)
-    await expect(await body.findByRole('menuitem', { name: /alerts agent/i })).toBeInTheDocument()
-  }
-}
-
-export const MailboxAccountSwitchingResetsSelection: Story = {
-  args: {
-    sidebarView: accountSwitchingSidebarView
-  },
-  render: function Render(args) {
-    const [activeAccountId, setActiveAccountId] = React.useState(accountSwitchingSidebarView.activeAccountId)
-    const sidebarView = React.useMemo(
-      () => ({
-        ...accountSwitchingSidebarView,
-        activeAccountId
-      }),
-      [activeAccountId]
-    )
-
-    return (
-      <DashboardScreen
-        {...args}
-        onMailboxAccountSelect={(accountId) => {
-          setActiveAccountId(accountId)
-          args.onMailboxAccountSelect?.(accountId)
-        }}
-        sidebarView={sidebarView}
-      />
-    )
-  },
-  play: async ({ args, canvasElement }) => {
-    const canvas = within(canvasElement)
-    const body = within(canvasElement.ownerDocument.body)
-
-    await userEvent.click(await canvas.findByRole('button', { name: /welcome aboard/i }))
-    await expect(await canvas.findByRole('heading', { name: /welcome aboard/i })).toBeInTheDocument()
-
-    await openWorkspaceMailboxSwitcher(canvasElement)
-    await userEvent.click(await body.findByRole('menuitem', { name: /billing agent/i }))
-
-    await expect(args.onMailboxAccountSelect).toHaveBeenCalledWith('agent-billing')
+    await expect(await canvas.findByRole('switch', { name: /show unread messages only/i })).toBeChecked()
     await expect(await canvas.findByRole('heading', { name: /appointment alert/i })).toBeInTheDocument()
-    await expect(canvas.queryByRole('heading', { name: /welcome aboard/i })).not.toBeInTheDocument()
-  }
-}
-
-export const MailboxAccountSwitchingResetsFolder: Story = {
-  args: {
-    sidebarView: customFolderSidebarView
-  },
-  render: function Render(args) {
-    const [activeAccountId, setActiveAccountId] = React.useState(accountSwitchingSidebarView.activeAccountId)
-    const sidebarView = React.useMemo(
-      () => ({
-        ...customFolderSidebarView,
-        activeAccountId,
-        activeItemId: 'inbox',
-        mails: accountSwitchingSidebarView.mails,
-        selectedMailId: 'appointment-alert'
-      }),
-      [activeAccountId]
-    )
-
-    return (
-      <DashboardScreen
-        {...args}
-        onMailboxAccountSelect={(accountId) => {
-          setActiveAccountId(accountId)
-          args.onMailboxAccountSelect?.(accountId)
-        }}
-        sidebarView={sidebarView}
-      />
-    )
-  },
-  play: async ({ args, canvasElement }) => {
-    const canvas = within(canvasElement)
-    const body = within(canvasElement.ownerDocument.body)
-
-    await userEvent.click(await canvas.findByRole('button', { name: /archive 42/i }))
-    await expect(args.onMailboxFolderSelect).toHaveBeenCalledWith('archive')
-    await expect(await canvas.findByRole('button', { name: /archive 42/i })).toHaveAttribute(
-      'data-active',
-      'true'
-    )
-
-    await openWorkspaceMailboxSwitcher(canvasElement)
-    await userEvent.click(await body.findByRole('menuitem', { name: /billing agent/i }))
-
-    await expect(args.onMailboxAccountSelect).toHaveBeenCalledWith('agent-billing')
-    await expect(await canvas.findByRole('button', { name: /^inbox$/i })).toHaveAttribute(
-      'data-active',
-      'true'
-    )
-    await expect(await canvas.findByRole('button', { name: /archive 42/i })).toHaveAttribute(
-      'data-active',
-      'false'
-    )
-  }
-}
-
-export const MailboxAccountSwitchingResetsFilters: Story = {
-  args: {
-    sidebarView: accountSwitchingSidebarView
-  },
-  render: function Render(args) {
-    const [activeAccountId, setActiveAccountId] = React.useState(accountSwitchingSidebarView.activeAccountId)
-    const sidebarView = React.useMemo(
-      () => ({
-        ...accountSwitchingSidebarView,
-        activeAccountId
-      }),
-      [activeAccountId]
-    )
-
-    return (
-      <DashboardScreen
-        {...args}
-        onMailboxAccountSelect={(accountId) => {
-          setActiveAccountId(accountId)
-          args.onMailboxAccountSelect?.(accountId)
-        }}
-        sidebarView={sidebarView}
-      />
-    )
-  },
-  play: async ({ args, canvasElement }) => {
-    const canvas = within(canvasElement)
-    const body = within(canvasElement.ownerDocument.body)
-    const searchInput = await canvas.findByPlaceholderText(/type to search/i)
-    const unreadSwitch = await canvas.findByRole('switch', { name: /show unread messages only/i })
-
-    await fireEvent.change(searchInput, {
-      target: { value: 'welcome' }
-    })
-    await userEvent.click(unreadSwitch)
-
-    await expect(args.onMailboxSearchChange).toHaveBeenCalledWith('welcome')
-    await expect(args.onMailboxUnreadOnlyChange).toHaveBeenCalledWith(true)
-    await expect(searchInput).toHaveValue('welcome')
-    await expect(unreadSwitch).toBeChecked()
-
-    await openWorkspaceMailboxSwitcher(canvasElement)
-    await userEvent.click(await body.findByRole('menuitem', { name: /billing agent/i }))
-
-    await expect(args.onMailboxAccountSelect).toHaveBeenCalledWith('agent-billing')
-    await expect(await canvas.findByPlaceholderText(/type to search/i)).toHaveValue('')
-    await expect(await canvas.findByRole('switch', { name: /show unread messages only/i })).not.toBeChecked()
-  }
-}
-
-export const MailboxAccountPermissions: Story = {
-  args: {
-    sidebarView: accountPermissionsSidebarView
-  },
-  play: async ({ canvasElement }) => {
-    const body = within(canvasElement.ownerDocument.body)
-
-    await openWorkspaceMailboxSwitcher(canvasElement)
-
-    const deniedAccount = await body.findByRole('menuitem', { name: /finance agent/i })
-    const loadingAccount = await body.findByRole('menuitem', { name: /importing agent/i })
-
-    await expect(await body.findByText(/^no mailbox permission$/i)).toBeInTheDocument()
-    await expect(loadingAccount).toHaveTextContent(/loading/i)
-    await expect(deniedAccount).toHaveAttribute('data-disabled')
-    await expect(loadingAccount).toHaveAttribute('data-disabled')
-  }
-}
-
-export const MailboxFolderNavigation: Story = {
-  args: {
-    sidebarView: accountSwitchingSidebarView
-  },
-  play: async ({ args, canvasElement }) => {
-    const canvas = within(canvasElement)
-
-    await userEvent.click(await canvas.findByRole('button', { name: /^drafts$/i }))
-    await expect(args.onMailboxFolderSelect).toHaveBeenCalledWith('drafts')
-    await userEvent.click(await canvas.findByRole('button', { name: /^sent$/i }))
-    await expect(args.onMailboxFolderSelect).toHaveBeenCalledWith('sent')
-    await userEvent.click(await canvas.findByRole('button', { name: /^junk$/i }))
-    await expect(args.onMailboxFolderSelect).toHaveBeenCalledWith('junk')
-    await userEvent.click(await canvas.findByRole('button', { name: /^trash$/i }))
-    await expect(args.onMailboxFolderSelect).toHaveBeenCalledWith('trash')
-  }
-}
-
-export const MailboxCustomFolder: Story = {
-  args: {
-    emailPreviewsById: customFolderEmailPreviewsById,
-    sidebarView: customFolderSidebarView
-  },
-  play: async ({ args, canvasElement }) => {
-    const canvas = within(canvasElement)
-
-    await expect(await canvas.findByRole('button', { name: /archive 42/i })).toBeInTheDocument()
-    await expect(await canvas.findByRole('button', { name: /provider portal/i })).toBeInTheDocument()
-    await expect(await canvas.findByRole('heading', { name: /archived routing review/i })).toBeInTheDocument()
-    await userEvent.click(await canvas.findByRole('button', { name: /archive 42/i }))
-    await expect(args.onMailboxFolderSelect).toHaveBeenCalledWith('archive')
-  }
-}
-
-export const MailboxCreateFolder: Story = {
-  args: {
-    emailPreviewsById: customFolderEmailPreviewsById,
-    sidebarView: folderCreateSidebarView
-  },
-  play: async ({ args, canvasElement }) => {
-    const canvas = within(canvasElement)
-
-    await userEvent.click(await canvas.findByRole('button', { name: /^create folder$/i }))
-    await expect(args.onMailboxFolderCreateOpenChange).toHaveBeenCalledWith(true)
-  }
-}
-
-export const MailboxCreateFolderOpen: Story = {
-  args: {
-    emailPreviewsById: customFolderEmailPreviewsById,
-    sidebarView: folderCreateOpenSidebarView
-  },
-  play: async ({ args, canvasElement }) => {
-    const body = within(canvasElement.ownerDocument.body)
-    const dialog = within(await body.findByRole('dialog', { name: /^create folder$/i }))
-
-    await expect(await dialog.findByLabelText(/^folder name$/i)).toHaveValue('Projects')
-    await fireEvent.change(await dialog.findByLabelText(/^folder name$/i), {
-      target: { value: 'Projects Archive' }
-    })
-    await expect(args.onMailboxFolderCreateNameChange).toHaveBeenCalledWith('Projects Archive')
-    await userEvent.click(await dialog.findByRole('button', { name: /^create folder$/i }))
-    await expect(args.onMailboxFolderCreateSubmit).toHaveBeenCalled()
-  }
-}
-
-export const MailboxCreateFolderSubmitting: Story = {
-  args: {
-    emailPreviewsById: customFolderEmailPreviewsById,
-    sidebarView: folderCreateSubmittingSidebarView
-  },
-  play: async ({ canvasElement }) => {
-    const body = within(canvasElement.ownerDocument.body)
-    const dialog = within(await body.findByRole('dialog', { name: /^create folder$/i }))
-
-    await expect(await dialog.findByLabelText(/^folder name$/i)).toBeDisabled()
-    await expect(await dialog.findByRole('button', { name: /creating folder/i })).toBeDisabled()
-  }
-}
-
-export const MailboxCreateFolderError: Story = {
-  args: {
-    emailPreviewsById: customFolderEmailPreviewsById,
-    sidebarView: folderCreateErrorSidebarView
-  },
-  play: async ({ canvasElement }) => {
-    const body = within(canvasElement.ownerDocument.body)
-    const dialog = within(await body.findByRole('dialog', { name: /^create folder$/i }))
-
-    await expect(await dialog.findByText(/wildduck already has a folder named projects/i)).toBeInTheDocument()
-    await expect(await dialog.findByRole('button', { name: /^create folder$/i })).toBeEnabled()
-  }
-}
-
-export const MailboxFolderActions: Story = {
-  args: {
-    emailPreviewsById: customFolderEmailPreviewsById,
-    sidebarView: customFolderSidebarView
-  },
-  play: async ({ args, canvasElement }) => {
-    const canvas = within(canvasElement)
-    const body = within(canvasElement.ownerDocument.body)
-
-    await userEvent.click(await canvas.findByRole('button', { name: /^archive folder actions$/i }))
-    await userEvent.click(await body.findByRole('menuitem', { name: /^rename folder$/i }))
-    await expect(args.onMailboxFolderAction).toHaveBeenCalledWith(
-      'rename-folder',
-      expect.objectContaining({ id: 'archive' })
-    )
-
-    await userEvent.click(await canvas.findByRole('button', { name: /^archive folder actions$/i }))
-    await userEvent.click(await body.findByRole('menuitem', { name: /^delete folder$/i }))
-    await expect(args.onMailboxFolderAction).toHaveBeenCalledWith(
-      'delete-folder',
-      expect.objectContaining({ id: 'archive' })
-    )
-  }
-}
-
-export const MailboxProtectedFolderActions: Story = {
-  args: {
-    sidebarView: protectedFolderActionSidebarView
-  },
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-    const body = within(canvasElement.ownerDocument.body)
-
-    await userEvent.click(await canvas.findByRole('button', { name: /^inbox folder actions$/i }))
-
-    const renameAction = await body.findByRole('menuitem', { name: /rename folder/i })
-    const deleteAction = await body.findByRole('menuitem', { name: /delete folder/i })
-
-    await expect(await body.findAllByText(/^system folder managed by wildduck$/i)).toHaveLength(2)
-    await expect(renameAction).toHaveAttribute('aria-disabled', 'true')
-    await expect(deleteAction).toHaveAttribute('aria-disabled', 'true')
-  }
-}
-
-export const MailboxRenameFolderOpen: Story = {
-  args: {
-    emailPreviewsById: customFolderEmailPreviewsById,
-    sidebarView: folderRenameOpenSidebarView
-  },
-  play: async ({ args, canvasElement }) => {
-    const body = within(canvasElement.ownerDocument.body)
-    const dialog = within(await body.findByRole('dialog', { name: /^rename folder$/i }))
-
-    await expect(await dialog.findByLabelText(/^folder name$/i)).toHaveValue('Archive')
-    await fireEvent.change(await dialog.findByLabelText(/^folder name$/i), {
-      target: { value: 'Provider Archive' }
-    })
-    await expect(args.onMailboxFolderRenameNameChange).toHaveBeenCalledWith('Provider Archive')
-    await userEvent.click(await dialog.findByRole('button', { name: /^rename folder$/i }))
-    await expect(args.onMailboxFolderRenameSubmit).toHaveBeenCalled()
-  }
-}
-
-export const MailboxRenameFolderSubmitting: Story = {
-  args: {
-    emailPreviewsById: customFolderEmailPreviewsById,
-    sidebarView: folderRenameSubmittingSidebarView
-  },
-  play: async ({ canvasElement }) => {
-    const body = within(canvasElement.ownerDocument.body)
-    const dialog = within(await body.findByRole('dialog', { name: /^rename folder$/i }))
-
-    await expect(await dialog.findByLabelText(/^folder name$/i)).toBeDisabled()
-    await expect(await dialog.findByRole('button', { name: /renaming folder/i })).toBeDisabled()
-  }
-}
-
-export const MailboxRenameFolderError: Story = {
-  args: {
-    emailPreviewsById: customFolderEmailPreviewsById,
-    sidebarView: folderRenameErrorSidebarView
-  },
-  play: async ({ canvasElement }) => {
-    const body = within(canvasElement.ownerDocument.body)
-    const dialog = within(await body.findByRole('dialog', { name: /^rename folder$/i }))
-
-    await expect(await dialog.findByText(/could not rename this folder/i)).toBeInTheDocument()
-    await expect(await dialog.findByRole('button', { name: /^rename folder$/i })).toBeEnabled()
-  }
-}
-
-export const MailboxDeleteFolderConfirm: Story = {
-  args: {
-    emailPreviewsById: customFolderEmailPreviewsById,
-    sidebarView: folderDeleteOpenSidebarView
-  },
-  play: async ({ args, canvasElement }) => {
-    const body = within(canvasElement.ownerDocument.body)
-    const dialogElement = await body.findByRole('alertdialog')
-    const dialog = within(dialogElement)
-
-    await expect(dialogElement).toHaveTextContent(/delete archive folder/i)
-    await userEvent.click(await dialog.findByRole('button', { name: /^delete folder$/i }))
-    await expect(args.onMailboxFolderDeleteConfirm).toHaveBeenCalled()
-  }
-}
-
-export const MailboxDeleteFolderSubmitting: Story = {
-  args: {
-    emailPreviewsById: customFolderEmailPreviewsById,
-    sidebarView: folderDeleteSubmittingSidebarView
-  },
-  play: async ({ canvasElement }) => {
-    const body = within(canvasElement.ownerDocument.body)
-    const dialog = within(await body.findByRole('alertdialog'))
-
-    await expect(await dialog.findByRole('button', { name: /deleting folder/i })).toBeDisabled()
-  }
-}
-
-export const MailboxDeleteFolderError: Story = {
-  args: {
-    emailPreviewsById: customFolderEmailPreviewsById,
-    sidebarView: folderDeleteErrorSidebarView
-  },
-  play: async ({ canvasElement }) => {
-    const body = within(canvasElement.ownerDocument.body)
-    const dialog = within(await body.findByRole('alertdialog'))
-
-    await expect(await dialog.findByText(/folder still contains messages/i)).toBeInTheDocument()
-    await expect(await dialog.findByRole('button', { name: /^delete folder$/i })).toBeEnabled()
   }
 }
 
 export const MailboxPagination: Story = {
   args: {
-    sidebarView: paginatedMailboxSidebarView
+    routeSearch: {
+      cursor: 'middle-page-cursor',
+      direction: 'next'
+    }
   },
-  play: async ({ args, canvasElement }) => {
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenPaginatedView
+    }),
+  play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
 
-    await expect(await canvas.findByText('51-75')).toBeInTheDocument()
+    await expect(await canvas.findByText('4 shown')).toBeInTheDocument()
     await expect(await canvas.findByText(/235 messages/i)).toBeInTheDocument()
-    await userEvent.click(await canvas.findByRole('button', { name: /previous page/i }))
-    await expect(args.onMailboxPageChange).toHaveBeenCalledWith({
-      cursor: 'previous-cursor-page-1',
-      direction: 'previous'
-    })
-    await userEvent.click(await canvas.findByRole('button', { name: /next page/i }))
-    await expect(args.onMailboxPageChange).toHaveBeenCalledWith({
-      cursor: 'next-cursor-page-3',
-      direction: 'next'
-    })
+    await expect(await canvas.findByRole('button', { name: /previous page/i })).toBeEnabled()
+    await expect(await canvas.findByRole('button', { name: /next page/i })).toBeEnabled()
   }
 }
 
 export const MailboxPaginationLoading: Story = {
   args: {
-    sidebarView: paginatedMailboxLoadingSidebarView
+    routeSearch: {
+      cursor: 'middle-page-cursor',
+      direction: 'next'
+    }
   },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      pending: true,
+      view: mailWorkspaceScreenPaginatedView
+    })
+}
+
+export const MessageAppointment: Story = {
+  args: {
+    routeSearch: { messageId: 'appointment-alert' }
+  },
+  render: (args) => renderMailWorkspaceStory(args)
+}
+
+export const MessageWelcome: Story = {
+  args: {
+    routeSearch: { messageId: 'welcome-email' }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenSearchFilteredView
+    })
+}
+
+export const MessageStarred: Story = {
+  args: {
+    routeSearch: { messageId: 'welcome-email' }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenSearchFilteredView
+    }),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
 
-    await expect(await canvas.findByRole('button', { name: /previous page/i })).toBeDisabled()
-    await expect(await canvas.findByRole('button', { name: /next page/i })).toBeDisabled()
+    await expect(await canvas.findByRole('heading', { name: /welcome aboard/i })).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /^unstar$/i })).toBeInTheDocument()
   }
 }
 
-export const DraftEditing: Story = {
+export const MessageUnread: Story = {
   args: {
-    composeView: composeDraftView,
-    emailPreviewsById: draftEmailPreviewsById,
-    sidebarView: draftSidebarView
+    routeSearch: { messageId: 'appointment-alert' }
   },
-  play: async ({ args, canvasElement }) => {
-    const body = within(canvasElement.ownerDocument.body)
-
-    await userEvent.type(await body.findByLabelText(/^subject$/i), ' updated')
-    await expect(args.onComposeFieldChange).toHaveBeenCalledWith(
-      'subject',
-      expect.stringContaining('Re: Deployment checklist')
-    )
-    await userEvent.click(await body.findByRole('button', { name: /^save draft$/i }))
-    await expect(args.onComposeSaveDraft).toHaveBeenCalled()
-    await userEvent.click(await body.findByRole('button', { name: /^send$/i }))
-    await expect(args.onComposeSubmit).toHaveBeenCalled()
-    await userEvent.click(await body.findByRole('button', { name: /^discard$/i }))
-    await expect(args.onComposeDiscardDraft).toHaveBeenCalled()
-  }
-}
-
-export const DraftToolbarActions: Story = {
-  args: {
-    emailPreviewsById: draftToolbarEmailPreviewsById,
-    sidebarView: draftSidebarView
-  },
-  play: async ({ args, canvasElement }) => {
+  render: (args) => renderMailWorkspaceStory(args),
+  play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
 
-    await expect(await canvas.findByRole('heading', { name: /deployment checklist/i })).toBeInTheDocument()
-    await userEvent.click(await canvas.findByRole('button', { name: /^send draft$/i }))
-    await expect(args.onEmailAction).toHaveBeenCalledWith(
-      'send-draft',
-      expect.objectContaining({ id: 'draft-reply' })
-    )
-    await userEvent.click(await canvas.findByRole('button', { name: /^edit draft$/i }))
-    await expect(args.onEmailAction).toHaveBeenCalledWith(
-      'edit-draft',
-      expect.objectContaining({ id: 'draft-reply' })
-    )
-    await userEvent.click(await canvas.findByRole('button', { name: /^discard draft$/i }))
-    await expect(args.onEmailAction).toHaveBeenCalledWith(
-      'discard-draft',
-      expect.objectContaining({ id: 'draft-reply' })
-    )
+    await expect(await canvas.findByRole('heading', { name: /appointment alert/i })).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /^mark as read$/i })).toBeInTheDocument()
   }
 }
 
-export const ComposeSending: Story = {
+export const MessageError: Story = {
   args: {
-    composeView: composeSendingView,
-    sidebarView: accountSwitchingSidebarView
+    routeSearch: { messageId: 'appointment-alert' }
   },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      error: new Error('Message data could not be loaded.')
+    }),
   play: async ({ canvasElement }) => {
-    const body = within(canvasElement.ownerDocument.body)
+    const canvas = within(canvasElement)
 
-    await expect(getContainingButton(await body.findByText(/^Send$/i))).toBeDisabled()
-    await expect(getContainingButton(await body.findByText(/^Save draft$/i))).toBeDisabled()
-  }
-}
-
-export const ComposeSelectedAccount: Story = {
-  args: {
-    composeView: composeSelectedAccountView,
-    sidebarView: accountSwitchingSidebarView
-  },
-  play: async ({ canvasElement }) => {
-    const body = within(canvasElement.ownerDocument.body)
-    const from = await body.findByLabelText(/^from$/i)
-
-    await expect(from).toHaveValue('Support Agent <support@agentteam.test>')
-    await expect(from).toHaveAttribute('readonly')
-  }
-}
-
-export const ComposeSavedDraft: Story = {
-  args: {
-    composeView: composeSavedDraftView,
-    sidebarView: draftSidebarView
-  },
-  play: async ({ canvasElement }) => {
-    const body = within(canvasElement.ownerDocument.body)
-
-    await expect(await body.findByText(/saved to wildduck drafts 2 minutes ago/i)).toBeInTheDocument()
-    await expect(await body.findByRole('button', { name: /^save draft$/i })).toBeEnabled()
-    await expect(await body.findByRole('button', { name: /^send$/i })).toBeEnabled()
-  }
-}
-
-export const ComposeSavingDraft: Story = {
-  args: {
-    composeView: composeSavingDraftView,
-    sidebarView: accountSwitchingSidebarView
-  },
-  play: async ({ canvasElement }) => {
-    const body = within(canvasElement.ownerDocument.body)
-
-    await expect(getContainingButton(await body.findByText(/^Save draft$/i))).toBeDisabled()
-    await expect(await body.findByRole('button', { name: /^discard$/i })).toBeDisabled()
-    await expect(getContainingButton(await body.findByText(/^Send$/i))).toBeDisabled()
-  }
-}
-
-export const ComposeReplyAll: Story = {
-  args: {
-    composeView: composeReplyAllView,
-    sidebarView: accountSwitchingSidebarView
-  }
-}
-
-export const ComposeForward: Story = {
-  args: {
-    composeView: composeForwardView,
-    sidebarView: accountSwitchingSidebarView
-  }
-}
-
-export const ComposeDraftSaveError: Story = {
-  args: {
-    composeView: composeDraftSaveErrorView,
-    sidebarView: accountSwitchingSidebarView
-  },
-  play: async ({ canvasElement }) => {
-    const body = within(canvasElement.ownerDocument.body)
-
-    await expect(await body.findByRole('dialog')).toHaveTextContent(/draft could not be saved/i)
-  }
-}
-
-export const ComposeValidationErrors: Story = {
-  args: {
-    composeView: composeValidationErrorView,
-    sidebarView: accountSwitchingSidebarView
-  },
-  play: async ({ args, canvasElement }) => {
-    const body = within(canvasElement.ownerDocument.body)
-    const toField = await body.findByLabelText(/^to$/i)
-    const messageBody = await body.findByLabelText(/^body$/i)
-
-    await expect(await body.findByText(/^use a valid recipient address\.$/i)).toBeInTheDocument()
-    await expect(await body.findByText(/^message body is required before sending\.$/i)).toBeInTheDocument()
-    await expect(toField).toHaveAttribute('aria-invalid', 'true')
-    await expect(messageBody).toHaveAttribute('aria-invalid', 'true')
-    await expect(getContainingButton(await body.findByText(/^Send$/i))).toBeDisabled()
-    await expect(getContainingButton(await body.findByText(/^Save draft$/i))).toBeEnabled()
-
-    await fireEvent.change(toField, {
-      target: { value: 'updates@provider.example' }
-    })
-    await expect(args.onComposeFieldChange).toHaveBeenCalledWith('to', 'updates@provider.example')
-  }
-}
-
-export const ComposeAttachments: Story = {
-  args: {
-    composeView: composeWithAttachmentsView,
-    sidebarView: accountSwitchingSidebarView
-  },
-  play: async ({ args, canvasElement }) => {
-    const body = within(canvasElement.ownerDocument.body)
-    const attachment = new File(['Draft attachment notes'], 'reply-notes.txt', {
-      type: 'text/plain'
-    })
-
-    await userEvent.upload(await body.findByLabelText(/^attach files$/i), attachment)
-    await expect(args.onComposeAttachmentAdd).toHaveBeenCalledWith(
-      expect.arrayContaining([expect.objectContaining({ name: 'reply-notes.txt', type: 'text/plain' })])
-    )
-    await expect(await body.findByText(/routing-checklist\.pdf/i)).toBeInTheDocument()
-    await userEvent.click(
-      await body.findByRole('button', { name: /remove attachment routing-checklist\.pdf/i })
-    )
-    await expect(args.onComposeAttachmentRemove).toHaveBeenCalledWith('compose-attachment-checklist')
-  }
-}
-
-export const ComposeAttachmentStatus: Story = {
-  args: {
-    composeView: composeAttachmentUploadStatusView,
-    sidebarView: accountSwitchingSidebarView
-  },
-  play: async ({ canvasElement }) => {
-    const body = within(canvasElement.ownerDocument.body)
-
-    await expect(await body.findByText(/^Uploading$/i)).toBeInTheDocument()
-    await expect(await body.findByText(/^Upload failed$/i)).toBeInTheDocument()
-    await expect(await body.findByText(/^Ready$/i)).toBeInTheDocument()
-    await expect(
-      await body.findByRole('button', { name: /remove attachment provider-log\.csv/i })
-    ).toBeDisabled()
-    await expect(
-      await body.findByRole('button', { name: /remove attachment large-export\.zip/i })
-    ).toBeEnabled()
+    await expect(await canvas.findByText(/message unavailable/i)).toBeInTheDocument()
   }
 }
 
 export const MessageAttachments: Story = {
   args: {
-    emailPreviewsById: attachmentEmailPreviewsById,
-    sidebarView: attachmentSidebarView
+    routeSearch: { messageId: 'attachment-message' }
   },
-  play: async ({ args, canvasElement }) => {
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenAttachmentView
+    }),
+  play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     const manifestLink = await canvas.findByRole('link', { name: /manifest\.json/i })
 
-    await userEvent.click(await canvas.findByRole('button', { name: /preview attachment preview\.png/i }))
-    await expect(args.onEmailAttachmentPreview).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'attachment-preview', filename: 'preview.png' }),
-      expect.objectContaining({ id: 'attachment-message' })
-    )
     await expect(manifestLink).toHaveAttribute(
       'href',
       expect.stringContaining(
@@ -1499,227 +301,735 @@ export const MessageAttachments: Story = {
 
 export const MessageInlineAttachments: Story = {
   args: {
-    emailPreviewsById: inlineAttachmentEmailPreviewsById,
-    sidebarView: inlineAttachmentSidebarView
+    routeSearch: { messageId: 'inline-attachment-message' }
   },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenInlineAttachmentView
+    }),
+  play: async ({ canvasElement }) => {
+    const iframeSource = await findEmailFrameSource(
+      canvasElement,
+      /inline attachment rendering email body/i,
+      'inline attachment email body'
+    )
+
+    await expect(iframeSource).toContain(
+      '/rpc/mail/accounts/agent-support/mailboxes/inbox/messages/attachment-message/attachments/inline-provider-logo'
+    )
+    await expect(iframeSource).toContain('Inline image unavailable')
+    await expect(iframeSource).not.toContain('cid:provider-logo')
+    await expect(iframeSource).not.toContain('wildduck.example.test')
+  }
+}
+
+export const ConversationThread: Story = {
+  args: {
+    routeSearch: { messageId: 'conversation-thread' }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenConversationView
+    }),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    const iframeElement = await canvas.findByTitle(/inline attachment rendering email body/i)
 
-    if (!(iframeElement instanceof globalThis.HTMLIFrameElement)) {
-      throw new TypeError('Expected inline attachment email body to render in an iframe')
-    }
-
-    const iframeBody = iframeElement.contentDocument?.body
-    if (!iframeBody) {
-      throw new Error('Expected inline attachment iframe body to be readable')
-    }
-
-    await waitFor(async () => {
-      const inlineLogo = iframeBody.querySelector('img[alt="Provider logo"]')
-      const inlineLogoSrc = inlineLogo?.getAttribute('src')
-
-      if (!inlineLogoSrc) {
-        throw new TypeError('Expected provider logo to render as an inline image')
-      }
-
-      await expect(inlineLogoSrc).toContain(
-        '/rpc/mail/accounts/agent-support/mailboxes/inbox/messages/inline-attachment-message/attachments/inline-provider-logo'
-      )
-      await expect(iframeBody.innerHTML).toContain('Inline image unavailable')
-      await expect(iframeBody.innerHTML).not.toContain('cid:provider-logo')
-      await expect(iframeBody.innerHTML).not.toContain('wildduck.example.test')
-    })
+    await expect(await canvas.findByRole('heading', { name: /agent mail smoke/i })).toBeInTheDocument()
+    await expect(
+      await canvas.findByText(/drafting reply from the selected wildduck drafts/i)
+    ).toBeInTheDocument()
   }
 }
 
-export const MessagePendingAction: Story = {
+export const DraftEditing: Story = {
   args: {
-    emailPreviewsById: pendingActionEmailPreviewsById,
-    sidebarView: pendingActionSidebarView
+    routeSearch: {
+      folderId: mailWorkspaceScreenFolderIds.drafts,
+      messageId: 'draft-reply'
+    }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenDraftView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    const body = within(canvasElement.ownerDocument.body)
+
+    await userEvent.click(await canvas.findByRole('button', { name: /^edit draft$/i }))
+    await expect(await body.findByLabelText(/^subject$/i)).toHaveValue(
+      'Re: Deployment checklist and routing review'
+    )
   }
 }
+
+export const DraftToolbarActions: Story = {
+  args: {
+    routeSearch: {
+      folderId: mailWorkspaceScreenFolderIds.drafts,
+      messageId: 'draft-reply'
+    }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenDraftView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+
+    await expect(await canvas.findByRole('button', { name: /^send draft$/i })).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /^edit draft$/i })).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /^discard draft$/i })).toBeInTheDocument()
+  }
+}
+
+export const MailboxJunk: Story = {
+  args: {
+    routeSearch: { folderId: mailWorkspaceScreenFolderIds.junk }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenJunkView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+
+    await expect(await canvas.findByRole('button', { name: /junk/i })).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /^not spam$/i })).toBeInTheDocument()
+  }
+}
+
+export const MailboxSent: Story = {
+  args: {
+    routeSearch: { folderId: mailWorkspaceScreenFolderIds.sent }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenSentView
+    })
+}
+
+export const MailboxTrash: Story = {
+  args: {
+    routeSearch: { folderId: mailWorkspaceScreenFolderIds.trash }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenTrashView
+    })
+}
+
+export const MailboxFolderNavigation: Story = {
+  args: {
+    routeSearch: {}
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      viewResolver: mailWorkspaceViewForQuery
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+
+    await userEvent.click(await canvas.findByRole('button', { name: /sent/i }))
+    await expect(
+      await canvas.findByRole('heading', { name: /deployment checklist and routing review/i })
+    ).toBeInTheDocument()
+  }
+}
+
+export const MailboxCustomFolder: Story = {
+  args: {
+    routeSearch: { folderId: mailWorkspaceScreenFolderIds.archive }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenCustomFolderView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+
+    await expect(await canvas.findByRole('button', { name: /archive/i })).toBeInTheDocument()
+    await expect(await canvas.findByRole('heading', { name: /archived routing review/i })).toBeInTheDocument()
+  }
+}
+
+export const MailboxCreateFolder: Story = {
+  args: {
+    routeSearch: { folderId: mailWorkspaceScreenFolderIds.archive }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenCustomFolderView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    const body = within(canvasElement.ownerDocument.body)
+
+    await userEvent.click(await canvas.findByRole('button', { name: /^create folder$/i }))
+    await expect(await body.findByRole('dialog', { name: /^create folder$/i })).toBeInTheDocument()
+  }
+}
+
+export const MailboxFolderActions: Story = {
+  args: {
+    routeSearch: { folderId: mailWorkspaceScreenFolderIds.archive }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenCustomFolderView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    const body = within(canvasElement.ownerDocument.body)
+
+    await userEvent.click(await canvas.findByRole('button', { name: /^archive folder actions$/i }))
+    await userEvent.click(await body.findByRole('menuitem', { name: /^rename folder$/i }))
+    await expect(await body.findByRole('dialog', { name: /^rename folder$/i })).toBeInTheDocument()
+  }
+}
+
+export const MailboxRenameFolderOpen: Story = MailboxFolderActions
+
+export const MailboxDeleteFolderConfirm: Story = {
+  args: {
+    routeSearch: { folderId: mailWorkspaceScreenFolderIds.archive }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenCustomFolderView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    const body = within(canvasElement.ownerDocument.body)
+
+    await userEvent.click(await canvas.findByRole('button', { name: /^archive folder actions$/i }))
+    await userEvent.click(await body.findByRole('menuitem', { name: /^delete folder$/i }))
+    await expect(await body.findByRole('alertdialog')).toHaveTextContent(/delete archive/i)
+  }
+}
+
+export const MailboxAccountSwitching: Story = {
+  args: {
+    routeSearch: { accountId: 'agent-billing' }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      viewResolver: mailWorkspaceViewForQuery
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+
+    await expect(await canvas.findByRole('heading', { name: /billing account handoff/i })).toBeInTheDocument()
+  }
+}
+
+export const MailboxAccountPermissions: Story = {
+  args: {
+    routeSearch: {}
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenAccountPermissionsView
+    }),
+  play: async ({ canvasElement }) => {
+    const body = await openWorkspaceMailboxSwitcher(canvasElement)
+
+    await expect(await body.findByRole('menuitem', { name: /finance agent/i })).toHaveAttribute(
+      'data-disabled'
+    )
+  }
+}
+
+export const MessageToolbarControllerActions: Story = {
+  args: {
+    routeSearch: { messageId: 'appointment-alert' }
+  },
+  render: (args) => renderMailWorkspaceStory(args),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+
+    await expect(await canvas.findByRole('button', { name: /^reply$/i })).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /^reply all$/i })).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /^forward$/i })).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /^move to folder$/i })).toBeInTheDocument()
+  }
+}
+
+export const MessageArchiveAction: Story = {
+  args: {
+    routeSearch: { messageId: 'blocked-images' }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenBlockedImagesView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+
+    await expect(await canvas.findByRole('button', { name: /^archive$/i })).toBeInTheDocument()
+  }
+}
+
+export const MessageMarkNotSpam: Story = MailboxJunk
 
 export const MessageMoveToSpam: Story = {
   args: {
-    mailActionView: moveToSpamActionView,
-    sidebarView: pendingActionSidebarView
+    routeSearch: { messageId: 'appointment-alert' }
   },
-  play: async ({ args, canvasElement }) => {
+  render: (args) => renderMailWorkspaceStory(args),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
     const body = within(canvasElement.ownerDocument.body)
 
-    await expect(await body.findByRole('dialog')).toHaveTextContent(/move message/i)
-    await expect(await body.findByText(/move to junk/i)).toBeInTheDocument()
-    await userEvent.click(await body.findByRole('button', { name: /^move to junk$/i }))
-    await expect(args.onMailMoveSubmit).toHaveBeenCalled()
+    await userEvent.click(await canvas.findByRole('button', { name: /^move to folder$/i }))
+    await expect(await body.findByRole('dialog', { name: /^move message$/i })).toBeInTheDocument()
   }
 }
 
 export const MessageMoveTargetSelection: Story = {
   args: {
-    mailActionView: moveToSpamActionView,
-    sidebarView: pendingActionSidebarView
+    routeSearch: { messageId: 'appointment-alert' }
   },
-  play: async ({ args, canvasElement }) => {
+  render: (args) => renderMailWorkspaceStory(args),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
     const body = within(canvasElement.ownerDocument.body)
-    const dialog = await body.findByRole('dialog')
 
-    await userEvent.click(await within(dialog).findByRole('combobox'))
+    await userEvent.click(await canvas.findByRole('button', { name: /^move to folder$/i }))
+    await userEvent.click(await body.findByRole('combobox'))
     await userEvent.keyboard('{ArrowDown}{Enter}')
-    await expect(args.onMailMoveTargetChange).toHaveBeenCalledWith('trash')
+    await expect(await body.findByRole('dialog', { name: /^move message$/i })).toBeInTheDocument()
   }
 }
 
 export const MessageMoveDisabledTarget: Story = {
   args: {
-    mailActionView: moveDisabledTargetActionView,
-    sidebarView: accountSwitchingSidebarView
+    routeSearch: { messageId: 'appointment-alert' }
   },
+  render: (args) => renderMailWorkspaceStory(args),
   play: async ({ canvasElement }) => {
-    const body = within(canvasElement.ownerDocument.body)
-    const dialog = within(await body.findByRole('dialog', { name: /^move message$/i }))
-
-    await expect(await dialog.findByRole('button', { name: /^move to inbox$/i })).toBeDisabled()
-    await userEvent.click(await dialog.findByRole('combobox'))
-
-    const inboxTarget = await body.findByRole('option', { name: /inbox/i })
-
-    await expect(await body.findAllByText(/^message is already in inbox$/i)).toHaveLength(2)
-    await expect(inboxTarget).toHaveAttribute('aria-disabled', 'true')
-  }
-}
-
-export const MessageMoveSubmitting: Story = {
-  args: {
-    mailActionView: moveActionSubmittingView,
-    sidebarView: pendingActionSidebarView
-  },
-  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
     const body = within(canvasElement.ownerDocument.body)
 
-    await expect(getContainingButton(await body.findByText(/^Moving$/i))).toBeDisabled()
-    await expect(await body.findByRole('button', { name: /^cancel$/i })).toBeDisabled()
-  }
-}
-
-export const MessageMoveError: Story = {
-  args: {
-    mailActionView: moveActionErrorView,
-    sidebarView: pendingActionSidebarView
-  },
-  play: async ({ canvasElement }) => {
-    const body = within(canvasElement.ownerDocument.body)
-
-    await expect(await body.findByText(/message could not be moved/i)).toBeInTheDocument()
+    await userEvent.click(await canvas.findByRole('button', { name: /^move to folder$/i }))
+    await expect(await body.findByRole('button', { name: /^move$/i })).toBeDisabled()
   }
 }
 
 export const MessageDeleteConfirm: Story = {
   args: {
-    mailActionView: deleteMessageActionView,
-    sidebarView: pendingActionSidebarView
+    routeSearch: { messageId: 'appointment-alert' }
   },
-  play: async ({ args, canvasElement }) => {
-    const body = within(canvasElement.ownerDocument.body)
-
-    await expect(await body.findByRole('alertdialog')).toHaveTextContent(/delete this message/i)
-    await userEvent.click(await body.findByRole('button', { name: /^delete message$/i }))
-    await expect(args.onMailDeleteConfirm).toHaveBeenCalled()
-  }
-}
-
-export const MessageDeleteSubmitting: Story = {
-  args: {
-    mailActionView: deleteMessageSubmittingActionView,
-    sidebarView: pendingActionSidebarView
-  },
+  render: (args) => renderMailWorkspaceStory(args),
   play: async ({ canvasElement }) => {
-    const body = within(canvasElement.ownerDocument.body)
-
-    await expect(getContainingButton(await body.findByText(/^Delete message$/i))).toBeDisabled()
-    await expect(await body.findByRole('button', { name: /^cancel$/i })).toBeDisabled()
-  }
-}
-
-export const MessageOriginalSource: Story = {
-  args: {
-    mailActionView: originalSourceActionView,
-    sidebarView: pendingActionSidebarView
-  },
-  play: async ({ args, canvasElement }) => {
-    const body = within(canvasElement.ownerDocument.body)
-
-    await expect(await body.findByRole('dialog')).toHaveTextContent(/original source/i)
-    await expect(await body.findByText(/storybook-original-source@example\.test/i)).toBeInTheDocument()
-    await userEvent.click(await body.findByRole('button', { name: /^download \.eml$/i }))
-    await expect(args.onMailOriginalSourceDownload).toHaveBeenCalled()
-  }
-}
-
-export const MessageOriginalSourceEvidence: Story = {
-  args: {
-    mailActionView: originalSourceEvidenceActionView,
-    sidebarView: pendingActionSidebarView
-  },
-  play: async ({ args, canvasElement }) => {
-    const body = within(canvasElement.ownerDocument.body)
-    const dialog = await body.findByRole('dialog')
-
-    await expect(dialog).toHaveTextContent(/cloudflare archived raw headers/i)
-    await expect(dialog).toHaveTextContent(/final wildduck source headers/i)
-    await expect(dialog).toHaveTextContent(/cloudflare edge evidence from verified archived raw\.eml/i)
-    await expect(dialog).toHaveTextContent(/not original internet authentication/i)
-    await expect((await within(dialog).findAllByText(/^X-CF-Trace$/i)).length).toBe(2)
-    await userEvent.click(await body.findByRole('button', { name: /^download evidence bundle$/i }))
-    await expect(args.onMailOriginalSourceDownload).toHaveBeenCalled()
-  }
-}
-
-export const MessageOriginalSourceLoading: Story = {
-  args: {
-    mailActionView: originalSourceLoadingActionView,
-    sidebarView: pendingActionSidebarView
-  },
-  play: async ({ canvasElement }) => {
-    const body = within(canvasElement.ownerDocument.body)
-
-    await expect(await body.findByText(/loading source/i)).toBeInTheDocument()
-    await expect(await body.findByRole('button', { name: /^download \.eml$/i })).toBeDisabled()
-  }
-}
-
-export const MessageOriginalSourceError: Story = {
-  args: {
-    mailActionView: originalSourceErrorActionView,
-    sidebarView: pendingActionSidebarView
-  },
-  play: async ({ canvasElement }) => {
-    const body = within(canvasElement.ownerDocument.body)
-
-    await expect(await body.findByText(/original source could not be loaded/i)).toBeInTheDocument()
-    await expect(await body.findByRole('button', { name: /^download \.eml$/i })).toBeDisabled()
-  }
-}
-
-export const MessageRowSelection: Story = {
-  args: {
-    sidebarView: emailPreviewSidebarView
-  },
-  play: async ({ args, canvasElement }) => {
     const canvas = within(canvasElement)
+    const body = within(canvasElement.ownerDocument.body)
 
-    await expect(await canvas.findByRole('heading', { name: /appointment alert/i })).toBeInTheDocument()
-    await userEvent.click(await canvas.findByRole('button', { name: /mailjet templates/i }))
-    await expect(args.onMailboxMessageSelect).toHaveBeenCalledWith('welcome-email')
-    await expect(await canvas.findByRole('heading', { name: /welcome aboard/i })).toBeInTheDocument()
+    await userEvent.click(await canvas.findByRole('button', { name: /^delete$/i }))
+    await expect(await body.findByRole('alertdialog')).toHaveTextContent(/delete this message/i)
+  }
+}
+
+export const ComposeSelectedAccount: Story = {
+  args: {
+    routeSearch: {}
+  },
+  render: (args) => renderMailWorkspaceStory(args),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    const body = within(canvasElement.ownerDocument.body)
+
+    await userEvent.click(await canvas.findByRole('button', { name: /^compose$/i }))
+    await expect(await body.findByLabelText(/^from$/i)).toHaveValue('Support Agent <support@agentteam.test>')
+  }
+}
+
+export const ComposeReplyAll: Story = {
+  args: {
+    routeSearch: { messageId: 'appointment-alert' }
+  },
+  render: (args) => renderMailWorkspaceStory(args),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    const body = within(canvasElement.ownerDocument.body)
+
+    await userEvent.click(await canvas.findByRole('button', { name: /^reply all$/i }))
+    await expect(await body.findByRole('dialog')).toHaveTextContent(/reply all/i)
+    await expect(await body.findByLabelText(/^subject$/i)).toHaveValue('Re: Appointment alert')
+  }
+}
+
+export const ComposeForward: Story = {
+  args: {
+    routeSearch: { messageId: 'appointment-alert' }
+  },
+  render: (args) => renderMailWorkspaceStory(args),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    const body = within(canvasElement.ownerDocument.body)
+
+    await userEvent.click(await canvas.findByRole('button', { name: /^forward$/i }))
+    await expect(await body.findByRole('dialog')).toHaveTextContent(/forward message/i)
+    await expect(await body.findByLabelText(/^subject$/i)).toHaveValue('Fwd: Appointment alert')
+  }
+}
+
+export const SecurityRemoteContentBlocked: Story = {
+  args: {
+    routeSearch: { messageId: 'blocked-images' }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenBlockedImagesView
+    }),
+  play: async ({ canvasElement }) => {
+    const iframeSource = await findEmailFrameSource(
+      canvasElement,
+      /deployment checklist and routing review email body/i,
+      'email body'
+    )
+
+    await expect(iframeSource).toContain('Remote image blocked')
+    await expect(iframeSource).not.toContain('assets.provider.example/launch-banner.png')
+  }
+}
+
+export const SecurityRemoteContentInteraction: Story = {
+  args: {
+    routeSearch: { messageId: 'blocked-images' }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenBlockedImagesView
+    }),
+  play: async ({ canvasElement }) => {
+    const iframeSource = await findEmailFrameSource(
+      canvasElement,
+      /deployment checklist and routing review email body/i,
+      'email body'
+    )
+
+    await expect(iframeSource).toContain('the provider portal')
+    await expect(iframeSource).toContain('data-agent-mail-external-link-id')
+    await expect(iframeSource).not.toContain('href="https://dash.cloudflare.com')
+  }
+}
+
+export const SecurityRemoteBackgroundImagesBlocked: Story = {
+  args: {
+    routeSearch: { messageId: 'remote-background-images-message' }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenRemoteBackgroundView
+    }),
+  play: async ({ canvasElement }) => {
+    const iframeSource = await findEmailFrameSource(
+      canvasElement,
+      /background image tracking email body/i,
+      'background image email body'
+    )
+
+    await expect(iframeSource).toContain('Background image content')
+    await expect(iframeSource).not.toContain('assets.provider.example')
+    await expect(iframeSource).not.toContain('background-image')
+  }
+}
+
+export const SecurityDocumentResourceTagsBlocked: Story = {
+  args: {
+    routeSearch: { messageId: 'document-resource-message' }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenDocumentResourceView
+    }),
+  play: async ({ canvasElement }) => {
+    const iframeSource = await findEmailFrameSource(
+      canvasElement,
+      /document resource controls email body/i,
+      'document resource email body'
+    )
+
+    await expect(iframeSource).toContain('Document resource content')
+    await expect(iframeSource).not.toContain('wildduck.example.test')
+    await expect(iframeSource).not.toContain('<base')
+    await expect(iframeSource).not.toContain('<link')
+    await expect(iframeSource).not.toContain('<script')
+    await expect(iframeSource).not.toContain('<iframe')
+    await expect(iframeSource).not.toContain('<object')
+    await expect(iframeSource).not.toContain('<embed')
+  }
+}
+
+export const SecurityMailtoLinkInteraction: Story = {
+  args: {
+    routeSearch: { messageId: 'mailto-link-message' }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenMailtoView
+    }),
+  play: async ({ canvasElement }) => {
+    const iframeSource = await findEmailFrameSource(
+      canvasElement,
+      /contact support by email email body/i,
+      'mailto email body'
+    )
+
+    await expect(iframeSource).toContain('Email support')
+    await expect(iframeSource).toContain('data-agent-mail-external-link-id')
+    await expect(iframeSource).not.toContain('href="mailto:support@example.test')
+  }
+}
+
+export const SecurityExternalLinkGenerated: Story = {
+  args: {
+    routeSearch: { messageId: 'external-link-message' }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenExternalLinkView
+    }),
+  play: async ({ canvasElement }) => {
+    const iframeSource = await findEmailFrameSource(
+      canvasElement,
+      /external link handling email body/i,
+      'external link email body'
+    )
+
+    await expect(iframeSource).toContain('Generated docs link')
+    await expect(iframeSource).toContain('data-agent-mail-external-link-id')
+    await expect(iframeSource).not.toContain('href="https://docs.example.test')
+  }
+}
+
+export const SecurityFormContentRemoved: Story = {
+  args: {
+    routeSearch: { messageId: 'form-message' }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenFormView
+    }),
+  play: async ({ canvasElement }) => {
+    const iframeSource = await findEmailFrameSource(
+      canvasElement,
+      /form in email body email body/i,
+      'form email body'
+    )
+
+    await expect(iframeSource).not.toContain('<form')
+    await expect(iframeSource).not.toContain('<input')
+    await expect(iframeSource).not.toContain('<button')
+    await expect(iframeSource).not.toContain('phish.example.test')
+  }
+}
+
+export const WorkspaceSwitcherDefault: Story = {
+  args: {
+    routeSearch: {}
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      viewResolver: mailWorkspaceViewForQuery
+    }),
+  play: async ({ canvasElement }) => {
+    const body = await openWorkspaceMailboxSwitcher(canvasElement)
+
+    await expect(await body.findByRole('menuitem', { name: /support agent/i })).toBeInTheDocument()
+    await expect(await body.findByRole('menuitem', { name: /billing agent/i })).toBeInTheDocument()
+  }
+}
+
+export const WorkspaceSwitcherLongMailboxList: Story = {
+  args: {
+    routeSearch: {}
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenLongMailboxListView
+    }),
+  play: async ({ canvasElement }) => {
+    const body = await openWorkspaceMailboxSwitcher(canvasElement)
+
+    await expect(await body.findByRole('menuitem', { name: /abuse review/i })).toBeInTheDocument()
+    await expect(await body.findByRole('menuitem', { name: /notifications/i })).toHaveAttribute(
+      'data-disabled'
+    )
+  }
+}
+
+export const WorkspaceSwitcherEmpty: Story = {
+  args: {
+    routeSearch: {}
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenNoAccountsView
+    }),
+  play: async ({ canvasElement }) => {
+    const body = await openWorkspaceMailboxSwitcher(canvasElement)
+
+    await expect(await body.findByText('No mailboxes')).toBeInTheDocument()
+  }
+}
+
+export const WorkspaceSwitcherSingleWorkspace: Story = {
+  args: {
+    routeSearch: {}
+  },
+  render: (args) => renderMailWorkspaceStory(args),
+  play: async ({ canvasElement }) => {
+    const body = await openWorkspaceMailboxSwitcher(canvasElement)
+
+    await expect(await body.findByText('AgentTeam Email')).toBeInTheDocument()
+    await expect(body.queryByText(/^Workspaces$/i)).not.toBeInTheDocument()
   }
 }
 
 export const AccountMenu: Story = {
+  args: {
+    routeSearch: {}
+  },
+  render: (args) => renderMailWorkspaceStory(args),
   play: async ({ canvasElement }) => {
     const body = within(canvasElement.ownerDocument.body)
 
     await userEvent.click(await body.findByRole('button', { name: /^account$/i }))
     await expect(await body.findByRole('menuitem', { name: /^settings$/i })).toBeInTheDocument()
+  }
+}
+
+async function openWorkspaceMailboxSwitcher(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement)
+
+  await userEvent.click(await canvas.findByRole('button', { name: /open workspace and mailbox switcher/i }))
+
+  return within(canvasElement.ownerDocument.body)
+}
+
+async function findEmailFrameSource(
+  canvasElement: HTMLElement,
+  title: RegExp,
+  description: string
+): Promise<string> {
+  const iframeElement = await within(canvasElement).findByTitle(title)
+
+  if (!(iframeElement instanceof globalThis.HTMLIFrameElement)) {
+    throw new TypeError(`Expected ${description} to render in an iframe`)
+  }
+
+  await waitFor(
+    () => {
+      if (!iframeElement.srcdoc) {
+        throw new Error(`Expected ${description} iframe source to be available`)
+      }
+    },
+    { timeout: 5_000 }
+  )
+
+  if (!iframeElement.srcdoc) {
+    throw new Error(`Expected ${description} iframe source to be available`)
+  }
+
+  return iframeElement.srcdoc
+}
+
+function renderMailWorkspaceStory(
+  args: DashboardMailControllerArgs,
+  options: {
+    error?: Error
+    pending?: boolean
+    view?: AgentMailWebWorkspace
+    viewResolver?: (query: MailWorkspaceQuery) => AgentMailWebWorkspace
+  } = {}
+) {
+  return (
+    <MailWorkspaceControllerStoryFrame
+      {...args}
+      mailboxAdminNavigationLoader={createStoryMailboxAdminNavigationLoader(storyMailboxAdminNavigation)}
+      mailWorkspaceLoader={createStoryMailWorkspaceLoader({
+        error: options.error,
+        pending: options.pending,
+        view: options.view ?? mailWorkspaceScreenReadyView,
+        viewResolver: options.viewResolver
+      })}
+    />
+  )
+}
+
+function createStoryMailWorkspaceLoader({
+  error,
+  pending,
+  view,
+  viewResolver
+}: {
+  error?: Error
+  pending?: boolean
+  view: AgentMailWebWorkspace
+  viewResolver?: (query: MailWorkspaceQuery) => AgentMailWebWorkspace
+}) {
+  return async (query: MailWorkspaceQuery) => {
+    if (pending) {
+      await new Promise(() => {})
+    }
+
+    if (error) {
+      throw error
+    }
+
+    return mailWorkspaceForQuery(viewResolver?.(query) ?? view, query)
+  }
+}
+
+function createStoryMailboxAdminNavigationLoader(navigation: AgentMailAdminNavigation) {
+  return async () => navigation
+}
+
+function mailWorkspaceViewForQuery(query: MailWorkspaceQuery) {
+  if (query.accountId === 'agent-billing') {
+    return mailWorkspaceScreenBillingAccountView
+  }
+
+  if (query.query?.trim() === 'welcome') {
+    return mailWorkspaceScreenSearchFilteredView
+  }
+
+  if (query.query?.trim()) {
+    return mailWorkspaceScreenSearchEmptyView
+  }
+
+  if (query.unreadOnly) {
+    return mailWorkspaceScreenUnreadOnlyView
+  }
+
+  const folderView = query.folderId ? mailWorkspaceScreenViewsByFolderId[query.folderId] : undefined
+  if (folderView) {
+    return folderView
+  }
+
+  const messageView = query.messageId ? mailWorkspaceScreenViewsByMessageId[query.messageId] : undefined
+  if (messageView) {
+    return messageView
+  }
+
+  return mailWorkspaceScreenAccountSwitchingView
+}
+
+function mailWorkspaceForQuery(
+  view: AgentMailWebWorkspace,
+  query: MailWorkspaceQuery
+): AgentMailWebWorkspace {
+  const activeAccountId = query.accountId ?? view.activeAccountId
+  const activeFolderId = query.folderId ?? view.activeFolderId
+  const selectedMessage =
+    query.messageId && view.selectedMessage?.id !== query.messageId ? null : view.selectedMessage
+
+  return {
+    ...view,
+    activeAccountId,
+    activeFolderId,
+    selectedMessage
   }
 }

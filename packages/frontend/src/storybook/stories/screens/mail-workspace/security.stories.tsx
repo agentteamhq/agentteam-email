@@ -1,21 +1,19 @@
 import {
   SecurityDocumentResourceTagsBlocked as SecurityDocumentResourceTagsBlockedStory,
-  SecurityExternalLinkGeneratedIdCollision as SecurityExternalLinkGeneratedIdCollisionStory,
+  SecurityExternalLinkGenerated as SecurityExternalLinkGeneratedStory,
   SecurityFormContentRemoved as SecurityFormContentRemovedStory,
   SecurityMailtoLinkInteraction as SecurityMailtoLinkInteractionStory,
   SecurityRemoteBackgroundImagesBlocked as SecurityRemoteBackgroundImagesBlockedStory,
-  SecurityRemoteContentAccountScoped as SecurityRemoteContentAccountScopedStory,
   SecurityRemoteContentBlocked as SecurityRemoteContentBlockedStory,
   SecurityRemoteContentInteraction as SecurityRemoteContentInteractionStory,
-  SecurityUnsafeControllerLink as SecurityUnsafeControllerLinkStory,
-  mailWorkspaceStoryMeta
+  mailWorkspaceControllerStoryMeta
 } from '../../mail-workspace.definitions'
 import type { Meta, StoryObj } from '@storybook/react'
 
 const meta = {
-  ...mailWorkspaceStoryMeta,
+  ...mailWorkspaceControllerStoryMeta,
   title: 'Screens/Mail Workspace/Security'
-} satisfies Meta<typeof mailWorkspaceStoryMeta.component>
+} satisfies Meta<typeof mailWorkspaceControllerStoryMeta.component>
 
 export default meta
 
@@ -31,11 +29,6 @@ export const SecurityRemoteContentInteraction: Story = {
   name: 'Remote content interaction'
 }
 
-export const SecurityRemoteContentAccountScoped: Story = {
-  ...SecurityRemoteContentAccountScopedStory,
-  name: 'Remote content account scoped'
-}
-
 export const SecurityRemoteBackgroundImagesBlocked: Story = {
   ...SecurityRemoteBackgroundImagesBlockedStory,
   name: 'Remote background images blocked'
@@ -46,19 +39,14 @@ export const SecurityDocumentResourceTagsBlocked: Story = {
   name: 'Document resource tags blocked'
 }
 
-export const SecurityUnsafeControllerLink: Story = {
-  ...SecurityUnsafeControllerLinkStory,
-  name: 'Unsafe controller link'
-}
-
 export const SecurityMailtoLinkInteraction: Story = {
   ...SecurityMailtoLinkInteractionStory,
   name: 'Mailto link interaction'
 }
 
-export const SecurityExternalLinkGeneratedIdCollision: Story = {
-  ...SecurityExternalLinkGeneratedIdCollisionStory,
-  name: 'External link generated id collision'
+export const SecurityExternalLinkGenerated: Story = {
+  ...SecurityExternalLinkGeneratedStory,
+  name: 'External link generated'
 }
 
 export const SecurityFormContentRemoved: Story = {
