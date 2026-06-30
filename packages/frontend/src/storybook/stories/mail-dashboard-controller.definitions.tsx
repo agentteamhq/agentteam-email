@@ -7,10 +7,13 @@ import {
   domainSettingsEmptyFirstUseState
 } from '../authenticated-section-fixtures'
 import {
+  mailboxAdminAgentsNoGrantManagementView,
   mailboxAdminEmptyView,
   mailboxAdminExternalPrincipalsOnlyView,
+  mailboxAdminGroupsEmptyView,
   mailboxAdminGroupsOnlyView,
   mailboxAdminPaginatedAccountsView,
+  mailboxAdminPendingAgentEnrollmentsView,
   mailboxAdminReadOnlyAccountsView,
   mailboxAdminReadyView
 } from '../mailbox-admin-fixtures'
@@ -287,6 +290,40 @@ export const MailboxAdminAccountsSearch: Story = {
   }
 }
 
+export const MailboxAdminAccountsPendingStatusFilter: Story = {
+  render: (args) =>
+    renderMailboxAdminControllerStory(args, {
+      view: mailboxAdminReadyView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+
+    await selectMailboxAdminStatus(canvasElement, 'Pending')
+
+    await expect(await canvas.findByText('triage@agentteam.example')).toBeInTheDocument()
+    await expect(await canvas.findByText('1 of 5 records')).toBeInTheDocument()
+    await waitFor(async () => {
+      await expect(canvas.queryByText('research@agentteam.example')).not.toBeInTheDocument()
+    })
+  }
+}
+
+export const MailboxAdminAccountsSearchNoResults: Story = {
+  render: (args) =>
+    renderMailboxAdminControllerStory(args, {
+      view: mailboxAdminReadyView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+    const searchInput = await canvas.findByPlaceholderText('Search accounts...')
+
+    await userEvent.type(searchInput, 'not-found')
+
+    await expect(await canvas.findByText('No matching records')).toBeInTheDocument()
+    await expect(await canvas.findByText('No accounts match "not-found".')).toBeInTheDocument()
+  }
+}
+
 export const MailboxAdminGroups: Story = {
   args: {
     routeSearch: { mailboxAdmin: 'groups' }
@@ -304,6 +341,45 @@ export const MailboxAdminGroups: Story = {
   }
 }
 
+export const MailboxAdminGroupsPendingStatusFilter: Story = {
+  args: {
+    routeSearch: { mailboxAdmin: 'groups' }
+  },
+  render: (args) =>
+    renderMailboxAdminControllerStory(args, {
+      view: mailboxAdminReadyView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+
+    await selectMailboxAdminStatus(canvasElement, 'Pending')
+
+    await expect(await canvas.findByText('alerts@agentteam.example')).toBeInTheDocument()
+    await expect(await canvas.findByText('1 of 3 records')).toBeInTheDocument()
+    await waitFor(async () => {
+      await expect(canvas.queryByText('support@agentteam.example')).not.toBeInTheDocument()
+    })
+  }
+}
+
+export const MailboxAdminGroupsStatusNoResults: Story = {
+  args: {
+    routeSearch: { mailboxAdmin: 'groups' }
+  },
+  render: (args) =>
+    renderMailboxAdminControllerStory(args, {
+      view: mailboxAdminReadyView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+
+    await selectMailboxAdminStatus(canvasElement, 'Disabled')
+
+    await expect(await canvas.findByText('No matching records')).toBeInTheDocument()
+    await expect(await canvas.findByText('No forwarding groups have disabled status.')).toBeInTheDocument()
+  }
+}
+
 export const MailboxAdminAgents: Story = {
   args: {
     routeSearch: { mailboxAdmin: 'agents' }
@@ -318,6 +394,69 @@ export const MailboxAdminAgents: Story = {
     await expect(await canvas.findByRole('heading', { name: 'Agents' })).toBeInTheDocument()
     await expect(await canvas.findByText('Research Agent')).toBeInTheDocument()
     await expect(await canvas.findByRole('button', { name: 'New agent' })).toBeEnabled()
+  }
+}
+
+export const MailboxAdminAgentsDisabledStatusFilter: Story = {
+  args: {
+    routeSearch: { mailboxAdmin: 'agents' }
+  },
+  render: (args) =>
+    renderMailboxAdminControllerStory(args, {
+      view: mailboxAdminReadyView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+
+    await selectMailboxAdminStatus(canvasElement, 'Disabled')
+
+    await expect(await canvas.findByText('Legacy Writer')).toBeInTheDocument()
+    await expect(await canvas.findByText('1 of 6 records')).toBeInTheDocument()
+
+    await userEvent.click(await canvas.findByRole('button', { name: /^open actions for legacy writer$/i }))
+    await expect(await canvas.findByRole('menuitem', { name: /^disable agent$/i })).toHaveAttribute(
+      'aria-disabled',
+      'true'
+    )
+  }
+}
+
+export const MailboxAdminAgentsWithoutGrantManagement: Story = {
+  args: {
+    routeSearch: { mailboxAdmin: 'agents' }
+  },
+  render: (args) =>
+    renderMailboxAdminControllerStory(args, {
+      view: mailboxAdminAgentsNoGrantManagementView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+
+    await userEvent.click(await canvas.findByRole('button', { name: /^open actions for research agent$/i }))
+    await expect(await canvas.findByRole('menuitem', { name: /^system permissions$/i })).toHaveAttribute(
+      'aria-disabled',
+      'true'
+    )
+    await expect(await canvas.findByRole('menuitem', { name: /^account access$/i })).toHaveAttribute(
+      'aria-disabled',
+      'true'
+    )
+  }
+}
+
+export const MailboxAdminAgentsPendingEnrollments: Story = {
+  args: {
+    routeSearch: { mailboxAdmin: 'agents' }
+  },
+  render: (args) =>
+    renderMailboxAdminControllerStory(args, {
+      view: mailboxAdminPendingAgentEnrollmentsView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+
+    await expect(await canvas.findByText('Pending enrollments')).toBeInTheDocument()
+    await expect((await canvas.findAllByText('Research Agent')).length).toBeGreaterThan(0)
   }
 }
 
@@ -379,7 +518,33 @@ export const MailboxAdminEmpty: Story = {
   }
 }
 
+export const MailboxAdminGroupsEmpty: Story = {
+  args: {
+    routeSearch: { mailboxAdmin: 'groups' }
+  },
+  render: (args) =>
+    renderMailboxAdminControllerStory(args, {
+      view: mailboxAdminGroupsEmptyView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement.ownerDocument.body)
+
+    await expect(await canvas.findByText('No groups')).toBeInTheDocument()
+  }
+}
+
 export const MailboxAdminLoading: Story = {
+  render: (args) =>
+    renderMailboxAdminControllerStory(args, {
+      pending: true,
+      view: mailboxAdminReadyView
+    })
+}
+
+export const MailboxAdminGroupsLoading: Story = {
+  args: {
+    routeSearch: { mailboxAdmin: 'groups' }
+  },
   render: (args) =>
     renderMailboxAdminControllerStory(args, {
       pending: true,
@@ -416,6 +581,17 @@ export const MailboxAdminError: Story = {
       await canvas.findByText('The mailbox administration RPC returned HTTP 502 while loading accounts.')
     ).toBeInTheDocument()
   }
+}
+
+function storyBody(canvasElement: HTMLElement) {
+  return within(canvasElement.ownerDocument.body)
+}
+
+async function selectMailboxAdminStatus(canvasElement: HTMLElement, statusLabel: string) {
+  const canvas = storyBody(canvasElement)
+
+  await userEvent.click(await canvas.findByRole('combobox', { name: /^filter by status$/i }))
+  await userEvent.click(await canvas.findByRole('option', { name: statusLabel }))
 }
 
 function renderMailWorkspaceControllerStory(
