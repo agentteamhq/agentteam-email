@@ -22,6 +22,21 @@ Storybook `meta.title` must use the approved sidebar roots (`Screens`, `Componen
 
 Storybook stories must be grouped by the rendered product surface; implementation-backed stories, including controller, route, RPC, loader, and interaction-test stories, must live under that product surface's `Integration` subgroup.
 
+Storybook `Screens/*` stories must represent production-reachable screen states
+through the same route, page, or controller owner used by the app.
+
+`Screens/*` stories may mock data at loader, RPC, API, or service boundaries,
+but must not handcraft state that is derived by an owning route, page,
+controller, or shell model.
+
+Direct prop-driven stories for product components are component state stories or
+mock stories unless the rendered component is itself the production owner for
+that screen state.
+
+When a screen surface has an owning controller, `Screens/*` stories for that
+surface must render through that controller or a Storybook frame that renders
+that controller.
+
 Storybook screen state catalogs must keep viewport variants shallow with sibling `meta.title` leaves such as `Screens/<Surface>/States - Desktop` and `Screens/<Surface>/States - Mobile`.
 
 Storybook mobile screen state catalogs must set the mobile viewport with `globals.viewport.value = 'mobile1'` and `globals.viewport.isRotated = false`.
