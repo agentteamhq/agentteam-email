@@ -6,23 +6,21 @@ import {
   AgentAccessDeniedExpiredApprovals as AgentAccessDeniedExpiredApprovalsStory,
   AgentAccessDense as AgentAccessDenseStory,
   AgentAccessEmpty as AgentAccessEmptyStory,
-  AgentAccessEnrollmentCreated as AgentAccessEnrollmentCreatedStory,
   AgentAccessError as AgentAccessErrorStory,
   AgentAccessLoading as AgentAccessLoadingStory,
   AgentAccessPaperclipConnected as AgentAccessPaperclipConnectedStory,
   AgentAccessPaperclipHandoff as AgentAccessPaperclipHandoffStory,
   AgentAccessPartialActions as AgentAccessPartialActionsStory,
   AgentAccessPendingApproval as AgentAccessPendingApprovalStory,
-  AgentAccessPendingBusy as AgentAccessPendingBusyStory,
   AgentAccessRevokedExpired as AgentAccessRevokedExpiredStory,
-  settingsDialogStoryMeta
+  settingsScreenStoryMeta
 } from '../../settings-dialog.definitions'
 import type { Meta, StoryObj } from '@storybook/react'
 
 const meta = {
-  ...settingsDialogStoryMeta,
+  ...settingsScreenStoryMeta,
   title: 'Screens/Settings/Agent Access'
-} satisfies Meta<typeof settingsDialogStoryMeta.component>
+} satisfies Meta<typeof settingsScreenStoryMeta.component>
 
 export default meta
 
@@ -43,11 +41,6 @@ export const AgentAccessEmpty: Story = {
   name: 'Empty'
 }
 
-export const AgentAccessEnrollmentCreated: Story = {
-  ...AgentAccessEnrollmentCreatedStory,
-  name: 'Enrollment created'
-}
-
 export const AgentAccessActive: Story = {
   ...AgentAccessActiveStory,
   name: 'Active'
@@ -66,11 +59,6 @@ export const AgentAccessPaperclipConnected: Story = {
 export const AgentAccessPendingApproval: Story = {
   ...AgentAccessPendingApprovalStory,
   name: 'Pending approval'
-}
-
-export const AgentAccessPendingBusy: Story = {
-  ...AgentAccessPendingBusyStory,
-  name: 'Pending busy'
 }
 
 export const AgentAccessDeniedExpiredApprovals: Story = {

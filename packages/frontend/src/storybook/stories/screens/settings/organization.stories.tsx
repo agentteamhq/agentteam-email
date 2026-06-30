@@ -2,14 +2,14 @@ import {
   OrganizationPeople as OrganizationPeopleStory,
   OrganizationSettings as OrganizationSettingsStory,
   Organizations as OrganizationsStory,
-  settingsDialogStoryMeta
+  settingsScreenStoryMeta
 } from '../../settings-dialog.definitions'
 import type { Meta, StoryObj } from '@storybook/react'
 
 const meta = {
-  ...settingsDialogStoryMeta,
+  ...settingsScreenStoryMeta,
   title: 'Screens/Settings/Organization'
-} satisfies Meta<typeof settingsDialogStoryMeta.component>
+} satisfies Meta<typeof settingsScreenStoryMeta.component>
 
 export default meta
 

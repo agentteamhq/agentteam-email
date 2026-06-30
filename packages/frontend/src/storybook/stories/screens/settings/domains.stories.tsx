@@ -8,14 +8,14 @@ import {
   DomainsDomainNeedsAttention as DomainsDomainNeedsAttentionStory,
   DomainsDomainProvisioning as DomainsDomainProvisioningStory,
   DomainsEmptyFirstUse as DomainsEmptyFirstUseStory,
-  settingsDialogStoryMeta
+  settingsScreenStoryMeta
 } from '../../settings-dialog.definitions'
 import type { Meta, StoryObj } from '@storybook/react'
 
 const meta = {
-  ...settingsDialogStoryMeta,
+  ...settingsScreenStoryMeta,
   title: 'Screens/Settings/Domains'
-} satisfies Meta<typeof settingsDialogStoryMeta.component>
+} satisfies Meta<typeof settingsScreenStoryMeta.component>
 
 export default meta
 
