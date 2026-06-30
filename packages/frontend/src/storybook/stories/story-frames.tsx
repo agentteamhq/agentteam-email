@@ -1,7 +1,6 @@
 import * as React from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
-import { DashboardScreen } from '../../screens/dashboard-screen'
 import { DashboardMailController } from '../../screens/dashboard-mail-client-controller'
 import type { DashboardSearch } from '../../lib/dashboard-search'
 import type { fetchAgentAccessView } from '../../lib/agent-access-rpc'
@@ -70,34 +69,5 @@ export function DashboardMailControllerStoryFrame({
         agentAccessViewLoader={agentAccessViewLoader}
       />
     </QueryClientProvider>
-  )
-}
-
-export function MailboxAdminPaginatedStoryFrame(args: React.ComponentProps<typeof DashboardScreen>) {
-  const [page, setPage] = React.useState(args.mailboxAdminView?.pagination?.page ?? 1)
-  const onPageChange = args.mailboxAdminView?.onPageChange
-  const mailboxAdminView = React.useMemo(
-    () =>
-      args.mailboxAdminView
-        ? {
-            ...args.mailboxAdminView,
-            onPageChange: (nextPage: number) => {
-              setPage(nextPage)
-              onPageChange?.(nextPage)
-            },
-            pagination: {
-              page,
-              pageSize: args.mailboxAdminView.pagination?.pageSize ?? 10
-            }
-          }
-        : undefined,
-    [args.mailboxAdminView, onPageChange, page]
-  )
-
-  return (
-    <DashboardScreen
-      {...args}
-      mailboxAdminView={mailboxAdminView}
-    />
   )
 }

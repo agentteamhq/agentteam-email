@@ -1,5 +1,4 @@
 import { strictParse } from '@main/common'
-import { getWebAppManifestIconUrl } from '../public-assets'
 import type { AuthRouteState, BillingRouteState, SettingsRouteState } from '@main/backend/routes/webapp'
 
 import type { PublicEnv } from '../types'
@@ -24,10 +23,6 @@ export function getStoryPublicEnv(): PublicEnv {
     ...storyPublicEnv,
     PUBLIC_HOSTNAME: getStoryPublicHostname()
   }
-}
-
-export function getStoryWebAppManifestIconUrl(size: 192 | 512) {
-  return getWebAppManifestIconUrl(getStoryPublicHostname(), size)
 }
 
 function getStoryPublicHostname() {
