@@ -185,9 +185,12 @@ export const WebmailFirstUseDomainSelection: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
 
-    await expect(await canvas.findByText('Add domain', {}, { timeout: 15000 })).toBeInTheDocument()
+    await expect(
+      await canvas.findByText('Set up email for your domain', {}, { timeout: 15000 })
+    ).toBeInTheDocument()
     await expect(await canvas.findByText('Cloudflare connected')).toBeInTheDocument()
-    await expect(await canvas.findByRole('button', { name: 'Connect domain' })).toBeEnabled()
+    await expect(await canvas.findByRole('button', { name: 'Connect agentteam.example' })).toBeEnabled()
+    await expect(canvas.queryByRole('button', { name: 'Setting up domain' })).not.toBeInTheDocument()
     await expect(canvas.queryByRole('button', { name: 'Continue with Cloudflare' })).not.toBeInTheDocument()
     await expect(canvas.queryByText('Choose a message from the mailbox to read it here.')).not.toBeInTheDocument()
   }

@@ -87,6 +87,7 @@ import {
   normalizeSearchQuery
 } from './mailbox-admin-visible-records'
 import { AgentEnrollmentCommandSummary } from './agent-enrollment-command'
+import { mailboxLocalPart } from '../../lib/mail-addresses'
 import type { MailboxAdminVisibleRecords } from './mailbox-admin-visible-records'
 import type {
   MailboxAdminAccount,
@@ -2525,17 +2526,6 @@ function defaultProvisionedMailboxAddress(agent: MailboxAdminAgent, domain: stri
   const nameLocalPart = mailboxLocalPart(agent.name) || 'agent'
   const idSuffix = agent.id.replace(/[^a-z0-9]/giu, '').slice(-6).toLowerCase()
   return `${nameLocalPart}${idSuffix ? `-${idSuffix}` : ''}@${domain}`
-}
-
-function mailboxLocalPart(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/^@/u, '')
-    .replace(/@.*$/u, '')
-    .replace(/[^a-z0-9._+-]+/gu, '.')
-    .replace(/^[._+-]+|[._+-]+$/gu, '')
-    .slice(0, 64)
 }
 
 function formValue(formData: FormData, name: string) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { mailboxAddress, mailboxAddressOrRaw, mailboxDisplayName } from './mail-addresses'
+import { mailboxAddress, mailboxAddressOrRaw, mailboxDisplayName, mailboxLocalPart } from './mail-addresses'
 
 describe('mail address helpers', () => {
   it('canonicalizes display-name and IDNA mailbox values', () => {
@@ -23,5 +23,13 @@ describe('mail address helpers', () => {
     expect(mailboxAddress('local@example.net@blocked.test')).toBe('')
     expect(mailboxAddress('Team: one@example.net;')).toBe('')
     expect(mailboxAddressOrRaw('Team: one@example.net;')).toBe('Team: one@example.net;')
+  })
+
+  it('normalizes mailbox local-part recommendations', () => {
+    expect.hasAssertions()
+
+    expect(mailboxLocalPart('Marin Patel')).toBe('marin.patel')
+    expect(mailboxLocalPart(' @Owner Example ')).toBe('owner.example')
+    expect(mailboxLocalPart('local@example.net')).toBe('local')
   })
 })

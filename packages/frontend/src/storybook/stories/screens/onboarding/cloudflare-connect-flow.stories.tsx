@@ -30,53 +30,69 @@ export const Step01ConnectCloudflare: Story = {
   args: buildProductOnboardingControllerArgs(productOnboardingScenarios.connectCloudflare, onboardingHandlers)
 }
 
-export const Step02StartingCloudflareOAuth: Story = {
-  name: '02 starting Cloudflare OAuth',
-  args: buildProductOnboardingControllerArgs(
-    productOnboardingScenarios.connectingCloudflare,
-    onboardingHandlers
-  )
-}
-
-export const Step03ReturningFromCloudflare: Story = {
-  name: '03 returning from Cloudflare',
-  args: buildProductOnboardingControllerArgs(
-    productOnboardingScenarios.returningFromCloudflare,
-    onboardingHandlers
-  )
-}
-
-export const Step04ChooseDomain: Story = {
-  name: '04 choose domain',
+export const Step02SelectDomain: Story = {
+  name: '02 select domain',
   args: buildProductOnboardingControllerArgs(productOnboardingScenarios.chooseDomain, onboardingHandlers),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
 
-    await expect(await canvas.findByText('Add domain')).toBeInTheDocument()
+    await expect(await canvas.findByText('Set up email for your domain')).toBeInTheDocument()
     await expect(await canvas.findByText('Cloudflare connected')).toBeInTheDocument()
-    await expect(await canvas.findByRole('button', { name: 'Connect domain' })).toBeEnabled()
+    await expect(await canvas.findByRole('button', { name: 'Connect agentteam.example' })).toBeEnabled()
+    await expect(canvas.queryByRole('button', { name: 'Setting up domain' })).not.toBeInTheDocument()
     await expect(canvas.queryByRole('button', { name: 'Continue with Cloudflare' })).not.toBeInTheDocument()
     await expect(canvas.queryByText('Choose a message from the mailbox to read it here.')).not.toBeInTheDocument()
   }
 }
 
-export const Step05ConnectSelectedDomain: Story = {
-  name: '05 connect selected domain',
-  args: buildProductOnboardingControllerArgs(productOnboardingScenarios.domainConnected, onboardingHandlers)
+export const Step03SettingUpDomain: Story = {
+  name: '03 setting up domain',
+  args: buildProductOnboardingControllerArgs(productOnboardingScenarios.settingUpDomain, onboardingHandlers),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+
+    await expect(await canvas.findByText('Setting up agentteam.example')).toBeInTheDocument()
+    await expect((await canvas.findByText('Setting up domain')).closest('button')).toBeDisabled()
+    await expect(canvas.queryByRole('button', { name: 'Connect agentteam.example' })).not.toBeInTheDocument()
+  }
 }
 
-export const Step06ProvisionDomain: Story = {
-  name: '06 provision domain',
-  args: buildProductOnboardingControllerArgs(productOnboardingScenarios.provisionDomain, onboardingHandlers)
+export const Step04CreateFirstMailbox: Story = {
+  name: '04 create first mailbox',
+  args: buildProductOnboardingControllerArgs(
+    productOnboardingScenarios.createFirstMailbox,
+    onboardingHandlers
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+
+    await expect(await canvas.findByText('Create your first mailbox')).toBeInTheDocument()
+    await expect(await canvas.findByText('marin@agentteam.example')).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: 'Create mailbox' })).toBeEnabled()
+  }
 }
 
-export const Step07MailboxReady: Story = {
-  name: '07 mailbox ready',
+export const Step05CreatingMailbox: Story = {
+  name: '05 creating mailbox',
+  args: buildProductOnboardingControllerArgs(
+    productOnboardingScenarios.creatingFirstMailbox,
+    onboardingHandlers
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+
+    await expect(await canvas.findByText('Create your first mailbox')).toBeInTheDocument()
+    await expect((await canvas.findByText('Creating mailbox')).closest('button')).toBeDisabled()
+  }
+}
+
+export const Step06MailboxReady: Story = {
+  name: '06 mailbox ready',
   args: buildProductOnboardingControllerArgs(productOnboardingScenarios.mailboxReady, onboardingHandlers)
 }
 
-export const Step08AgentsNoMailboxSetupReturn: Story = {
-  name: '08 agents no-mailbox setup return',
+export const AgentsNoMailboxSetupReturn: Story = {
+  name: 'Agents no-mailbox setup return',
   args: buildProductOnboardingControllerArgs(
     productOnboardingScenarios.agentsNoMailboxSetupReturn,
     onboardingHandlers

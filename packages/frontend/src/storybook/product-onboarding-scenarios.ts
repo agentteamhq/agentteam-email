@@ -3,9 +3,7 @@ import { storyAuthClient } from './auth-client-fixtures'
 import {
   domainSettingsAddDomainAuthorizeCloudflareState,
   domainSettingsAddDomainSelectZoneState,
-  domainSettingsDomainConnectedState,
-  domainSettingsDomainLiveState,
-  domainSettingsDomainProvisioningState
+  domainSettingsDomainLiveState
 } from './authenticated-section-fixtures'
 import { mailboxAdminEmptyView } from './mailbox-admin-fixtures'
 import { mailWorkspaceEmptyView } from './mail-workspace-fixtures'
@@ -21,6 +19,7 @@ import type { AgentMailAdminNavigation, AgentMailAdminView, AgentMailWebWorkspac
 interface ProductOnboardingScenario {
   defaultSettingsOpen?: boolean
   domainSettingsState: DomainSettingsState
+  firstMailboxSetupState?: DashboardMailControllerStoryFrameProps['firstMailboxSetupState']
   routeSearch?: DashboardSearch
   settingsOpen?: boolean
   settingsSection?: SettingsSectionId
@@ -53,11 +52,25 @@ const cloudflareErrorState = {
   message: 'Cloudflare authorization was not completed. Try again when you are ready.'
 } satisfies DomainSettingsState
 
-const returningFromCloudflareState = {
+const settingUpDomainState = {
   ...domainSettingsAddDomainSelectZoneState,
   busy: true,
-  message: 'Cloudflare account connected'
+  message: 'Setting up Cloudflare-routed email for agentteam.example.'
 } satisfies DomainSettingsState
+
+const firstMailboxSetupState = {
+  addressLocalPart: 'marin',
+  canSubmit: true,
+  displayName: 'Marin Patel',
+  domain: 'agentteam.example',
+  state: 'ready'
+} satisfies NonNullable<DashboardMailControllerStoryFrameProps['firstMailboxSetupState']>
+
+const creatingFirstMailboxSetupState = {
+  ...firstMailboxSetupState,
+  canSubmit: false,
+  state: 'creating'
+} satisfies NonNullable<DashboardMailControllerStoryFrameProps['firstMailboxSetupState']>
 
 export const productOnboardingScenarios = {
   agentsNoMailboxSetupReturn: {
@@ -77,24 +90,26 @@ export const productOnboardingScenarios = {
     domainSettingsState: domainSettingsAddDomainAuthorizeCloudflareState,
     workspace: firstUseWorkspace
   },
-  connectingCloudflare: {
-    domainSettingsState: cloudflareConnectingState,
+  createFirstMailbox: {
+    domainSettingsState: domainSettingsDomainLiveState,
+    firstMailboxSetupState,
     workspace: firstUseWorkspace
   },
-  domainConnected: {
-    domainSettingsState: domainSettingsDomainConnectedState,
+  creatingFirstMailbox: {
+    domainSettingsState: domainSettingsDomainLiveState,
+    firstMailboxSetupState: creatingFirstMailboxSetupState,
+    workspace: firstUseWorkspace
+  },
+  connectingCloudflare: {
+    domainSettingsState: cloudflareConnectingState,
     workspace: firstUseWorkspace
   },
   mailboxReady: {
     domainSettingsState: domainSettingsDomainLiveState,
     workspace: configuredMailboxWorkspace
   },
-  provisionDomain: {
-    domainSettingsState: domainSettingsDomainProvisioningState,
-    workspace: firstUseWorkspace
-  },
-  returningFromCloudflare: {
-    domainSettingsState: returningFromCloudflareState,
+  settingUpDomain: {
+    domainSettingsState: settingUpDomainState,
     workspace: firstUseWorkspace
   },
   settingsOpen: {
@@ -122,6 +137,7 @@ export function buildProductOnboardingControllerArgs(
     defaultSettingsOpen: scenario.defaultSettingsOpen,
     defaultSettingsSection: 'domains',
     domainSettingsState,
+    firstMailboxSetupState: scenario.firstMailboxSetupState,
     mailWorkspaceLoader: createProductOnboardingMailWorkspaceLoader(scenario.workspace),
     mailboxAdminNavigationLoader: createProductOnboardingMailboxAdminNavigationLoader(),
     mailboxAdminViewLoader: createProductOnboardingMailboxAdminViewLoader(),

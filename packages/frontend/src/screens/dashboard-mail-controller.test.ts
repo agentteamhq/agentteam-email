@@ -281,7 +281,7 @@ describe('mail client controller view mapping', () => {
 
     expect(view.state).toBe('empty')
     expect(view.onboardingPrompt).toMatchObject({
-      actionLabel: 'Continue setup',
+      actionLabel: 'Connect domain',
       mode: 'configureDomain',
       state: 'ready',
       title: 'Choose your domain'
@@ -309,6 +309,44 @@ describe('mail client controller view mapping', () => {
     expect(view.onboardingPrompt).toMatchObject({
       mode: 'configureDomain',
       state: 'ready'
+    })
+  })
+
+  it('advances first-use dashboard onboarding to first mailbox creation after domain setup succeeds', () => {
+    expect.hasAssertions()
+    const view = toDashboardView(
+      'success',
+      null,
+      undefined,
+      firstUseMailWorkspace(),
+      domainSettings({
+        mode: 'domain',
+        selectedDomainPublicId: cloudflareConnection().publicId,
+        status: {
+          connections: [
+            cloudflareConnection({
+              provisioningStatus: 'succeeded',
+              status: 'active'
+            })
+          ],
+          grants: [cloudflareGrant()]
+        }
+      }),
+      {
+        addressLocalPart: 'marin',
+        canSubmit: true,
+        displayName: 'Marin Patel',
+        domain: 'agentteam.example',
+        state: 'ready'
+      }
+    )
+
+    expect(view.state).toBe('empty')
+    expect(view.onboardingPrompt).toMatchObject({
+      actionLabel: 'Create mailbox',
+      mode: 'createMailbox',
+      state: 'ready',
+      title: 'Create your first mailbox'
     })
   })
 
@@ -682,7 +720,9 @@ function cloudflareGrant(): DomainSettingsStatus['grants'][number] {
   }
 }
 
-function cloudflareConnection(): DomainSettingsStatus['connections'][number] {
+function cloudflareConnection(
+  overrides: Partial<DomainSettingsStatus['connections'][number]> = {}
+): DomainSettingsStatus['connections'][number] {
   return {
     cloudflareAccountId: 'cloudflare-account-id',
     cloudflareAccountName: 'AgentTeam Production',
@@ -695,7 +735,8 @@ function cloudflareConnection(): DomainSettingsStatus['connections'][number] {
     publicId: 'connection-public-id' as DomainSettingsStatus['connections'][number]['publicId'],
     status: 'connected',
     updatedAt: new Date('2026-06-21T16:16:00.000Z'),
-    workerScriptName: null
+    workerScriptName: null,
+    ...overrides
   }
 }
 

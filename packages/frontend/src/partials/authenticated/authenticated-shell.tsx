@@ -148,7 +148,8 @@ import type {
   AuthenticatedManagementNavItem,
   AuthenticatedRemoteImage,
   AuthenticatedSidebarView,
-  AuthenticatedWorkspaceSwitcherWorkspace
+  AuthenticatedWorkspaceSwitcherWorkspace,
+  FirstMailboxSetupState
 } from './authenticated-shell-models'
 import type {
   WorkspaceMailboxSwitcherMailbox,
@@ -1835,6 +1836,7 @@ function ManagementNavButton({
 }
 
 export function AuthenticatedDashboardContent({
+  firstMailboxSetupState,
   onAttachmentPreview,
   onEmailAction,
   domainSettingsState,
@@ -1842,6 +1844,7 @@ export function AuthenticatedDashboardContent({
   onRetry,
   view = defaultAuthenticatedDashboardView
 }: {
+  firstMailboxSetupState?: FirstMailboxSetupState
   onAttachmentPreview?: (attachment: AuthenticatedEmailAttachment, email: AuthenticatedEmailPreview) => void
   domainSettingsState?: DomainSettingsState
   onEmailAction?: (action: AuthenticatedEmailAction, email: AuthenticatedEmailPreview) => void
@@ -1869,6 +1872,7 @@ export function AuthenticatedDashboardContent({
       return (
         <DashboardOnboardingPrompt
           domainSettingsState={domainSettingsState}
+          firstMailboxSetupState={firstMailboxSetupState}
           onConnect={onOnboardingConnect}
           view={view.onboardingPrompt}
         />
@@ -1903,14 +1907,24 @@ export function AuthenticatedDashboardContent({
 
 function DashboardOnboardingPrompt({
   domainSettingsState,
+  firstMailboxSetupState,
   onConnect,
   view
 }: {
   domainSettingsState?: DomainSettingsState
+  firstMailboxSetupState?: FirstMailboxSetupState
   onConnect?: () => void
   view: NonNullable<AuthenticatedDashboardView['onboardingPrompt']>
 }) {
   const isConnecting = view.state === 'connecting'
+
+  if (view.mode === 'createMailbox') {
+    return (
+      <div className='flex min-h-[calc(100dvh-3.5rem)] items-center justify-center p-6'>
+        <FirstMailboxSetupCard state={firstMailboxSetupState} />
+      </div>
+    )
+  }
 
   if (view.mode === 'configureDomain') {
     return (
@@ -1953,6 +1967,88 @@ function DashboardOnboardingPrompt({
         </CardFooter>
       </Card>
     </div>
+  )
+}
+
+function FirstMailboxSetupCard({ state }: { state?: FirstMailboxSetupState }) {
+  const isCreating = state?.state === 'creating'
+  const address = state?.addressLocalPart ? `${state.addressLocalPart}@${state.domain}` : `@${state?.domain ?? ''}`
+
+  return (
+    <Card className='w-full max-w-xl gap-0 overflow-hidden py-6 shadow-none'>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault()
+          if (state?.canSubmit && !isCreating && !state.readOnly) {
+            state.onSubmit?.()
+          }
+        }}
+      >
+        <CardHeader className='flex flex-col items-center px-6 text-center'>
+          <div className='bg-primary/10 text-primary flex size-14 items-center justify-center rounded-full border'>
+            <UserIcon className='size-7' />
+          </div>
+          <Badge variant='secondary'>Domain ready</Badge>
+          <CardTitle className='text-xl'>Create your first mailbox</CardTitle>
+          <CardDescription className='max-w-md'>
+            Start with your owner mailbox. You can add team and agent mailboxes later.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className='grid gap-5 px-6'>
+          <div className='grid gap-2'>
+            <Label htmlFor='first-mailbox-address'>Mailbox address</Label>
+            <div className='grid grid-cols-[minmax(0,1fr)_auto] items-center overflow-hidden rounded-md border'>
+              <Input
+                aria-label='Mailbox local part'
+                className='border-0 shadow-none focus-visible:ring-0'
+                disabled={isCreating || state?.readOnly}
+                id='first-mailbox-address'
+                value={state?.addressLocalPart ?? ''}
+                onChange={(event) => {
+                  state?.onAddressLocalPartChange?.(event.currentTarget.value)
+                }}
+              />
+              <span className='text-muted-foreground bg-muted/50 border-l px-3 py-2 text-sm'>
+                @{state?.domain ?? 'domain'}
+              </span>
+            </div>
+          </div>
+          <div className='grid gap-2'>
+            <Label htmlFor='first-mailbox-name'>Display name</Label>
+            <Input
+              disabled={isCreating || state?.readOnly}
+              id='first-mailbox-name'
+              value={state?.displayName ?? ''}
+              onChange={(event) => {
+                state?.onDisplayNameChange?.(event.currentTarget.value)
+              }}
+            />
+          </div>
+          <div className='rounded-md border px-4 py-3 text-sm'>
+            <p className='font-medium'>{address}</p>
+            <p className='text-muted-foreground mt-1'>
+              This mailbox becomes the first active account for the domain.
+            </p>
+          </div>
+          {state?.errorDescription ? (
+            <div className='text-destructive flex items-start gap-2 text-sm'>
+              <WarningIcon data-icon='inline-start' />
+              <span>{state.errorDescription}</span>
+            </div>
+          ) : null}
+        </CardContent>
+        <CardFooter className='border-t px-6 pt-4'>
+          <Button
+            className='w-full'
+            disabled={!state?.canSubmit || isCreating || state?.readOnly}
+            type='submit'
+          >
+            {isCreating ? <Spinner data-icon='inline-start' /> : null}
+            {isCreating ? 'Creating mailbox' : 'Create mailbox'}
+          </Button>
+        </CardFooter>
+      </form>
+    </Card>
   )
 }
 

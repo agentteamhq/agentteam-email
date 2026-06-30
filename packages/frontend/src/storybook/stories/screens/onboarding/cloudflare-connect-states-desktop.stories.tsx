@@ -23,13 +23,13 @@ export const ConnectCloudflare: Story = cloudflareConnectStateStories.connectClo
 
 export const ConnectingCloudflare: Story = cloudflareConnectStateStories.connectingCloudflare
 
-export const ReturningFromCloudflare: Story = cloudflareConnectStateStories.returningFromCloudflare
-
 export const ChooseDomain: Story = cloudflareConnectStateStories.chooseDomain
 
-export const DomainConnected: Story = cloudflareConnectStateStories.domainConnected
+export const SettingUpDomain: Story = cloudflareConnectStateStories.settingUpDomain
 
-export const ProvisionDomain: Story = cloudflareConnectStateStories.provisionDomain
+export const CreateFirstMailbox: Story = cloudflareConnectStateStories.createFirstMailbox
+
+export const CreatingFirstMailbox: Story = cloudflareConnectStateStories.creatingFirstMailbox
 
 export const MailboxReady: Story = cloudflareConnectStateStories.mailboxReady
 

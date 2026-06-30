@@ -23,7 +23,8 @@ import type {
   AuthenticatedMailFolderAction,
   AuthenticatedMailItem,
   AuthenticatedMailPageChange,
-  AuthenticatedSidebarView
+  AuthenticatedSidebarView,
+  FirstMailboxSetupState
 } from '../partials/authenticated/authenticated-shell-models'
 import type { DashboardSearch } from '../lib/dashboard-search'
 import type { AuthProviderProps } from '@better-auth-ui/react'
@@ -46,6 +47,7 @@ export interface DashboardScreenProps {
   defaultSettingsOpen?: boolean
   defaultSettingsSection?: SettingsSectionId
   emailPreviewsById?: Readonly<Record<string, AuthenticatedEmailPreview>>
+  firstMailboxSetupState?: FirstMailboxSetupState
   mailboxAdminView?: MailboxAdminView
   mailActionView?: AuthenticatedMailActionView
   onComposeAttachmentAdd?: (files: ReadonlyArray<File>) => void
@@ -108,6 +110,7 @@ export function DashboardScreen({
   defaultSettingsOpen,
   defaultSettingsSection,
   emailPreviewsById,
+  firstMailboxSetupState,
   mailboxAdminView,
   mailActionView,
   onComposeAttachmentRemove,
@@ -365,6 +368,7 @@ export function DashboardScreen({
         ) : (
           <AuthenticatedDashboardContent
             domainSettingsState={domainSettingsState}
+            firstMailboxSetupState={firstMailboxSetupState}
             onAttachmentPreview={onEmailAttachmentPreview}
             onEmailAction={handleEmailAction}
             onOnboardingConnect={onDashboardOnboardingConnect}

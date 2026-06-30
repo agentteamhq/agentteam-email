@@ -2,7 +2,8 @@ import { defaultAuthenticatedDashboardView } from '../partials/authenticated/aut
 import type { DomainSettingsState } from '../partials/authenticated/settings-dialog'
 import type {
   AuthenticatedDashboardView,
-  AuthenticatedEmailPreview
+  AuthenticatedEmailPreview,
+  FirstMailboxSetupState
 } from '../partials/authenticated/authenticated-shell-models'
 import type { AgentMailWebWorkspace } from '@main/backend'
 
@@ -15,10 +16,17 @@ const FIRST_USE_DASHBOARD_ONBOARDING_PROMPT = {
 } satisfies Omit<NonNullable<AuthenticatedDashboardView['onboardingPrompt']>, 'state'>
 
 const FIRST_USE_DASHBOARD_DOMAIN_SETUP_PROMPT = {
-  actionLabel: 'Continue setup',
-  description: 'Choose the Cloudflare domain that should receive AgentTeam Email.',
+  actionLabel: 'Connect domain',
+  description: 'Select the Cloudflare domain that should receive AgentTeam Email.',
   mode: 'configureDomain',
   title: 'Choose your domain'
+} satisfies Omit<NonNullable<AuthenticatedDashboardView['onboardingPrompt']>, 'state'>
+
+const FIRST_USE_DASHBOARD_MAILBOX_SETUP_PROMPT = {
+  actionLabel: 'Create mailbox',
+  description: 'Create the first mailbox account for this domain.',
+  mode: 'createMailbox',
+  title: 'Create your first mailbox'
 } satisfies Omit<NonNullable<AuthenticatedDashboardView['onboardingPrompt']>, 'state'>
 
 export function toDashboardView(
@@ -26,7 +34,8 @@ export function toDashboardView(
   error: Error | null,
   selectedEmail: AuthenticatedEmailPreview | undefined,
   workspace: AgentMailWebWorkspace | undefined,
-  domainSettingsState: DomainSettingsState
+  domainSettingsState: DomainSettingsState,
+  firstMailboxSetupState?: FirstMailboxSetupState
 ): AuthenticatedDashboardView {
   if (status === 'pending') {
     return {
@@ -50,7 +59,7 @@ export function toDashboardView(
       ...defaultAuthenticatedDashboardView,
       emptyDescription: 'Connect a Cloudflare domain to start receiving agent email.',
       emptyTitle: 'Connect your domain',
-      onboardingPrompt: toFirstUseDashboardOnboardingPrompt(domainSettingsState),
+      onboardingPrompt: toFirstUseDashboardOnboardingPrompt(domainSettingsState, firstMailboxSetupState),
       state: 'empty'
     }
   }
@@ -67,12 +76,26 @@ function isFirstUseWorkspace(workspace: AgentMailWebWorkspace | undefined) {
 }
 
 function toFirstUseDashboardOnboardingPrompt(
-  domainSettingsState: DomainSettingsState
+  domainSettingsState: DomainSettingsState,
+  firstMailboxSetupState?: FirstMailboxSetupState
 ): NonNullable<AuthenticatedDashboardView['onboardingPrompt']> {
   const status = domainSettingsState.status
   const hasActiveGrant = status?.grants.some((grant) => grant.status === 'active') ?? false
   const hasConnection = (status?.connections.length ?? 0) > 0
   const isBusy = domainSettingsState.busy === true
+
+  if (firstMailboxSetupState) {
+    return {
+      ...FIRST_USE_DASHBOARD_MAILBOX_SETUP_PROMPT,
+      errorDescription: firstMailboxSetupState.errorDescription ?? undefined,
+      state:
+        firstMailboxSetupState.state === 'creating'
+          ? 'connecting'
+          : firstMailboxSetupState.state === 'error'
+            ? 'error'
+            : 'ready'
+    }
+  }
 
   if (hasActiveGrant || hasConnection) {
     return {

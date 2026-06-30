@@ -301,9 +301,22 @@ export interface AuthenticatedDashboardOnboardingView {
   description: string
   errorDescription?: string
   helperText?: string
-  mode?: 'connectCloudflare' | 'configureDomain'
+  mode?: 'connectCloudflare' | 'configureDomain' | 'createMailbox'
   state: 'ready' | 'connecting' | 'error'
   title: string
+}
+
+export interface FirstMailboxSetupState {
+  addressLocalPart: string
+  canSubmit: boolean
+  displayName: string
+  domain: string
+  errorDescription?: string | null
+  onAddressLocalPartChange?: (localPart: string) => void
+  onDisplayNameChange?: (displayName: string) => void
+  onSubmit?: () => void
+  readOnly?: boolean
+  state: 'ready' | 'creating' | 'error'
 }
 
 export interface AuthenticatedComposeView {
