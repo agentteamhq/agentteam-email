@@ -762,7 +762,7 @@ configs:
       processes = 1
       connections = 1
       pool = "default"
-      host = "atemail-mail-control-service"
+      host = "${AT_EMAIL_ADMIN_ZONEMTA_RELAY_HOST:-atemail-mail-control-service}"
       port = 2587
       ignoreTLS = true
       secure = false
@@ -779,7 +779,7 @@ configs:
       processes = 1
       connections = 1
       pool = "default"
-      host = "atemail-mail-control-service"
+      host = "${AT_EMAIL_ADMIN_ZONEMTA_RELAY_HOST:-atemail-mail-control-service}"
       port = 2587
       ignoreTLS = true
       secure = false
@@ -796,7 +796,7 @@ configs:
       processes = 1
       connections = 1
       pool = "default"
-      host = "atemail-mail-control-service"
+      host = "${AT_EMAIL_ADMIN_ZONEMTA_RELAY_HOST:-atemail-mail-control-service}"
       port = 2587
       ignoreTLS = true
       secure = false

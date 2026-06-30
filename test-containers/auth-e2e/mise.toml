@@ -1,6 +1,6 @@
 [tasks.test]
 description = "Run the auth E2E harness"
-depends = ["//:db:setup", "//:mail:start"]
+depends = ["//:dev:start"]
 dir = "{{config_root}}"
 run = '''
 repo_root="$(git rev-parse --show-toplevel)"

@@ -37,7 +37,7 @@ config_roots = [
 CONTAINER_ENGINE = "podman"
 _.file = ".env"
 # renovate: datasource=docker depName=docker.io/library/mongo versioning=docker
-AT_EMAIL_ADMIN_DEV_MONGO_IMAGE = "docker.io/library/mongo:8.2.7"
+AT_EMAIL_ADMIN_DEV_MONGO_IMAGE = "docker.io/library/mongo:8.3.2"
 # renovate: datasource=docker depName=docker.io/axllent/mailpit versioning=docker
 AT_EMAIL_ADMIN_DEV_MAILPIT_IMAGE = "docker.io/axllent/mailpit:v1.30.1"
 # renovate: datasource=docker depName=docker.io/minio/minio versioning=docker
@@ -52,10 +52,6 @@ find . -type d -name tmp -not -path '*/node_modules/*' -not -path '*/.git/*' | w
   find "${d:?}" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
 done
 '''
-
-[tasks.dev]
-description = "Run the local frontend/server dev graph"
-run = "pnpm dev"
 
 [tasks.build]
 description = "Build all workspace packages"
@@ -207,68 +203,25 @@ description = "Stop the unauthenticated LAN preview proxy and remove preview vol
 depends = ["//test-containers/paperclip-plugin-e2e:preview:reset"]
 run = "true"
 
-[tasks."db:setup"]
-description = "Start the configured dev MongoDB database"
-run = [
-  { task = "db:start" },
-  "printf 'MongoDB is ready. No schema migration is required.\\n'",
-]
+[tasks."dev:start"]
+description = "Start the local source-development support stack"
+run = "bash scripts/dev-stack.sh start"
 
-[tasks."db:start"]
-description = "Start MongoDB container"
-run = "bash scripts/dev-mongo.sh start"
+[tasks."dev:stop"]
+description = "Stop the local source-development support stack"
+run = "bash scripts/dev-stack.sh stop"
 
-[tasks."db:stop"]
-description = "Stop MongoDB container"
-run = "bash scripts/dev-mongo.sh stop"
+[tasks."dev:status"]
+description = "Show local source-development support stack status"
+run = "bash scripts/dev-stack.sh status"
 
-[tasks."db:status"]
-description = "Check MongoDB container status"
-run = "bash scripts/dev-mongo.sh status"
+[tasks."dev:logs"]
+description = "Follow local source-development support stack logs"
+run = "bash scripts/dev-stack.sh logs"
 
-[tasks."db:logs"]
-description = "Tail MongoDB container logs"
-run = "bash scripts/dev-mongo.sh logs"
-
-[tasks."db:shell"]
-description = "Open interactive mongosh shell to dev database"
-run = "bash scripts/dev-mongo.sh shell"
-
-[tasks."mail:start"]
-description = "Start Mailpit container"
-run = """
-container_name="agentteam-email-mailpit"
-mkdir -p ~/.local/share/agentteam-email/mailpit
-"${CONTAINER_ENGINE}" rm -f "${container_name}" >/dev/null 2>&1 || true
-"${CONTAINER_ENGINE}" run -d --name "${container_name}" \
-  -e MP_MAX_MESSAGES=500 \
-  -e MP_DATABASE=/data/mailpit.db \
-  -e MP_SMTP_AUTH_ACCEPT_ANY=1 \
-  -e MP_SMTP_AUTH_ALLOW_INSECURE=1 \
-  -p 8025:8025 \
-  -p 1025:1025 \
-  -v ~/.local/share/agentteam-email/mailpit:/data:Z \
-  "${AT_EMAIL_ADMIN_DEV_MAILPIT_IMAGE}"
-echo "Mailpit started - Web UI: http://localhost:8025 | SMTP: localhost:1025"
-"""
-
-[tasks."mail:stop"]
-description = "Stop Mailpit container"
-run = '''
-"${CONTAINER_ENGINE}" rm -f agentteam-email-mailpit
-'''
-
-[tasks."mail:status"]
-description = "Check Mailpit container status"
-run = '''
-"${CONTAINER_ENGINE}" ps -a --filter name=agentteam-email-mailpit --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
-'''
-
-[tasks."mail:logs"]
-description = "Tail Mailpit container logs"
-run = '''
-"${CONTAINER_ENGINE}" logs -f agentteam-email-mailpit
-'''
+[tasks."dev:mail-control"]
+description = "Run the Mail Control Service from source against the local dev stack"
+run = "bash scripts/dev-mail-control.sh"
 
 [tasks."stack:env"]
 description = "Create the production-like local Compose env file when missing"
