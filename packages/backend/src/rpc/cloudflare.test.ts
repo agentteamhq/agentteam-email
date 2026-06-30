@@ -76,6 +76,7 @@ describe('Cloudflare RPC routes', () => {
     )
 
     expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')?.split(';')[0]).toBe('application/json')
     expect((response.headers as Headers & { getSetCookie: () => string[] }).getSetCookie()).toStrictEqual([
       'cf-oauth-state=one; Path=/; HttpOnly',
       'cf-oauth-verifier=two; Path=/; Secure'

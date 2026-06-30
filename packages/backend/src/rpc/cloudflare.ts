@@ -85,6 +85,7 @@ const cloudflare = new Elysia({
       try {
         const { responseHeaders, ...body } = await startCloudflareOAuth(request.headers)
         applySetCookieHeaders(set.headers, responseHeaders)
+        set.headers['content-type'] = 'application/json'
         return body
       } catch (error) {
         return cloudflareErrorResponse(error, set)
