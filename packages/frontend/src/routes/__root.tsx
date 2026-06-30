@@ -2,6 +2,7 @@ import { HeadContent, Scripts, createRootRouteWithContext, useRouter } from '@ta
 import type { ReactNode } from 'react'
 
 import { throwRouteRedirect } from '../lib/route-redirect'
+import { EnvProvider } from '../partials/webapp/env-provider'
 import { NotFoundPage } from '../partials/webapp/not-found-page'
 import { SiteMeta } from '../partials/webapp/site-meta'
 import { serializePublicEnv } from '../public-env'
@@ -48,7 +49,7 @@ export const Route = createRootRouteWithContext<FrontendRouterContext>()({
   shellComponent: RootDocument
 })
 
-function RootDocument({ children }: { children: ReactNode }) {
+export function RootDocument({ children }: { children: ReactNode }) {
   const router = useRouter()
   const publicEnv = router.options.context.publicEnv
 
@@ -64,7 +65,7 @@ function RootDocument({ children }: { children: ReactNode }) {
             __html: `window.__WEBAPP_PUBLIC_ENV__=${serializePublicEnv(publicEnv)};`
           }}
         />
-        {children}
+        <EnvProvider publicEnv={publicEnv}>{children}</EnvProvider>
         <Scripts />
       </body>
     </html>

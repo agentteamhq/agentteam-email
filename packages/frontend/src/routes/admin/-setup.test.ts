@@ -66,6 +66,34 @@ describe('admin setup route loader', () => {
     expect(loadAdminSetupRoute).toHaveBeenCalledWith(request)
     expect(adminSetupRouteTestState.notFound).not.toHaveBeenCalled()
   })
+
+  it('throws not-found when the server setup route state hides setup from the requester', async () => {
+    expect.hasAssertions()
+    const request = new Request('https://mail.example.com/admin/setup/')
+    const routeState = {
+      redirectTo: '/admin/',
+      setupRequired: false,
+      shouldNotFound: true,
+      shouldRedirectToAdmin: false,
+      user: null
+    } satisfies AdminSetupRouteState
+    const loadAdminSetupRoute = vi.fn(async (_request: Request) => routeState)
+
+    await expect(
+      loadAdminSetupRouteState(
+        createAdminSetupLoaderInput({
+          serverContext: {
+            request,
+            serverRouteHandlers: {
+              loadAdminSetupRoute
+            }
+          }
+        })
+      )
+    ).rejects.toBe(adminSetupRouteTestState.notFoundError)
+    expect(loadAdminSetupRoute).toHaveBeenCalledWith(request)
+    expect(adminSetupRouteTestState.notFound).toHaveBeenCalledWith({ throw: true })
+  })
 })
 
 function createAdminSetupLoaderInput(overrides: Partial<AdminSetupLoaderInput> = {}): AdminSetupLoaderInput {
