@@ -1,10 +1,13 @@
-import { AccountMenu as AccountMenuStory, mailWorkspaceStoryMeta } from '../../mail-workspace.definitions'
+import {
+  AccountMenu as AccountMenuStory,
+  mailWorkspaceControllerStoryMeta
+} from '../../mail-workspace.definitions'
 import type { Meta, StoryObj } from '@storybook/react'
 
 const meta = {
-  ...mailWorkspaceStoryMeta,
+  ...mailWorkspaceControllerStoryMeta,
   title: 'Screens/Mail Workspace/Account'
-} satisfies Meta<typeof mailWorkspaceStoryMeta.component>
+} satisfies Meta<typeof mailWorkspaceControllerStoryMeta.component>
 
 export default meta
 

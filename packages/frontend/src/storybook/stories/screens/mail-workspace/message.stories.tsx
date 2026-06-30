@@ -3,18 +3,17 @@ import {
   MessageAttachments as MessageAttachmentsStory,
   MessageError as MessageErrorStory,
   MessageInlineAttachments as MessageInlineAttachmentsStory,
-  MessageRowSelection as MessageRowSelectionStory,
   MessageStarred as MessageStarredStory,
   MessageUnread as MessageUnreadStory,
   MessageWelcome as MessageWelcomeStory,
-  mailWorkspaceStoryMeta
+  mailWorkspaceControllerStoryMeta
 } from '../../mail-workspace.definitions'
 import type { Meta, StoryObj } from '@storybook/react'
 
 const meta = {
-  ...mailWorkspaceStoryMeta,
+  ...mailWorkspaceControllerStoryMeta,
   title: 'Screens/Mail Workspace/Message'
-} satisfies Meta<typeof mailWorkspaceStoryMeta.component>
+} satisfies Meta<typeof mailWorkspaceControllerStoryMeta.component>
 
 export default meta
 
@@ -27,7 +26,7 @@ export const MessageAppointment: Story = {
 
 export const MessageError: Story = {
   ...MessageErrorStory,
-  name: 'Error'
+  name: 'Loader error'
 }
 
 export const MessageWelcome: Story = {
@@ -53,9 +52,4 @@ export const MessageAttachments: Story = {
 export const MessageInlineAttachments: Story = {
   ...MessageInlineAttachmentsStory,
   name: 'Inline attachments'
-}
-
-export const MessageRowSelection: Story = {
-  ...MessageRowSelectionStory,
-  name: 'Row selection'
 }
