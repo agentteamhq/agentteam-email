@@ -34,8 +34,8 @@ config_roots = [
 ]
 
 [env]
-CONTAINER_ENGINE = "podman"
 _.file = ".env"
+CONTAINER_ENGINE = "{{ get_env(name='CONTAINER_ENGINE', default='podman') }}"
 # renovate: datasource=docker depName=docker.io/library/mongo versioning=docker
 AT_EMAIL_ADMIN_DEV_MONGO_IMAGE = "docker.io/library/mongo:8.3.2"
 # renovate: datasource=docker depName=docker.io/axllent/mailpit versioning=docker
@@ -86,6 +86,9 @@ git ls-files -z --cached --others --exclude-standard \
   '*.yml' \
   ':!:charts/agentteam-email/templates/**' \
   ':!:pnpm-lock.yaml' \
+  | while IFS= read -r -d '' file; do
+      [[ -f "${file}" ]] && printf '%s\0' "${file}"
+    done \
   | xargs -0 -r yamllint -d '{extends: relaxed, rules: {line-length: disable}}'
 '''
 
@@ -106,13 +109,6 @@ git archive --format=tar HEAD | tar -x -C "${scan_dir}"
 exec gitleaks dir "${scan_dir}" --redact --config "${PWD}/.gitleaks.toml"
 '''
 
-[tasks.test]
-description = "Run repo unit tests"
-run = [
-  { task = "//apps/mail-control-service:test" },
-  "pnpm test",
-]
-
 [tasks.typegen]
 description = "Regenerate committed service-boundary contracts"
 depends = ["typegen:rpc-openapi"]
@@ -121,17 +117,140 @@ depends = ["typegen:rpc-openapi"]
 description = "Regenerate the committed RPC OpenAPI schema"
 run = "node scripts/generate-rpc-openapi.mjs"
 
-[tasks."test:e2e"]
-description = "Run all end-to-end test-container flows"
+[tasks."test:node"]
+description = "Run workspace package unit tests"
+run = "pnpm test"
+
+[tasks.test]
+description = "Run repo unit tests"
 depends = [
-  "//apps/mail-control-service/test-containers/inbound-replay-smoke-e2e:test",
-  "//test-containers/auth-e2e:test",
-  "//test-containers/cloudflare-oauth-e2e:test",
-  "//test-containers/paperclip-plugin-e2e:test",
-  "//test-containers/kind-e2e:test",
-  "//test-containers/full-stack-e2e:test",
+  "//apps/mail-control-service:test",
+  ":test:node",
 ]
 run = "true"
+
+[tasks."test:static"]
+description = "Run static validation checks used by CI"
+depends = [
+  ":lint",
+  ":typecheck",
+  ":leaks:check",
+  ":test:charts",
+]
+run = "true"
+
+[tasks."test:charts"]
+description = "Run Helm chart render and client dry-run checks"
+depends = [
+  "//charts:template:missing-required",
+  "//charts:dry-run",
+]
+run = "true"
+
+[tasks."test:unit"]
+description = "Run host-level unit and package checks used by CI"
+depends = [
+  ":test:node",
+  "//apps/mail-control-service:check",
+  "//apps/at-email-cli:fmt:check",
+  "//apps/at-email-cli:mod:check",
+  "//apps/at-email-cli:test",
+  "//test-containers/cloudflare-oauth-prod-probe:test",
+]
+run = "true"
+
+[tasks."test:storybook:browsers"]
+description = "Install Chromium dependencies for Storybook interaction tests"
+run = "pnpm exec playwright install --with-deps chromium"
+
+[tasks."test:storybook:test"]
+description = "Run frontend Storybook interaction tests"
+run = "pnpm exec turbo run storybook:test --filter=@main/frontend --output-logs=full --log-order=stream --ui=stream --summarize=false"
+
+[tasks."storybook:build"]
+description = "Build the frontend Storybook static artifact"
+env = { STORYBOOK_BUILD_OUTPUT_DIR = "storybook-static" }
+run = "pnpm exec turbo run storybook:build --filter=@main/frontend --output-logs=full --log-order=stream --ui=stream --summarize=false"
+
+[tasks."test:storybook"]
+description = "Run Storybook browser setup and interaction tests"
+run = [
+  { task = ":test:storybook:browsers" },
+  { task = ":test:storybook:test" },
+]
+
+[tasks."test:images"]
+description = "Build repo-owned runtime container images used by CI and E2E"
+depends = [
+  "//apps/mail-control-service:image:build",
+  "//apps/web-server:image:build",
+  "//apps/at-email-cli:image:build",
+]
+run = "true"
+
+[tasks."test:release-artifacts"]
+description = "Validate at-email CLI release, npm, plugin, and skill artifacts"
+depends = [
+  "//apps/at-email-cli:release:check",
+  "//apps/at-email-cli:release:npm:check",
+  "//apps/at-email-cli:release:plugins:check",
+  "//apps/at-email-cli:skills:check",
+]
+run = "true"
+
+[tasks."test:e2e:service"]
+description = "Run service-owned Mail Control end-to-end suites"
+depends = [
+  "//apps/mail-control-service:test:e2e",
+]
+run = "true"
+
+[tasks."test:e2e:node"]
+description = "Run self-contained Node end-to-end harnesses"
+depends = [
+  "//test-containers/cloudflare-oauth-e2e:test",
+  "//test-containers/paperclip-plugin-e2e:test",
+]
+run = "true"
+
+[tasks."test:e2e:auth"]
+description = "Run auth E2E against the source-development stack"
+depends = ["//test-containers/auth-e2e:test"]
+depends_post = ["//:dev:stop"]
+run = "true"
+
+[tasks."test:e2e:kubernetes"]
+description = "Run Kubernetes-backed end-to-end harnesses"
+run = [
+  { task = "//test-containers/kind-e2e:test" },
+  { task = "//test-containers/full-stack-e2e:test" },
+]
+
+[tasks."test:e2e"]
+description = "Run all end-to-end test-container flows"
+run = [
+  { tasks = [
+    ":test:e2e:service",
+    ":test:e2e:node",
+  ] },
+  { task = ":test:e2e:auth" },
+  { task = ":test:e2e:kubernetes" },
+]
+
+[tasks."test:ci"]
+description = "Run the full CI validation gate against the example environment"
+env = { _.file = ".env.example", CI = "true", DEBUG = "*", TEST_ARTIFACT_SUBMIT_SKIP = "1" }
+run = [
+  { task = ":test:static" },
+  { tasks = [
+    ":build",
+    ":test:unit",
+  ] },
+  { task = ":test:storybook" },
+  { task = ":test:images" },
+  { task = ":test:release-artifacts" },
+  { task = ":test:e2e" },
+]
 
 [tasks."paperclip-plugin:start"]
 description = "Start an isolated Paperclip sandbox with the local AgentTeam Email plugin installed"

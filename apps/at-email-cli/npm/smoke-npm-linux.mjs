@@ -10,7 +10,7 @@ const cliRoot = path.resolve(scriptDir, '..')
 
 function parseArgs(argv) {
   const args = {
-    engine: process.env.CONTAINER_ENGINE || 'docker',
+    engine: process.env.CONTAINER_ENGINE,
     npmRoot: path.join(cliRoot, 'dist', 'npm'),
     smokeDir: path.join(cliRoot, 'dist', 'npm-linux-smoke'),
     glibcImage: 'docker.io/library/node:26.4.0-bookworm-slim',
@@ -42,11 +42,15 @@ function parseArgs(argv) {
     }
   }
 
+  if (!args.engine) {
+    throw new Error('missing CONTAINER_ENGINE')
+  }
+
   return args
 }
 
 function runContainer({ engine, image, smokeDir, version }) {
-  const volumeMode = engine.includes('podman') ? 'ro,Z' : 'ro'
+  const volumeMode = process.env.CONTAINER_ENGINE_VOLUME_MODE || 'ro,Z'
   for (const alias of binaryAliases) {
     const result = childProcess.spawnSync(
       engine,

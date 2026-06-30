@@ -22,41 +22,23 @@ compose_command() {
     return
   fi
 
-  if command -v podman-compose >/dev/null 2>&1; then
-    printf '%s\n' podman-compose
+  local engine
+  engine="$(container_engine)"
+  if "${engine}" compose version >/dev/null 2>&1; then
+    printf '%s\n' "${engine}" compose
     return
   fi
 
-  if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
-    printf '%s\n' docker compose
+  if command -v "${engine}-compose" >/dev/null 2>&1; then
+    printf '%s\n' "${engine}-compose"
     return
   fi
 
-  if command -v docker-compose >/dev/null 2>&1; then
-    printf '%s\n' docker-compose
-    return
-  fi
-
-  fail 'missing Compose CLI; install podman-compose, docker compose, or docker-compose'
+  fail "missing Compose CLI for CONTAINER_ENGINE=${engine}; set AT_EMAIL_ADMIN_COMPOSE_COMMAND"
 }
 
 container_engine() {
-  if [[ -n "${CONTAINER_ENGINE:-}" ]]; then
-    printf '%s\n' "${CONTAINER_ENGINE}"
-    return
-  fi
-
-  if command -v podman >/dev/null 2>&1; then
-    printf '%s\n' podman
-    return
-  fi
-
-  if command -v docker >/dev/null 2>&1; then
-    printf '%s\n' docker
-    return
-  fi
-
-  fail 'missing container engine; install podman or docker'
+  printf '%s\n' "${CONTAINER_ENGINE:?missing CONTAINER_ENGINE}"
 }
 
 read_compose_command() {

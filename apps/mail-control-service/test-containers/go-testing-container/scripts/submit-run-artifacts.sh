@@ -23,7 +23,7 @@ run_root_abs="$(cd "${run_dir_abs}/.." && pwd)"
 submit_status=0
 
 if [ -z "${TEST_ARTIFACT_SUBMIT_SKIP:-}" ]; then
-  podman run --rm \
+  "${CONTAINER_ENGINE:?missing CONTAINER_ENGINE}" run --rm \
     --userns keep-id \
     --user "$(id -u):$(id -g)" \
     --env-host \

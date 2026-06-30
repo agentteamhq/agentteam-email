@@ -39,13 +39,10 @@ run = '''
 : "${WT:?missing WT}"
 repo_root="$(git rev-parse --show-toplevel)"
 cd "${repo_root}"
-engine="${CONTAINER_ENGINE:-podman}"
-image_tag="${AT_EMAIL_CLI_TEST_IMAGE_TAG:-stage}"
-image_repository="${AT_EMAIL_CLI_TEST_IMAGE_REPOSITORY:-atemail.${WT}.at-email-cli-test}"
-"${engine}" build \
+"${CONTAINER_ENGINE:?missing CONTAINER_ENGINE}" build \
   -f apps/at-email-cli/Containerfile \
   --target test \
-  -t "${image_repository}:${image_tag}" \
+  -t "${AT_EMAIL_CLI_TEST_IMAGE_REPOSITORY:-atemail.${WT}.at-email-cli-test}:${AT_EMAIL_CLI_TEST_IMAGE_TAG:-stage}" \
   .
 '''
 
@@ -56,12 +53,9 @@ run = '''
 : "${WT:?missing WT}"
 repo_root="$(git rev-parse --show-toplevel)"
 cd "${repo_root}"
-engine="${CONTAINER_ENGINE:-podman}"
-image_tag="${AT_EMAIL_CLI_IMAGE_TAG:-stage}"
-image_repository="${AT_EMAIL_CLI_IMAGE_REPOSITORY:-atemail.${WT}.at-email-cli}"
-"${engine}" build \
+"${CONTAINER_ENGINE:?missing CONTAINER_ENGINE}" build \
   -f apps/at-email-cli/Containerfile \
-  -t "${image_repository}:${image_tag}" \
+  -t "${AT_EMAIL_CLI_IMAGE_REPOSITORY:-atemail.${WT}.at-email-cli}:${AT_EMAIL_CLI_IMAGE_TAG:-stage}" \
   .
 '''
 

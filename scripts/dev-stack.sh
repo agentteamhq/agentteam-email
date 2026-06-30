@@ -23,22 +23,19 @@ compose_command() {
     return
   fi
 
-  if command -v podman-compose >/dev/null 2>&1; then
-    printf '%s\n' podman-compose
+  local engine
+  engine="$(container_engine)"
+  if "${engine}" compose version >/dev/null 2>&1; then
+    printf '%s\n' "${engine}" compose
     return
   fi
 
-  if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
-    printf '%s\n' docker compose
+  if command -v "${engine}-compose" >/dev/null 2>&1; then
+    printf '%s\n' "${engine}-compose"
     return
   fi
 
-  if command -v docker-compose >/dev/null 2>&1; then
-    printf '%s\n' docker-compose
-    return
-  fi
-
-  fail 'missing Compose CLI; install podman-compose, docker compose, or docker-compose'
+  fail "missing Compose CLI for CONTAINER_ENGINE=${engine}; set AT_EMAIL_ADMIN_COMPOSE_COMMAND"
 }
 
 read_compose_command() {
@@ -46,12 +43,7 @@ read_compose_command() {
 }
 
 container_engine() {
-  if [[ "${compose_cmd[0]}" == "podman-compose" ]]; then
-    printf '%s\n' podman
-    return
-  fi
-
-  printf '%s\n' docker
+  printf '%s\n' "${CONTAINER_ENGINE:?missing CONTAINER_ENGINE}"
 }
 
 first_env() {
@@ -132,24 +124,26 @@ run_compose() {
 support_container_id() {
   local service="$1"
 
-  if [[ "${compose_cmd[0]}" == "podman-compose" ]]; then
-    printf '%s_%s_1\n' "${project}" "${service}"
+  local container_id
+  container_id="$(run_compose ps -q "${service}" 2>/dev/null | head -n 1)"
+  if [[ -n "${container_id}" ]]; then
+    printf '%s\n' "${container_id}"
     return
   fi
 
-  run_compose ps -q "${service}" 2>/dev/null | head -n 1
+  printf '%s_%s_1\n' "${project}" "${service}"
 }
 
 remove_support_containers() {
-  if [[ "${compose_cmd[0]}" == "podman-compose" ]]; then
-    local service
-    for service in "${support_services[@]}"; do
-      podman rm -f "${project}_${service}_1" >/dev/null 2>&1 || true
-    done
-    return
-  fi
-
-  run_compose rm -sf "${support_services[@]}"
+  local engine service container_id
+  engine="$(container_engine)"
+  run_compose rm -sf "${support_services[@]}" >/dev/null 2>&1 || true
+  for service in "${support_services[@]}"; do
+    container_id="$(support_container_id "${service}")"
+    if [[ -n "${container_id}" ]]; then
+      "${engine}" rm -f "${container_id}" >/dev/null 2>&1 || true
+    fi
+  done
 }
 
 kill_log_tails() {
@@ -339,13 +333,8 @@ stop_stack() {
   kill_log_tails
   read_compose_command
   prepare_compose_env
-  if [[ "${compose_cmd[0]}" == "podman-compose" ]]; then
-    remove_support_containers
-    podman network rm "${AT_EMAIL_ADMIN_DEV_NETWORK}" >/dev/null 2>&1 || true
-    return
-  fi
-
   remove_support_containers
+  "$(container_engine)" network rm "${AT_EMAIL_ADMIN_DEV_NETWORK}" >/dev/null 2>&1 || true
 }
 
 status_stack() {
