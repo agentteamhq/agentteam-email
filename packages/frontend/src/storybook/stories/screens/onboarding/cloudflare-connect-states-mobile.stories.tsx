@@ -9,7 +9,6 @@ import type { Meta, StoryObj } from '@storybook/react'
 const meta = {
   title: 'Screens/Onboarding/States - Mobile',
   component: DashboardScreen,
-  tags: ['mock'],
   args: cloudflareConnectStateMetaArgs,
   globals: {
     viewport: {

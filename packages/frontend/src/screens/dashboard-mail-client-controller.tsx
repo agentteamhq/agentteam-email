@@ -52,20 +52,14 @@ import {
   sendMailMessage,
   updateMailMessage
 } from '../lib/mail-rpc'
-import { mailboxAddress, mailboxAddressOrRaw, mailboxDisplayName } from '../lib/mail-addresses'
+import { mailboxAddress } from '../lib/mail-addresses'
 import { isMailboxAdminSectionId } from '../partials/authenticated/mailbox-admin-models'
-import {
-  actionsForMessage,
-  findSystemFolder,
-  formatMessageDate,
-  threadActionsForMessage,
-  toSidebarView
-} from './dashboard-mail-sidebar-view'
-import { toDashboardView } from './dashboard-mail-dashboard-view'
+import { findSystemFolder } from './dashboard-mail-sidebar-view'
 import { DashboardScreen } from './dashboard-screen'
 import { toMailboxAdminView } from './dashboard-mailbox-admin-view'
 import { invalidateMailboxAdminQueries } from './dashboard-mailbox-admin-query-cache'
 import { mailboxAdminViewQueryForSection } from './dashboard-mailbox-admin-query'
+import { deriveDashboardMailWorkspaceScreenModel } from './dashboard-mail-screen-model'
 import type { MailWorkspaceQuery } from '../lib/mail-rpc'
 import type { MailboxAdminViewQuery } from '../lib/mail-admin-rpc'
 import type {
@@ -1232,24 +1226,28 @@ export function DashboardMailController({
     }
   })
 
-  const sidebarView = React.useMemo(
+  const workspaceScreenModel = React.useMemo(
     () =>
-      toSidebarView(
-        workspace,
-        activeMailboxAdminSection ? mailboxAdminStatus : workspaceQuery.status,
-        activeMailboxAdminSection ? mailboxAdminError : workspaceQuery.error,
+      deriveDashboardMailWorkspaceScreenModel({
+        allowedMailboxAdminSections,
+        domainSettingsState,
         folderCreate,
         folderDelete,
         folderRename,
         routeSearch,
-        allowedMailboxAdminSections
-      ),
+        sidebarError: activeMailboxAdminSection ? mailboxAdminError : workspaceQuery.error,
+        sidebarStatus: activeMailboxAdminSection ? mailboxAdminStatus : workspaceQuery.status,
+        workspace,
+        workspaceError: workspaceQuery.error,
+        workspaceStatus: workspaceQuery.status
+      }),
     [
+      activeMailboxAdminSection,
+      allowedMailboxAdminSections,
+      domainSettingsState,
       folderCreate,
       folderDelete,
       folderRename,
-      activeMailboxAdminSection,
-      allowedMailboxAdminSections,
       mailboxAdminError,
       mailboxAdminStatus,
       routeSearch,
@@ -1491,26 +1489,7 @@ export function DashboardMailController({
       mailboxAdminStatusFilter
     ]
   )
-  const selectedPreview = React.useMemo(
-    () =>
-      workspace?.selectedMessage ? toEmailPreview(workspace.selectedMessage, workspace.folders) : undefined,
-    [workspace?.folders, workspace?.selectedMessage]
-  )
-  const emailPreviewsById = React.useMemo(
-    () => (selectedPreview ? { [selectedPreview.id]: selectedPreview } : {}),
-    [selectedPreview]
-  )
-  const dashboardView = React.useMemo(
-    () =>
-      toDashboardView(
-        workspaceQuery.status,
-        workspaceQuery.error,
-        selectedPreview,
-        workspace,
-        domainSettingsState
-      ),
-    [domainSettingsState, selectedPreview, workspace, workspaceQuery.error, workspaceQuery.status]
-  )
+  const { dashboardView, emailPreviewsById, sidebarView } = workspaceScreenModel
   const mailActionView = React.useMemo(
     () =>
       toMailActionView({
@@ -2050,73 +2029,6 @@ export function DashboardMailController({
   )
 }
 
-function toEmailPreview(
-  message: AgentMailWebMessageDetail,
-  folders: ReadonlyArray<AgentMailWebFolder>
-): AuthenticatedEmailPreview {
-  return {
-    actions: actionsForMessage(message, folders),
-    attachments: message.attachments.map(toEmailAttachment),
-    folderId: message.mailboxId,
-    html: message.html,
-    id: message.id,
-    isDraft: message.isDraft,
-    isStarred: message.isStarred,
-    isUnread: message.unread,
-    receivedAt: formatMessageDate(message.receivedAt),
-    recipientEmail: message.to.join(', '),
-    senderEmail: mailboxAddressOrRaw(message.from),
-    senderName: mailboxDisplayName(message.from),
-    subject: message.subject,
-    thread: message.thread?.map((threadMessage: AgentMailWebThreadMessage) =>
-      toEmailThreadMessage(
-        threadMessage,
-        folders,
-        threadMessage.id === message.id && threadMessage.mailboxId === message.mailboxId
-          ? 'expanded'
-          : 'collapsed'
-      )
-    ),
-    threadId: message.threadId
-  }
-}
-
-function toEmailThreadMessage(
-  message: AgentMailWebThreadMessage,
-  folders: ReadonlyArray<AgentMailWebFolder>,
-  state: 'collapsed' | 'expanded'
-): NonNullable<AuthenticatedEmailPreview['thread']>[number] {
-  return {
-    actions: threadActionsForMessage(message, folders),
-    attachments: message.attachments.map(toEmailAttachment),
-    folderId: message.mailboxId,
-    html: message.html,
-    id: message.id,
-    isDraft: message.isDraft,
-    receivedAt: formatMessageDate(message.receivedAt),
-    recipientEmail: message.to.join(', '),
-    senderEmail: mailboxAddressOrRaw(message.from),
-    senderName: mailboxDisplayName(message.from),
-    state,
-    teaser: message.teaser
-  }
-}
-
-function toEmailAttachment(
-  attachment: AgentMailWebThreadMessage['attachments'][number]
-): NonNullable<AuthenticatedEmailPreview['attachments']>[number] {
-  return {
-    contentId: attachment.contentId,
-    disposition: attachment.disposition,
-    filename: attachment.filename,
-    id: attachment.id,
-    mimetype: attachment.mimetype,
-    sizeLabel: attachment.size === undefined ? undefined : formatBytes(attachment.size),
-    status: 'ready',
-    url: attachment.url
-  }
-}
-
 function toMailActionView({
   deleteDialog,
   folders,
@@ -2321,16 +2233,6 @@ function forwardedBody(message: AgentMailWebThreadMessage) {
     '',
     stripHTML(message.html)
   ].join('\n')
-}
-
-function formatBytes(value: number) {
-  if (value < 1024) {
-    return `${value} B`
-  }
-  if (value < 1024 * 1024) {
-    return `${Math.round(value / 1024)} KB`
-  }
-  return `${(value / 1024 / 1024).toFixed(1)} MB`
 }
 
 function replyRecipient(message: AgentMailWebThreadMessage) {

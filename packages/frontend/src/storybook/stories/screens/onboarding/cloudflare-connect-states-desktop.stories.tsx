@@ -9,7 +9,6 @@ import type { Meta, StoryObj } from '@storybook/react'
 const meta = {
   title: 'Screens/Onboarding/States - Desktop',
   component: DashboardScreen,
-  tags: ['mock'],
   args: cloudflareConnectStateMetaArgs,
   parameters: {
     layout: 'fullscreen'
