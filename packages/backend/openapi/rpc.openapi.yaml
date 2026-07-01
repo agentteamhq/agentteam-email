@@ -88,6 +88,402 @@ paths:
   /rpc/internal/agent-mail/cloudflare/send-raw:
     post:
       operationId: postRpcInternalAgent-mailCloudflareSend-raw
+  /rpc/admin/dashboard:
+    get:
+      responses:
+        "200":
+          description: Response for status 200
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - audit
+                  - generatedAt
+                  - provisioning
+                  - setup
+                properties:
+                  audit:
+                    type: object
+                    required:
+                      - failedCount
+                      - highSeverityCount
+                      - recent
+                      - totalCount
+                    properties:
+                      failedCount:
+                        type: number
+                      highSeverityCount:
+                        type: number
+                      recent:
+                        type: array
+                        items:
+                          type: object
+                          required:
+                            - action
+                            - createdAt
+                            - id
+                            - severity
+                            - status
+                          properties:
+                            action:
+                              type: string
+                            createdAt:
+                              type: string
+                            id:
+                              type: string
+                            severity:
+                              type: string
+                              enum:
+                                - low
+                                - medium
+                                - high
+                                - critical
+                            status:
+                              type: string
+                              enum:
+                                - success
+                                - failed
+                      totalCount:
+                        type: number
+                  generatedAt:
+                    type: string
+                  provisioning:
+                    type: object
+                    required:
+                      - credentialRefreshes
+                      - domains
+                      - workerDeployments
+                    properties:
+                      credentialRefreshes:
+                        type: object
+                        required:
+                          - failedCount
+                          - lastFailureAt
+                          - pendingCount
+                        properties:
+                          failedCount:
+                            type: number
+                          lastFailureAt:
+                            nullable: true
+                            anyOf:
+                              - type: string
+                              - type: "null"
+                          pendingCount:
+                            type: number
+                      domains:
+                        type: object
+                        required:
+                          - byStatus
+                          - lastRuntimeSyncedAt
+                          - totalCount
+                        properties:
+                          byStatus:
+                            type: array
+                            items:
+                              type: object
+                              required:
+                                - count
+                                - status
+                              properties:
+                                count:
+                                  type: number
+                                status:
+                                  type: string
+                                  enum:
+                                    - connected
+                                    - provisioning
+                                    - active
+                                    - degraded
+                                    - disconnected
+                          lastRuntimeSyncedAt:
+                            nullable: true
+                            anyOf:
+                              - type: string
+                              - type: "null"
+                          totalCount:
+                            type: number
+                      workerDeployments:
+                        type: object
+                        required:
+                          - byProvisioningStatus
+                          - byStatus
+                          - credentialsDueCount
+                          - credentialsExpiredCount
+                          - lastDeployedAt
+                          - totalCount
+                        properties:
+                          byProvisioningStatus:
+                            type: array
+                            items:
+                              type: object
+                              required:
+                                - count
+                                - status
+                              properties:
+                                count:
+                                  type: number
+                                status:
+                                  type: string
+                                  enum:
+                                    - not_started
+                                    - pending
+                                    - succeeded
+                                    - failed
+                          byStatus:
+                            type: array
+                            items:
+                              type: object
+                              required:
+                                - count
+                                - status
+                              properties:
+                                count:
+                                  type: number
+                                status:
+                                  type: string
+                                  enum:
+                                    - pending
+                                    - active
+                                    - degraded
+                                    - disabled
+                                    - disconnected
+                          credentialsDueCount:
+                            type: number
+                          credentialsExpiredCount:
+                            type: number
+                          lastDeployedAt:
+                            nullable: true
+                            anyOf:
+                              - type: string
+                              - type: "null"
+                          totalCount:
+                            type: number
+                  setup:
+                    type: object
+                    required:
+                      - activeSessionCount
+                      - adminConfigured
+                      - adminCount
+                      - databaseReachable
+                      - organizationCount
+                      - userCount
+                    properties:
+                      activeSessionCount:
+                        type: number
+                      adminConfigured:
+                        type: boolean
+                      adminCount:
+                        type: number
+                      databaseReachable:
+                        type: boolean
+                      organizationCount:
+                        type: number
+                      userCount:
+                        type: number
+        "401":
+          description: Response for status 401
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+        "403":
+          description: Response for status 403
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+      operationId: getRpcAdminDashboard
+  /rpc/admin/audit-logs:
+    get:
+      parameters:
+        - name: action
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - minimum: 1
+                type: number
+              - type: string
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - 25
+              - 50
+              - 100
+              - "25"
+              - "50"
+              - "100"
+        - name: severity
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - const: all
+                type: string
+              - anyOf:
+                  - const: low
+                    type: string
+                  - const: medium
+                    type: string
+                  - const: high
+                    type: string
+                  - const: critical
+                    type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - const: all
+                type: string
+              - anyOf:
+                  - const: success
+                    type: string
+                  - const: failed
+                    type: string
+      responses:
+        "200":
+          description: Response for status 200
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - events
+                  - filters
+                  - pagination
+                properties:
+                  events:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - action
+                        - createdAt
+                        - id
+                        - severity
+                        - status
+                      properties:
+                        action:
+                          type: string
+                        createdAt:
+                          type: string
+                        id:
+                          type: string
+                        severity:
+                          type: string
+                          enum:
+                            - low
+                            - medium
+                            - high
+                            - critical
+                        status:
+                          type: string
+                          enum:
+                            - success
+                            - failed
+                  filters:
+                    type: object
+                    required:
+                      - action
+                      - severity
+                      - status
+                    properties:
+                      action:
+                        nullable: true
+                        anyOf:
+                          - type: string
+                          - type: "null"
+                      severity:
+                        anyOf:
+                          - const: all
+                            type: string
+                          - anyOf:
+                              - const: low
+                                type: string
+                              - const: medium
+                                type: string
+                              - const: high
+                                type: string
+                              - const: critical
+                                type: string
+                      status:
+                        anyOf:
+                          - const: all
+                            type: string
+                          - anyOf:
+                              - const: success
+                                type: string
+                              - const: failed
+                                type: string
+                  pagination:
+                    type: object
+                    required:
+                      - hasNextPage
+                      - hasPreviousPage
+                      - page
+                      - pageSize
+                      - totalCount
+                      - totalPages
+                    properties:
+                      hasNextPage:
+                        type: boolean
+                      hasPreviousPage:
+                        type: boolean
+                      page:
+                        type: number
+                      pageSize:
+                        type: string
+                        enum:
+                          - 25
+                          - 50
+                          - 100
+                      totalCount:
+                        type: number
+                      totalPages:
+                        type: number
+        "401":
+          description: Response for status 401
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+        "403":
+          description: Response for status 403
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+      operationId: getRpcAdminAudit-logs
   /rpc/admin/setup/first-admin:
     post:
       requestBody:

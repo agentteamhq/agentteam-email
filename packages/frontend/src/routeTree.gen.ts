@@ -29,6 +29,7 @@ import { Route as RedirectErrorRouteImport } from './routes/redirect/error'
 import { Route as DeviceCapabilitiesRouteImport } from './routes/device/capabilities'
 import { Route as DeviceApproveRouteImport } from './routes/device/approve'
 import { Route as AdminSetupRouteImport } from './routes/admin/setup'
+import { Route as AdminAuditLogsRouteImport } from './routes/admin/audit-logs'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AgentClaimTokenRouteImport } from './routes/agent/claim.$token'
@@ -134,6 +135,11 @@ const AdminSetupRoute = AdminSetupRouteImport.update({
   path: '/setup',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const AdminAuditLogsRoute = AdminAuditLogsRouteImport.update({
+  id: '/audit-logs',
+  path: '/audit-logs',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -179,6 +185,7 @@ export interface FileRoutesByFullPath {
   '/verification-email-sent': typeof VerificationEmailSentRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/settings': typeof AuthenticatedSettingsRouteWithChildren
+  '/admin/audit-logs': typeof AdminAuditLogsRoute
   '/admin/setup': typeof AdminSetupRoute
   '/device/approve': typeof DeviceApproveRoute
   '/device/capabilities': typeof DeviceCapabilitiesRoute
@@ -204,6 +211,7 @@ export interface FileRoutesByTo {
   '/verification-email-sent': typeof VerificationEmailSentRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/settings': typeof AuthenticatedSettingsRouteWithChildren
+  '/admin/audit-logs': typeof AdminAuditLogsRoute
   '/admin/setup': typeof AdminSetupRoute
   '/device/approve': typeof DeviceApproveRoute
   '/device/capabilities': typeof DeviceCapabilitiesRoute
@@ -232,6 +240,7 @@ export interface FileRoutesById {
   '/verification-email-sent': typeof VerificationEmailSentRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRouteWithChildren
+  '/admin/audit-logs': typeof AdminAuditLogsRoute
   '/admin/setup': typeof AdminSetupRoute
   '/device/approve': typeof DeviceApproveRoute
   '/device/capabilities': typeof DeviceCapabilitiesRoute
@@ -260,6 +269,7 @@ export interface FileRouteTypes {
     | '/verification-email-sent'
     | '/dashboard'
     | '/settings'
+    | '/admin/audit-logs'
     | '/admin/setup'
     | '/device/approve'
     | '/device/capabilities'
@@ -285,6 +295,7 @@ export interface FileRouteTypes {
     | '/verification-email-sent'
     | '/dashboard'
     | '/settings'
+    | '/admin/audit-logs'
     | '/admin/setup'
     | '/device/approve'
     | '/device/capabilities'
@@ -312,6 +323,7 @@ export interface FileRouteTypes {
     | '/verification-email-sent'
     | '/_authenticated/dashboard'
     | '/_authenticated/settings'
+    | '/admin/audit-logs'
     | '/admin/setup'
     | '/device/approve'
     | '/device/capabilities'
@@ -484,6 +496,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSetupRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/admin/audit-logs': {
+      id: '/admin/audit-logs'
+      path: '/audit-logs'
+      fullPath: '/admin/audit-logs'
+      preLoaderRoute: typeof AdminAuditLogsRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/_authenticated/settings': {
       id: '/_authenticated/settings'
       path: '/settings'
@@ -551,11 +570,13 @@ const AuthenticatedRouteRouteWithChildren =
   AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
 
 interface AdminRouteRouteChildren {
+  AdminAuditLogsRoute: typeof AdminAuditLogsRoute
   AdminSetupRoute: typeof AdminSetupRoute
   AdminIndexRoute: typeof AdminIndexRoute
 }
 
 const AdminRouteRouteChildren: AdminRouteRouteChildren = {
+  AdminAuditLogsRoute: AdminAuditLogsRoute,
   AdminSetupRoute: AdminSetupRoute,
   AdminIndexRoute: AdminIndexRoute,
 }

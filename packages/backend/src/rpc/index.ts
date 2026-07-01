@@ -12,6 +12,7 @@ import { rewritePublicOAuthMetadataResponse } from '../auth/oauth-metadata'
 import { PUBLIC_VARS } from '../vars.public'
 
 import { PRIVATE_VARS } from '../vars.private'
+import admin from './admin'
 import adminSetup from './admin-setup'
 import agentAccess from './agent-access'
 import cloudflare from './cloudflare'
@@ -83,6 +84,10 @@ export const backendRpcApp = new Elysia({ name: 'rpc', prefix: '/rpc', normalize
   .all('/auth/api/agent/approve-capability', ({ status }) => status(404, { error: 'Not found' }))
   .all('/auth/api/agent/grant-capability', ({ status }) => status(404, { error: 'Not found' }))
   .all('/auth/api/agent/revoke-capability', ({ status }) => status(404, { error: 'Not found' }))
+  // The Better Auth audit-log plugin exposes a generic insert endpoint for
+  // authenticated users. Audit records in this app are server-owned evidence, so
+  // user-submitted audit events must not reach the Better Auth mount.
+  .all('/auth/api/audit-log/insert', ({ status }) => status(404, { error: 'Not found' }))
   // Better Auth is mounted at /rpc/auth while keeping /api as its logical
   // Better Auth basePath. Public OAuth metadata routes above rewrite generated
   // /api URLs back to this public /rpc/auth/api mount.
@@ -102,6 +107,7 @@ export const backendRpcApp = new Elysia({ name: 'rpc', prefix: '/rpc', normalize
   })
   // Mount route modules
   .use(internalRpcApp)
+  .use(admin)
   .use(adminSetup)
   .use(agentAccess)
   .use(cloudflare)
