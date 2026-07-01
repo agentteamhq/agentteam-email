@@ -94,7 +94,7 @@ export function createMongoSecondaryStorage(db: Database): BetterAuthSecondarySt
               value: '0'
             }
           },
-          { new: true, upsert: true }
+          { returnDocument: 'after', upsert: true }
         )
         .exec()
       const count = Math.max(0, Math.trunc(record?.counter ?? 0))

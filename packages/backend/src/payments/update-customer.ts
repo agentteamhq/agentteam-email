@@ -98,7 +98,7 @@ export async function updateStripeCustomer(userId: UserId, options: { db?: Datab
           stripeLastUpdated
         }
       },
-      { new: true }
+      { returnDocument: 'after' }
     )
     .exec()
 

@@ -413,7 +413,7 @@ export async function connectCloudflareDomain({
           domain
         }
       },
-      { new: true, upsert: true }
+      { returnDocument: 'after', upsert: true }
     )
     .exec()
 
@@ -434,7 +434,7 @@ export async function connectCloudflareDomain({
           agentMailDomainId: domainRecord._id
         }
       },
-      { new: true }
+      { returnDocument: 'after' }
     )
     .exec()
 
@@ -562,7 +562,7 @@ export async function applyCloudflareConnectionProvisioning({
             cloudflareConnectionId: connection._id
           }
         },
-        { new: true, upsert: true }
+        { returnDocument: 'after', upsert: true }
       )
       .exec()
 
@@ -604,7 +604,7 @@ export async function applyCloudflareConnectionProvisioning({
             workerScriptName: result.workerScriptName
           }
         },
-        { new: true }
+        { returnDocument: 'after' }
       )
       .exec()
 
@@ -653,7 +653,7 @@ export async function applyCloudflareConnectionProvisioning({
               status: 'degraded'
             }
           },
-          { new: true }
+          { returnDocument: 'after' }
         )
         .exec()
 
@@ -676,7 +676,7 @@ export async function applyCloudflareConnectionProvisioning({
             status: 'degraded'
           }
         },
-        { new: true }
+        { returnDocument: 'after' }
       )
       .exec()
 
@@ -1177,7 +1177,7 @@ async function upsertCloudflareGrant(
           cloudflareUserId: input.cloudflareUserId
         }
       },
-      { new: true, upsert: true }
+      { returnDocument: 'after', upsert: true }
     )
     .exec()
 
@@ -1265,7 +1265,7 @@ async function upsertAgentMailDomain(
           organizationId: context.organizationId
         }
       },
-      { new: true, upsert: true }
+      { returnDocument: 'after', upsert: true }
     )
     .exec()
 

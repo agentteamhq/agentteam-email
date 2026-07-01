@@ -145,7 +145,7 @@ describe('Mongo secondary storage', () => {
             value: '0'
           }
         },
-        { new: true, upsert: true }
+        { returnDocument: 'after', upsert: true }
       )
       expect(secondaryStorageTestState.updateOne).toHaveBeenNthCalledWith(
         2,

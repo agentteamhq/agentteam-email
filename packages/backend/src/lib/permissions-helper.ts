@@ -74,7 +74,7 @@ export async function updatePolicy(args: updatePolicyArgs): Promise<SubjectPolic
   const { db, policy, patches, inversePatches, actor, actionType, subjectPolicyId } = args
 
   const subjectPolicy = await db.models.subjectPolicy
-    .findByIdAndUpdate(subjectPolicyId, { $set: { policy } }, { new: true })
+    .findByIdAndUpdate(subjectPolicyId, { $set: { policy } }, { returnDocument: 'after' })
     .exec()
 
   await db.models.policyAuditEntry.create({
