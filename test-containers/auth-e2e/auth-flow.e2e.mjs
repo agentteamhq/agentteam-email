@@ -7,7 +7,8 @@ import { MongoClient, UUID } from 'mongodb'
 import { chromium } from 'playwright'
 
 const packageDir = path.dirname(fileURLToPath(import.meta.url))
-const runId = process.env.TEST_RUN_ID || new Date().toISOString().replaceAll(/[-:]/g, '').replace(/\..+$/, 'Z')
+const runId =
+  process.env.TEST_RUN_ID || new Date().toISOString().replaceAll(/[-:]/g, '').replace(/\..+$/, 'Z')
 const runDir = path.resolve(process.env.TEST_RUN_DIR || path.join(packageDir, 'tmp', `run-${runId}`))
 const logsDir = path.join(runDir, 'logs')
 const reportsDir = path.join(runDir, 'reports')
@@ -31,6 +32,12 @@ const testPassword =
 const testName = 'Auth E2E User'
 const testUsername =
   process.env.AT_EMAIL_ADMIN_AUTH_E2E_USERNAME || `authe2e${crypto.randomBytes(6).toString('hex')}`
+const adminEmail =
+  process.env.AT_EMAIL_ADMIN_AUTH_E2E_ADMIN_EMAIL ||
+  `auth-e2e-admin-${Date.now()}-${crypto.randomBytes(4).toString('hex')}@example.test`
+const adminPassword =
+  process.env.AT_EMAIL_ADMIN_AUTH_E2E_ADMIN_PASSWORD ||
+  `AdminE2E-${crypto.randomBytes(12).toString('base64url')}!1`
 const headless = process.env.AT_EMAIL_ADMIN_AUTH_E2E_HEADLESS !== 'false'
 const verifyEmailGateTitle = 'Verify your email'
 const verifyEmailGateDescription =
@@ -72,6 +79,8 @@ try {
   page = await context.newPage()
   installPageDiagnostics(page)
 
+  await completeAdminSetupIfRequired(page)
+
   const signupStartedAt = new Date(Date.now() - 5_000)
   await signUp(page)
   await page.screenshot({ fullPage: true, path: path.join(screenshotsDir, 'signup-verify-email-gate.png') })
@@ -91,7 +100,10 @@ try {
 
   await context.clearCookies()
   await signInExpectVerifyEmail(page)
-  await page.screenshot({ fullPage: true, path: path.join(screenshotsDir, 'unverified-signin-verify-email-gate.png') })
+  await page.screenshot({
+    fullPage: true,
+    path: path.join(screenshotsDir, 'unverified-signin-verify-email-gate.png')
+  })
 
   const unverifiedSigninSession = await getSessionFromBrowser(page)
   assert(unverifiedSigninSession === null, 'unverified credential sign-in does not create a browser session')
@@ -106,7 +118,10 @@ try {
   await page.screenshot({ fullPage: true, path: path.join(screenshotsDir, 'email-verified-dashboard.png') })
 
   const verifiedSession = await getSessionFromBrowser(page)
-  assert(verifiedSession?.user?.email === testEmail, 'email verification auto sign-in session belongs to the signed-up user')
+  assert(
+    verifiedSession?.user?.email === testEmail,
+    'email verification auto sign-in session belongs to the signed-up user'
+  )
 
   const stateAfterVerification = await readAuthDatabaseState(db, testEmail)
   assertProvisionedAuthState(stateAfterVerification, {
@@ -133,8 +148,14 @@ try {
   await writeJson(path.join(reportsDir, 'auth-state-after-verification.json'), stateAfterVerification)
   await writeJson(path.join(reportsDir, 'auth-state-after-signin.json'), stateAfterSignin)
   await writeJson(path.join(reportsDir, 'browser-session-after-signup.json'), redactSession(signupSession))
-  await writeJson(path.join(reportsDir, 'browser-session-after-unverified-signin.json'), redactSession(unverifiedSigninSession))
-  await writeJson(path.join(reportsDir, 'browser-session-after-verification.json'), redactSession(verifiedSession))
+  await writeJson(
+    path.join(reportsDir, 'browser-session-after-unverified-signin.json'),
+    redactSession(unverifiedSigninSession)
+  )
+  await writeJson(
+    path.join(reportsDir, 'browser-session-after-verification.json'),
+    redactSession(verifiedSession)
+  )
   await writeJson(path.join(reportsDir, 'browser-session-after-signin.json'), redactSession(signedInSession))
 
   logs.push('[auth-e2e] passed')
@@ -142,9 +163,11 @@ try {
 } catch (error) {
   logs.push(`[auth-e2e] failed: ${error instanceof Error ? error.stack || error.message : String(error)}`)
   if (page) {
-    await page.screenshot({ fullPage: true, path: path.join(screenshotsDir, 'failure.png') }).catch((screenshotError) => {
-      logs.push(`[auth-e2e] failure screenshot failed: ${stringifyError(screenshotError)}`)
-    })
+    await page
+      .screenshot({ fullPage: true, path: path.join(screenshotsDir, 'failure.png') })
+      .catch((screenshotError) => {
+        logs.push(`[auth-e2e] failure screenshot failed: ${stringifyError(screenshotError)}`)
+      })
   }
   await flushArtifacts()
   throw error
@@ -158,6 +181,81 @@ try {
     await browser.close().catch((error) => {
       logs.push(`[auth-e2e] browser shutdown failed: ${stringifyError(error)}`)
     })
+  }
+}
+
+async function completeAdminSetupIfRequired(targetPage) {
+  await targetPage.goto('/signup/', {
+    timeout: 60_000,
+    waitUntil: 'domcontentloaded'
+  })
+
+  const entryState = await waitForAuthEntryState(targetPage)
+  if (entryState === 'signup') {
+    logs.push('[auth-e2e] first admin setup already complete')
+    return
+  }
+
+  logs.push(`[auth-e2e] first admin setup required; adminEmail=${adminEmail}`)
+  await targetPage.screenshot({
+    fullPage: true,
+    path: path.join(screenshotsDir, 'first-admin-setup-required.png')
+  })
+
+  const setupResponse = await targetPage.evaluate(
+    async ({ email, password }) => {
+      const response = await fetch('/rpc/admin/setup/first-admin', {
+        body: JSON.stringify({
+          confirmPassword: password,
+          email,
+          password
+        }),
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json'
+        },
+        method: 'POST'
+      })
+
+      return {
+        body: await response.text(),
+        status: response.status,
+        statusText: response.statusText
+      }
+    },
+    {
+      email: adminEmail,
+      password: adminPassword
+    }
+  )
+
+  assert(
+    setupResponse.status >= 200 && setupResponse.status < 300,
+    `first admin setup returned ${setupResponse.status} ${setupResponse.statusText}: ${setupResponse.body}`
+  )
+  await targetPage.context().clearCookies()
+  await targetPage.goto('/signup/', {
+    timeout: 60_000,
+    waitUntil: 'domcontentloaded'
+  })
+  assert((await waitForAuthEntryState(targetPage)) === 'signup', 'first admin setup did not unlock signup')
+
+  logs.push('[auth-e2e] first admin setup completed')
+}
+
+async function waitForAuthEntryState(targetPage) {
+  const setupButton = targetPage.getByRole('button', { exact: true, name: 'Set up instance' })
+  const signupButton = targetPage.getByRole('button', { exact: true, name: 'Sign Up' })
+
+  try {
+    return await Promise.any([
+      setupButton.waitFor({ state: 'visible', timeout: 60_000 }).then(() => 'adminSetup'),
+      signupButton.waitFor({ state: 'visible', timeout: 60_000 }).then(() => 'signup')
+    ])
+  } catch {
+    throw new Error(
+      `expected signup or first-admin setup form; current url ${targetPage.url()}; title ${await targetPage.title()}`
+    )
   }
 }
 
@@ -209,8 +307,12 @@ async function submitCredentialSignIn(targetPage) {
 
 async function waitForVerifyEmailGate(targetPage, description) {
   await waitForPath(targetPage, isVerifyEmailGatePath, description)
-  await targetPage.getByText(verifyEmailGateTitle, { exact: true }).waitFor({ state: 'visible', timeout: 60_000 })
-  await targetPage.getByText(verifyEmailGateDescription, { exact: true }).waitFor({ state: 'visible', timeout: 60_000 })
+  await targetPage
+    .getByText(verifyEmailGateTitle, { exact: true })
+    .waitFor({ state: 'visible', timeout: 60_000 })
+  await targetPage
+    .getByText(verifyEmailGateDescription, { exact: true })
+    .waitFor({ state: 'visible', timeout: 60_000 })
 }
 
 async function waitForVerificationUrl(targetPage, since) {
@@ -228,7 +330,10 @@ async function waitForVerificationUrl(targetPage, since) {
       if (message.Created && new Date(message.Created) < since) {
         return false
       }
-      return Array.isArray(message.To) && message.To.some((to) => to.Address?.toLowerCase() === testEmail.toLowerCase())
+      return (
+        Array.isArray(message.To) &&
+        message.To.some((to) => to.Address?.toLowerCase() === testEmail.toLowerCase())
+      )
     })
     lastSeen = `${messages.length} total messages, ${matching.length} matching ${testEmail}`
     for (const message of matching) {
@@ -293,7 +398,11 @@ async function readAuthDatabaseState(targetDb, email) {
 
   const userId = userDocument._id
   const accounts = await targetDb.collection('account').find({ userId }).toArray()
-  const sessions = await targetDb.collection('session').find({ userId }).sort({ createdAt: 1, _id: 1 }).toArray()
+  const sessions = await targetDb
+    .collection('session')
+    .find({ userId })
+    .sort({ createdAt: 1, _id: 1 })
+    .toArray()
 
   const latestSession = sessions.at(-1) ?? null
 
@@ -340,7 +449,10 @@ function normalizeAccount(account) {
 }
 
 function assertProvisionedAuthState(state, options) {
-  assert(state.user.email === options.expectedUserEmail, `expected user email ${options.expectedUserEmail}, got ${state.user.email}`)
+  assert(
+    state.user.email === options.expectedUserEmail,
+    `expected user email ${options.expectedUserEmail}, got ${state.user.email}`
+  )
   assert(
     state.user.emailVerified === options.expectedEmailVerified,
     `expected emailVerified=${options.expectedEmailVerified}, got ${state.user.emailVerified}`
@@ -399,7 +511,9 @@ function serializeMongoValue(value) {
     return value.map(serializeMongoValue)
   }
   if (typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key === '_id' ? 'id' : key, serializeMongoValue(entry)]))
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key === '_id' ? 'id' : key, serializeMongoValue(entry)])
+    )
   }
   return value
 }
@@ -479,7 +593,10 @@ function isAuthenticatedLandingPath(url) {
 async function assertNoFlashCookie(targetContext) {
   const cookies = await targetContext.cookies(appOrigin)
   const flashCookie = cookies.find((cookie) => cookie.name === '_flash')
-  assert(!flashCookie, 'expected email verification flash cookie to be cleared after authenticated dashboard render')
+  assert(
+    !flashCookie,
+    'expected email verification flash cookie to be cleared after authenticated dashboard render'
+  )
 }
 
 function installPageDiagnostics(targetPage) {
@@ -525,7 +642,8 @@ function requireEnv(name) {
 }
 
 function resolveDatabaseUrl() {
-  const configuredUrl = process.env.AT_EMAIL_ADMIN_DEV_DATABASE_URL || process.env.MONGODB_URI || process.env.DATABASE_URL
+  const configuredUrl =
+    process.env.AT_EMAIL_ADMIN_DEV_DATABASE_URL || process.env.MONGODB_URI || process.env.DATABASE_URL
   if (!configuredUrl) {
     return 'mongodb://localhost:27017/agentteam_email'
   }
