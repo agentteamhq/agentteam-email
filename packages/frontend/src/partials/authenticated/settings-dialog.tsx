@@ -32,8 +32,8 @@ import {
   Card,
   CardAction,
   CardContent,
-  CardFooter,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle
 } from '../../components/ui/card'

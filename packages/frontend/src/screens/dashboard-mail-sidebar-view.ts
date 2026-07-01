@@ -14,8 +14,8 @@ import type {
   AuthenticatedEmailAction,
   AuthenticatedEmailToolbarAction,
   AuthenticatedMailItem,
-  AuthenticatedMailNavItem,
   AuthenticatedMailNavIconKey,
+  AuthenticatedMailNavItem,
   AuthenticatedManagementNavGroup,
   AuthenticatedManagementNavItem,
   AuthenticatedSidebarView

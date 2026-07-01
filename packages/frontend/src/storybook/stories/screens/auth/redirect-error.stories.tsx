@@ -7,7 +7,7 @@ import { storyPublicEnv } from 'src/storybook/screen-fixtures'
 import type { Meta, StoryObj } from '@storybook/react'
 
 const storyOccurredAt = new Date('2026-06-30T12:00:00.000Z')
-const storyPublicHostname = String(storyPublicEnv.PUBLIC_HOSTNAME)
+const storyPublicHostname = storyPublicEnv.PUBLIC_HOSTNAME
 
 function createStoryState(pathAndSearch: string) {
   return createRedirectErrorViewState({

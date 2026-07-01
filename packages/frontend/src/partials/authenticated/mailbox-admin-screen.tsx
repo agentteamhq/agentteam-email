@@ -77,6 +77,7 @@ import {
 } from '../../components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table'
 import { Skeleton } from '../../components/ui/skeleton'
+import { mailboxLocalPart } from '../../lib/mail-addresses'
 import {
   formatMailboxCapability,
   formatSystemPermission,
@@ -87,7 +88,6 @@ import {
   normalizeSearchQuery
 } from './mailbox-admin-visible-records'
 import { AgentEnrollmentCommandSummary } from './agent-enrollment-command'
-import { mailboxLocalPart } from '../../lib/mail-addresses'
 import type { MailboxAdminVisibleRecords } from './mailbox-admin-visible-records'
 import type {
   MailboxAdminAccount,
