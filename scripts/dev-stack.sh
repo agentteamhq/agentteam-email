@@ -71,7 +71,7 @@ prepare_compose_env() {
   default_env AT_EMAIL_ADMIN_PULL_POLICY 'missing'
   default_env AT_EMAIL_ADMIN_PUBLIC_HOSTNAME "$(first_env 'http://127.0.0.1:4321' PUBLIC_HOSTNAME AT_EMAIL_ADMIN_PUBLIC_HOSTNAME)"
   default_env AT_EMAIL_ADMIN_BETTER_AUTH_SECRET "$(first_env 'local-dev-better-auth-secret' BETTER_AUTH_SECRET AT_EMAIL_ADMIN_BETTER_AUTH_SECRET)"
-  default_env AT_EMAIL_ADMIN_ENCRYPT_SECRET_KEY "$(first_env 'local-dev-encrypt-secret-key' ENCRYPT_SECRET_KEY AT_EMAIL_ADMIN_ENCRYPT_SECRET_KEY)"
+  default_env AT_EMAIL_ADMIN_ENCRYPT_SECRET_KEY "$(first_env 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' ENCRYPT_SECRET_KEY AT_EMAIL_ADMIN_ENCRYPT_SECRET_KEY)"
   default_env AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN 'local-dev-control-to-web-token'
   default_env AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN 'local-dev-wildduck-admin-token'
   default_env AT_EMAIL_ADMIN_WILDDUCK_ACCESS_CONTROL_SECRET 'local-dev-wildduck-access-control-secret'
