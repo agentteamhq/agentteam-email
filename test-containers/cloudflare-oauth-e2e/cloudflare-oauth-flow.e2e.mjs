@@ -5,7 +5,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const packageDir = path.dirname(fileURLToPath(import.meta.url))
-const runId = process.env.TEST_RUN_ID || new Date().toISOString().replaceAll(/[-:]/g, '').replace(/\..+$/, 'Z')
+const runId =
+  process.env.TEST_RUN_ID || new Date().toISOString().replaceAll(/[-:]/g, '').replace(/\..+$/, 'Z')
 const runDir = path.resolve(process.env.TEST_RUN_DIR || path.join(packageDir, 'tmp', `run-${runId}`))
 const reportsDir = path.join(runDir, 'reports')
 const logsDir = path.join(runDir, 'logs')
@@ -18,6 +19,7 @@ const cloudflareScopes = [
   'workers-r2.write',
   'workers-scripts.read',
   'workers-scripts.write',
+  'user-details.read',
   'dns.read',
   'dns.write',
   'zone.read',
@@ -32,10 +34,7 @@ const cloudflareScopes = [
   'email-sending.write',
   'offline_access'
 ]
-const logs = [
-  `[cloudflare-oauth-e2e] runDir=${runDir}`,
-  `[cloudflare-oauth-e2e] baseUrl=${baseUrl}`
-]
+const logs = [`[cloudflare-oauth-e2e] runDir=${runDir}`, `[cloudflare-oauth-e2e] baseUrl=${baseUrl}`]
 
 if (!process.env.DOCKER_HOST && process.env.PODMAN_SOCK) {
   process.env.DOCKER_HOST = process.env.PODMAN_SOCK
@@ -72,6 +71,7 @@ try {
 
   await assertDiscovery()
   const tokenResult = await performOAuthFlow()
+  await assertFakeCloudflareIdentity(tokenResult.access_token)
   await assertFakeCloudflareApi(tokenResult.access_token)
 
   await writeJson(path.join(reportsDir, 'oauth-token-result.json'), {
@@ -82,7 +82,9 @@ try {
   })
   logs.push('[cloudflare-oauth-e2e] passed')
 } catch (error) {
-  logs.push(`[cloudflare-oauth-e2e] failed: ${error instanceof Error ? error.stack || error.message : String(error)}`)
+  logs.push(
+    `[cloudflare-oauth-e2e] failed: ${error instanceof Error ? error.stack || error.message : String(error)}`
+  )
   throw error
 } finally {
   if (container) {
@@ -133,21 +135,22 @@ async function performOAuthFlow() {
       const html = await interactionResponse.text()
       storeCookies(cookieJar, interactionResponse)
 
-      const prompt =
-        html.includes('name="prompt" value="login"') ? 'login'
-        : html.includes('name="prompt" value="consent"') ? 'consent'
-        : null
+      const prompt = html.includes('name="prompt" value="login"')
+        ? 'login'
+        : html.includes('name="prompt" value="consent"')
+          ? 'consent'
+          : null
 
       assert(prompt, `Unknown oidc-provider interaction prompt at ${nextUrl}`)
 
       const body =
-        prompt === 'login' ?
-          new URLSearchParams({
-            login: 'cloudflare-user-1',
-            password: 'password',
-            prompt
-          })
-        : new URLSearchParams({ prompt })
+        prompt === 'login'
+          ? new URLSearchParams({
+              login: 'cloudflare-user-1',
+              password: 'password',
+              prompt
+            })
+          : new URLSearchParams({ prompt })
 
       response = await fetchWithCookies(nextUrl, cookieJar, {
         body,
@@ -185,9 +188,48 @@ async function performOAuthFlow() {
   assert.equal(tokenResult.token_type, 'Bearer')
   assert.equal(typeof tokenResult.access_token, 'string')
   assert.equal(typeof tokenResult.refresh_token, 'string')
+  assert(
+    tokenResult.scope.split(/\s+/u).includes('user-details.read'),
+    'OAuth token lacks user-details.read scope'
+  )
 
   logs.push('[cloudflare-oauth-e2e] authorization code flow ok')
   return tokenResult
+}
+
+async function assertFakeCloudflareIdentity(accessToken) {
+  const authHeaders = {
+    authorization: `Bearer ${accessToken}`
+  }
+  const discovery = await fetchJson(new URL('/.well-known/openid-configuration', baseUrl))
+  const userInfo = await fetchJson(new URL(discovery.userinfo_endpoint), {
+    headers: authHeaders
+  })
+
+  assert.equal(userInfo.sub, 'cloudflare-user-1')
+  assert.equal(Object.hasOwn(userInfo, 'email'), false, 'Cloudflare OIDC userinfo must not return email')
+  assert.equal(
+    Object.hasOwn(userInfo, 'email_verified'),
+    false,
+    'Cloudflare OIDC userinfo must not return email_verified'
+  )
+
+  const unauthorizedUser = await fetch(new URL('/client/v4/user', baseUrl))
+  assert.equal(unauthorizedUser.status, 401)
+
+  const user = await fetchCloudflareJson(new URL('/client/v4/user', baseUrl), {
+    headers: authHeaders
+  })
+  assert.equal(user.result.id, 'cloudflare-user-1')
+  assert.equal(user.result.email, 'cloudflare-user@example.test')
+  assert.equal(user.result.first_name, 'Cloudflare')
+  assert.equal(user.result.last_name, 'Test User')
+
+  await writeJson(path.join(reportsDir, 'fake-cloudflare-identity.json'), {
+    restUser: user.result,
+    userInfo
+  })
+  logs.push('[cloudflare-oauth-e2e] fake Cloudflare identity ok')
 }
 
 async function assertFakeCloudflareApi(accessToken) {
@@ -290,9 +332,9 @@ async function fetchWithCookies(url, cookieJar, init = {}) {
 
 function storeCookies(cookieJar, response) {
   const setCookieHeaders =
-    typeof response.headers.getSetCookie === 'function' ?
-      response.headers.getSetCookie()
-    : splitSetCookieHeader(response.headers.get('set-cookie'))
+    typeof response.headers.getSetCookie === 'function'
+      ? response.headers.getSetCookie()
+      : splitSetCookieHeader(response.headers.get('set-cookie'))
 
   for (const setCookie of setCookieHeaders) {
     const [cookiePair] = setCookie.split(';')

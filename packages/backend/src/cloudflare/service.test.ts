@@ -250,12 +250,12 @@ describe('Cloudflare OAuth start service', () => {
       body: expect.objectContaining({
         providerId: 'cloudflare',
         callbackURL: expect.any(String),
-        errorCallbackURL: expect.any(String),
-        scopes: expect.arrayContaining(['email-sending.write', 'user-details.read'])
+        errorCallbackURL: expect.any(String)
       }),
       headers,
       returnHeaders: true
     })
+    expect(oauthBody).not.toHaveProperty('scopes')
     expect(successUrl.origin).toBe('https://mail.example.test')
     expect(successUrl.pathname).toBe('/dashboard/')
     expect(successUrl.searchParams.get('settings')).toBe('connectedAccounts')
@@ -658,17 +658,16 @@ function cloudflareOAuthStartGlobals() {
           callbackURL?: string
           errorCallbackURL?: string
           providerId: string
-          scopes: string[]
         }
         headers: Headers
         returnHeaders: boolean
       }) =>
-      Promise.resolve({
-        headers: new Headers({ 'set-cookie': 'cloudflare-oauth-start=1' }),
-        response: {
-          url: 'https://dash.cloudflare.test/oauth/start'
-        }
-      })
+        Promise.resolve({
+          headers: new Headers({ 'set-cookie': 'cloudflare-oauth-start=1' }),
+          response: {
+            url: 'https://dash.cloudflare.test/oauth/start'
+          }
+        })
     ),
     intentCreate: vi.fn((input: Record<string, unknown>) =>
       Promise.resolve({

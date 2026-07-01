@@ -8,12 +8,14 @@ const clientId = process.env.OAUTH_CLIENT_ID || 'agentteam-email-cloudflare-test
 const redirectUris = splitList(process.env.OAUTH_REDIRECT_URIS || process.env.OAUTH_REDIRECT_URI)
 const cloudflareScopes = splitList(
   process.env.CLOUDFLARE_OAUTH_SCOPES ||
-    'workers-r2.read workers-r2.write workers-scripts.read workers-scripts.write dns.read dns.write zone.read cloud-email-security.read email-routing-address.read email-routing-address.write email-routing-rule.read email-routing-rule.write email-routing-suppression.read email-security-dmarcreports.read email-sending.read email-sending.write offline_access'
+    'workers-r2.read workers-r2.write workers-scripts.read workers-scripts.write user-details.read dns.read dns.write zone.read cloud-email-security.read email-routing-address.read email-routing-address.write email-routing-rule.read email-routing-rule.write email-routing-suppression.read email-security-dmarcreports.read email-sending.read email-sending.write offline_access'
 )
 const grantedUser = {
   accountId: 'cloudflare-user-1',
   email: 'cloudflare-user@example.test',
   emailVerified: true,
+  firstName: 'Cloudflare',
+  lastName: 'Test User',
   name: 'Cloudflare Test User'
 }
 const account = {
@@ -48,9 +50,8 @@ const provider = new Provider(issuer, {
     }
   ],
   claims: {
-    email: ['email', 'email_verified'],
     openid: ['sub'],
-    profile: ['name']
+    'user-details.read': ['sub']
   },
   cookies: {
     keys: ['agentteam-email-cloudflare-test-cookie-key']
@@ -71,9 +72,6 @@ const provider = new Provider(issuer, {
     return {
       accountId: grantedUser.accountId,
       claims: async () => ({
-        email: grantedUser.email,
-        email_verified: grantedUser.emailVerified,
-        name: grantedUser.name,
         sub: grantedUser.accountId
       })
     }
@@ -108,6 +106,21 @@ const server = http.createServer(async (request, response) => {
       return
     }
 
+    if (request.method === 'GET' && ['/me', '/oauth2/userinfo'].includes(url.pathname)) {
+      if (!hasBearerAuth(request)) {
+        sendJson(response, 401, {
+          error: 'invalid_token',
+          error_description: 'Bearer access token is required'
+        })
+        return
+      }
+
+      sendJson(response, 200, {
+        sub: grantedUser.accountId
+      })
+      return
+    }
+
     if (url.pathname.startsWith('/client/v4/')) {
       await handleCloudflareApi(request, response, url)
       return
@@ -131,6 +144,11 @@ async function handleCloudflareApi(request, response, url) {
       401,
       cloudflareResponse(null, false, [{ code: 10000, message: 'Authentication error' }])
     )
+    return
+  }
+
+  if (request.method === 'GET' && url.pathname === '/client/v4/user') {
+    sendJson(response, 200, cloudflareResponse(cloudflareUserDetails()))
     return
   }
 
@@ -256,6 +274,16 @@ async function handleCloudflareApi(request, response, url) {
       { code: 1003, message: `Unhandled fake Cloudflare API route: ${request.method} ${url.pathname}` }
     ])
   )
+}
+
+function cloudflareUserDetails() {
+  return {
+    email: grantedUser.email,
+    first_name: grantedUser.firstName,
+    id: grantedUser.accountId,
+    last_name: grantedUser.lastName,
+    username: grantedUser.email
+  }
 }
 
 function hasBearerAuth(request) {

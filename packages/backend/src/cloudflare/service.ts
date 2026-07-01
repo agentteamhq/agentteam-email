@@ -158,8 +158,7 @@ export async function startCloudflareOAuth(headers: Headers): Promise<StartCloud
     body: {
       providerId: CLOUDFLARE_OAUTH_PROVIDER_ID,
       callbackURL,
-      errorCallbackURL: createOAuthErrorCallbackURL(intentView.publicId),
-      scopes: getCloudflareRequiredOAuthScopes()
+      errorCallbackURL: createOAuthErrorCallbackURL(intentView.publicId)
     },
     headers,
     returnHeaders: true
