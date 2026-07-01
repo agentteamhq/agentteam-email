@@ -8,6 +8,7 @@ import { Button } from "src/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "src/components/ui/card"
 import { FieldDescription } from "src/components/ui/field"
 import { Spinner } from "src/components/ui/spinner"
+import { VERIFY_EMAIL_STORAGE_KEY } from "src/lib/auth/better-auth-ui-localization"
 import { cn } from "src/lib/utils"
 import { OpenEmailButton } from "./open-email-button"
 
@@ -59,12 +60,12 @@ export function VerifyEmail({ className }: VerifyEmailProps) {
 
   const isHydrated = useIsHydrated()
   const [email, setEmail] = useState(
-    (isHydrated && sessionStorage.getItem("better-auth-ui.verify-email")) || ""
+    (isHydrated && sessionStorage.getItem(VERIFY_EMAIL_STORAGE_KEY)) || ""
   )
   const [cooldown, setCooldown] = useState(RESEND_COOLDOWN_SECONDS)
 
   useEffect(() => {
-    setEmail(sessionStorage.getItem("better-auth-ui.verify-email") ?? "")
+    setEmail(sessionStorage.getItem(VERIFY_EMAIL_STORAGE_KEY) ?? "")
   }, [])
 
   useEffect(() => {

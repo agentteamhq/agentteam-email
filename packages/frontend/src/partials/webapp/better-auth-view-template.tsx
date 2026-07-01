@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 
 import { Auth } from '../../components/auth/auth'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
+import { verifyEmailGateCopy } from '../../lib/auth/better-auth-ui-localization'
 import { Spinner } from '../../components/ui/spinner'
 import { cn, tw } from '../../lib/utils'
 import type { ReactNode } from 'react'
@@ -84,8 +85,8 @@ const authConfig = {
     subtitle: 'Sign in to accept the organization invitation.'
   },
   verifyEmail: {
-    title: 'Verify your email',
-    subtitle: 'Please check your inbox for a verification link.'
+    title: verifyEmailGateCopy.title,
+    subtitle: verifyEmailGateCopy.description
   },
   emailOtp: {
     title: 'Enter verification code',

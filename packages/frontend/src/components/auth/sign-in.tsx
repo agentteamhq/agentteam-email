@@ -18,6 +18,7 @@ import {
 import { Input } from "src/components/ui/input"
 import { Label } from "src/components/ui/label"
 import { Spinner } from "src/components/ui/spinner"
+import { VERIFY_EMAIL_STORAGE_KEY } from "src/lib/auth/better-auth-ui-localization"
 import { cn } from "src/lib/utils"
 import { ProviderButtons, type SocialLayout } from "./provider-buttons"
 
@@ -64,7 +65,7 @@ export function SignIn({
         setPassword("")
 
         if (error.error?.code === "EMAIL_NOT_VERIFIED") {
-          sessionStorage.setItem("better-auth-ui.verify-email", email)
+          sessionStorage.setItem(VERIFY_EMAIL_STORAGE_KEY, email)
           navigate({
             to: `${basePaths.auth}/${viewPaths.auth.verifyEmail}`
           })
