@@ -1,32 +1,76 @@
-import { storyPublicEnv } from 'src/storybook/screen-fixtures'
+import { useEffect, type PropsWithChildren } from 'react'
+import { expect, within } from 'storybook/test'
+
+import {
+  VERIFY_EMAIL_STORAGE_KEY,
+  verifyEmailGateCopy
+} from 'src/lib/auth/better-auth-ui-localization'
+import { defaultAuthRouteArgs } from 'src/storybook/auth-route-fixtures'
+import { publicAuthRouteState } from 'src/storybook/screen-fixtures'
+import { AuthRoutePage } from 'src/screens/auth-route-page'
 import { EmailStatusScreen } from 'src/screens/email-status-screen'
 import type { Meta, StoryObj } from '@storybook/react'
 
+const storyVerifyEmail = 'marin.patel@northstar-ops.example.test'
+
+function VerifyEmailStorage({ children }: PropsWithChildren) {
+  useEffect(() => {
+    const previousEmail = window.sessionStorage.getItem(VERIFY_EMAIL_STORAGE_KEY)
+    window.sessionStorage.setItem(VERIFY_EMAIL_STORAGE_KEY, storyVerifyEmail)
+
+    return () => {
+      if (previousEmail === null) {
+        window.sessionStorage.removeItem(VERIFY_EMAIL_STORAGE_KEY)
+      } else {
+        window.sessionStorage.setItem(VERIFY_EMAIL_STORAGE_KEY, previousEmail)
+      }
+    }
+  }, [])
+
+  return <>{children}</>
+}
+
 const meta = {
   title: 'Screens/Auth/Email Status',
-  component: EmailStatusScreen,
+  component: AuthRoutePage,
   args: {
-    publicEnv: storyPublicEnv
+    ...defaultAuthRouteArgs,
+    routeState: publicAuthRouteState,
+    lastUsedLoginMethod: null,
+    view: 'verifyEmail'
   },
   parameters: {
     layout: 'fullscreen'
   }
-} satisfies Meta<typeof EmailStatusScreen>
+} satisfies Meta<typeof AuthRoutePage>
 
 export default meta
 
 type Story = StoryObj<typeof meta>
 
-export const VerificationEmailSent: Story = {
-  name: 'Verification email sent',
+export const VerifyEmailGate: Story = {
+  name: 'Verify email gate',
+  decorators: [
+    (StoryComponent) => (
+      <VerifyEmailStorage>
+        <StoryComponent />
+      </VerifyEmailStorage>
+    )
+  ],
   args: {
-    type: 'verification'
+    routeState: publicAuthRouteState,
+    lastUsedLoginMethod: null,
+    view: 'verifyEmail'
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+
+    await expect(await canvas.findByText(verifyEmailGateCopy.title)).toBeInTheDocument()
+    await expect(await canvas.findByText(verifyEmailGateCopy.description)).toBeInTheDocument()
   }
 }
 
 export const RecoveryEmailSent: Story = {
   name: 'Recovery email sent',
-  args: {
-    type: 'recovery'
-  }
+  render: () => <EmailStatusScreen />
 }

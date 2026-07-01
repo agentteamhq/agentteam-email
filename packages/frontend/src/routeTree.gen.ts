@@ -9,7 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as VerificationEmailSentRouteImport } from './routes/verification-email-sent'
+import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as SignoutRouteImport } from './routes/signout'
 import { Route as SigninRouteImport } from './routes/signin'
@@ -35,9 +35,9 @@ import { Route as AgentClaimTokenRouteImport } from './routes/agent/claim.$token
 import { Route as AuthenticatedSettingsSectionRouteImport } from './routes/_authenticated/settings.$section'
 import { Route as AuthenticatedOrganizationSectionRouteImport } from './routes/_authenticated/organization.$section'
 
-const VerificationEmailSentRoute = VerificationEmailSentRouteImport.update({
-  id: '/verification-email-sent',
-  path: '/verification-email-sent',
+const VerifyEmailRoute = VerifyEmailRouteImport.update({
+  id: '/verify-email',
+  path: '/verify-email',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SignupRoute = SignupRouteImport.update({
@@ -176,7 +176,7 @@ export interface FileRoutesByFullPath {
   '/signin': typeof SigninRoute
   '/signout': typeof SignoutRoute
   '/signup': typeof SignupRoute
-  '/verification-email-sent': typeof VerificationEmailSentRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/settings': typeof AuthenticatedSettingsRouteWithChildren
   '/admin/setup': typeof AdminSetupRoute
@@ -201,7 +201,7 @@ export interface FileRoutesByTo {
   '/signin': typeof SigninRoute
   '/signout': typeof SignoutRoute
   '/signup': typeof SignupRoute
-  '/verification-email-sent': typeof VerificationEmailSentRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/settings': typeof AuthenticatedSettingsRouteWithChildren
   '/admin/setup': typeof AdminSetupRoute
@@ -229,7 +229,7 @@ export interface FileRoutesById {
   '/signin': typeof SigninRoute
   '/signout': typeof SignoutRoute
   '/signup': typeof SignupRoute
-  '/verification-email-sent': typeof VerificationEmailSentRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRouteWithChildren
   '/admin/setup': typeof AdminSetupRoute
@@ -257,7 +257,7 @@ export interface FileRouteTypes {
     | '/signin'
     | '/signout'
     | '/signup'
-    | '/verification-email-sent'
+    | '/verify-email'
     | '/dashboard'
     | '/settings'
     | '/admin/setup'
@@ -282,7 +282,7 @@ export interface FileRouteTypes {
     | '/signin'
     | '/signout'
     | '/signup'
-    | '/verification-email-sent'
+    | '/verify-email'
     | '/dashboard'
     | '/settings'
     | '/admin/setup'
@@ -309,7 +309,7 @@ export interface FileRouteTypes {
     | '/signin'
     | '/signout'
     | '/signup'
-    | '/verification-email-sent'
+    | '/verify-email'
     | '/_authenticated/dashboard'
     | '/_authenticated/settings'
     | '/admin/setup'
@@ -337,18 +337,18 @@ export interface RootRouteChildren {
   SigninRoute: typeof SigninRoute
   SignoutRoute: typeof SignoutRoute
   SignupRoute: typeof SignupRoute
-  VerificationEmailSentRoute: typeof VerificationEmailSentRoute
+  VerifyEmailRoute: typeof VerifyEmailRoute
   RedirectErrorRoute: typeof RedirectErrorRoute
   AgentClaimTokenRoute: typeof AgentClaimTokenRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/verification-email-sent': {
-      id: '/verification-email-sent'
-      path: '/verification-email-sent'
-      fullPath: '/verification-email-sent'
-      preLoaderRoute: typeof VerificationEmailSentRouteImport
+    '/verify-email': {
+      id: '/verify-email'
+      path: '/verify-email'
+      fullPath: '/verify-email'
+      preLoaderRoute: typeof VerifyEmailRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/signup': {
@@ -592,7 +592,7 @@ const rootRouteChildren: RootRouteChildren = {
   SigninRoute: SigninRoute,
   SignoutRoute: SignoutRoute,
   SignupRoute: SignupRoute,
-  VerificationEmailSentRoute: VerificationEmailSentRoute,
+  VerifyEmailRoute: VerifyEmailRoute,
   RedirectErrorRoute: RedirectErrorRoute,
   AgentClaimTokenRoute: AgentClaimTokenRoute,
 }

@@ -32,6 +32,9 @@ const testName = 'Auth E2E User'
 const testUsername =
   process.env.AT_EMAIL_ADMIN_AUTH_E2E_USERNAME || `authe2e${crypto.randomBytes(6).toString('hex')}`
 const headless = process.env.AT_EMAIL_ADMIN_AUTH_E2E_HEADLESS !== 'false'
+const verifyEmailGateTitle = 'Verify your email'
+const verifyEmailGateDescription =
+  'An activation link has been sent to your email address. Please check your inbox and click the link to complete activation.'
 
 const logs = [
   `[auth-e2e] runDir=${runDir}`,
@@ -70,29 +73,45 @@ try {
 
   const signupStartedAt = new Date(Date.now() - 5_000)
   await signUp(page)
-  await page.screenshot({ fullPage: true, path: path.join(screenshotsDir, 'signup-verification-sent.png') })
+  await page.screenshot({ fullPage: true, path: path.join(screenshotsDir, 'signup-verify-email-gate.png') })
+
+  const signupSession = await getSessionFromBrowser(page)
+  assert(signupSession === null, 'signup with required email verification does not create a browser session')
+
+  const stateAfterSignup = await readAuthDatabaseState(db, testEmail)
+  assertProvisionedAuthState(stateAfterSignup, {
+    expectedEmailVerified: false,
+    expectedSessionCount: 0,
+    expectedUserEmail: testEmail
+  })
 
   const verificationUrl = await waitForVerificationUrl(page, signupStartedAt)
   logs.push(`[auth-e2e] verificationUrl=${redactVerificationUrl(verificationUrl)}`)
+
+  await context.clearCookies()
+  await signInExpectVerifyEmail(page)
+  await page.screenshot({ fullPage: true, path: path.join(screenshotsDir, 'unverified-signin-verify-email-gate.png') })
+
+  const unverifiedSigninSession = await getSessionFromBrowser(page)
+  assert(unverifiedSigninSession === null, 'unverified credential sign-in does not create a browser session')
 
   await page.goto(verificationUrl, {
     timeout: 60_000,
     waitUntil: 'domcontentloaded'
   })
-  await waitForPath(page, isAuthenticatedLandingPath, 'email verification redirect')
-  await page.screenshot({ fullPage: true, path: path.join(screenshotsDir, 'email-verified-dashboard.png') })
+  await waitForPath(page, isPostVerificationSignInPath, 'email verification sign-in redirect')
+  await page.screenshot({ fullPage: true, path: path.join(screenshotsDir, 'email-verified-signin.png') })
 
   const verifiedSession = await getSessionFromBrowser(page)
-  assert(verifiedSession?.user?.email === testEmail, 'verified web session belongs to the signed-up user')
+  assert(verifiedSession === null, 'email verification does not auto sign in')
 
   const stateAfterVerification = await readAuthDatabaseState(db, testEmail)
   assertProvisionedAuthState(stateAfterVerification, {
     expectedEmailVerified: true,
-    expectedSessionCountAtLeast: 1,
+    expectedSessionCount: 0,
     expectedUserEmail: testEmail
   })
 
-  await context.clearCookies()
   await signIn(page)
   await page.screenshot({ fullPage: true, path: path.join(screenshotsDir, 'signed-in-dashboard.png') })
 
@@ -106,8 +125,11 @@ try {
     expectedUserEmail: testEmail
   })
 
+  await writeJson(path.join(reportsDir, 'auth-state-after-signup.json'), stateAfterSignup)
   await writeJson(path.join(reportsDir, 'auth-state-after-verification.json'), stateAfterVerification)
   await writeJson(path.join(reportsDir, 'auth-state-after-signin.json'), stateAfterSignin)
+  await writeJson(path.join(reportsDir, 'browser-session-after-signup.json'), redactSession(signupSession))
+  await writeJson(path.join(reportsDir, 'browser-session-after-unverified-signin.json'), redactSession(unverifiedSigninSession))
   await writeJson(path.join(reportsDir, 'browser-session-after-verification.json'), redactSession(verifiedSession))
   await writeJson(path.join(reportsDir, 'browser-session-after-signin.json'), redactSession(signedInSession))
 
@@ -151,10 +173,20 @@ async function signUp(targetPage) {
   await targetPage.getByLabel('Password', { exact: true }).fill(testPassword)
   await targetPage.getByLabel('Confirm password', { exact: true }).fill(testPassword)
   await submitButton.click()
-  await waitForPath(targetPage, isSignupCompletionPath, 'signup completion redirect')
+  await waitForVerifyEmailGate(targetPage, 'signup verify-email redirect')
 }
 
 async function signIn(targetPage) {
+  await submitCredentialSignIn(targetPage)
+  await waitForPath(targetPage, isAuthenticatedLandingPath, 'credential sign-in authenticated redirect')
+}
+
+async function signInExpectVerifyEmail(targetPage) {
+  await submitCredentialSignIn(targetPage)
+  await waitForVerifyEmailGate(targetPage, 'unverified credential sign-in verify-email redirect')
+}
+
+async function submitCredentialSignIn(targetPage) {
   await targetPage.goto('/signin/', {
     timeout: 60_000,
     waitUntil: 'domcontentloaded'
@@ -169,7 +201,12 @@ async function signIn(targetPage) {
   }
   await targetPage.getByLabel('Password', { exact: true }).fill(testPassword)
   await submitButton.click()
-  await waitForPath(targetPage, isAuthenticatedLandingPath, 'credential sign-in authenticated redirect')
+}
+
+async function waitForVerifyEmailGate(targetPage, description) {
+  await waitForPath(targetPage, isVerifyEmailGatePath, description)
+  await targetPage.getByText(verifyEmailGateTitle, { exact: true }).waitFor({ state: 'visible', timeout: 60_000 })
+  await targetPage.getByText(verifyEmailGateDescription, { exact: true }).waitFor({ state: 'visible', timeout: 60_000 })
 }
 
 async function waitForVerificationUrl(targetPage, since) {
@@ -259,7 +296,7 @@ async function readAuthDatabaseState(targetDb, email) {
   return {
     user: normalizeUser(userDocument),
     accountCount: accounts.length,
-    accounts: accounts.map(normalizeMongoDocument),
+    accounts: accounts.map(normalizeAccount),
     sessionCount: sessions.length,
     latestSession: latestSession ? normalizeSession(latestSession) : null,
     sessions: sessions.map(normalizeSession)
@@ -287,8 +324,15 @@ function normalizeSession(session) {
   }
 }
 
-function normalizeMongoDocument(document) {
-  return serializeMongoValue(document)
+function normalizeAccount(account) {
+  return {
+    id: stringifyMongoId(account._id),
+    accountId: account.accountId ?? null,
+    providerId: account.providerId ?? null,
+    userId: stringifyMongoId(account.userId),
+    createdAt: serializeMongoValue(account.createdAt),
+    updatedAt: serializeMongoValue(account.updatedAt)
+  }
 }
 
 function assertProvisionedAuthState(state, options) {
@@ -298,6 +342,17 @@ function assertProvisionedAuthState(state, options) {
     `expected emailVerified=${options.expectedEmailVerified}, got ${state.user.emailVerified}`
   )
   assert(state.accountCount >= 1, `expected at least one account, found ${state.accountCount}`)
+  if (typeof options.expectedSessionCount === 'number') {
+    assert(
+      state.sessionCount === options.expectedSessionCount,
+      `expected exactly ${options.expectedSessionCount} session(s), found ${state.sessionCount}`
+    )
+    if (options.expectedSessionCount > 0) {
+      assert(state.latestSession, 'expected a latest session')
+    }
+    return
+  }
+
   assert(
     state.sessionCount >= options.expectedSessionCountAtLeast,
     `expected at least ${options.expectedSessionCountAtLeast} session(s), found ${state.sessionCount}`
@@ -396,24 +451,17 @@ async function waitForPath(targetPage, predicate, description) {
   throw new Error(`timed out waiting for ${description}; last url ${currentUrl}`)
 }
 
-function isSignupCompletionPath(url) {
-  return (
-    url.pathname === '/dashboard/' ||
-    url.pathname === '/dashboard' ||
-    url.pathname === '/settings/' ||
-    url.pathname === '/settings' ||
-    url.pathname === '/verification-email-sent/' ||
-    url.pathname === '/verification-email-sent' ||
-    isPendingVerificationSignInPath(url)
-  )
+function isVerifyEmailGatePath(url) {
+  return url.pathname === '/verify-email/' || url.pathname === '/verify-email'
 }
 
-function isPendingVerificationSignInPath(url) {
+function isPostVerificationSignInPath(url) {
   if (url.pathname !== '/signin/' && url.pathname !== '/signin') {
     return false
   }
+
   const redirect = url.searchParams.get('redirect')
-  return redirect === '/dashboard/' || redirect === '/dashboard'
+  return redirect === '/settings/' || redirect === '/settings'
 }
 
 function isAuthenticatedLandingPath(url) {

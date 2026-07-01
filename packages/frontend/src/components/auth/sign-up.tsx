@@ -25,6 +25,7 @@ import {
 } from "src/components/ui/input-group"
 import { Label } from "src/components/ui/label"
 import { Spinner } from "src/components/ui/spinner"
+import { VERIFY_EMAIL_STORAGE_KEY } from "src/lib/auth/better-auth-ui-localization"
 import { cn } from "src/lib/utils"
 import { AdditionalField } from "./additional-field"
 import { ProviderButtons, type SocialLayout } from "./provider-buttons"
@@ -39,7 +40,7 @@ export type SignUpProps = {
  * Renders a sign-up form with name, email, and password fields, optional social provider buttons, and submission handling.
  *
  * Submits credentials to the configured auth client and handles the response:
- * - If email verification is required, shows a notification and navigates to sign-in
+ * - If email verification is required, stores the email and navigates to the verification gate
  * - On success, refreshes the session and navigates to the configured redirect path
  * - On failure, displays error toasts
  * - Manages a pending state while the request is in-flight
@@ -83,7 +84,7 @@ export function SignUp({
       },
       onSuccess: (_data, { email }) => {
         if (emailAndPassword?.requireEmailVerification) {
-          sessionStorage.setItem("better-auth-ui.verify-email", email)
+          sessionStorage.setItem(VERIFY_EMAIL_STORAGE_KEY, email)
           navigate({
             to: `${basePaths.auth}/${viewPaths.auth.verifyEmail}`
           })

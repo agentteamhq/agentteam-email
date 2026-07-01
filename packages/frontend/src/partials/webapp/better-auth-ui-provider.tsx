@@ -16,6 +16,7 @@ import { authReactClient } from '../../lib/auth-react-client'
 import { clearPersistedStore } from '../../store/use-store'
 
 import { Link } from '../../components/link'
+import { betterAuthUILocalization } from '../../lib/auth/better-auth-ui-localization'
 import { useEnvContext } from './env-context'
 import type { ReactNode } from 'react'
 import type { AuthProviderProps } from '@better-auth-ui/react'
@@ -100,11 +101,6 @@ export function BetterAuthUIProvider({
         return
       }
 
-      if (currentPath.startsWith('/signup') && targetPath.startsWith('/signin')) {
-        navigateToHref('/verification-email-sent/', true)
-        return
-      }
-
       navigateToHref(targetHref, replace)
     },
     [currentPath, navigateToHref, publicEnv.PUBLIC_HOSTNAME]
@@ -125,10 +121,12 @@ export function BetterAuthUIProvider({
         forgotPassword: true,
         maxPasswordLength: 128,
         minPasswordLength: 8,
-        name: true
+        name: true,
+        requireEmailVerification: true
       }}
       redirectTo={redirectTo}
       navigate={navigate}
+      localization={betterAuthUILocalization}
       plugins={[
         magicLinkPlugin(),
         passkeyPlugin(),
@@ -145,7 +143,8 @@ export function BetterAuthUIProvider({
           signOut: 'signout',
           signUp: 'signup',
           forgotPassword: 'forgot-password',
-          resetPassword: 'reset-password'
+          resetPassword: 'reset-password',
+          verifyEmail: 'verify-email'
         },
         settings: {
           account: 'account',

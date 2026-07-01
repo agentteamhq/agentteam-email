@@ -666,7 +666,10 @@ export function createGlobalAuth(db: Database): GlobalAuth {
           if (ctx.body.email) {
             const errorMessage = await sendUserVerificationEmail(ctx.body.email as string)
             if (errorMessage) {
-              return ctx.error('FORBIDDEN', { message: errorMessage })
+              return ctx.error('FORBIDDEN', {
+                code: error.body.code,
+                message: errorMessage
+              })
             }
           }
         }
@@ -689,7 +692,7 @@ export function createGlobalAuth(db: Database): GlobalAuth {
       requireEmailVerification: true
     },
     emailVerification: {
-      autoSignInAfterVerification: true,
+      autoSignInAfterVerification: false,
       sendOnSignUp: true,
       sendVerificationEmail: async (data, request) => {
         const verifyUrl = `${BETTER_AUTH_ROUTE}/verify-email?token=${data.token}&callbackURL=${encodeURIComponent('/redirect/email-verified/')}`
