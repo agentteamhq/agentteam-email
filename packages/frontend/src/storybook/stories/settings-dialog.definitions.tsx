@@ -25,8 +25,9 @@ import {
 import { storyAuthClient } from '../auth-client-fixtures'
 import { mailWorkspaceEmptyView } from '../mail-workspace-fixtures'
 import { authenticatedSettingsRouteState, storyPublicEnv } from '../screen-fixtures'
+import { getSettingsSectionHref } from '../../partials/authenticated/settings-dialog-sections'
 import { DashboardMailControllerStoryFrame } from './story-frames'
-import type { DashboardSearch } from '../../lib/dashboard-search'
+import type { SettingsRouteSearch } from '../../lib/dashboard-search'
 import type { DomainSettingsState } from '../../partials/authenticated/settings-dialog'
 import type { SettingsSectionId } from '../../partials/authenticated/settings-dialog-sections'
 import type { DashboardMailControllerStoryFrameProps } from './story-frames'
@@ -43,7 +44,7 @@ interface SettingsScreenScenario {
   agentAccessPending?: boolean
   agentAccessView?: AgentAccessView
   domainSettingsState?: DomainSettingsState
-  routeSearch?: DashboardSearch
+  routeSearch?: SettingsRouteSearch
   settingsSection: SettingsSectionId
   workspace?: AgentMailWebWorkspace
 }
@@ -148,22 +149,6 @@ function createStoryMailboxAdminNavigationLoader(
   return async () => navigation
 }
 
-function routeSearchForSettingsSection(settingsSection: SettingsSectionId): DashboardSearch {
-  if (settingsSection === 'agentAccess') {
-    return { settings: 'agentAccess' }
-  }
-
-  if (settingsSection === 'domains') {
-    return { settings: 'domains' }
-  }
-
-  if (settingsSection === 'security') {
-    return { settings: 'security' }
-  }
-
-  return {}
-}
-
 function buildSettingsScreenArgs({
   agentAccessError,
   agentAccessPending,
@@ -184,14 +169,12 @@ function buildSettingsScreenArgs({
     mailWorkspaceLoader: createStoryMailWorkspaceLoader(workspace),
     mailboxAdminNavigationLoader: createStoryMailboxAdminNavigationLoader(),
     publicEnv: storyPublicEnv,
-    routeSearch: {
-      ...routeSearchForSettingsSection(settingsSection),
-      ...(routeSearch ?? {})
-    },
+    routeSearch: routeSearch ?? {},
     routeState: authenticatedSettingsRouteState,
     sessionCleanupEnabled: false,
     settingsOpen: true,
-    settingsSection
+    settingsSection,
+    storyPath: getSettingsSectionHref(settingsSection)
   }
 }
 
@@ -424,7 +407,14 @@ export const DomainsAddDomainAuthorizeCloudflare: Story = {
   args: buildSettingsScreenArgs({
     domainSettingsState: domainSettingsAddDomainAuthorizeCloudflareState,
     settingsSection: 'domains'
-  })
+  }),
+  play: async ({ args, canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+
+    await expect(args.storyPath).toBe('/settings/domains/')
+    await expect(await canvas.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: 'Continue with Cloudflare' })).toBeEnabled()
+  }
 }
 
 export const DomainsAddDomainSelectZone: Story = {

@@ -34,5 +34,3 @@ export const CreatingFirstMailbox: Story = cloudflareConnectStateStories.creatin
 export const MailboxReady: Story = cloudflareConnectStateStories.mailboxReady
 
 export const CloudflareError: Story = cloudflareConnectStateStories.cloudflareError
-
-export const SettingsOpen: Story = cloudflareConnectStateStories.settingsOpen

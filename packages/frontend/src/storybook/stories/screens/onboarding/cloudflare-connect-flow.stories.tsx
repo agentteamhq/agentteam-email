@@ -27,7 +27,14 @@ type Story = StoryObj<typeof meta>
 
 export const Step01ConnectCloudflare: Story = {
   name: '01 connect Cloudflare',
-  args: buildProductOnboardingControllerArgs(productOnboardingScenarios.connectCloudflare, onboardingHandlers)
+  args: buildProductOnboardingControllerArgs(productOnboardingScenarios.connectCloudflare, onboardingHandlers),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    const page = within(canvasElement.ownerDocument.body)
+
+    await expect(await canvas.findByRole('button', { name: 'Continue with Cloudflare' })).toBeEnabled()
+    await expect(page.queryByRole('dialog', { name: 'Settings' })).not.toBeInTheDocument()
+  }
 }
 
 export const Step02SelectDomain: Story = {
@@ -106,8 +113,6 @@ export const AgentsNoMailboxSetupReturn: Story = {
 
     await expect(await canvas.findByRole('heading', { name: 'Agents' }, { timeout: 15000 })).toBeInTheDocument()
     await expect(await canvas.findByText('No agents')).toBeInTheDocument()
-    await expect(await canvas.findByRole('button', { name: 'Continue setup' })).toBeInTheDocument()
-    await expect(canvas.queryByRole('button', { name: 'Create folder' })).not.toBeInTheDocument()
   }
 }
 

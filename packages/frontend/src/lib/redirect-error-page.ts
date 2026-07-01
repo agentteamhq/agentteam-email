@@ -84,7 +84,7 @@ export function createRedirectErrorViewState({
     providerLabel,
     providerMessage,
     redactedQueryKeys: redactedPageUri.redactedQueryKeys,
-    retryHref: isCloudflare && isConnectedAccount ? '/dashboard/?settings=connectedAccounts' : '/',
+    retryHref: isCloudflare && isConnectedAccount ? '/settings/domains/' : '/',
     supportEmailHref: createSupportEmailHref(supportReference),
     supportReference,
     title: isCloudflare ? 'Cloudflare connection failed' : 'Connection redirect failed'

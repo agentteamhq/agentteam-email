@@ -2,6 +2,7 @@ import { rpc } from './rpc-api-client'
 import type {
   CloudflareAccountSummary,
   CloudflareConnectionInput,
+  CloudflareOAuthReturnTarget,
   CloudflareStatusResult,
   CloudflareZoneSummary,
   FinalizeCloudflareOAuthResult
@@ -22,8 +23,10 @@ export async function fetchCloudflareStatus(): Promise<CloudflareStatusResult> {
   return readCloudflareRpcResult<CloudflareStatusResult>(result)
 }
 
-export async function startCloudflareOAuth(): Promise<{ redirectUrl: string }> {
-  const result = await rpc.cloudflare.oauth.start.post()
+export async function startCloudflareOAuth(
+  returnTarget: CloudflareOAuthReturnTarget
+): Promise<{ redirectUrl: string }> {
+  const result = await rpc.cloudflare.oauth.start.post({ returnTarget })
   return readCloudflareOAuthStartResult(result)
 }
 

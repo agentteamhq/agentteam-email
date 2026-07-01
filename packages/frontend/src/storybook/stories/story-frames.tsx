@@ -2,20 +2,22 @@ import * as React from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
 
-import { validateDashboardSearch } from '../../lib/dashboard-search'
+import { validateDashboardSearch, validateSettingsSearch } from '../../lib/dashboard-search'
 import { DashboardMailController } from '../../screens/dashboard-mail-client-controller'
-import type { DashboardSearch } from '../../lib/dashboard-search'
+import type { SettingsRouteSearch } from '../../lib/dashboard-search'
 import type { AgentAccessSettingsState } from '../../partials/authenticated/settings-dialog'
 
 type DashboardMailControllerArgs = React.ComponentProps<typeof DashboardMailController>
 
 export type DashboardMailControllerStoryFrameProps = DashboardMailControllerArgs & {
   agentAccessView?: NonNullable<AgentAccessSettingsState['view']>
+  storyPath?: string
 }
 
 export function DashboardMailControllerStoryFrame({
   agentAccessView,
   routeSearch: initialRouteSearch,
+  storyPath = '/dashboard/',
   ...props
 }: DashboardMailControllerStoryFrameProps) {
   const queryClient = React.useMemo(
@@ -29,7 +31,7 @@ export function DashboardMailControllerStoryFrame({
       }),
     []
   )
-  const routeSearch = useStoryDashboardSearch(initialRouteSearch)
+  const routeSearch = useStoryDashboardSearch(initialRouteSearch, storyPath)
   const agentAccessViewLoader = React.useMemo(() => {
     if (agentAccessView === undefined) {
       return props.agentAccessViewLoader
@@ -56,32 +58,59 @@ export function DashboardMailControllerStoryFrame({
   )
 }
 
-function useStoryDashboardSearch(initialRouteSearch: DashboardSearch | undefined) {
+function useStoryDashboardSearch(initialRouteSearch: SettingsRouteSearch | undefined, storyPath: string) {
   const router = useRouter()
   const initialSearch = React.useMemo(
-    () => validateDashboardSearch(initialRouteSearch ? { ...initialRouteSearch } : {}),
-    [initialRouteSearch]
+    () => validateStorySearch(storyPath, initialRouteSearch ? { ...initialRouteSearch } : {}),
+    [initialRouteSearch, storyPath]
   )
   const initialSearchKey = JSON.stringify(initialSearch)
-  const routeSearch = useRouterState({
-    select: (state) => storyDashboardSearchFromRouterSearch(state.location.search as Record<string, unknown>)
+  const storyRouteKey = `${storyPath}:${initialSearchKey}`
+  const [appliedStoryRouteKey, setAppliedStoryRouteKey] = React.useState<string | null>(null)
+  const routerSearch = useRouterState({
+    select: (state) =>
+      storyDashboardSearchFromRouterSearch(
+        state.location.pathname,
+        state.location.search as Record<string, unknown>
+      )
   })
 
   React.useEffect(() => {
+    if (isSettingsPath(storyPath)) {
+      router
+        .navigate({
+          href: storyPath,
+          replace: true
+        })
+        .then(() => {
+          setAppliedStoryRouteKey(storyRouteKey)
+        })
+        .catch(ignoreAsyncError)
+      return
+    }
+
     router
       .navigate({
         replace: true,
-        search: initialSearch,
+        search: validateDashboardSearch({ ...initialSearch }),
         to: '/dashboard/'
       })
+      .then(() => {
+        setAppliedStoryRouteKey(storyRouteKey)
+      })
       .catch(ignoreAsyncError)
-  }, [initialSearch, initialSearchKey, router])
+  }, [initialSearch, initialSearchKey, router, storyPath, storyRouteKey])
 
-  return routeSearch
+  return appliedStoryRouteKey === storyRouteKey && hasDashboardSearchValue(routerSearch)
+    ? routerSearch
+    : initialSearch
 }
 
-function storyDashboardSearchFromRouterSearch(search: Record<string, unknown>): DashboardSearch {
-  const directSearch = validateDashboardSearch(search)
+function storyDashboardSearchFromRouterSearch(
+  pathname: string,
+  search: Record<string, unknown>
+): SettingsRouteSearch {
+  const directSearch = validateStorySearch(pathname, search)
   if (hasDashboardSearchValue(directSearch)) {
     return directSearch
   }
@@ -97,13 +126,21 @@ function storyDashboardSearchFromRouterSearch(search: Record<string, unknown>): 
       return directSearch
     }
 
-    return validateDashboardSearch(Object.fromEntries(redirectUrl.searchParams.entries()))
+    return validateStorySearch(redirectUrl.pathname, Object.fromEntries(redirectUrl.searchParams.entries()))
   } catch {
     return directSearch
   }
 }
 
-function hasDashboardSearchValue(search: DashboardSearch) {
+function validateStorySearch(pathname: string, search: Record<string, unknown>): SettingsRouteSearch {
+  return isSettingsPath(pathname) ? validateSettingsSearch(search) : validateDashboardSearch(search)
+}
+
+function isSettingsPath(pathname: string) {
+  return pathname === '/settings' || pathname === '/settings/' || pathname.startsWith('/settings/')
+}
+
+function hasDashboardSearchValue(search: SettingsRouteSearch) {
   return Object.values(search).some((value) => value !== undefined)
 }
 

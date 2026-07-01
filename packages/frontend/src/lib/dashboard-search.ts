@@ -3,7 +3,6 @@ import type { MailboxAdminSectionId } from '../partials/authenticated/mailbox-ad
 
 export interface DashboardSearch {
   accountId?: string
-  agentAccessSource?: 'paperclip'
   cloudflareIntentId?: string
   cloudflareOAuthError?: string
   cursor?: string
@@ -12,13 +11,22 @@ export interface DashboardSearch {
   mailboxAdmin?: MailboxAdminSectionId
   mailQuery?: string
   messageId?: string
-  paperclipCompanyId?: string
-  paperclipPluginId?: string
-  settings?: 'agentAccess' | 'connectedAccounts' | 'domains' | 'security'
   unreadOnly?: boolean
 }
 
+export interface SettingsRouteSearch extends DashboardSearch {
+  agentAccessSource?: 'paperclip'
+  paperclipCompanyId?: string
+  paperclipPluginId?: string
+}
+
 export function validateDashboardSearch(search: Record<string, unknown>): DashboardSearch {
+  return {
+    ...validateDashboardBaseSearch(search)
+  }
+}
+
+export function validateSettingsSearch(search: Record<string, unknown>): SettingsRouteSearch {
   const paperclipSource = search.source === 'paperclip' || search.agentAccessSource === 'paperclip'
   const paperclipCompanyId =
     readSearchString(search.paperclip_company_id) ?? readSearchString(search.paperclipCompanyId)
@@ -26,8 +34,16 @@ export function validateDashboardSearch(search: Record<string, unknown>): Dashbo
     readSearchString(search.paperclip_plugin_id) ?? readSearchString(search.paperclipPluginId)
 
   return {
-    accountId: typeof search.accountId === 'string' && search.accountId.trim() ? search.accountId : undefined,
+    ...validateDashboardBaseSearch(search),
     agentAccessSource: paperclipSource ? 'paperclip' : undefined,
+    paperclipCompanyId,
+    paperclipPluginId
+  }
+}
+
+function validateDashboardBaseSearch(search: Record<string, unknown>): DashboardSearch {
+  return {
+    accountId: typeof search.accountId === 'string' && search.accountId.trim() ? search.accountId : undefined,
     cloudflareIntentId:
       typeof search.cloudflareIntentId === 'string' && search.cloudflareIntentId.trim()
         ? search.cloudflareIntentId
@@ -45,20 +61,6 @@ export function validateDashboardSearch(search: Record<string, unknown>): Dashbo
         : undefined,
     mailQuery: typeof search.mailQuery === 'string' ? search.mailQuery : undefined,
     messageId: typeof search.messageId === 'string' && search.messageId.trim() ? search.messageId : undefined,
-    paperclipCompanyId,
-    paperclipPluginId,
-    settings:
-      search.settings === 'cli-access' || search.settings === 'cliAccess'
-        ? 'security'
-        : search.settings === 'agent-access' || search.settings === 'agentAccess'
-          ? 'agentAccess'
-          : search.settings === 'domains' ||
-              search.settings === 'connectedAccounts' ||
-              search.settings === 'security'
-            ? search.settings
-            : paperclipSource
-              ? 'agentAccess'
-              : undefined,
     unreadOnly: search.unreadOnly === true || search.unreadOnly === 'true' ? true : undefined
   }
 }

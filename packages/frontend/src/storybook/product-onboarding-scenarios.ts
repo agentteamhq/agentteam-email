@@ -11,18 +11,14 @@ import { authenticatedSettingsRouteState, storyPublicEnv } from './screen-fixtur
 import type { DashboardSearch } from '../lib/dashboard-search'
 import type { MailboxAdminViewQuery } from '../lib/mail-admin-rpc'
 import type { MailWorkspaceQuery } from '../lib/mail-rpc'
-import type { SettingsSectionId } from '../partials/authenticated/settings-dialog-sections'
 import type { DomainSettingsState } from '../partials/authenticated/settings-dialog'
 import type { DashboardMailControllerStoryFrameProps } from './stories/story-frames'
 import type { AgentMailAdminNavigation, AgentMailAdminView, AgentMailWebWorkspace } from '@main/backend'
 
 interface ProductOnboardingScenario {
-  defaultSettingsOpen?: boolean
   domainSettingsState: DomainSettingsState
   firstMailboxSetupState?: DashboardMailControllerStoryFrameProps['firstMailboxSetupState']
   routeSearch?: DashboardSearch
-  settingsOpen?: boolean
-  settingsSection?: SettingsSectionId
   workspace: AgentMailWebWorkspace
 }
 
@@ -111,13 +107,6 @@ export const productOnboardingScenarios = {
   settingUpDomain: {
     domainSettingsState: settingUpDomainState,
     workspace: firstUseWorkspace
-  },
-  settingsOpen: {
-    defaultSettingsOpen: true,
-    domainSettingsState: domainSettingsAddDomainAuthorizeCloudflareState,
-    settingsOpen: true,
-    settingsSection: 'domains',
-    workspace: firstUseWorkspace
   }
 } satisfies Record<string, ProductOnboardingScenario>
 
@@ -134,7 +123,6 @@ export function buildProductOnboardingControllerArgs(
   return {
     agentAccessViewLoader: createProductOnboardingAgentAccessViewLoader(),
     authClient: storyAuthClient,
-    defaultSettingsOpen: scenario.defaultSettingsOpen,
     defaultSettingsSection: 'domains',
     domainSettingsState,
     firstMailboxSetupState: scenario.firstMailboxSetupState,
@@ -144,9 +132,7 @@ export function buildProductOnboardingControllerArgs(
     publicEnv: storyPublicEnv,
     routeSearch,
     routeState: authenticatedSettingsRouteState,
-    sessionCleanupEnabled: false,
-    settingsOpen: scenario.settingsOpen,
-    settingsSection: scenario.settingsSection
+    sessionCleanupEnabled: false
   }
 }
 

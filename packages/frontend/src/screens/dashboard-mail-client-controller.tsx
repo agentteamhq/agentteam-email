@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useRouter } from '@tanstack/react-router'
+import { useRouter, useRouterState } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
 import {
@@ -54,6 +54,7 @@ import {
 } from '../lib/mail-rpc'
 import { mailboxAddress, mailboxLocalPart } from '../lib/mail-addresses'
 import { isMailboxAdminSectionId } from '../partials/authenticated/mailbox-admin-models'
+import { cloudflareOAuthCompletionPath } from './dashboard-cloudflare-oauth-routing'
 import { FIRST_USE_SETUP_NAV_ITEM_ID, findSystemFolder } from './dashboard-mail-sidebar-view'
 import { DashboardScreen } from './dashboard-screen'
 import { toMailboxAdminView } from './dashboard-mailbox-admin-view'
@@ -74,6 +75,7 @@ import type {
   AgentMailWebThreadMessage,
   AgentMailWebWorkspace,
   CloudflareAccountSummary,
+  CloudflareOAuthReturnTarget,
   CloudflareStatusResult,
   CloudflareZoneSummary
 } from '@main/backend'
@@ -88,7 +90,7 @@ import type {
   AuthenticatedMailFolderAction,
   AuthenticatedMailPageChange
 } from '../partials/authenticated/authenticated-shell-models'
-import type { DashboardSearch } from '../lib/dashboard-search'
+import type { DashboardSearch, SettingsRouteSearch } from '../lib/dashboard-search'
 import type { DashboardScreenProps } from './dashboard-screen'
 import type {
   MailboxAdminAccountInput,
@@ -199,6 +201,11 @@ function canEditAgentAccess(view: AgentAccessView | null | undefined) {
 interface CloudflareOAuthCallbackState {
   intentPublicId: string
   oauthError?: string
+}
+
+interface DomainSettingsControllerResult {
+  dashboardOnboardingStartOAuth?: () => void
+  settingsState: DomainSettingsState
 }
 
 function useAgentAccessController({
@@ -372,8 +379,13 @@ function useDomainSettingsController({
 }: {
   cloudflareOAuthCallback?: CloudflareOAuthCallbackState | null
   state?: DomainSettingsState
-}): DomainSettingsState {
+}): DomainSettingsControllerResult {
   const router = useRouter()
+  const routePathname = useRouterState({ select: (routerState) => routerState.location.pathname })
+  const cloudflareOAuthCompletionHref = React.useMemo(
+    () => cloudflareOAuthCompletionPath(routePathname),
+    [routePathname]
+  )
   const isInjectedState = state !== undefined
   const readOnly = state?.readOnly ?? false
   const [runtimeStatus, setRuntimeStatus] = React.useState<CloudflareStatusResult | null>(null)
@@ -397,7 +409,9 @@ function useDomainSettingsController({
   const loadCloudflareDomainsForStatus = React.useCallback(
     async (statusForEligibility: CloudflareStatusResult | null) => {
       const accounts = await fetchCloudflareAccounts()
-      const zoneResults = await Promise.allSettled(accounts.map((account) => fetchCloudflareZones(account.id)))
+      const zoneResults = await Promise.allSettled(
+        accounts.map((account) => fetchCloudflareZones(account.id))
+      )
       const zones = zoneResults.flatMap((result) => (result.status === 'fulfilled' ? [...result.value] : []))
       const firstZone = firstEligibleCloudflareZone(zones, statusForEligibility)
 
@@ -523,8 +537,7 @@ function useDomainSettingsController({
       )
 
       await router.navigate({
-        to: '/dashboard/',
-        search: {},
+        href: cloudflareOAuthCompletionHref,
         replace: true
       })
       const [cloudflareStatus, mailStatus] = await Promise.allSettled([refreshStatus(), refreshMailStatus()])
@@ -548,6 +561,7 @@ function useDomainSettingsController({
   }, [
     cloudflareOAuthCallback?.intentPublicId,
     cloudflareOAuthCallback?.oauthError,
+    cloudflareOAuthCompletionHref,
     isInjectedState,
     loadCloudflareDomainsForStatus,
     refreshStatus,
@@ -555,21 +569,32 @@ function useDomainSettingsController({
     router
   ])
 
-  const startOAuth = React.useCallback(async () => {
-    if (isInjectedState || readOnly) {
-      return
-    }
+  const startOAuth = React.useCallback(
+    async (returnTarget: CloudflareOAuthReturnTarget) => {
+      if (isInjectedState || readOnly) {
+        return
+      }
 
-    setRuntimeBusy(true)
-    setRuntimeMessage(null)
-    try {
-      const result = await startCloudflareOAuth()
-      await router.navigate({ href: result.redirectUrl })
-    } catch (error) {
-      setRuntimeMessage(errorMessage(error, 'Failed to start Cloudflare OAuth.'))
-      setRuntimeBusy(false)
-    }
-  }, [isInjectedState, readOnly, router])
+      setRuntimeBusy(true)
+      setRuntimeMessage(null)
+      try {
+        const result = await startCloudflareOAuth(returnTarget)
+        await router.navigate({ href: result.redirectUrl })
+      } catch (error) {
+        setRuntimeMessage(errorMessage(error, 'Failed to start Cloudflare OAuth.'))
+        setRuntimeBusy(false)
+      }
+    },
+    [isInjectedState, readOnly, router]
+  )
+
+  const startDashboardOnboardingOAuth = React.useCallback(() => {
+    startOAuth('dashboard-onboarding').catch(handleUnexpectedCloudflareActionError)
+  }, [handleUnexpectedCloudflareActionError, startOAuth])
+
+  const startSettingsOAuth = React.useCallback(() => {
+    startOAuth('settings-domains').catch(handleUnexpectedCloudflareActionError)
+  }, [handleUnexpectedCloudflareActionError, startOAuth])
 
   const loadAccounts = React.useCallback(async () => {
     if (isInjectedState || readOnly) {
@@ -710,7 +735,9 @@ function useDomainSettingsController({
 
       const provisionedStatus = await provisionCloudflareConnection(connectionPublicId)
       setRuntimeStatus(provisionedStatus)
-      setRuntimeSelectedDomainPublicId(selectCloudflareConnectionPublicId(provisionedStatus, connectionPublicId))
+      setRuntimeSelectedDomainPublicId(
+        selectCloudflareConnectionPublicId(provisionedStatus, connectionPublicId)
+      )
       setRuntimeMessage('Domain setup complete')
       await refreshMailStatus().catch(() => null)
     } catch (error) {
@@ -718,14 +745,7 @@ function useDomainSettingsController({
     } finally {
       setRuntimeBusy(false)
     }
-  }, [
-    isInjectedState,
-    readOnly,
-    refreshMailStatus,
-    runtimeDraftDomain,
-    selectedAccount,
-    selectedZone
-  ])
+  }, [isInjectedState, readOnly, refreshMailStatus, runtimeDraftDomain, selectedAccount, selectedZone])
 
   const disconnectCloudflare = React.useCallback(
     async (grantPublicId?: string) => {
@@ -753,87 +773,92 @@ function useDomainSettingsController({
   )
 
   if (state) {
-    return state
+    return {
+      dashboardOnboardingStartOAuth: state.onStartOAuth,
+      settingsState: state
+    }
   }
 
   return {
-    accounts: runtimeAccounts,
-    busy: runtimeBusy,
-    draftDomain: runtimeDraftDomain,
-    message: runtimeMessage,
-    mailStatus: runtimeMailStatus,
-    mailStatusMessage: runtimeMailStatusMessage,
-    mode: runtimeMode ?? ((runtimeStatus?.connections.length ?? 0) > 0 ? 'domain' : 'addDomain'),
-    onAddDomain: () => {
-      if (readOnly) {
-        return
-      }
-      setRuntimeMode('addDomain')
-      setRuntimeMessage(null)
-    },
-    onConnectDomain: () => {
-      connectDomain().catch(handleUnexpectedCloudflareActionError)
-    },
-    onDisconnectCloudflare: (grantPublicId) => {
-      disconnectCloudflare(grantPublicId).catch(handleUnexpectedCloudflareActionError)
-    },
-    onDraftDomainChange: (domain) => {
-      if (!readOnly) {
-        setRuntimeDraftDomain(domain)
-      }
-    },
-    onLoadAccounts: () => {
-      loadAccounts().catch(handleUnexpectedCloudflareActionError)
-    },
-    onLoadZones: () => {
-      loadZones().catch(handleUnexpectedCloudflareActionError)
-    },
-    onProvisionDomain: (connectionPublicId) => {
-      provisionDomain(connectionPublicId).catch(handleUnexpectedCloudflareActionError)
-    },
-    onSelectAccount: (accountId) => {
-      if (readOnly) {
-        return
-      }
-      setRuntimeSelectedAccountId(accountId)
-      setRuntimeSelectedZoneId('')
-      setRuntimeZones([])
-      setRuntimeDraftDomain('')
-    },
-    onSelectDomain: (connectionPublicId) => {
-      if (readOnly) {
-        return
-      }
-      setRuntimeSelectedDomainPublicId(connectionPublicId)
-      setRuntimeMode('domain')
-      setRuntimeMessage(null)
-    },
-    onSelectZone: (zoneId) => {
-      if (readOnly) {
-        return
-      }
-      const nextZone = runtimeZones.find((zone) => zone.id === zoneId) ?? null
-      setRuntimeSelectedZoneId(zoneId)
-      setRuntimeSelectedAccountId(nextZone?.accountId ?? '')
-      setRuntimeDraftDomain(nextZone?.name ?? '')
-    },
-    onSetupDomain: () => {
-      setupDomain().catch(handleUnexpectedCloudflareActionError)
-    },
-    onStartOAuth: () => {
-      startOAuth().catch(handleUnexpectedCloudflareActionError)
-    },
-    onRefreshMailStatus: () => {
-      refreshMailStatus().catch((error: unknown) => {
-        setRuntimeMailStatusMessage(errorMessage(error, 'Failed to load mail runtime status.'))
-      })
-    },
-    readOnly,
-    selectedAccountId: runtimeSelectedAccountId,
-    selectedDomainPublicId: runtimeSelectedDomainPublicId ?? runtimeStatus?.connections[0]?.publicId ?? null,
-    selectedZoneId: runtimeSelectedZoneId,
-    status: runtimeStatus,
-    zones: runtimeZones
+    dashboardOnboardingStartOAuth: startDashboardOnboardingOAuth,
+    settingsState: {
+      accounts: runtimeAccounts,
+      busy: runtimeBusy,
+      draftDomain: runtimeDraftDomain,
+      message: runtimeMessage,
+      mailStatus: runtimeMailStatus,
+      mailStatusMessage: runtimeMailStatusMessage,
+      mode: runtimeMode ?? ((runtimeStatus?.connections.length ?? 0) > 0 ? 'domain' : 'addDomain'),
+      onAddDomain: () => {
+        if (readOnly) {
+          return
+        }
+        setRuntimeMode('addDomain')
+        setRuntimeMessage(null)
+      },
+      onConnectDomain: () => {
+        connectDomain().catch(handleUnexpectedCloudflareActionError)
+      },
+      onDisconnectCloudflare: (grantPublicId) => {
+        disconnectCloudflare(grantPublicId).catch(handleUnexpectedCloudflareActionError)
+      },
+      onDraftDomainChange: (domain) => {
+        if (!readOnly) {
+          setRuntimeDraftDomain(domain)
+        }
+      },
+      onLoadAccounts: () => {
+        loadAccounts().catch(handleUnexpectedCloudflareActionError)
+      },
+      onLoadZones: () => {
+        loadZones().catch(handleUnexpectedCloudflareActionError)
+      },
+      onProvisionDomain: (connectionPublicId) => {
+        provisionDomain(connectionPublicId).catch(handleUnexpectedCloudflareActionError)
+      },
+      onSelectAccount: (accountId) => {
+        if (readOnly) {
+          return
+        }
+        setRuntimeSelectedAccountId(accountId)
+        setRuntimeSelectedZoneId('')
+        setRuntimeZones([])
+        setRuntimeDraftDomain('')
+      },
+      onSelectDomain: (connectionPublicId) => {
+        if (readOnly) {
+          return
+        }
+        setRuntimeSelectedDomainPublicId(connectionPublicId)
+        setRuntimeMode('domain')
+        setRuntimeMessage(null)
+      },
+      onSelectZone: (zoneId) => {
+        if (readOnly) {
+          return
+        }
+        const nextZone = runtimeZones.find((zone) => zone.id === zoneId) ?? null
+        setRuntimeSelectedZoneId(zoneId)
+        setRuntimeSelectedAccountId(nextZone?.accountId ?? '')
+        setRuntimeDraftDomain(nextZone?.name ?? '')
+      },
+      onSetupDomain: () => {
+        setupDomain().catch(handleUnexpectedCloudflareActionError)
+      },
+      onStartOAuth: startSettingsOAuth,
+      onRefreshMailStatus: () => {
+        refreshMailStatus().catch((error: unknown) => {
+          setRuntimeMailStatusMessage(errorMessage(error, 'Failed to load mail runtime status.'))
+        })
+      },
+      readOnly,
+      selectedAccountId: runtimeSelectedAccountId,
+      selectedDomainPublicId:
+        runtimeSelectedDomainPublicId ?? runtimeStatus?.connections[0]?.publicId ?? null,
+      selectedZoneId: runtimeSelectedZoneId,
+      status: runtimeStatus,
+      zones: runtimeZones
+    }
   }
 }
 
@@ -910,7 +935,6 @@ function agentAccessStatusLabel(value: string): string {
 function cleanDashboardSearch(search: DashboardSearch): DashboardSearch {
   return {
     accountId: cleanSearchValue(search.accountId),
-    agentAccessSource: search.agentAccessSource,
     cloudflareIntentId: cleanSearchValue(search.cloudflareIntentId),
     cloudflareOAuthError: cleanSearchValue(search.cloudflareOAuthError),
     cursor: cleanSearchValue(search.cursor),
@@ -919,9 +943,6 @@ function cleanDashboardSearch(search: DashboardSearch): DashboardSearch {
     mailboxAdmin: search.mailboxAdmin,
     mailQuery: cleanSearchValue(search.mailQuery),
     messageId: cleanSearchValue(search.messageId),
-    paperclipCompanyId: cleanSearchValue(search.paperclipCompanyId),
-    paperclipPluginId: cleanSearchValue(search.paperclipPluginId),
-    settings: search.settings,
     unreadOnly: search.unreadOnly === true ? true : undefined
   }
 }
@@ -931,7 +952,7 @@ function cleanSearchValue(value: string | undefined) {
 }
 
 function paperclipConnectionHandoffFromSearch(
-  routeSearch: DashboardSearch | undefined
+  routeSearch: SettingsRouteSearch | undefined
 ): AgentAccessConnectionHandoff | null {
   if (routeSearch?.agentAccessSource !== 'paperclip') {
     return null
@@ -981,7 +1002,7 @@ interface DashboardMailControllerProps extends Pick<
   mailWorkspaceLoader?: MailWorkspaceLoader
   mailboxAdminViewLoader?: MailboxAdminViewLoader
   mailboxAdminNavigationLoader?: MailboxAdminNavigationLoader
-  routeSearch?: DashboardSearch
+  routeSearch?: SettingsRouteSearch
 }
 
 export function DashboardMailController({
@@ -1071,7 +1092,7 @@ export function DashboardMailController({
     onCopyEnrollmentCommand: handleCopyAgentEnrollmentCommand,
     paperclipConnectionHandoff: paperclipConnectionHandoffFromSearch(routeSearch)
   })
-  const domainSettingsState = useDomainSettingsController({
+  const { dashboardOnboardingStartOAuth, settingsState: domainSettingsState } = useDomainSettingsController({
     cloudflareOAuthCallback: routeSearch?.cloudflareIntentId
       ? {
           intentPublicId: routeSearch.cloudflareIntentId,
@@ -1415,12 +1436,7 @@ export function DashboardMailController({
           }
     )
     setFirstMailboxError(null)
-  }, [
-    firstMailboxDefaultDisplayName,
-    firstMailboxDefaultLocalPart,
-    firstMailboxDomain,
-    firstMailboxDraftKey
-  ])
+  }, [firstMailboxDefaultDisplayName, firstMailboxDefaultLocalPart, firstMailboxDomain, firstMailboxDraftKey])
 
   const firstMailboxAddress =
     firstMailboxDomain && firstMailboxDraft.addressLocalPart
@@ -1435,9 +1451,9 @@ export function DashboardMailController({
             addressLocalPart: firstMailboxDraft.addressLocalPart,
             canSubmit: Boolean(
               normalizedFirstMailboxAddress &&
-                normalizedFirstMailboxAddress === firstMailboxAddress &&
-                firstMailboxDraft.displayName.trim() &&
-                !isSavingAccount
+              normalizedFirstMailboxAddress === firstMailboxAddress &&
+              firstMailboxDraft.displayName.trim() &&
+              !isSavingAccount
             ),
             displayName: firstMailboxDraft.displayName,
             domain: firstMailboxDomain,
@@ -2174,7 +2190,7 @@ export function DashboardMailController({
       onMailOriginalSourceDownload={() => {
         downloadOriginalSource(selectedMessage, originalSourceDialog.source)
       }}
-      onDashboardOnboardingConnect={domainSettingsState.onStartOAuth}
+      onDashboardOnboardingConnect={dashboardOnboardingStartOAuth}
       onMailboxAccountSelect={(accountId) => {
         navigateMail({
           accountId,
@@ -2306,7 +2322,6 @@ export function DashboardMailController({
       onMessageRetry={() => {
         runAsync(workspaceQuery.refetch())
       }}
-      routeSearch={routeSearch}
       sidebarView={sidebarView}
     />
   )

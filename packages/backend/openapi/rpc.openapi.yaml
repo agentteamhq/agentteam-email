@@ -6566,6 +6566,42 @@ paths:
       operationId: postRpcAgent-accessTrialsClaimByTokenDecision
   /rpc/cloudflare/oauth/start:
     post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - returnTarget
+              properties:
+                returnTarget:
+                  type: string
+                  enum:
+                    - dashboard-onboarding
+                    - settings-domains
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - returnTarget
+              properties:
+                returnTarget:
+                  type: string
+                  enum:
+                    - dashboard-onboarding
+                    - settings-domains
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - returnTarget
+              properties:
+                returnTarget:
+                  type: string
+                  enum:
+                    - dashboard-onboarding
+                    - settings-domains
       responses:
         "200":
           description: Response for status 200

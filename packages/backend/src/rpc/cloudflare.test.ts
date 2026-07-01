@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { CloudflareOAuthReturnTarget } from '../cloudflare/service'
 
 type CloudflareHeadersMock = (headers: Headers) => Promise<unknown>
+type CloudflareStartMock = (input: {
+  headers: Headers
+  returnTarget: CloudflareOAuthReturnTarget
+}) => Promise<unknown>
 type CloudflareConnectionMock = (input: { headers: Headers; input: unknown }) => Promise<unknown>
 type CloudflareProvisionMock = (input: { connectionPublicId: string; headers: Headers }) => Promise<unknown>
 type CloudflareDisconnectMock = (input: { grantPublicId?: string; headers: Headers }) => Promise<unknown>
@@ -17,12 +22,13 @@ const cloudflareRpcTestState = vi.hoisted(() => ({
   isCloudflareAccessError: vi.fn<IsCloudflareAccessErrorMock>(),
   listConnectedCloudflareAccounts: vi.fn<CloudflareHeadersMock>(),
   listConnectedCloudflareZones: vi.fn<CloudflareZonesMock>(),
-  startCloudflareOAuth: vi.fn<CloudflareHeadersMock>()
+  startCloudflareOAuth: vi.fn<CloudflareStartMock>()
 }))
 
 vi.mock('../cloudflare/service', () => ({
   applyCloudflareConnectionProvisioning: cloudflareRpcTestState.applyCloudflareConnectionProvisioning,
   connectCloudflareDomain: cloudflareRpcTestState.connectCloudflareDomain,
+  CloudflareOAuthReturnTargetValues: ['dashboard-onboarding', 'settings-domains'],
   disconnectCloudflare: cloudflareRpcTestState.disconnectCloudflare,
   finalizeCloudflareOAuth: cloudflareRpcTestState.finalizeCloudflareOAuth,
   getCloudflareStatus: cloudflareRpcTestState.getCloudflareStatus,
@@ -68,8 +74,10 @@ describe('Cloudflare RPC routes', () => {
     const { default: cloudflare } = await import('./cloudflare')
     const response = await cloudflare.handle(
       new Request('https://mail.example.com/cloudflare/oauth/start', {
+        body: JSON.stringify({ returnTarget: 'settings-domains' }),
         headers: {
-          cookie: 'session=abc'
+          cookie: 'session=abc',
+          'content-type': 'application/json'
         },
         method: 'POST'
       })
@@ -89,7 +97,49 @@ describe('Cloudflare RPC routes', () => {
       redirectUrl: 'https://dash.cloudflare.com/oauth2/auth?state=state-1'
     })
     expect(cloudflareRpcTestState.startCloudflareOAuth).toHaveBeenCalledOnce()
-    expect(cloudflareRpcTestState.startCloudflareOAuth.mock.calls[0][0].get('cookie')).toBe('session=abc')
+    expect(cloudflareRpcTestState.startCloudflareOAuth).toHaveBeenCalledWith({
+      headers: expect.any(Headers),
+      returnTarget: 'settings-domains'
+    })
+    expect(cloudflareRpcTestState.startCloudflareOAuth.mock.calls[0][0].headers.get('cookie')).toBe(
+      'session=abc'
+    )
+  })
+
+  it('rejects missing Cloudflare OAuth return targets before reaching the service', async () => {
+    expect.hasAssertions()
+
+    const { default: cloudflare } = await import('./cloudflare')
+    const response = await cloudflare.handle(
+      new Request('https://mail.example.com/cloudflare/oauth/start', {
+        body: JSON.stringify({}),
+        headers: {
+          'content-type': 'application/json'
+        },
+        method: 'POST'
+      })
+    )
+
+    expect(response.status).toBe(422)
+    expect(cloudflareRpcTestState.startCloudflareOAuth).not.toHaveBeenCalled()
+  })
+
+  it('rejects unknown Cloudflare OAuth return targets before reaching the service', async () => {
+    expect.hasAssertions()
+
+    const { default: cloudflare } = await import('./cloudflare')
+    const response = await cloudflare.handle(
+      new Request('https://mail.example.com/cloudflare/oauth/start', {
+        body: JSON.stringify({ returnTarget: 'dashboard-settings-query' }),
+        headers: {
+          'content-type': 'application/json'
+        },
+        method: 'POST'
+      })
+    )
+
+    expect(response.status).toBe(422)
+    expect(cloudflareRpcTestState.startCloudflareOAuth).not.toHaveBeenCalled()
   })
 
   it('connects a domain with validated route input through the service boundary', async () => {
