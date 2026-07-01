@@ -86,6 +86,7 @@ prepare_compose_env() {
   default_env AT_EMAIL_ADMIN_R2_BUCKET 'agent-mail-dev-archive'
   default_env AT_EMAIL_ADMIN_R2_ACCESS_KEY_ID 'local-dev-r2-access-key'
   default_env AT_EMAIL_ADMIN_R2_SECRET_ACCESS_KEY 'local-dev-r2-secret-key'
+  default_env AT_EMAIL_ADMIN_MONGODB_MAX_INCOMING_CONNECTIONS '256'
 
   export AT_EMAIL_ADMIN_DEV_NETWORK="${AT_EMAIL_ADMIN_DEV_NETWORK:-${project}-network}"
   export AT_EMAIL_ADMIN_MONGODB_REPLICA_SET_NAME="${AT_EMAIL_ADMIN_MONGODB_REPLICA_SET_NAME:-rs0}"

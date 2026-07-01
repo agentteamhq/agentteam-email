@@ -99,19 +99,20 @@ try {
     timeout: 60_000,
     waitUntil: 'domcontentloaded'
   })
-  await waitForPath(page, isPostVerificationSignInPath, 'email verification sign-in redirect')
-  await page.screenshot({ fullPage: true, path: path.join(screenshotsDir, 'email-verified-signin.png') })
+  await waitForPath(page, isAuthenticatedLandingPath, 'email verification authenticated redirect')
+  await page.screenshot({ fullPage: true, path: path.join(screenshotsDir, 'email-verified-dashboard.png') })
 
   const verifiedSession = await getSessionFromBrowser(page)
-  assert(verifiedSession === null, 'email verification does not auto sign in')
+  assert(verifiedSession?.user?.email === testEmail, 'email verification auto sign-in session belongs to the signed-up user')
 
   const stateAfterVerification = await readAuthDatabaseState(db, testEmail)
   assertProvisionedAuthState(stateAfterVerification, {
     expectedEmailVerified: true,
-    expectedSessionCount: 0,
+    expectedSessionCountAtLeast: 1,
     expectedUserEmail: testEmail
   })
 
+  await context.clearCookies()
   await signIn(page)
   await page.screenshot({ fullPage: true, path: path.join(screenshotsDir, 'signed-in-dashboard.png') })
 
@@ -453,15 +454,6 @@ async function waitForPath(targetPage, predicate, description) {
 
 function isVerifyEmailGatePath(url) {
   return url.pathname === '/verify-email/' || url.pathname === '/verify-email'
-}
-
-function isPostVerificationSignInPath(url) {
-  if (url.pathname !== '/signin/' && url.pathname !== '/signin') {
-    return false
-  }
-
-  const redirect = url.searchParams.get('redirect')
-  return redirect === '/settings/' || redirect === '/settings'
 }
 
 function isAuthenticatedLandingPath(url) {

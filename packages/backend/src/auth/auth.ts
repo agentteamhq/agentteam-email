@@ -692,7 +692,7 @@ export function createGlobalAuth(db: Database): GlobalAuth {
       requireEmailVerification: true
     },
     emailVerification: {
-      autoSignInAfterVerification: false,
+      autoSignInAfterVerification: true,
       sendOnSignUp: true,
       sendVerificationEmail: async (data, request) => {
         const verifyUrl = `${BETTER_AUTH_ROUTE}/verify-email?token=${data.token}&callbackURL=${encodeURIComponent('/redirect/email-verified/')}`
