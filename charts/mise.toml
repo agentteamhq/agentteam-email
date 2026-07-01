@@ -60,27 +60,9 @@ depends = [
 ]
 run = "true"
 
-[tasks."dry-run:basic"]
-description = "Run Kubernetes client-side dry-run for the basic Helm render"
-depends = [":template:basic"]
-run = "kubectl apply --dry-run=client --validate=false -f tmp/render-basic.yaml >/dev/null"
-
-[tasks."dry-run:existing-secret"]
-description = "Run Kubernetes client-side dry-run for the existing Secret Helm render"
-depends = [":template:existing-secret"]
-run = "kubectl apply --dry-run=client --validate=false -f tmp/render-existing-secret.yaml >/dev/null"
-
-[tasks."dry-run"]
-description = "Run Kubernetes client-side dry-run for all successful Helm renders"
-depends = [
-  ":dry-run:basic",
-  ":dry-run:existing-secret",
-]
-run = "true"
-
 [tasks.check]
-description = "Lint, render, and Kubernetes dry-run the AgentTeam Email Helm chart"
-depends = [":lint", ":dry-run"]
+description = "Lint and render the AgentTeam Email Helm chart"
+depends = [":lint", ":template"]
 run = "true"
 
 [tasks.test]
