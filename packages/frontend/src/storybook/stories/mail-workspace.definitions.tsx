@@ -448,7 +448,7 @@ export const MailboxCustomFolder: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
 
-    await expect(await canvas.findByRole('button', { name: /archive/i })).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /^archive\s+42$/i })).toBeInTheDocument()
     await expect(await canvas.findByRole('heading', { name: /archived routing review/i })).toBeInTheDocument()
   }
 }
@@ -484,7 +484,7 @@ export const MailboxFolderActions: Story = {
 
     await userEvent.click(await canvas.findByRole('button', { name: /^archive folder actions$/i }))
     await userEvent.click(await body.findByRole('menuitem', { name: /^rename folder$/i }))
-    await expect(await body.findByRole('dialog', { name: /^rename folder$/i })).toBeInTheDocument()
+    await expect(await body.findByRole('dialog', { name: /^rename archive$/i })).toBeInTheDocument()
   }
 }
 
@@ -883,7 +883,8 @@ export const WorkspaceSwitcherSingleWorkspace: Story = {
   play: async ({ canvasElement }) => {
     const body = await openWorkspaceMailboxSwitcher(canvasElement)
 
-    await expect(await body.findByText('AgentTeam Email')).toBeInTheDocument()
+    await expect(await body.findByText('Current workspace')).toBeInTheDocument()
+    await expect(await body.findByRole('menuitem', { name: /support agent/i })).toBeInTheDocument()
     await expect(body.queryByText(/^Workspaces$/i)).not.toBeInTheDocument()
   }
 }
