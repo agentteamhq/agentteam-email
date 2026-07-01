@@ -52,7 +52,7 @@ export function MagicLinkButton({ view }: MagicLinkButtonProps) {
       }}
       className={cn(
         buttonVariants({ variant: "outline" }),
-        "w-full",
+        "w-full no-underline hover:no-underline",
         isPending && "opacity-50 pointer-events-none"
       )}
     >
