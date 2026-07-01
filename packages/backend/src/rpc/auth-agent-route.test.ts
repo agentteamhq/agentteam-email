@@ -103,6 +103,30 @@ describe('Better Auth Agent Auth mounted routes', () => {
     }
   })
 
+  it('does not expose Better Auth audit-log insertion through the public auth mount', async () => {
+    expect.hasAssertions()
+
+    const { backendRpcApp } = await import('./index')
+    const response = await backendRpcApp.handle(
+      new Request('https://mail.example.com/rpc/auth/api/audit-log/insert', {
+        body: JSON.stringify({
+          action: 'admin.dashboard.probe',
+          metadata: {},
+          severity: 'low',
+          status: 'success'
+        }),
+        headers: {
+          'content-type': 'application/json',
+          cookie: 'better-auth.session_token=session'
+        },
+        method: 'POST'
+      })
+    )
+
+    expect(response.status).toBe(404)
+    await expect(readJsonResponse(response)).resolves.toStrictEqual({ error: 'Not found' })
+  })
+
   it('accepts delegated dynamic agent registration at the public RPC auth mount', async () => {
     expect.hasAssertions()
 

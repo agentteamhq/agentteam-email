@@ -22,7 +22,7 @@ export const Route = createFileRoute('/admin/')({
       },
       {
         name: 'description',
-        content: `Review ${SITE_STRINGS.BRAND_NAME} audit logs and instance setup health.`
+        content: `Review ${SITE_STRINGS.BRAND_NAME} admin setup and recent audit activity.`
       }
     ]
   }),

@@ -86,6 +86,18 @@ export {
   type AgentMailCapabilityCatalog
 } from '@main/db'
 export type { AgentMailPublicStatus } from './agent-mail/service'
+export type {
+  AdminAuditLogList,
+  AdminAuditLogListFilters,
+  AdminAuditLogListInput,
+  AdminAuditLogListPagination,
+  AdminAuditLogPageSize,
+  AdminAuditLogSeverityFilter,
+  AdminAuditLogStatusFilter,
+  AdminDashboardAuditEvent,
+  AdminDashboardStatusCount,
+  AdminDashboardSummary
+} from './admin/dashboard-service'
 export type { AgentMailSendSubmitResult } from './agent-mail/control-client'
 export type {
   AgentMailComposeInput,
