@@ -18,7 +18,7 @@ if [[ "${AT_EMAIL_ADMIN_AUTH_E2E_START_APP:-1}" == "1" ]]; then
   run_id="${TEST_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
   app_log_dir="test-containers/auth-e2e/tmp/app-${run_id}/logs"
   mkdir -p "${app_log_dir}"
-  corepack pnpm --filter @main/frontend dev >"${app_log_dir}/frontend.log" 2>&1 &
+  pnpm --filter @main/frontend dev >"${app_log_dir}/frontend.log" 2>&1 &
   app_pid="$!"
 
   cleanup() {
@@ -56,5 +56,5 @@ if [[ -n "${last_error}" ]]; then
   exit 1
 fi
 
-corepack pnpm --filter @main/auth-e2e test:auth
+pnpm --filter @main/auth-e2e test:auth
 '''
