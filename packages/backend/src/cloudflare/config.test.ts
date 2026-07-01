@@ -1,5 +1,26 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+const EXPECTED_CLOUDFLARE_REQUIRED_OAUTH_SCOPES = [
+  'workers-r2.read',
+  'workers-r2.write',
+  'workers-scripts.read',
+  'workers-scripts.write',
+  'user-details.read',
+  'dns.read',
+  'dns.write',
+  'zone.read',
+  'cloud-email-security.read',
+  'email-routing-address.read',
+  'email-routing-address.write',
+  'email-routing-rule.read',
+  'email-routing-rule.write',
+  'email-routing-suppression.read',
+  'email-security-dmarcreports.read',
+  'email-sending.read',
+  'email-sending.write',
+  'offline_access'
+]
+
 describe('Cloudflare OAuth config', () => {
   afterEach(() => {
     vi.unstubAllEnvs()
@@ -10,7 +31,8 @@ describe('Cloudflare OAuth config', () => {
     stubRequiredEnv()
     vi.stubEnv('CLOUDFLARE_OAUTH_CLIENT_ID', 'cloudflare-client-id')
 
-    const { createCloudflareGenericOAuthConfig, isCloudflareOAuthConfigured } = await import('./config')
+    const { createCloudflareGenericOAuthConfig, getCloudflareRequiredOAuthScopes, isCloudflareOAuthConfigured } =
+      await import('./config')
     const config = createCloudflareGenericOAuthConfig()
 
     expect(isCloudflareOAuthConfigured()).toBe(true)
@@ -19,8 +41,9 @@ describe('Cloudflare OAuth config', () => {
       pkce: true,
       providerId: 'cloudflare',
       redirectURI: 'https://mail.example.test/rpc/auth/api/oauth2/callback/cloudflare',
-      scopes: expect.arrayContaining(['email-sending.read', 'email-sending.write', 'offline_access'])
+      scopes: EXPECTED_CLOUDFLARE_REQUIRED_OAUTH_SCOPES
     })
+    expect(getCloudflareRequiredOAuthScopes()).toStrictEqual(EXPECTED_CLOUDFLARE_REQUIRED_OAUTH_SCOPES)
     expect(config).not.toHaveProperty('authentication')
     expect(config).not.toHaveProperty('clientSecret')
   })

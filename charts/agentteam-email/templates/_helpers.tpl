@@ -189,7 +189,6 @@ emptyDir: {}
 {{- else if eq $name "CLOUDFLARE_OAUTH_CLIENT_ID" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.admin.cloudflare.oauth.clientId "name" "admin.cloudflare.oauth.clientId") -}}
 {{- else if eq $name "CLOUDFLARE_OAUTH_ISSUER" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.cloudflare.oauth.issuer) -}}
 {{- else if eq $name "CLOUDFLARE_OAUTH_REVOKE_URL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.cloudflare.oauth.revokeUrl) -}}
-{{- else if eq $name "CLOUDFLARE_OAUTH_SCOPES" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.cloudflare.oauth.scopes) -}}
 {{- else if eq $name "CLOUDFLARE_OAUTH_TOKEN_URL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.cloudflare.oauth.tokenUrl) -}}
 {{- else if eq $name "CLOUDFLARE_OAUTH_USERINFO_URL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.cloudflare.oauth.userInfoUrl) -}}
 {{- else if eq $name "PUBLIC_GOOGLE_CLIENT_ID" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.socialAuth.google.clientId) -}}

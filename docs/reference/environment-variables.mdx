@@ -155,9 +155,9 @@ Even when sharing a single MongoDB server, each URI must point to a distinct log
 
 These variables configure the admin instance's Cloudflare OAuth app. Users connect their own Cloudflare domains from the web UI through this app.
 
-Configure the Cloudflare OAuth client for Authorization Code with PKCE and refresh tokens. The default scope set includes `offline_access` so Better Auth can store a refresh token and refresh access over time.
+Configure the Cloudflare OAuth client for Authorization Code with PKCE and refresh tokens. The web app requests a fixed scope set from code, including `offline_access` so Better Auth can store a refresh token and refresh access over time.
 
-The default Cloudflare OAuth scopes are:
+The required Cloudflare OAuth scopes are:
 
 | Cloudflare section | Permission                        | Scope                              |
 | ------------------ | --------------------------------- | ---------------------------------- |
@@ -165,6 +165,7 @@ The default Cloudflare OAuth scopes are:
 | Developer Platform | Workers R2 Storage Write          | `workers-r2.write`                 |
 | Developer Platform | Workers Scripts Read              | `workers-scripts.read`             |
 | Developer Platform | Workers Scripts Write             | `workers-scripts.write`            |
+| Account & Billing  | User Details Read                 | `user-details.read`                |
 | DNS & Zones        | DNS Read                          | `dns.read`                         |
 | DNS & Zones        | DNS Write                         | `dns.write`                        |
 | DNS & Zones        | Zone Read                         | `zone.read`                        |
@@ -217,11 +218,6 @@ Leave these unset for normal Cloudflare OAuth and API access. The web app and ma
 
 <ParamField path="AT_EMAIL_ADMIN_CF_OAUTH_ISSUER" type="string">
   Optional Cloudflare OAuth issuer override.
-
-</ParamField>
-
-<ParamField path="AT_EMAIL_ADMIN_CF_OAUTH_SCOPES" type="string">
-  Optional comma- or whitespace-separated Cloudflare OAuth scope override. Leave unset to use the default scopes listed above.
 
 </ParamField>
 

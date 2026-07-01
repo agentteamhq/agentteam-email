@@ -251,7 +251,7 @@ describe('Cloudflare OAuth start service', () => {
         providerId: 'cloudflare',
         callbackURL: expect.any(String),
         errorCallbackURL: expect.any(String),
-        scopes: expect.arrayContaining(['email-sending.write'])
+        scopes: expect.arrayContaining(['email-sending.write', 'user-details.read'])
       }),
       headers,
       returnHeaders: true
