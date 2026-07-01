@@ -100,7 +100,6 @@ const envSchema = z.object({
   CLOUDFLARE_OAUTH_ISSUER: optionalNonEmptyString,
   CLOUDFLARE_OAUTH_REVOKE_URL: optionalNonEmptyString,
   CLOUDFLARE_OAUTH_TOKEN_URL: optionalNonEmptyString,
-  CLOUDFLARE_OAUTH_USERINFO_URL: optionalNonEmptyString,
   AT_EMAIL_ADMIN_CONTROL_API_BASE_URL: optionalNonEmptyString,
   AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN: optionalNonEmptyString,
   AT_EMAIL_ADMIN_WILDDUCK_API_BASE_URL: optionalNonEmptyString,

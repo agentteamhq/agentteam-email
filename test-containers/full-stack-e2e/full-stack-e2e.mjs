@@ -921,7 +921,12 @@ async function checkCloudflareOAuthConnectionThroughWeb() {
     headers: { accept: 'application/json', cookie: runtime.cookieHeader }
   })
   assert(zones.status === 200, `Cloudflare zones returned ${zones.status}`)
-  return 'Cloudflare OAuth is linked through the web boundary and can list accounts/zones'
+  const fakeCloudflare = await fetchClusterJson('http://fake-cloudflare:8080/__requests')
+  const observedUserDetails = (fakeCloudflare.requests || []).some(
+    (request) => request.method === 'GET' && request.path === '/client/v4/user'
+  )
+  assert(observedUserDetails, 'Cloudflare OAuth did not fetch REST user details from /client/v4/user')
+  return 'Cloudflare OAuth is linked through the web boundary, fetches REST user details, and can list accounts/zones'
 }
 
 async function checkDomainConnectionThroughWebServer() {

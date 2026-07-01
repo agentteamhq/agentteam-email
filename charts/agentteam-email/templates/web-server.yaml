@@ -118,8 +118,6 @@ spec:
 {{- include "agentteam-email.envFor" (dict "root" . "name" "CLOUDFLARE_OAUTH_REVOKE_URL") | nindent 14 }}
             - name: CLOUDFLARE_OAUTH_TOKEN_URL
 {{- include "agentteam-email.envFor" (dict "root" . "name" "CLOUDFLARE_OAUTH_TOKEN_URL") | nindent 14 }}
-            - name: CLOUDFLARE_OAUTH_USERINFO_URL
-{{- include "agentteam-email.envFor" (dict "root" . "name" "CLOUDFLARE_OAUTH_USERINFO_URL") | nindent 14 }}
             - name: PUBLIC_GOOGLE_CLIENT_ID
 {{- include "agentteam-email.envFor" (dict "root" . "name" "PUBLIC_GOOGLE_CLIENT_ID") | nindent 14 }}
             - name: GOOGLE_CLIENT_SECRET

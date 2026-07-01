@@ -114,8 +114,6 @@ admin:
         value: ''
       tokenUrl:
         value: ''
-      userInfoUrl:
-        value: ''
     r2:
       accountId: {}
       apiToken: {}

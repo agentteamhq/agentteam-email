@@ -2,8 +2,34 @@ import { createHash, createHmac } from 'node:crypto'
 import http from 'node:http'
 
 const port = Number(process.env.PORT || '8788')
-const oauthEmail = process.env.AT_EMAIL_ADMIN_FAKE_CF_OAUTH_EMAIL || 'cloudflare-user@example.test'
-const oauthSubject = process.env.AT_EMAIL_ADMIN_FAKE_CF_OAUTH_SUB || 'cloudflare-user-1'
+const oauthEmail =
+  process.env.AT_EMAIL_ADMIN_FAKE_CF_OAUTH_EMAIL ||
+  process.env.FAKE_AT_EMAIL_ADMIN_CF_OAUTH_EMAIL ||
+  'cloudflare-user@example.test'
+const oauthSubject =
+  process.env.AT_EMAIL_ADMIN_FAKE_CF_OAUTH_SUB ||
+  process.env.FAKE_AT_EMAIL_ADMIN_CF_OAUTH_SUB ||
+  'cloudflare-user-1'
+const cloudflareOAuthScopes = [
+  'workers-r2.read',
+  'workers-r2.write',
+  'workers-scripts.read',
+  'workers-scripts.write',
+  'user-details.read',
+  'dns.read',
+  'dns.write',
+  'zone.read',
+  'cloud-email-security.read',
+  'email-routing-address.read',
+  'email-routing-address.write',
+  'email-routing-rule.read',
+  'email-routing-rule.write',
+  'email-routing-suppression.read',
+  'email-security-dmarcreports.read',
+  'email-sending.read',
+  'email-sending.write',
+  'offline_access'
+]
 const account = {
   id: 'cf-account-1',
   name: 'Full Stack E2E Account',
@@ -109,6 +135,12 @@ async function handleCloudflareApi(request, response, url, body) {
       401,
       cloudflareResponse(null, false, [{ code: 10000, message: 'Authentication error' }])
     )
+    return
+  }
+
+  if (request.method === 'GET' && url.pathname === '/client/v4/user') {
+    recordOperation({ type: 'user.get' })
+    sendJson(response, 200, cloudflareResponse(cloudflareUserDetails()))
     return
   }
 
@@ -317,15 +349,21 @@ function handleOAuth(request, response, url) {
       access_token: 'full-stack-e2e-cloudflare-oauth-token',
       expires_in: 3600,
       refresh_token: 'full-stack-e2e-cloudflare-refresh-token',
-      scope: 'account:read zone:read workers:write email_routing:edit',
+      scope: cloudflareOAuthScopes.join(' '),
       token_type: 'Bearer'
     })
     return
   }
   if (request.method === 'GET' && url.pathname === '/oauth2/userinfo') {
+    if (!hasBearerAuth(request)) {
+      sendJson(response, 401, {
+        error: 'invalid_token',
+        error_description: 'Bearer access token is required'
+      })
+      return
+    }
+
     sendJson(response, 200, {
-      email: oauthEmail,
-      email_verified: true,
       sub: oauthSubject
     })
     return
@@ -338,6 +376,16 @@ function handleOAuth(request, response, url) {
     error: 'not_found',
     error_description: `Unhandled fake Cloudflare OAuth route: ${request.method} ${url.pathname}`
   })
+}
+
+function cloudflareUserDetails() {
+  return {
+    email: oauthEmail,
+    first_name: 'Cloudflare',
+    id: oauthSubject,
+    last_name: 'Test User',
+    username: oauthEmail
+  }
 }
 
 function handleWorkerNotificationSigning(response, body) {

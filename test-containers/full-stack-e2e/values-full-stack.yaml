@@ -52,8 +52,6 @@ admin:
         value: http://fake-cloudflare:8080/oauth2/revoke
       tokenUrl:
         value: http://fake-cloudflare:8080/oauth2/token
-      userInfoUrl:
-        value: http://fake-cloudflare:8080/oauth2/userinfo
     r2:
       accountId:
         value: full-stack-e2e-cloudflare-account-id
