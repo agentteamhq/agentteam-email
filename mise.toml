@@ -233,7 +233,9 @@ run = [
 
 [tasks."test:ci"]
 description = "Run the full CI validation gate against the example environment"
-env = { _.file = ".env.example", CI = "true", DEBUG = "*", TEST_ARTIFACT_SUBMIT_SKIP = "1" }
+# Default to the checked-in example environment for CI parity, while allowing
+# local worktrees to run the same gate against their isolated .env ports.
+env = { _.file = "{{ get_env(name='AT_EMAIL_ADMIN_TEST_CI_ENV_FILE', default='.env.example') }}", CI = "true", DEBUG = "*", TEST_ARTIFACT_SUBMIT_SKIP = "1" }
 run = [
   { task = ":test:static" },
   { task = ":build" },
