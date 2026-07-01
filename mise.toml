@@ -317,20 +317,32 @@ depends = ["//test-containers/paperclip-plugin-e2e:preview:reset"]
 run = "true"
 
 [tasks."dev:start"]
-description = "Start the local source-development support stack"
-run = "bash scripts/dev-stack.sh start"
+description = "Start the full local source-development runtime"
+run = "bash scripts/dev-runtime.sh start"
 
 [tasks."dev:stop"]
-description = "Stop the local source-development support stack"
-run = "bash scripts/dev-stack.sh stop"
+description = "Stop the full local source-development runtime"
+run = "bash scripts/dev-runtime.sh stop"
+
+[tasks."dev:restart"]
+description = "Restart the full local source-development runtime"
+run = "bash scripts/dev-runtime.sh restart"
 
 [tasks."dev:status"]
-description = "Show local source-development support stack status"
-run = "bash scripts/dev-stack.sh status"
+description = "Show full local source-development runtime status"
+run = "bash scripts/dev-runtime.sh status"
 
-[tasks."dev:logs"]
-description = "Follow local source-development support stack logs"
-run = "bash scripts/dev-stack.sh logs"
+[tasks."dev:deps:start"]
+description = "Start local source-development dependency containers"
+run = "bash scripts/dev-stack.sh start"
+
+[tasks."dev:deps:stop"]
+description = "Stop local source-development dependency containers"
+run = "bash scripts/dev-stack.sh stop"
+
+[tasks."dev:deps:status"]
+description = "Show local source-development dependency container status"
+run = "bash scripts/dev-stack.sh status"
 
 [tasks."dev:mail-control"]
 description = "Run the Mail Control Service from source against the local dev stack"

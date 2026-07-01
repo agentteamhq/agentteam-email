@@ -209,7 +209,7 @@ verify_support_containers_running() {
   done
 
   if ((${#failures[@]} > 0)); then
-    printf 'dev-stack: incomplete support stack:\n' >&2
+    printf 'dev-stack: incomplete dependency containers:\n' >&2
     printf '  - %s\n' "${failures[@]}" >&2
     return 1
   fi
@@ -254,7 +254,7 @@ start_support_containers() {
   fi
 
   write_start_diagnostics "${run_dir}" "start-failed"
-  printf 'dev-stack: initial start incomplete; recreating support containers and retrying once\n' >&2
+  printf 'dev-stack: initial start incomplete; recreating dependency containers and retrying once\n' >&2
   remove_support_containers
 
   if run_compose up -d --no-deps --remove-orphans --force-recreate "${support_services[@]}" &&
@@ -263,7 +263,7 @@ start_support_containers() {
   fi
 
   write_start_diagnostics "${run_dir}" "start-retry-failed"
-  fail "support stack did not start all services; diagnostics: ${run_dir}/logs/start-retry-failed-diagnostics.log"
+  fail "dependency containers did not start all services; diagnostics: ${run_dir}/logs/start-retry-failed-diagnostics.log"
 }
 
 wait_http() {
@@ -312,7 +312,7 @@ start_stack() {
   kill_log_tails
   create_run_dir
 
-  printf 'Starting dev support stack: %s\n' "${project}"
+  printf 'Starting dev dependency containers: %s\n' "${project}"
   printf 'Run id: %s\n' "${run_id}"
   printf 'Run directory: %s\n' "${run_dir}"
   render_runtime_configs "${run_dir}"
@@ -327,7 +327,7 @@ start_stack() {
   wait_tcp 'Haraka SMTP' 127.0.0.1 "${AT_EMAIL_ADMIN_DEV_HARAKA_SMTP_PORT:-10025}"
   wait_tcp 'ZoneMTA DSN SMTP' 127.0.0.1 "${AT_EMAIL_ADMIN_DEV_ZONEMTA_DSN_PORT:-2526}"
 
-  printf 'Dev support stack ready. Logs: %s/logs/containers.log\n' "${run_dir}"
+  printf 'Dev dependency containers ready. Logs: %s/logs/containers.log\n' "${run_dir}"
 }
 
 stop_stack() {

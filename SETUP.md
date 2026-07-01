@@ -32,32 +32,34 @@ DATABASE_URL=mongodb://127.0.0.1:27017/agentteam_email_feature_mailbox?directCon
 ```
 
 `mise run dev:start` uses `WT` to scope local container names and volumes. The
-database name and support service ports in `.env` are the worktree isolation
-boundary when multiple dev stacks run on one host.
+database name and dependency service ports in `.env` are the worktree isolation
+boundary when multiple dev runtimes run on one host.
 
 ## Local Runtime
 
-Start the source-development support stack through the repo-owned task:
+Start the full source-development runtime through the repo-owned task:
 
 ```bash
 mise run dev:start
 ```
 
-This starts the local containers required by source development: MongoDB, Redis,
-Mailpit, MinIO, WildDuck, Rspamd, Haraka, and ZoneMTA. It writes a run directory
-under `tmp/run-<id>/` and prints that run id. Container logs are written to
-`tmp/run-<id>/logs/containers.log`.
+This starts the local dependency containers required by source development:
+MongoDB, Redis, Mailpit, MinIO, WildDuck, Rspamd, Haraka, and ZoneMTA. It also
+starts the Mail Control Service from source and the root `pnpm dev` Turbo graph
+for the backend and frontend packages. Each invocation writes a run directory
+under `tmp/run-<id>/` and prints the current run id.
 
-Run the Mail Control Service from source against that stack with:
+Stop or restart that runtime with:
 
 ```bash
-mise run dev:mail-control
+mise run dev:stop
+mise run dev:restart
 ```
 
-Run the local frontend and backend source-development graph with:
+Inspect the active runtime marker and dependency container status with:
 
 ```bash
-pnpm dev
+mise run dev:status
 ```
 
 For local OAuth providers that require HTTPS redirect URLs, set
@@ -67,15 +69,16 @@ shell/profile. The frontend Vite dev server reads those two certificate
 variables only when `DEV_HTTPS=true`; keep machine-specific certificate paths
 out of committed files and repo-local example files.
 
-Inspect or stop the source-development support stack with:
+For lower-level debugging, start the dependency containers separately, then run
+the source processes in the foreground:
 
 ```bash
-mise run dev:status
-mise run dev:logs
-mise run dev:stop
+mise run dev:deps:start
+mise run dev:mail-control
+pnpm dev
 ```
 
-The source-development stack reads configuration from the repo-root `.env`.
+The source-development runtime reads configuration from the repo-root `.env`.
 Docker Compose self-hosting uses `.env.compose` and the `stack:*` tasks instead.
 
 Run the production-like local stack through the Compose-backed stack tasks:

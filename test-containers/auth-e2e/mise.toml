@@ -1,6 +1,6 @@
 [tasks.test]
 description = "Run the auth E2E harness"
-depends = ["//:dev:start"]
+depends = ["//:dev:deps:start"]
 dir = "{{config_root}}"
 run = '''
 repo_root="$(git rev-parse --show-toplevel)"
@@ -18,7 +18,7 @@ if [[ "${AT_EMAIL_ADMIN_AUTH_E2E_START_APP:-1}" == "1" ]]; then
   run_id="${TEST_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
   app_log_dir="test-containers/auth-e2e/tmp/app-${run_id}/logs"
   mkdir -p "${app_log_dir}"
-  pnpm --filter @main/frontend dev >"${app_log_dir}/frontend.log" 2>&1 &
+  pnpm dev >"${app_log_dir}/pnpm-dev.log" 2>&1 &
   app_pid="$!"
 
   cleanup() {
@@ -41,7 +41,7 @@ for _ in {1..120}; do
   if [[ -n "${app_pid}" ]] && ! kill -0 "${app_pid}" >/dev/null 2>&1; then
     echo "auth-e2e app server exited before healthcheck passed" >&2
     if [[ -n "${app_log_dir:-}" ]]; then
-      sed -n '1,220p' "${app_log_dir}/frontend.log" >&2 || true
+      sed -n '1,220p' "${app_log_dir}/pnpm-dev.log" >&2 || true
     fi
     exit 1
   fi
@@ -51,7 +51,7 @@ done
 if [[ -n "${last_error}" ]]; then
   echo "Timed out waiting for ${health_url}" >&2
   if [[ -n "${app_log_dir:-}" ]]; then
-    sed -n '1,220p' "${app_log_dir}/frontend.log" >&2 || true
+    sed -n '1,220p' "${app_log_dir}/pnpm-dev.log" >&2 || true
   fi
   exit 1
 fi
