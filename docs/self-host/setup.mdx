@@ -37,7 +37,7 @@ AgentTeam Email does not provision user mail domains from admin environment vari
   <Step title='Create the admin Cloudflare OAuth app'>
     Create one Cloudflare OAuth app for the admin instance. The web app uses this OAuth app when signed-in users connect their own Cloudflare accounts and domains.
 
-    Configure the default Cloudflare OAuth scopes listed in [Environment Variables](/reference/environment-variables#cloudflare-oauth).
+    Configure the required Cloudflare OAuth scopes listed in [Environment Variables](/reference/environment-variables#cloudflare-oauth).
 
     Configure the OAuth client for Authorization Code with PKCE and token endpoint authentication method `none`. OAuth access and refresh tokens from connected users are stored by Better Auth in the web server database and must not be copied into Compose files, Helm values, browser-visible config, logs, or docs.
 

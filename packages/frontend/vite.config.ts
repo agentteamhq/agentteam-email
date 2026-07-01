@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { dirname, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import babel from '@rolldown/plugin-babel'
@@ -11,6 +12,7 @@ import {
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { defineConfig, loadEnv, type PluginOption } from 'vite'
+import type { ServerOptions as HttpsServerOptions } from 'node:https'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const projectRoot = resolve(__dirname, '../..')
@@ -24,88 +26,93 @@ const env = loadEnv(processEnv.NODE_ENV ?? 'development', projectRoot, 'BUILD_')
 const buildSourcemaps = (processEnv.BUILD_SOURCEMAPS ?? env.BUILD_SOURCEMAPS) === 'true'
 const buildMinify = (processEnv.BUILD_MINIFY ?? env.BUILD_MINIFY ?? 'true') === 'true'
 
-export default defineConfig(() => ({
-  plugins: [
-    runtimePublicEnvAlias(),
-    backendPackageDistRestartPlugin(),
-    responsiveImage(),
-    tanstackReactStartCore({
-      client: {
-        base: '/_build',
-        entry: 'entry-client'
-      },
-      dev: {
-        ssrStyles: {
-          enabled: true
-        }
-      },
-      importProtection: {
-        enabled: true
-      },
-      router: {
-        quoteStyle: 'single'
-      },
-      server: {
-        entry: 'start-web-server'
-      }
-    }),
-    react(),
-    babel({ presets: [reactCompilerPreset()] }),
-    tailwindcss()
-  ],
-  resolve: {
-    alias: createBaseAliases()
-  },
-  server: {
-    allowedHosts: true as const,
-    host: true,
-    port: Number.parseInt(processEnv.FRONTEND_PORT ?? processEnv.PORT ?? '4321', 10),
-    strictPort: false,
-    watch: {
-      ignored: ignoredDevWatchPath
-    }
-  },
-  build: {
-    emptyOutDir: true,
-    minify: buildMinify,
-    outDir: 'dist',
-    sourcemap: buildSourcemaps,
-    target: 'esnext'
-  },
-  environments: {
-    client: {
-      build: {
-        copyPublicDir: true,
-        emitAssets: true,
-        outDir: 'dist/client',
-        rolldownOptions: {
-          output: {
-            // TODO(image-pipeline): keep generated responsive-image assets hash-addressed here.
-            assetFileNames: '_build/assets/[name]-[hash][extname]',
-            chunkFileNames: '_build/assets/[name]-[hash].js',
-            entryFileNames: '_build/[name].js'
-          }
-        }
-      }
-    },
-    server: {
-      build: {
-        copyPublicDir: false,
-        emitAssets: true,
-        outDir: 'dist/server',
-        rolldownOptions: {
-          external: isExternalServerImport,
-          input: resolve(__dirname, 'src/index.ts'),
-          output: {
-            entryFileNames: '[name].mjs',
-            format: 'esm' as const
+export default defineConfig(({ command }) => {
+  const https = command === 'serve' ? resolveDevHttpsOptions() : undefined
+
+  return {
+    plugins: [
+      runtimePublicEnvAlias(),
+      backendPackageDistRestartPlugin(),
+      responsiveImage(),
+      tanstackReactStartCore({
+        client: {
+          base: '/_build',
+          entry: 'entry-client'
+        },
+        dev: {
+          ssrStyles: {
+            enabled: true
           }
         },
-        ssr: true
+        importProtection: {
+          enabled: true
+        },
+        router: {
+          quoteStyle: 'single'
+        },
+        server: {
+          entry: 'start-web-server'
+        }
+      }),
+      react(),
+      babel({ presets: [reactCompilerPreset()] }),
+      tailwindcss()
+    ],
+    resolve: {
+      alias: createBaseAliases()
+    },
+    server: {
+      allowedHosts: true as const,
+      host: true,
+      https,
+      port: Number.parseInt(processEnv.FRONTEND_PORT ?? processEnv.PORT ?? '4321', 10),
+      strictPort: false,
+      watch: {
+        ignored: ignoredDevWatchPath
+      }
+    },
+    build: {
+      emptyOutDir: true,
+      minify: buildMinify,
+      outDir: 'dist',
+      sourcemap: buildSourcemaps,
+      target: 'esnext'
+    },
+    environments: {
+      client: {
+        build: {
+          copyPublicDir: true,
+          emitAssets: true,
+          outDir: 'dist/client',
+          rolldownOptions: {
+            output: {
+              // TODO(image-pipeline): keep generated responsive-image assets hash-addressed here.
+              assetFileNames: '_build/assets/[name]-[hash][extname]',
+              chunkFileNames: '_build/assets/[name]-[hash].js',
+              entryFileNames: '_build/[name].js'
+            }
+          }
+        }
+      },
+      server: {
+        build: {
+          copyPublicDir: false,
+          emitAssets: true,
+          outDir: 'dist/server',
+          rolldownOptions: {
+            external: isExternalServerImport,
+            input: resolve(__dirname, 'src/index.ts'),
+            output: {
+              entryFileNames: '[name].mjs',
+              format: 'esm' as const
+            }
+          },
+          ssr: true
+        }
       }
     }
   }
-}))
+})
 
 function ignoredDevWatchPath(path: string): boolean {
   const normalizedPath = resolve(path)
@@ -114,6 +121,33 @@ function ignoredDevWatchPath(path: string): boolean {
   }
 
   return normalizedPath.includes(`${sep}packages${sep}`) && normalizedPath.includes(`${sep}dist${sep}`)
+}
+
+function resolveDevHttpsOptions(): HttpsServerOptions | undefined {
+  if (!isTrueEnv(processEnv.DEV_HTTPS)) {
+    return undefined
+  }
+
+  const certPath = requireEnvPath('DEV_TLS_CERT')
+  const keyPath = requireEnvPath('DEV_TLS_KEY')
+
+  return {
+    cert: readFileSync(certPath),
+    key: readFileSync(keyPath)
+  }
+}
+
+function isTrueEnv(value: string | undefined): boolean {
+  return value === '1' || value?.toLowerCase() === 'true'
+}
+
+function requireEnvPath(name: 'DEV_TLS_CERT' | 'DEV_TLS_KEY'): string {
+  const value = processEnv[name]?.trim()
+  if (!value) {
+    throw new Error(`${name} is required when DEV_HTTPS=true`)
+  }
+
+  return value
 }
 
 function isWithinPath(path: string, parent: string): boolean {

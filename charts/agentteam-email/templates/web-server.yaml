@@ -116,8 +116,6 @@ spec:
 {{- include "agentteam-email.envFor" (dict "root" . "name" "CLOUDFLARE_OAUTH_ISSUER") | nindent 14 }}
             - name: CLOUDFLARE_OAUTH_REVOKE_URL
 {{- include "agentteam-email.envFor" (dict "root" . "name" "CLOUDFLARE_OAUTH_REVOKE_URL") | nindent 14 }}
-            - name: CLOUDFLARE_OAUTH_SCOPES
-{{- include "agentteam-email.envFor" (dict "root" . "name" "CLOUDFLARE_OAUTH_SCOPES") | nindent 14 }}
             - name: CLOUDFLARE_OAUTH_TOKEN_URL
 {{- include "agentteam-email.envFor" (dict "root" . "name" "CLOUDFLARE_OAUTH_TOKEN_URL") | nindent 14 }}
             - name: CLOUDFLARE_OAUTH_USERINFO_URL

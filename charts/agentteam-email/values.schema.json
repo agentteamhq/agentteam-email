@@ -69,7 +69,6 @@
                 "clientId": { "$ref": "#/$defs/valueSource" },
                 "issuer": { "$ref": "#/$defs/valueSource" },
                 "revokeUrl": { "$ref": "#/$defs/valueSource" },
-                "scopes": { "$ref": "#/$defs/valueSource" },
                 "tokenUrl": { "$ref": "#/$defs/valueSource" },
                 "userInfoUrl": { "$ref": "#/$defs/valueSource" }
               },

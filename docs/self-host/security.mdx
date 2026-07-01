@@ -57,7 +57,7 @@ User-domain setup is not an environment-variable workflow. A signed-in user conn
 
 ## Token scope requirements
 
-The Cloudflare OAuth app must request the default scopes listed in [Environment Variables](/reference/environment-variables#cloudflare-oauth).
+The Cloudflare OAuth app must request the required scopes listed in [Environment Variables](/reference/environment-variables#cloudflare-oauth).
 
 The admin R2 API token must be scoped to the Cloudflare account that owns the archive bucket and must be able to call the R2 temporary credentials API for that bucket. AgentTeam Email requests `object-read-write` temporary credentials scoped to the connected domain archive prefix.
 

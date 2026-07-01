@@ -112,8 +112,6 @@ admin:
         value: ''
       revokeUrl:
         value: ''
-      scopes:
-        value: ''
       tokenUrl:
         value: ''
       userInfoUrl:

@@ -4,11 +4,12 @@ import type { GenericOAuthConfig } from 'better-auth/plugins'
 
 export const CLOUDFLARE_OAUTH_PROVIDER_ID = 'cloudflare'
 
-const DEFAULT_CLOUDFLARE_REQUIRED_OAUTH_SCOPES = [
+const CLOUDFLARE_REQUIRED_OAUTH_SCOPES = [
   'workers-r2.read',
   'workers-r2.write',
   'workers-scripts.read',
   'workers-scripts.write',
+  'user-details.read',
   'dns.read',
   'dns.write',
   'zone.read',
@@ -32,18 +33,10 @@ export const CLOUDFLARE_OAUTH_DEFAULTS = {
   apiBaseUrl: 'https://api.cloudflare.com/client/v4'
 } as const
 
-export type CloudflareRequiredOAuthScope = (typeof DEFAULT_CLOUDFLARE_REQUIRED_OAUTH_SCOPES)[number]
+export type CloudflareRequiredOAuthScope = (typeof CLOUDFLARE_REQUIRED_OAUTH_SCOPES)[number]
 
 export function getCloudflareRequiredOAuthScopes(): string[] {
-  const configuredScopes = PRIVATE_VARS.CLOUDFLARE_OAUTH_SCOPES
-  if (!configuredScopes) {
-    return [...DEFAULT_CLOUDFLARE_REQUIRED_OAUTH_SCOPES]
-  }
-
-  return configuredScopes
-    .split(/[,\s]+/u)
-    .map((scope) => scope.trim())
-    .filter(Boolean)
+  return [...CLOUDFLARE_REQUIRED_OAUTH_SCOPES]
 }
 
 export function isCloudflareOAuthConfigured(): boolean {
