@@ -26,7 +26,6 @@ import type {
   AuthenticatedSidebarView,
   FirstMailboxSetupState
 } from '../partials/authenticated/authenticated-shell-models'
-import type { DashboardSearch } from '../lib/dashboard-search'
 import type { AuthProviderProps } from '@better-auth-ui/react'
 import type { SettingsRouteState } from '@main/backend/routes/webapp'
 
@@ -93,7 +92,6 @@ export interface DashboardScreenProps {
   onSettingsSectionChange?: (section: SettingsSectionId) => void
   publicEnv: PublicEnv
   routeState: SettingsRouteState
-  routeSearch?: DashboardSearch
   sessionCleanupEnabled?: boolean
   domainSettingsState?: DomainSettingsState
   settingsOpen?: boolean
@@ -150,7 +148,6 @@ export function DashboardScreen({
   onSettingsSectionChange,
   publicEnv,
   routeState,
-  routeSearch,
   sessionCleanupEnabled,
   domainSettingsState,
   settingsOpen: settingsOpenProp,
@@ -158,14 +155,6 @@ export function DashboardScreen({
   settingsSection: settingsSectionProp,
   sidebarView
 }: DashboardScreenProps) {
-  const requestedSettingsSection =
-    routeSearch?.settings === 'security'
-      ? 'security'
-      : routeSearch?.settings === 'agentAccess'
-        ? 'agentAccess'
-        : routeSearch?.settings === 'connectedAccounts' || routeSearch?.settings === 'domains'
-          ? 'domains'
-          : undefined
   const activeItemIdBase = sidebarView.activeItemId
   const activeAccountIdBase = sidebarView.activeAccountId
   const activeItemScopeBase = getMailboxScopedStateKey(activeAccountIdBase, activeItemIdBase)
@@ -201,10 +190,10 @@ export function DashboardScreen({
     ReadonlySet<string>
   >(() => new Set())
   const [uncontrolledSettingsOpen, setUncontrolledSettingsOpen] = React.useState(
-    defaultSettingsOpen ?? Boolean(requestedSettingsSection)
+    defaultSettingsOpen ?? false
   )
   const [uncontrolledSettingsSection, setUncontrolledSettingsSection] = React.useState<SettingsSectionId>(
-    requestedSettingsSection ?? defaultSettingsSection ?? 'account'
+    defaultSettingsSection ?? 'account'
   )
   const settingsOpen = settingsOpenProp ?? uncontrolledSettingsOpen
   const settingsSection = settingsSectionProp ?? uncontrolledSettingsSection

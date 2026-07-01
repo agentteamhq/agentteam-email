@@ -870,7 +870,11 @@ async function checkCloudflareRoutesRequireAuthenticatedWebActor() {
 
 async function checkCloudflareOAuthConnectionThroughWeb() {
   assert(runtime.cookieHeader, 'authenticated cookie is required for Cloudflare OAuth')
-  const start = await postJson('/rpc/cloudflare/oauth/start', {}, { cookie: runtime.cookieHeader })
+  const start = await postJson(
+    '/rpc/cloudflare/oauth/start',
+    { returnTarget: 'dashboard-onboarding' },
+    { cookie: runtime.cookieHeader }
+  )
   assert(
     start.status === 200,
     `Cloudflare OAuth start returned ${start.status}: ${bodySnippet(start.bodyText)}`

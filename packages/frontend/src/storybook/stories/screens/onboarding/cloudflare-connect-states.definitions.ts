@@ -1,4 +1,4 @@
-import { fn } from 'storybook/test'
+import { expect, fn, within } from 'storybook/test'
 
 import {
   buildProductOnboardingControllerArgs,
@@ -10,6 +10,7 @@ import type { DashboardMailControllerStoryFrameProps } from 'src/storybook/stori
 interface CloudflareConnectStateStoryDefinition {
   args: DashboardMailControllerStoryFrameProps
   name: string
+  play?: (context: { canvasElement: HTMLElement }) => Promise<void>
 }
 
 const onboardingHandlers = {
@@ -34,7 +35,14 @@ export const cloudflareConnectStateStories = {
     args: buildProductOnboardingControllerArgs(
       productOnboardingScenarios.connectCloudflare,
       onboardingHandlers
-    )
+    ),
+    play: async ({ canvasElement }) => {
+      const canvas = within(canvasElement)
+      const page = within(canvasElement.ownerDocument.body)
+
+      await expect(await canvas.findByRole('button', { name: 'Continue with Cloudflare' })).toBeEnabled()
+      await expect(page.queryByRole('dialog', { name: 'Settings' })).not.toBeInTheDocument()
+    }
   },
   connectingCloudflare: {
     name: 'Connecting Cloudflare',
@@ -67,9 +75,5 @@ export const cloudflareConnectStateStories = {
       productOnboardingScenarios.settingUpDomain,
       onboardingHandlers
     )
-  },
-  settingsOpen: {
-    name: 'Settings open',
-    args: buildProductOnboardingControllerArgs(productOnboardingScenarios.settingsOpen, onboardingHandlers)
   }
 } satisfies Record<string, CloudflareConnectStateStoryDefinition>

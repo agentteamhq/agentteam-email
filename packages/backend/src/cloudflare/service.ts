@@ -61,6 +61,13 @@ const WORKER_CREDENTIAL_REFRESH_AFTER_MS = 24 * 60 * 60 * 1000
 const ACTIVE_SEND_DOMAIN_STATUSES = ['active', 'degraded'] as const
 const ACTIVE_SEND_CONNECTION_STATUSES = ['active', 'degraded'] as const
 const CLOUDFLARE_EMAIL_SEND_SCOPE = 'email-sending.write'
+export const CloudflareOAuthReturnTargetValues = ['dashboard-onboarding', 'settings-domains'] as const
+export type CloudflareOAuthReturnTarget = (typeof CloudflareOAuthReturnTargetValues)[number]
+
+const CLOUDFLARE_OAUTH_CALLBACK_PATH_BY_RETURN_TARGET = {
+  'dashboard-onboarding': '/dashboard/',
+  'settings-domains': '/settings/domains/'
+} satisfies Record<CloudflareOAuthReturnTarget, string>
 
 export type { CloudflareAccountSummary, CloudflareZoneSummary } from './client'
 export type {
@@ -73,6 +80,11 @@ export interface StartCloudflareOAuthResult {
   intent: CloudflareOAuthConnectionIntentPublicView
   redirectUrl: string
   responseHeaders: Headers
+}
+
+export interface StartCloudflareOAuthInput {
+  headers: Headers
+  returnTarget: CloudflareOAuthReturnTarget
 }
 
 export interface FinalizeCloudflareOAuthResult {
@@ -134,7 +146,10 @@ export function isCloudflareAccessError(error: unknown): error is CloudflareAcce
   return error instanceof CloudflareAccessError
 }
 
-export async function startCloudflareOAuth(headers: Headers): Promise<StartCloudflareOAuthResult> {
+export async function startCloudflareOAuth({
+  headers,
+  returnTarget
+}: StartCloudflareOAuthInput): Promise<StartCloudflareOAuthResult> {
   if (!isCloudflareOAuthConfigured()) {
     throw new Error('Cloudflare OAuth is not configured')
   }
@@ -145,15 +160,16 @@ export async function startCloudflareOAuth(headers: Headers): Promise<StartCloud
   const userId = context.userId
   const organizationId = context.organizationId
   const expiresAt = new Date(Date.now() + CLOUDFLARE_OAUTH_INTENT_TTL_MS)
+  const callbackPath = callbackPathForCloudflareOAuthReturnTarget(returnTarget)
   const intent = await db.models.cloudflareOAuthConnectionIntent.create({
     userId,
     organizationId,
     status: 'pending',
-    callbackPath: '/dashboard/',
+    callbackPath,
     expiresAt
   })
   const intentView = cloudflareOAuthConnectionIntentPublicView(intent)
-  const callbackURL = createOAuthCallbackURL(intentView.publicId)
+  const callbackURL = createOAuthCallbackURL(intentView.publicId, callbackPath)
   const result = await auth.api.oAuth2LinkAccount({
     body: {
       providerId: CLOUDFLARE_OAUTH_PROVIDER_ID,
@@ -1383,9 +1399,15 @@ function domainFromAddress(address: string): string {
   return normalizeDomain(match[1])
 }
 
-function createOAuthCallbackURL(intentPublicId: CloudflareOAuthConnectionIntentPublicId): string {
-  const url = new URL('/dashboard/', PUBLIC_VARS.PUBLIC_HOSTNAME)
-  url.searchParams.set('settings', 'connectedAccounts')
+function callbackPathForCloudflareOAuthReturnTarget(returnTarget: CloudflareOAuthReturnTarget): string {
+  return CLOUDFLARE_OAUTH_CALLBACK_PATH_BY_RETURN_TARGET[returnTarget]
+}
+
+function createOAuthCallbackURL(
+  intentPublicId: CloudflareOAuthConnectionIntentPublicId,
+  callbackPath: string
+): string {
+  const url = new URL(callbackPath, PUBLIC_VARS.PUBLIC_HOSTNAME)
   url.searchParams.set('cloudflareIntentId', intentPublicId)
 
   return url.toString()

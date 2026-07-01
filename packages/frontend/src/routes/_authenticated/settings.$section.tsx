@@ -1,7 +1,7 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 
 import { readAuthenticatedRouteState } from '../../lib/authenticated-app-route'
-import { validateDashboardSearch } from '../../lib/dashboard-search'
+import { validateSettingsSearch } from '../../lib/dashboard-search'
 import { throwRouteRedirect } from '../../lib/route-redirect'
 import {
   getSettingsSectionFromSegment,
@@ -12,7 +12,7 @@ import { SITE_STRINGS, formatSiteTitle } from '../../strings'
 import type { SettingsSectionId } from '../../partials/authenticated/settings-dialog-sections'
 
 export const Route = createFileRoute('/_authenticated/settings/$section')({
-  validateSearch: validateDashboardSearch,
+  validateSearch: validateSettingsSearch,
   loader: ({ context, params }) => {
     if (
       params.section === 'cli-access' ||
@@ -56,10 +56,7 @@ function SettingsSectionRouteScreen() {
       }}
       publicEnv={router.options.context.publicEnv}
       routeState={routeState}
-      routeSearch={{
-        ...search,
-        settings: settingsSection === 'agentAccess' ? 'agentAccess' : search.settings
-      }}
+      routeSearch={search}
       settingsOpen
       settingsSection={settingsSection}
     />

@@ -229,47 +229,65 @@ describe('Cloudflare OAuth start service', () => {
     cloudflareServiceTestState.requireAgentMailOrganizationContext.mockReset()
   })
 
-  it('sends Cloudflare OAuth failures to the app-owned redirect error route', async () => {
-    expect.hasAssertions()
-    const { globals, mocks } = cloudflareOAuthStartGlobals()
-    const headers = new Headers({ cookie: 'session=abc' })
-    cloudflareServiceTestState.globals.mockResolvedValue(globals)
-    cloudflareServiceTestState.requireAgentMailOrganizationContext.mockResolvedValue({
-      ability: { cannot: vi.fn(() => false) },
-      organizationId: TEST_ORGANIZATION_ID
-    })
-    const { startCloudflareOAuth } = await import('./service')
+  it.each([
+    {
+      callbackPath: '/dashboard/',
+      returnTarget: 'dashboard-onboarding'
+    },
+    {
+      callbackPath: '/settings/domains/',
+      returnTarget: 'settings-domains'
+    }
+  ] as const)(
+    'starts Cloudflare OAuth for $returnTarget and sends failures to the app-owned redirect error route',
+    async ({ callbackPath, returnTarget }) => {
+      expect.hasAssertions()
+      const { globals, mocks } = cloudflareOAuthStartGlobals()
+      const headers = new Headers({ cookie: 'session=abc' })
+      cloudflareServiceTestState.globals.mockResolvedValue(globals)
+      cloudflareServiceTestState.requireAgentMailOrganizationContext.mockResolvedValue({
+        ability: { cannot: vi.fn(() => false) },
+        organizationId: TEST_ORGANIZATION_ID
+      })
+      const { startCloudflareOAuth } = await import('./service')
 
-    const result = await startCloudflareOAuth(headers)
-    const oauthBody = mocks.authOAuth2LinkAccount.mock.calls[0]?.[0].body
-    const successUrl = new URL(String(oauthBody?.callbackURL))
-    const errorUrl = new URL(String(oauthBody?.errorCallbackURL))
+      const result = await startCloudflareOAuth({ headers, returnTarget })
+      const oauthBody = mocks.authOAuth2LinkAccount.mock.calls[0]?.[0].body
+      const successUrl = new URL(String(oauthBody?.callbackURL))
+      const errorUrl = new URL(String(oauthBody?.errorCallbackURL))
 
-    expect(result.redirectUrl).toBe('https://dash.cloudflare.test/oauth/start')
-    expect(mocks.authOAuth2LinkAccount).toHaveBeenCalledWith({
-      body: expect.objectContaining({
-        providerId: 'cloudflare',
-        callbackURL: expect.any(String),
-        errorCallbackURL: expect.any(String)
-      }),
-      headers,
-      returnHeaders: true
-    })
-    expect(oauthBody).not.toHaveProperty('scopes')
-    expect(successUrl.origin).toBe('https://mail.example.test')
-    expect(successUrl.pathname).toBe('/dashboard/')
-    expect(successUrl.searchParams.get('settings')).toBe('connectedAccounts')
-    expect(successUrl.searchParams.get('cloudflareIntentId')).toBe(result.intent.publicId)
-    expect(errorUrl.origin).toBe('https://mail.example.test')
-    expect(errorUrl.pathname).toBe('/redirect/error')
-    expect(errorUrl.searchParams.get('provider')).toBe('cloudflare')
-    expect(errorUrl.searchParams.get('flow')).toBe('connected-account')
-    expect(errorUrl.searchParams.get('cloudflareIntentId')).toBe(result.intent.publicId)
-    expect(errorUrl.searchParams.get('callbackUri')).toBe(
-      'https://mail.example.test/rpc/auth/api/oauth2/callback/cloudflare'
-    )
-    expect(errorUrl.toString()).not.toContain('/rpc/auth/api/error')
-  })
+      expect(result.redirectUrl).toBe('https://dash.cloudflare.test/oauth/start')
+      expect(mocks.authOAuth2LinkAccount).toHaveBeenCalledWith({
+        body: expect.objectContaining({
+          providerId: 'cloudflare',
+          callbackURL: expect.any(String),
+          errorCallbackURL: expect.any(String)
+        }),
+        headers,
+        returnHeaders: true
+      })
+      expect(oauthBody).not.toHaveProperty('scopes')
+      expect(mocks.intentCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callbackPath,
+          status: 'pending'
+        })
+      )
+      expect(successUrl.origin).toBe('https://mail.example.test')
+      expect(successUrl.pathname).toBe(callbackPath)
+      expect(successUrl.searchParams.has('settings')).toBe(false)
+      expect(successUrl.searchParams.get('cloudflareIntentId')).toBe(result.intent.publicId)
+      expect(errorUrl.origin).toBe('https://mail.example.test')
+      expect(errorUrl.pathname).toBe('/redirect/error')
+      expect(errorUrl.searchParams.get('provider')).toBe('cloudflare')
+      expect(errorUrl.searchParams.get('flow')).toBe('connected-account')
+      expect(errorUrl.searchParams.get('cloudflareIntentId')).toBe(result.intent.publicId)
+      expect(errorUrl.searchParams.get('callbackUri')).toBe(
+        'https://mail.example.test/rpc/auth/api/oauth2/callback/cloudflare'
+      )
+      expect(errorUrl.toString()).not.toContain('/rpc/auth/api/error')
+    }
+  )
 })
 
 describe('Cloudflare domain authorization', () => {

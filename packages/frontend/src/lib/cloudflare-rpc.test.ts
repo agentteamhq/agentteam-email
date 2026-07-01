@@ -32,8 +32,11 @@ describe('Cloudflare RPC adapter', () => {
     })
     const { startCloudflareOAuth } = await import('./cloudflare-rpc')
 
-    await expect(startCloudflareOAuth()).resolves.toStrictEqual({
+    await expect(startCloudflareOAuth('dashboard-onboarding')).resolves.toStrictEqual({
       redirectUrl: 'https://dash.cloudflare.com/oauth2/auth?state=state-1'
+    })
+    expect(cloudflareRpcTestState.oauthStartPost).toHaveBeenCalledWith({
+      returnTarget: 'dashboard-onboarding'
     })
   })
 
@@ -49,9 +52,12 @@ describe('Cloudflare RPC adapter', () => {
     })
     const { startCloudflareOAuth } = await import('./cloudflare-rpc')
 
-    await expect(startCloudflareOAuth()).rejects.toMatchObject({
+    await expect(startCloudflareOAuth('settings-domains')).rejects.toMatchObject({
       message: 'Cloudflare OAuth start returned an invalid redirect URL',
       status: 200
+    })
+    expect(cloudflareRpcTestState.oauthStartPost).toHaveBeenCalledWith({
+      returnTarget: 'settings-domains'
     })
   })
 
@@ -66,7 +72,7 @@ describe('Cloudflare RPC adapter', () => {
     })
     const { startCloudflareOAuth } = await import('./cloudflare-rpc')
 
-    await expect(startCloudflareOAuth()).rejects.toMatchObject({
+    await expect(startCloudflareOAuth('settings-domains')).rejects.toMatchObject({
       message: 'Cloudflare OAuth start returned an invalid redirect URL',
       status: 200
     })

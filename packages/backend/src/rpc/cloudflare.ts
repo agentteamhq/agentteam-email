@@ -3,6 +3,7 @@ import { Elysia, t } from 'elysia'
 import {
   applyCloudflareConnectionProvisioning,
   connectCloudflareDomain,
+  CloudflareOAuthReturnTargetValues,
   disconnectCloudflare,
   finalizeCloudflareOAuth,
   getCloudflareStatus,
@@ -31,6 +32,7 @@ type CloudflareResponseHeaders = Record<string, string | number | string[]>
 
 const optionalDateLikeSchema = t.Optional(t.Any())
 const optionalNullableStringSchema = t.Optional(t.Nullable(t.String()))
+const cloudflareOAuthReturnTargetSchema = t.Enum(enumObject(CloudflareOAuthReturnTargetValues))
 const cloudflareOAuthGrantResponseSchema = t.Object({
   cloudflareEmail: optionalNullableStringSchema,
   cloudflareUserId: t.String(),
@@ -81,17 +83,23 @@ const cloudflare = new Elysia({
 })
   .post(
     '/oauth/start',
-    async ({ request, set }) => {
+    async ({ body, request, set }) => {
       try {
-        const { responseHeaders, ...body } = await startCloudflareOAuth(request.headers)
+        const { responseHeaders, ...responseBody } = await startCloudflareOAuth({
+          headers: request.headers,
+          returnTarget: body.returnTarget
+        })
         applySetCookieHeaders(set.headers, responseHeaders)
         set.headers['content-type'] = 'application/json'
-        return body
+        return responseBody
       } catch (error) {
         return cloudflareErrorResponse(error, set)
       }
     },
     {
+      body: t.Object({
+        returnTarget: cloudflareOAuthReturnTargetSchema
+      }),
       response: {
         200: typedResponseSchema<{
           intent: Awaited<ReturnType<typeof startCloudflareOAuth>>['intent']
@@ -321,6 +329,14 @@ function splitCombinedSetCookie(value: string | null): string[] {
     return []
   }
   return value.split(/,(?=\s*[^;,]+=)/u)
+}
+
+function enumObject<const TValues extends readonly string[]>(
+  values: TValues
+): { [TValue in TValues[number]]: TValue } {
+  return Object.fromEntries(values.map((value) => [value, value])) as {
+    [TValue in TValues[number]]: TValue
+  }
 }
 
 export default cloudflare
