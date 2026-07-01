@@ -131,13 +131,14 @@ run = "true"
 
 [tasks."test:static"]
 description = "Run static validation checks used by CI"
-depends = [
-  ":lint",
-  ":typecheck",
-  ":leaks:check",
-  ":test:charts",
+# Run these checks sequentially: lint and typecheck each let Turbo prepare
+# package builds, so parallel mise schedulers can race on shared dist outputs.
+run = [
+  { task = ":lint" },
+  { task = ":typecheck" },
+  { task = ":leaks:check" },
+  { task = ":test:charts" },
 ]
-run = "true"
 
 [tasks."test:charts"]
 description = "Run offline Helm chart render checks"
@@ -148,15 +149,14 @@ run = "true"
 
 [tasks."test:unit"]
 description = "Run host-level unit and package checks used by CI"
-depends = [
-  ":test:node",
-  "//apps/mail-control-service:check",
-  "//apps/at-email-cli:fmt:check",
-  "//apps/at-email-cli:mod:check",
-  "//apps/at-email-cli:test",
-  "//test-containers/cloudflare-oauth-prod-probe:test",
+run = [
+  { task = ":test:node" },
+  { task = "//apps/mail-control-service:check" },
+  { task = "//apps/at-email-cli:fmt:check" },
+  { task = "//apps/at-email-cli:mod:check" },
+  { task = "//apps/at-email-cli:test" },
+  { task = "//test-containers/cloudflare-oauth-prod-probe:test" },
 ]
-run = "true"
 
 [tasks."test:storybook:browsers"]
 description = "Install Chromium dependencies for Storybook interaction tests"
@@ -180,22 +180,20 @@ run = [
 
 [tasks."test:images"]
 description = "Build repo-owned runtime container images used by CI and E2E"
-depends = [
-  "//apps/mail-control-service:image:build",
-  "//apps/web-server:image:build",
-  "//apps/at-email-cli:image:build",
+run = [
+  { task = "//apps/mail-control-service:image:build" },
+  { task = "//apps/web-server:image:build" },
+  { task = "//apps/at-email-cli:image:build" },
 ]
-run = "true"
 
 [tasks."test:release-artifacts"]
 description = "Validate at-email CLI release, npm, plugin, and skill artifacts"
-depends = [
-  "//apps/at-email-cli:release:check",
-  "//apps/at-email-cli:release:npm:check",
-  "//apps/at-email-cli:release:plugins:check",
-  "//apps/at-email-cli:skills:check",
+run = [
+  { task = "//apps/at-email-cli:release:check" },
+  { task = "//apps/at-email-cli:release:npm:check" },
+  { task = "//apps/at-email-cli:release:plugins:check" },
+  { task = "//apps/at-email-cli:skills:check" },
 ]
-run = "true"
 
 [tasks."test:e2e:service"]
 description = "Run service-owned Mail Control end-to-end suites"
@@ -206,11 +204,10 @@ run = "true"
 
 [tasks."test:e2e:node"]
 description = "Run self-contained Node end-to-end harnesses"
-depends = [
-  "//test-containers/cloudflare-oauth-e2e:test",
-  "//test-containers/paperclip-plugin-e2e:test",
+run = [
+  { task = "//test-containers/cloudflare-oauth-e2e:test" },
+  { task = "//test-containers/paperclip-plugin-e2e:test" },
 ]
-run = "true"
 
 [tasks."test:e2e:auth"]
 description = "Run auth E2E against the source-development stack"
@@ -228,10 +225,8 @@ run = [
 [tasks."test:e2e"]
 description = "Run all end-to-end test-container flows"
 run = [
-  { tasks = [
-    ":test:e2e:service",
-    ":test:e2e:node",
-  ] },
+  { task = ":test:e2e:service" },
+  { task = ":test:e2e:node" },
   { task = ":test:e2e:auth" },
   { task = ":test:e2e:kubernetes" },
 ]
@@ -241,10 +236,8 @@ description = "Run the full CI validation gate against the example environment"
 env = { _.file = ".env.example", CI = "true", DEBUG = "*", TEST_ARTIFACT_SUBMIT_SKIP = "1" }
 run = [
   { task = ":test:static" },
-  { tasks = [
-    ":build",
-    ":test:unit",
-  ] },
+  { task = ":build" },
+  { task = ":test:unit" },
   { task = ":test:storybook" },
   { task = ":test:images" },
   { task = ":test:release-artifacts" },

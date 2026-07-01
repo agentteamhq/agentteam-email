@@ -72,6 +72,9 @@ jobs:
           CONTAINER_ENGINE: docker
           CONTAINER_ENGINE_HOST: unix:///var/run/docker.sock
           MISE_TASK_OUTPUT: prefix
+          # Keep the CI task scheduler single-lane so package build outputs are
+          # prepared by one mise graph instead of concurrent independent graphs.
+          MISE_JOBS: 1
         run: mise run test:ci
 
   publish_release:

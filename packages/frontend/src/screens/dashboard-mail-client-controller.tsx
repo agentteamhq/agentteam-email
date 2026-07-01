@@ -474,8 +474,11 @@ function useDomainSettingsController({
       return
     }
 
-    setRuntimeBusy(true)
-    loadCloudflareDomainsForStatus(runtimeStatus)
+    Promise.resolve()
+      .then(() => {
+        setRuntimeBusy(true)
+        return loadCloudflareDomainsForStatus(runtimeStatus)
+      })
       .catch((error: unknown) => {
         setRuntimeMessage(errorMessage(error, 'Failed to load Cloudflare domains.'))
       })

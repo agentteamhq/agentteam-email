@@ -1,6 +1,6 @@
 import { agentAccessActionableState } from '../agent-access-fixtures'
-import { DashboardMailController } from '../../screens/dashboard-mail-client-controller'
 import { DashboardMailControllerStoryFrame } from './story-frames'
+import type { DashboardMailController } from '../../screens/dashboard-mail-client-controller'
 import type { ComponentProps } from 'react'
 
 type DashboardMailControllerArgs = ComponentProps<typeof DashboardMailController>

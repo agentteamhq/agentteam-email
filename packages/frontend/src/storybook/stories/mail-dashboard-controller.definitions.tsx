@@ -150,9 +150,9 @@ export const WebmailFirstUseOnboarding: Story = {
       await canvas.findByText('Connect Cloudflare to choose the domain you want to use with AgentTeam Email.')
     ).toBeInTheDocument()
     await expect(await canvas.findByRole('button', { name: 'Continue with Cloudflare' })).toBeEnabled()
-    expect((await canvas.findAllByText('No mailbox yet')).length).toBeGreaterThan(0)
+    await expect((await canvas.findAllByText('No mailbox yet')).length).toBeGreaterThan(0)
     for (const folderLabel of ['Inbox', 'Drafts', 'Sent', 'Junk', 'Trash']) {
-      expect((await canvas.findAllByText(folderLabel)).length).toBeGreaterThan(0)
+      await expect((await canvas.findAllByText(folderLabel)).length).toBeGreaterThan(0)
     }
     await expect(canvas.queryByRole('button', { name: 'Continue setup' })).not.toBeInTheDocument()
     await expect(canvas.queryByRole('button', { name: 'Create folder' })).not.toBeInTheDocument()
@@ -160,15 +160,15 @@ export const WebmailFirstUseOnboarding: Story = {
 
     const inboxButton = await canvas.findByRole('button', { name: 'Inbox' })
     await userEvent.hover(inboxButton)
-    expect((await body.findAllByText('Inbox: Connect a mailbox before opening folders.')).length).toBeGreaterThan(0)
+    await expect((await body.findAllByText('Inbox: Connect a mailbox before opening folders.')).length).toBeGreaterThan(0)
 
     await userEvent.click(await canvas.findByRole('button', { name: 'Accounts' }))
     await expect(await canvas.findByRole('button', { name: 'Continue setup' })).toBeInTheDocument()
 
     await userEvent.click(await canvas.findByRole('button', { name: 'Continue setup' }))
     await expect(await canvas.findByText('Connect your domain', {}, { timeout: 15000 })).toBeInTheDocument()
-    await waitFor(() => {
-      expect(canvas.queryByRole('button', { name: 'Continue setup' })).not.toBeInTheDocument()
+    await waitFor(async () => {
+      await expect(canvas.queryByRole('button', { name: 'Continue setup' })).not.toBeInTheDocument()
     })
   }
 }
