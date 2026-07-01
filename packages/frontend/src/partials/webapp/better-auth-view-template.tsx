@@ -1,8 +1,6 @@
 'use client'
 
 import { KeyIcon } from '@phosphor-icons/react'
-import { useEffect } from 'react'
-import { toast } from 'sonner'
 
 import { Auth } from '../../components/auth/auth'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
@@ -27,7 +25,6 @@ export type BetterAuthLastUsedLoginMethod = 'email' | 'magic-link' | 'google' | 
 export interface BetterAuthViewTemplateProps {
   view: BetterAuthRouteView
   redirectTo?: string
-  flash?: string | null
   lastUsedLoginMethod?: BetterAuthLastUsedLoginMethod | null
   resetPasswordToken?: string
 }
@@ -133,14 +130,8 @@ function getLastMethodClass(
   return lastUsedAnchors[lastUsedLoginMethod]
 }
 
-export function BetterAuthViewTemplate({ view, flash, lastUsedLoginMethod }: BetterAuthViewTemplateProps) {
+export function BetterAuthViewTemplate({ view, lastUsedLoginMethod }: BetterAuthViewTemplateProps) {
   const config = view in authConfig ? authConfig[view] : null
-
-  useEffect(() => {
-    if (flash) {
-      toast.success(flash)
-    }
-  }, [flash])
 
   return (
     <BetterAuthViewFrame

@@ -158,6 +158,20 @@ describe('webapp auth route state', () => {
     })
   })
 
+  it('redirects completed email verification to the dashboard with a flash message', async () => {
+    expect.hasAssertions()
+
+    const { handleEmailVerifiedRedirect } = await import('./webapp')
+    const response = await handleEmailVerifiedRedirect(
+      new Request('https://mail.example.com/redirect/email-verified/')
+    )
+
+    expect(response.status).toBe(302)
+    expect(response.headers.get('location')).toBe('/dashboard/')
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(response.headers.get('set-cookie')).toContain('_flash=Your%20email%20has%20been%20verified.')
+  })
+
   it('redirects protected route state to setup before sign-in when no admin exists', async () => {
     expect.hasAssertions()
 

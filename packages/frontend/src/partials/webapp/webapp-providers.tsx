@@ -1,15 +1,13 @@
-import { StrictMode } from 'react'
+import { StrictMode, useEffect } from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
 import { ThemeProvider } from 'next-themes'
+import { toast } from 'sonner'
 
 import { Toaster } from '../../components/ui/sonner'
 
 import { BetterAuthUIProvider } from './better-auth-ui-provider'
-import { BetterAuthViewTemplate } from './better-auth-view-template'
 import { EnvProvider } from './env-provider'
 import { ErrorPage } from './error-page'
-import { NotFoundPage } from './not-found-page'
-import type { BetterAuthViewTemplateProps } from './better-auth-view-template'
 import type { EnvContextValue } from './env-context'
 import type { PropsWithChildren } from 'react'
 import type { AuthProviderProps } from '@better-auth-ui/react'
@@ -50,8 +48,19 @@ export function WebappProviders(props: PropsWithChildren<WebappProvidersProps>) 
             </BetterAuthUIProvider>
           </ThemeProvider>
           <Toaster />
+          <FlashToast flash={props.flash} />
         </ErrorBoundary>
       </EnvProvider>
     </StrictMode>
   )
+}
+
+function FlashToast({ flash }: { flash?: string | null }) {
+  useEffect(() => {
+    if (flash) {
+      toast.success(flash, { id: 'route-flash' })
+    }
+  }, [flash])
+
+  return null
 }
