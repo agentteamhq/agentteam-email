@@ -6579,6 +6579,7 @@ paths:
                   type: string
                   enum:
                     - dashboard-onboarding
+                    - settings-connected-accounts
                     - settings-domains
           application/x-www-form-urlencoded:
             schema:
@@ -6590,6 +6591,7 @@ paths:
                   type: string
                   enum:
                     - dashboard-onboarding
+                    - settings-connected-accounts
                     - settings-domains
           multipart/form-data:
             schema:
@@ -6601,6 +6603,7 @@ paths:
                   type: string
                   enum:
                     - dashboard-onboarding
+                    - settings-connected-accounts
                     - settings-domains
       responses:
         "200":

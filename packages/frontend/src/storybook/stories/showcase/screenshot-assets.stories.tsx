@@ -1,6 +1,5 @@
 import { fn, userEvent, within } from 'storybook/test'
 
-import { agentAccessActiveState } from 'src/storybook/agent-access-fixtures'
 import {
   accountSwitchingSidebarView,
   authenticatedSectionBaseArgs
@@ -231,14 +230,5 @@ export const HomeMailboxAdmin: Story = {
   args: {
     mailboxAdminView: mailboxAdminReadyView,
     sidebarView: mailboxAdminSidebarView('accounts')
-  }
-}
-
-export const HomeAgentAccess: Story = {
-  name: 'Mock home agent access',
-  args: {
-    agentAccessState: agentAccessActiveState,
-    settingsOpen: true,
-    settingsSection: 'agentAccess'
   }
 }

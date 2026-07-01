@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { cloudflareOAuthCompletionPath } from './dashboard-cloudflare-oauth-routing'
 import { DashboardMailController } from './dashboard-mail-client-controller'
+import { validateDashboardSearch } from '../lib/dashboard-search'
+import type { DashboardSearch } from '../lib/dashboard-search'
 import type { DashboardScreenProps } from './dashboard-screen'
 import type { PublicEnv } from '../types'
 import type { SettingsRouteState } from '@main/backend/routes/webapp'
@@ -112,16 +114,67 @@ describe('DashboardMailController Cloudflare OAuth routing', () => {
     })
   })
 
+  it('starts settings connected-account OAuth with the connected accounts return target', async () => {
+    expect.hasAssertions()
+    const props = renderController('/settings/connected-accounts/')
+
+    props.domainSettingsState?.onStartConnectedAccountOAuth?.()
+    await flushPromises()
+
+    expect(controllerTestState.startCloudflareOAuth).toHaveBeenCalledWith('settings-connected-accounts')
+    expect(controllerTestState.navigate).toHaveBeenCalledWith({
+      href: 'https://dash.cloudflare.test/oauth/start'
+    })
+  })
+
   it('clears OAuth callback search on the canonical return surface', () => {
     expect(cloudflareOAuthCompletionPath('/dashboard/')).toBe('/dashboard/')
     expect(cloudflareOAuthCompletionPath('/dashboard')).toBe('/dashboard/')
+    expect(cloudflareOAuthCompletionPath('/dashboard/?settings=domains')).toBe('/dashboard/')
+    expect(cloudflareOAuthCompletionPath('/dashboard/?settings=connectedAccounts')).toBe('/dashboard/')
+    expect(cloudflareOAuthCompletionPath('/dashboard/?source=paperclip')).toBe('/dashboard/')
+    expect(cloudflareOAuthCompletionPath('/settings/connected-accounts/')).toBe(
+      '/settings/connected-accounts/'
+    )
+    expect(cloudflareOAuthCompletionPath('/settings/connected-accounts')).toBe(
+      '/settings/connected-accounts/'
+    )
+    expect(cloudflareOAuthCompletionPath('/settings/connectedAccounts')).toBe('/dashboard/')
+    expect(cloudflareOAuthCompletionPath('/settings/connectedAccounts/?cloudflareIntentId=abc')).toBe(
+      '/dashboard/'
+    )
     expect(cloudflareOAuthCompletionPath('/settings/domains/')).toBe('/settings/domains/')
     expect(cloudflareOAuthCompletionPath('/settings/domains')).toBe('/settings/domains/')
+    expect(cloudflareOAuthCompletionPath('/settings/domains/?cloudflareIntentId=abc')).toBe(
+      '/settings/domains/'
+    )
     expect(cloudflareOAuthCompletionPath('/organization/people')).toBe('/organization/people/')
+  })
+
+  it.each(['/dashboard/', '/dashboard/?settings=domains', '/dashboard/?settings=connectedAccounts'])(
+    'does not force settings open for %s',
+    (href) => {
+      expect.hasAssertions()
+      const props = renderControllerForDashboardUrl(href)
+
+      expect(props.settingsOpen).toBeUndefined()
+      expect(props.settingsSection).toBeUndefined()
+      expect(props.defaultSettingsOpen).toBeUndefined()
+      expect(props.defaultSettingsSection).toBeUndefined()
+    }
+  )
+
+  it('does not preserve Paperclip handoff state on dashboard route search', () => {
+    expect.hasAssertions()
+    const props = renderControllerForDashboardUrl('/dashboard/?source=paperclip')
+
+    expect(props.settingsOpen).toBeUndefined()
+    expect(props.settingsSection).toBeUndefined()
+    expect(props.agentAccessState?.connectionHandoff).toBeNull()
   })
 })
 
-function renderController(routePathname = '/dashboard/') {
+function renderController(routePathname = '/dashboard/', routeSearch?: DashboardSearch) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -137,6 +190,7 @@ function renderController(routePathname = '/dashboard/') {
       <DashboardMailController
         publicEnv={publicEnv}
         routeState={routeState}
+        routeSearch={routeSearch}
       />
     </QueryClientProvider>
   )
@@ -147,6 +201,15 @@ function renderController(routePathname = '/dashboard/') {
   }
 
   return controllerTestState.capturedScreenProps
+}
+
+function renderControllerForDashboardUrl(href: string) {
+  const url = new URL(href, 'https://mail.example.com')
+
+  return renderController(
+    url.pathname,
+    validateDashboardSearch(Object.fromEntries(url.searchParams.entries()))
+  )
 }
 
 async function flushPromises() {

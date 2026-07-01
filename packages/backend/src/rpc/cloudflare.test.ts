@@ -28,7 +28,11 @@ const cloudflareRpcTestState = vi.hoisted(() => ({
 vi.mock('../cloudflare/service', () => ({
   applyCloudflareConnectionProvisioning: cloudflareRpcTestState.applyCloudflareConnectionProvisioning,
   connectCloudflareDomain: cloudflareRpcTestState.connectCloudflareDomain,
-  CloudflareOAuthReturnTargetValues: ['dashboard-onboarding', 'settings-domains'],
+  CloudflareOAuthReturnTargetValues: [
+    'dashboard-onboarding',
+    'settings-connected-accounts',
+    'settings-domains'
+  ],
   disconnectCloudflare: cloudflareRpcTestState.disconnectCloudflare,
   finalizeCloudflareOAuth: cloudflareRpcTestState.finalizeCloudflareOAuth,
   getCloudflareStatus: cloudflareRpcTestState.getCloudflareStatus,
@@ -56,55 +60,58 @@ describe('Cloudflare RPC routes', () => {
     )
   })
 
-  it('starts Cloudflare OAuth through the webserver and preserves Better Auth cookies', async () => {
-    expect.hasAssertions()
+  it.each(['dashboard-onboarding', 'settings-connected-accounts', 'settings-domains'] as const)(
+    'starts Cloudflare OAuth through the webserver for %s and preserves Better Auth cookies',
+    async (returnTarget) => {
+      expect.hasAssertions()
 
-    const responseHeaders = new Headers()
-    responseHeaders.append('set-cookie', 'cf-oauth-state=one; Path=/; HttpOnly')
-    responseHeaders.append('set-cookie', 'cf-oauth-verifier=two; Path=/; Secure')
-    cloudflareRpcTestState.startCloudflareOAuth.mockResolvedValue({
-      intent: {
-        publicId: 'intent-public-1',
-        status: 'pending'
-      },
-      redirectUrl: 'https://dash.cloudflare.com/oauth2/auth?state=state-1',
-      responseHeaders
-    })
-
-    const { default: cloudflare } = await import('./cloudflare')
-    const response = await cloudflare.handle(
-      new Request('https://mail.example.com/cloudflare/oauth/start', {
-        body: JSON.stringify({ returnTarget: 'settings-domains' }),
-        headers: {
-          cookie: 'session=abc',
-          'content-type': 'application/json'
+      const responseHeaders = new Headers()
+      responseHeaders.append('set-cookie', 'cf-oauth-state=one; Path=/; HttpOnly')
+      responseHeaders.append('set-cookie', 'cf-oauth-verifier=two; Path=/; Secure')
+      cloudflareRpcTestState.startCloudflareOAuth.mockResolvedValue({
+        intent: {
+          publicId: 'intent-public-1',
+          status: 'pending'
         },
-        method: 'POST'
+        redirectUrl: 'https://dash.cloudflare.com/oauth2/auth?state=state-1',
+        responseHeaders
       })
-    )
 
-    expect(response.status).toBe(200)
-    expect(response.headers.get('content-type')?.split(';')[0]).toBe('application/json')
-    expect((response.headers as Headers & { getSetCookie: () => string[] }).getSetCookie()).toStrictEqual([
-      'cf-oauth-state=one; Path=/; HttpOnly',
-      'cf-oauth-verifier=two; Path=/; Secure'
-    ])
-    await expect(response.json()).resolves.toStrictEqual({
-      intent: {
-        publicId: 'intent-public-1',
-        status: 'pending'
-      },
-      redirectUrl: 'https://dash.cloudflare.com/oauth2/auth?state=state-1'
-    })
-    expect(cloudflareRpcTestState.startCloudflareOAuth).toHaveBeenCalledOnce()
-    expect(cloudflareRpcTestState.startCloudflareOAuth).toHaveBeenCalledWith({
-      headers: expect.any(Headers),
-      returnTarget: 'settings-domains'
-    })
-    expect(cloudflareRpcTestState.startCloudflareOAuth.mock.calls[0][0].headers.get('cookie')).toBe(
-      'session=abc'
-    )
-  })
+      const { default: cloudflare } = await import('./cloudflare')
+      const response = await cloudflare.handle(
+        new Request('https://mail.example.com/cloudflare/oauth/start', {
+          body: JSON.stringify({ returnTarget }),
+          headers: {
+            cookie: 'session=abc',
+            'content-type': 'application/json'
+          },
+          method: 'POST'
+        })
+      )
+
+      expect(response.status).toBe(200)
+      expect(response.headers.get('content-type')?.split(';')[0]).toBe('application/json')
+      expect((response.headers as Headers & { getSetCookie: () => string[] }).getSetCookie()).toStrictEqual([
+        'cf-oauth-state=one; Path=/; HttpOnly',
+        'cf-oauth-verifier=two; Path=/; Secure'
+      ])
+      await expect(response.json()).resolves.toStrictEqual({
+        intent: {
+          publicId: 'intent-public-1',
+          status: 'pending'
+        },
+        redirectUrl: 'https://dash.cloudflare.com/oauth2/auth?state=state-1'
+      })
+      expect(cloudflareRpcTestState.startCloudflareOAuth).toHaveBeenCalledOnce()
+      expect(cloudflareRpcTestState.startCloudflareOAuth).toHaveBeenCalledWith({
+        headers: expect.any(Headers),
+        returnTarget
+      })
+      expect(cloudflareRpcTestState.startCloudflareOAuth.mock.calls[0][0].headers.get('cookie')).toBe(
+        'session=abc'
+      )
+    }
+  )
 
   it('rejects missing Cloudflare OAuth return targets before reaching the service', async () => {
     expect.hasAssertions()
@@ -131,6 +138,24 @@ describe('Cloudflare RPC routes', () => {
     const response = await cloudflare.handle(
       new Request('https://mail.example.com/cloudflare/oauth/start', {
         body: JSON.stringify({ returnTarget: 'dashboard-settings-query' }),
+        headers: {
+          'content-type': 'application/json'
+        },
+        method: 'POST'
+      })
+    )
+
+    expect(response.status).toBe(422)
+    expect(cloudflareRpcTestState.startCloudflareOAuth).not.toHaveBeenCalled()
+  })
+
+  it('rejects camelCase Cloudflare OAuth return targets before reaching the service', async () => {
+    expect.hasAssertions()
+
+    const { default: cloudflare } = await import('./cloudflare')
+    const response = await cloudflare.handle(
+      new Request('https://mail.example.com/cloudflare/oauth/start', {
+        body: JSON.stringify({ returnTarget: 'settingsConnectedAccounts' }),
         headers: {
           'content-type': 'application/json'
         },

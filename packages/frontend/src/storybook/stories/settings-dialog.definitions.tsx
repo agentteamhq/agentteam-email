@@ -378,6 +378,36 @@ export const AgentAccessDense: Story = {
   })
 }
 
+export const ConnectedAccountsEmpty: Story = {
+  args: buildSettingsScreenArgs({
+    domainSettingsState: domainSettingsEmptyFirstUseState,
+    settingsSection: 'connected-accounts'
+  }),
+  play: async ({ args, canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+
+    await expect(args.storyPath).toBe('/settings/connected-accounts/')
+    await expect(await canvas.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument()
+    await expect(await canvas.findByText('Connect a Cloudflare account')).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: 'Connect Cloudflare account' })).toBeEnabled()
+  }
+}
+
+export const ConnectedAccountsCloudflare: Story = {
+  args: buildSettingsScreenArgs({
+    domainSettingsState: domainSettingsAddDomainSelectZoneState,
+    settingsSection: 'connected-accounts'
+  }),
+  play: async ({ args, canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+
+    await expect(args.storyPath).toBe('/settings/connected-accounts/')
+    await expect(await canvas.findByText('Connected accounts', { selector: 'p' })).toBeInTheDocument()
+    await expect(await canvas.findByText('admin@example.com')).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: 'Connect another account' })).toBeEnabled()
+  }
+}
+
 export const Organizations: Story = {
   args: buildSettingsScreenArgs({
     settingsSection: 'organizations'

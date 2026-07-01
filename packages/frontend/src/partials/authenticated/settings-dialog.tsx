@@ -7,6 +7,7 @@ import {
   GlobeHemisphereWestIcon,
   IdentificationCardIcon,
   LockIcon,
+  PlugsConnectedIcon,
   PlusCircleIcon,
   RobotIcon,
   SuitcaseSimpleIcon,
@@ -141,6 +142,7 @@ export interface DomainSettingsState {
   onSelectDomain?: (connectionPublicId: CloudflareConnectionView['publicId']) => void
   onSelectZone?: (zoneId: string) => void
   onSetupDomain?: () => void
+  onStartConnectedAccountOAuth?: () => void
   onStartOAuth?: () => void
   readOnly?: boolean
   selectedAccountId?: string
@@ -182,6 +184,7 @@ const settingsNavigation = [
   { id: 'account', name: 'Account', icon: UserCircleIcon },
   { id: 'security', name: 'Security', icon: LockIcon },
   { id: 'agentAccess', name: 'Agent access', icon: RobotIcon },
+  { id: 'connected-accounts', name: 'Connected accounts', icon: PlugsConnectedIcon },
   { id: 'organizations', name: 'Organizations', icon: SuitcaseSimpleIcon },
   { id: 'organizationSettings', name: 'Organization settings', icon: IdentificationCardIcon },
   { id: 'organizationPeople', name: 'Organization people', icon: UsersIcon }
@@ -195,6 +198,7 @@ const settingsNames = {
   account: 'Account',
   security: 'Security',
   agentAccess: 'Agent access',
+  'connected-accounts': 'Connected accounts',
   organizations: 'Organizations',
   organizationSettings: 'Organization settings',
   organizationPeople: 'Organization people',
@@ -251,7 +255,7 @@ export function SettingsDialog({
       <DialogContent className='overflow-hidden p-0 md:max-h-[500px] md:max-w-[700px] lg:max-w-[800px]'>
         <DialogTitle className='sr-only'>Settings</DialogTitle>
         <DialogDescription className='sr-only'>
-          Manage account, security, organization, and domain settings.
+          Manage account, security, connected account, organization, and domain settings.
         </DialogDescription>
         <SidebarProvider className='h-full min-h-0 min-w-0 items-start overflow-hidden'>
           <Sidebar
@@ -286,6 +290,22 @@ export function SettingsDialog({
               <SidebarGroup className='min-h-0 flex-1'>
                 <SidebarGroupContent className='min-h-0 overflow-hidden'>
                   <SidebarMenu>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={activeSection === 'domains' && domainSettings.mode === 'domain'}
+                      >
+                        <button
+                          type='button'
+                          onClick={() => {
+                            setActiveSection('domains')
+                          }}
+                        >
+                          <GlobeHemisphereWestIcon />
+                          <span>Domains</span>
+                        </button>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
                     <SidebarMenuItem>
                       <SidebarMenuButton
                         asChild
@@ -378,11 +398,27 @@ export function SettingsDialog({
                 className='shrink-0'
                 onClick={() => {
                   setActiveSection('domains')
+                }}
+                size='sm'
+                type='button'
+                variant={
+                  activeSection === 'domains' && domainSettings.mode === 'domain' ? 'secondary' : 'ghost'
+                }
+              >
+                <GlobeHemisphereWestIcon />
+                Domains
+              </Button>
+              <Button
+                className='shrink-0'
+                onClick={() => {
+                  setActiveSection('domains')
                   domainSettings.onAddDomain()
                 }}
                 size='sm'
                 type='button'
-                variant={activeSection === 'domains' ? 'secondary' : 'ghost'}
+                variant={
+                  activeSection === 'domains' && domainSettings.mode === 'addDomain' ? 'secondary' : 'ghost'
+                }
               >
                 <PlusCircleIcon />
                 Add domain
@@ -422,11 +458,19 @@ function SettingsPanelContent({
     return (
       <SettingsEmptyContent
         description={
-          section === 'domains'
-            ? 'Domains connected to AgentTeam Email will appear here.'
-            : 'This settings section has no records to show yet.'
+          section === 'connected-accounts'
+            ? 'Connected provider accounts will appear here.'
+            : section === 'domains'
+              ? 'Domains connected to AgentTeam Email will appear here.'
+              : 'This settings section has no records to show yet.'
         }
-        title={section === 'domains' ? 'No domains' : 'Nothing to show'}
+        title={
+          section === 'connected-accounts'
+            ? 'No connected accounts'
+            : section === 'domains'
+              ? 'No domains'
+              : 'Nothing to show'
+        }
       />
     )
   }
@@ -478,6 +522,10 @@ function SettingsPanelContent({
         hideNav
       />
     )
+  }
+
+  if (section === 'connected-accounts') {
+    return <ConnectedAccountsContent settings={domainSettings} />
   }
 
   if (section === 'domains') {
@@ -1142,6 +1190,7 @@ interface DomainSettingsController {
   busy: boolean
   connections: readonly CloudflareConnectionView[]
   draftDomain: string
+  grants: readonly CloudflareGrantView[]
   mailStatus: AgentMailPublicStatus | null
   mailStatusMessage: string | null
   message: string | null
@@ -1159,6 +1208,7 @@ interface DomainSettingsController {
   onSelectDomain: (connectionPublicId: DomainPublicId) => void
   onSelectZone: (zoneId: string) => void
   onSetupDomain: () => void
+  onStartConnectedAccountOAuth: () => void
   onStartOAuth: () => void
   readOnly: boolean
   selectedAccountId: string
@@ -1181,6 +1231,7 @@ function domainSettingsControllerFromState(state?: DomainSettingsState): DomainS
   const mailStatusMessage = state?.mailStatusMessage ?? null
   const message = state?.message ?? null
   const connections = status?.connections ?? []
+  const grants = status?.grants ?? []
   const selectedDomainPublicId = state?.selectedDomainPublicId ?? connections[0]?.publicId ?? null
   const selectedDomain = selectedDomainPublicId
     ? (connections.find((connection) => connection.publicId === selectedDomainPublicId) ??
@@ -1188,7 +1239,7 @@ function domainSettingsControllerFromState(state?: DomainSettingsState): DomainS
       null)
     : (connections[0] ?? null)
   const mode = state?.mode ?? (connections.length > 0 ? 'domain' : 'addDomain')
-  const activeGrant = status?.grants.find((grant) => grant.status === 'active') ?? null
+  const activeGrant = grants.find((grant) => grant.status === 'active') ?? null
   const missingScopes = activeGrant ? getMissingScopes(activeGrant) : []
   const action =
     <TArgs extends unknown[]>(handler: ((...args: TArgs) => void) | undefined) =>
@@ -1204,6 +1255,7 @@ function domainSettingsControllerFromState(state?: DomainSettingsState): DomainS
     busy: state?.busy ?? false,
     connections,
     draftDomain,
+    grants,
     mailStatus,
     mailStatusMessage,
     message,
@@ -1221,6 +1273,7 @@ function domainSettingsControllerFromState(state?: DomainSettingsState): DomainS
     onSelectDomain: action(state?.onSelectDomain),
     onSelectZone: action(state?.onSelectZone),
     onSetupDomain: action(state?.onSetupDomain),
+    onStartConnectedAccountOAuth: action(state?.onStartConnectedAccountOAuth),
     onStartOAuth: action(state?.onStartOAuth),
     readOnly,
     selectedAccountId,
@@ -1248,6 +1301,167 @@ export function DomainSettingsPanel({
       settings={domainSettingsControllerFromState(state)}
     />
   )
+}
+
+function ConnectedAccountsContent({ settings }: { settings: DomainSettingsController }) {
+  if (settings.status === null && !settings.message) {
+    return <ConnectedAccountsLoadingContent />
+  }
+
+  if (settings.grants.length === 0) {
+    return (
+      <div className='grid max-w-3xl gap-4'>
+        <Card className='gap-0 py-4 shadow-none'>
+          <CardHeader
+            className='flex flex-col gap-3 px-4 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center'
+          >
+            <div className='flex min-w-0 items-start gap-3'>
+              <CloudflareLogo className='mt-0.5 h-6 w-auto shrink-0' />
+              <div className='min-w-0'>
+                <CardTitle className='text-sm'>Connect a Cloudflare account</CardTitle>
+                <CardDescription className='mt-1'>
+                  Add provider accounts here before choosing domains for AgentTeam Email.
+                </CardDescription>
+              </div>
+            </div>
+            <CardAction
+              className='w-full self-stretch justify-self-auto sm:w-56 sm:self-center sm:justify-self-end'
+            >
+              <CloudflareConnectButton
+                busy={settings.busy}
+                className='h-8 text-sm'
+                disabled={settings.busy || settings.readOnly}
+                onClick={settings.onStartConnectedAccountOAuth}
+              >
+                Connect Cloudflare account
+              </CloudflareConnectButton>
+            </CardAction>
+          </CardHeader>
+        </Card>
+        {settings.message ? <p className='text-muted-foreground text-sm'>{settings.message}</p> : null}
+      </div>
+    )
+  }
+
+  return (
+    <section className='grid max-w-3xl gap-4'>
+      <div className='flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'>
+        <div className='min-w-0'>
+          <p className='font-medium'>Connected accounts</p>
+          <p className='text-muted-foreground text-sm'>
+            Manage Cloudflare OAuth grants used to list zones and set up AgentTeam Email domains.
+          </p>
+        </div>
+        <CloudflareConnectButton
+          busy={settings.busy}
+          className='h-8 text-sm sm:w-56'
+          disabled={settings.busy || settings.readOnly}
+          onClick={settings.onStartConnectedAccountOAuth}
+        >
+          Connect another account
+        </CloudflareConnectButton>
+      </div>
+      {settings.message ? <p className='text-muted-foreground text-sm'>{settings.message}</p> : null}
+      <ConnectedAccountsSection title='Cloudflare accounts'>
+        {settings.grants.map((grant) => (
+          <ConnectedAccountGrantRow
+            busy={settings.busy}
+            grant={grant}
+            key={grant.publicId}
+            onDisconnect={settings.onDisconnectCloudflare}
+            readOnly={settings.readOnly}
+          />
+        ))}
+      </ConnectedAccountsSection>
+    </section>
+  )
+}
+
+function ConnectedAccountsLoadingContent() {
+  return (
+    <div className='grid max-w-3xl gap-3'>
+      <Skeleton className='h-16 rounded-lg' />
+      <Skeleton className='h-24 rounded-lg' />
+    </div>
+  )
+}
+
+function ConnectedAccountsSection({ children, title }: { children: React.ReactNode; title: string }) {
+  return (
+    <div className='grid gap-2'>
+      <p className='text-sm font-medium'>{title}</p>
+      <div className='divide-border overflow-hidden rounded-lg border'>{children}</div>
+    </div>
+  )
+}
+
+function ConnectedAccountGrantRow({
+  busy,
+  grant,
+  onDisconnect,
+  readOnly
+}: {
+  busy: boolean
+  grant: CloudflareGrantView
+  onDisconnect: (grantPublicId?: CloudflareGrantPublicId) => void
+  readOnly: boolean
+}) {
+  const missingScopes = getMissingScopes(grant)
+  const statusVariant = grant.status === 'active' && missingScopes.length === 0 ? 'secondary' : 'outline'
+
+  return (
+    <div className='grid gap-2 border-b p-3 text-sm last:border-b-0'>
+      <div className='flex items-start justify-between gap-3'>
+        <div className='min-w-0'>
+          <p className='truncate font-medium'>{grant.cloudflareEmail ?? 'Cloudflare account'}</p>
+          <p className='text-muted-foreground truncate'>
+            User {formatReferenceId(grant.cloudflareUserId) ?? 'Unknown'} · Grant{' '}
+            {formatReferenceId(grant.publicId)}
+          </p>
+        </div>
+        <Badge variant={statusVariant}>{formatCloudflareGrantStatus(grant, missingScopes)}</Badge>
+      </div>
+      <div className='text-muted-foreground grid gap-1 sm:grid-cols-3'>
+        <span>{formatCloudflareGrantScopeSummary(grant)}</span>
+        <span>Last checked {formatDateTime(grant.lastTokenCheckAt)}</span>
+        <span>{missingScopes.length > 0 ? `${missingScopes.length} missing scopes` : 'Required scopes ready'}</span>
+      </div>
+      {grant.lastErrorMessage ? <p className='text-destructive text-xs'>{grant.lastErrorMessage}</p> : null}
+      {missingScopes.length > 0 ? (
+        <p className='text-muted-foreground text-xs'>Missing Cloudflare scopes: {missingScopes.join(', ')}</p>
+      ) : null}
+      <div>
+        <Button
+          disabled={busy || readOnly}
+          onClick={() => {
+            onDisconnect(grant.publicId)
+          }}
+          size='sm'
+          variant='outline'
+        >
+          <TrashIcon data-icon='inline-start' />
+          Disconnect account
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function formatCloudflareGrantStatus(
+  grant: CloudflareGrantView,
+  missingScopes: readonly string[]
+): string {
+  if (grant.status === 'active' && missingScopes.length > 0) {
+    return 'Missing scopes'
+  }
+
+  return formatStatusLabel(grant.status)
+}
+
+function formatCloudflareGrantScopeSummary(grant: CloudflareGrantView): string {
+  const grantedRequiredScopes = grant.requiredScopes.filter((scope) => grant.grantedScopes.includes(scope))
+
+  return `${grantedRequiredScopes.length}/${grant.requiredScopes.length} required scopes granted`
 }
 
 function DomainSettingsContent({
@@ -1364,6 +1578,7 @@ function AddDomainPanel({ settings }: { settings: DomainSettingsController }) {
   const selectedDomainName = selectedZone?.name ?? settings.draftDomain
   const zoneGroups = groupCloudflareZonesByAccount(settings.zones)
   const hasDomains = settings.zones.length > 0
+  const hasUsableGrant = Boolean(activeGrant && settings.missingScopes.length === 0)
   const primaryAction = hasDomains ? settings.onSetupDomain : settings.onLoadAccounts
   const primaryDisabled =
     settings.busy ||
@@ -1371,7 +1586,7 @@ function AddDomainPanel({ settings }: { settings: DomainSettingsController }) {
     settings.missingScopes.length > 0 ||
     (hasDomains && (!selectedZone || !selectedDomainName))
 
-  if (!activeGrant) {
+  if (!hasUsableGrant) {
     return (
       <div className='grid max-w-3xl gap-4'>
         <Card className='gap-0 py-4 shadow-none'>
@@ -1381,8 +1596,14 @@ function AddDomainPanel({ settings }: { settings: DomainSettingsController }) {
             <div className='flex min-w-0 items-start gap-3'>
               <CloudflareLogo className='mt-0.5 h-6 w-auto shrink-0' />
               <div className='min-w-0'>
-                <CardTitle className='text-sm'>Connect your domain</CardTitle>
-                <CardDescription className='mt-1'>Connect Cloudflare to choose your domain.</CardDescription>
+                <CardTitle className='text-sm'>
+                  {activeGrant ? 'Update Cloudflare access' : 'Connect your domain'}
+                </CardTitle>
+                <CardDescription className='mt-1'>
+                  {activeGrant
+                    ? 'Reconnect Cloudflare with the scopes required to choose domains.'
+                    : 'Connect Cloudflare to choose your domain.'}
+                </CardDescription>
               </div>
             </div>
             <CardAction
@@ -1394,11 +1615,16 @@ function AddDomainPanel({ settings }: { settings: DomainSettingsController }) {
                 disabled={settings.busy || settings.readOnly}
                 onClick={settings.onStartOAuth}
               >
-                Continue with Cloudflare
+                {activeGrant ? 'Reconnect Cloudflare' : 'Continue with Cloudflare'}
               </CloudflareConnectButton>
             </CardAction>
           </CardHeader>
         </Card>
+        {settings.missingScopes.length > 0 ? (
+          <div className='border-destructive/40 text-destructive rounded-lg border p-3 text-sm'>
+            Missing Cloudflare scopes: {settings.missingScopes.join(', ')}
+          </div>
+        ) : null}
         {settings.message ? <p className='text-muted-foreground text-sm'>{settings.message}</p> : null}
       </div>
     )

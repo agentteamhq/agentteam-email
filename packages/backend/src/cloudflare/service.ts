@@ -61,11 +61,16 @@ const WORKER_CREDENTIAL_REFRESH_AFTER_MS = 24 * 60 * 60 * 1000
 const ACTIVE_SEND_DOMAIN_STATUSES = ['active', 'degraded'] as const
 const ACTIVE_SEND_CONNECTION_STATUSES = ['active', 'degraded'] as const
 const CLOUDFLARE_EMAIL_SEND_SCOPE = 'email-sending.write'
-export const CloudflareOAuthReturnTargetValues = ['dashboard-onboarding', 'settings-domains'] as const
+export const CloudflareOAuthReturnTargetValues = [
+  'dashboard-onboarding',
+  'settings-connected-accounts',
+  'settings-domains'
+] as const
 export type CloudflareOAuthReturnTarget = (typeof CloudflareOAuthReturnTargetValues)[number]
 
 const CLOUDFLARE_OAUTH_CALLBACK_PATH_BY_RETURN_TARGET = {
   'dashboard-onboarding': '/dashboard/',
+  'settings-connected-accounts': '/settings/connected-accounts/',
   'settings-domains': '/settings/domains/'
 } satisfies Record<CloudflareOAuthReturnTarget, string>
 

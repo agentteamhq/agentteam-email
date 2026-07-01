@@ -50,7 +50,7 @@ export const CloudflareConnectionFailed: Story = {
     await expect(await canvas.findByText('invalid_request')).toBeInTheDocument()
     await expect(await canvas.findByRole('link', { name: /try again/i })).toHaveAttribute(
       'href',
-      '/dashboard/?settings=connectedAccounts'
+      '/settings/connected-accounts/'
     )
   }
 }

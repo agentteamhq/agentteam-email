@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
 
 import { validateDashboardSearch, validateSettingsSearch } from '../../lib/dashboard-search'
+import { resolveSettingsRouteSegment } from '../../partials/authenticated/settings-dialog-sections'
 import { DashboardMailController } from '../../screens/dashboard-mail-client-controller'
 import type { SettingsRouteSearch } from '../../lib/dashboard-search'
 import type { AgentAccessSettingsState } from '../../partials/authenticated/settings-dialog'
@@ -137,7 +138,16 @@ function validateStorySearch(pathname: string, search: Record<string, unknown>):
 }
 
 function isSettingsPath(pathname: string) {
-  return pathname === '/settings' || pathname === '/settings/' || pathname.startsWith('/settings/')
+  const normalizedPathname = pathname.endsWith('/') ? pathname : `${pathname}/`
+  if (normalizedPathname === '/settings/') {
+    return true
+  }
+
+  const settingsSectionMatch = /^\/settings\/([^/]+)\/$/u.exec(normalizedPathname)
+
+  return settingsSectionMatch
+    ? resolveSettingsRouteSegment(settingsSectionMatch[1]).type === 'section'
+    : false
 }
 
 function hasDashboardSearchValue(search: SettingsRouteSearch) {

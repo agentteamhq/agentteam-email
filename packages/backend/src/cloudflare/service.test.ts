@@ -235,6 +235,10 @@ describe('Cloudflare OAuth start service', () => {
       returnTarget: 'dashboard-onboarding'
     },
     {
+      callbackPath: '/settings/connected-accounts/',
+      returnTarget: 'settings-connected-accounts'
+    },
+    {
       callbackPath: '/settings/domains/',
       returnTarget: 'settings-domains'
     }

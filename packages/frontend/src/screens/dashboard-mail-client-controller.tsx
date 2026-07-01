@@ -592,7 +592,11 @@ function useDomainSettingsController({
     startOAuth('dashboard-onboarding').catch(handleUnexpectedCloudflareActionError)
   }, [handleUnexpectedCloudflareActionError, startOAuth])
 
-  const startSettingsOAuth = React.useCallback(() => {
+  const startSettingsConnectedAccountsOAuth = React.useCallback(() => {
+    startOAuth('settings-connected-accounts').catch(handleUnexpectedCloudflareActionError)
+  }, [handleUnexpectedCloudflareActionError, startOAuth])
+
+  const startSettingsDomainsOAuth = React.useCallback(() => {
     startOAuth('settings-domains').catch(handleUnexpectedCloudflareActionError)
   }, [handleUnexpectedCloudflareActionError, startOAuth])
 
@@ -845,7 +849,8 @@ function useDomainSettingsController({
       onSetupDomain: () => {
         setupDomain().catch(handleUnexpectedCloudflareActionError)
       },
-      onStartOAuth: startSettingsOAuth,
+      onStartConnectedAccountOAuth: startSettingsConnectedAccountsOAuth,
+      onStartOAuth: startSettingsDomainsOAuth,
       onRefreshMailStatus: () => {
         refreshMailStatus().catch((error: unknown) => {
           setRuntimeMailStatusMessage(errorMessage(error, 'Failed to load mail runtime status.'))

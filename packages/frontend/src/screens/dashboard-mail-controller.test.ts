@@ -288,6 +288,30 @@ describe('mail client controller view mapping', () => {
     })
   })
 
+  it('skips first-use dashboard OAuth when a usable Cloudflare grant already exists', () => {
+    expect.hasAssertions()
+    const view = toDashboardView(
+      'success',
+      null,
+      undefined,
+      firstUseMailWorkspace(),
+      domainSettings({
+        status: {
+          connections: [],
+          grants: [cloudflareGrant()]
+        }
+      })
+    )
+
+    expect(view.state).toBe('empty')
+    expect(view.onboardingPrompt).toMatchObject({
+      actionLabel: 'Connect domain',
+      mode: 'configureDomain',
+      state: 'ready',
+      title: 'Choose your domain'
+    })
+  })
+
   it('keeps first-use dashboard onboarding on domain setup while a connected domain needs provisioning', () => {
     expect.hasAssertions()
     const view = toDashboardView(

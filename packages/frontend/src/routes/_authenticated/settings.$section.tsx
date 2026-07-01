@@ -1,11 +1,12 @@
-import { createFileRoute, useRouter } from '@tanstack/react-router'
+import { createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 
 import { readAuthenticatedRouteState } from '../../lib/authenticated-app-route'
 import { validateSettingsSearch } from '../../lib/dashboard-search'
 import { throwRouteRedirect } from '../../lib/route-redirect'
 import {
   getSettingsSectionFromSegment,
-  getSettingsSectionHref
+  getSettingsSectionHref,
+  resolveSettingsRouteSegment
 } from '../../partials/authenticated/settings-dialog-sections'
 import { DashboardMailController } from '../../screens/dashboard-mail-client-controller'
 import { SITE_STRINGS, formatSiteTitle } from '../../strings'
@@ -14,12 +15,12 @@ import type { SettingsSectionId } from '../../partials/authenticated/settings-di
 export const Route = createFileRoute('/_authenticated/settings/$section')({
   validateSearch: validateSettingsSearch,
   loader: ({ context, params }) => {
-    if (
-      params.section === 'cli-access' ||
-      params.section === 'cliAccess' ||
-      params.section === 'developer'
-    ) {
-      throwRouteRedirect(getSettingsSectionHref('security'))
+    const sectionRoute = resolveSettingsRouteSegment(params.section)
+    if (sectionRoute.type === 'redirect') {
+      throwRouteRedirect(sectionRoute.href)
+    }
+    if (sectionRoute.type === 'notFound') {
+      notFound({ throw: true })
     }
     return readAuthenticatedRouteState(context)
   },
@@ -30,7 +31,7 @@ export const Route = createFileRoute('/_authenticated/settings/$section')({
       },
       {
         name: 'description',
-        content: `Manage ${SITE_STRINGS.BRAND_NAME} account, security, organization, and domain settings.`
+        content: `Manage ${SITE_STRINGS.BRAND_NAME} account, security, connected account, organization, and domain settings.`
       }
     ]
   }),
@@ -43,6 +44,10 @@ function SettingsSectionRouteScreen() {
   const search = Route.useSearch()
   const router = useRouter()
   const settingsSection = getSettingsSectionFromSegment(section)
+  if (!settingsSection) {
+    notFound({ throw: true })
+    return null
+  }
 
   return (
     <DashboardMailController

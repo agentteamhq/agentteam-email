@@ -29,7 +29,7 @@ describe('redirect error page state', () => {
     expect(state.errorCode).toBe('invalid_request')
     expect(state.providerMessage).toBe('The request is missing the required redirect uri')
     expect(state.callbackUri).toBe('https://mail.example.test/rpc/auth/api/oauth2/callback/cloudflare')
-    expect(state.retryHref).toBe('/settings/domains/')
+    expect(state.retryHref).toBe('/settings/connected-accounts/')
     expect(state.redactedQueryKeys).toStrictEqual(['access_token', 'code', 'state'])
     expect(state.pageUri).toContain('code=%5Bredacted%5D')
     expect(state.pageUri).toContain('state=%5Bredacted%5D')
