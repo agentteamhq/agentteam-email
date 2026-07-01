@@ -60,6 +60,13 @@ Run the local frontend and backend source-development graph with:
 pnpm dev
 ```
 
+For local OAuth providers that require HTTPS redirect URLs, set
+`DEV_HTTPS=true` in the repo-root `.env`, set `PUBLIC_HOSTNAME` to the matching
+HTTPS origin, and export `DEV_TLS_CERT` plus `DEV_TLS_KEY` from your local
+shell/profile. The frontend Vite dev server reads those two certificate
+variables only when `DEV_HTTPS=true`; keep machine-specific certificate paths
+out of committed files and repo-local example files.
+
 Inspect or stop the source-development support stack with:
 
 ```bash
