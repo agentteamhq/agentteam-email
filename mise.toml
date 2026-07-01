@@ -140,10 +140,9 @@ depends = [
 run = "true"
 
 [tasks."test:charts"]
-description = "Run Helm chart render and client dry-run checks"
+description = "Run offline Helm chart render checks"
 depends = [
-  "//charts:template:missing-required",
-  "//charts:dry-run",
+  "//charts:template",
 ]
 run = "true"
 

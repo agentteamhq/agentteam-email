@@ -284,7 +284,6 @@ The chart validation tasks live in `charts/mise.toml`.
 ```bash
 mise run //charts:lint
 mise run //charts:template
-mise run //charts:dry-run
 mise run //charts:check
 ```
 
