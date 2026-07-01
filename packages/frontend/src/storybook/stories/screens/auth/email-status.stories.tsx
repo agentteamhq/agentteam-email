@@ -1,4 +1,4 @@
-import { useEffect, type PropsWithChildren } from 'react'
+import { useEffect } from 'react'
 import { expect, within } from 'storybook/test'
 
 import {
@@ -9,20 +9,21 @@ import { defaultAuthRouteArgs } from 'src/storybook/auth-route-fixtures'
 import { publicAuthRouteState } from 'src/storybook/screen-fixtures'
 import { AuthRoutePage } from 'src/screens/auth-route-page'
 import { EmailStatusScreen } from 'src/screens/email-status-screen'
+import type { PropsWithChildren } from 'react'
 import type { Meta, StoryObj } from '@storybook/react'
 
 const storyVerifyEmail = 'marin.patel@northstar-ops.example.test'
 
 function VerifyEmailStorage({ children }: PropsWithChildren) {
   useEffect(() => {
-    const previousEmail = window.sessionStorage.getItem(VERIFY_EMAIL_STORAGE_KEY)
-    window.sessionStorage.setItem(VERIFY_EMAIL_STORAGE_KEY, storyVerifyEmail)
+    const previousEmail = globalThis.window.sessionStorage.getItem(VERIFY_EMAIL_STORAGE_KEY)
+    globalThis.window.sessionStorage.setItem(VERIFY_EMAIL_STORAGE_KEY, storyVerifyEmail)
 
     return () => {
       if (previousEmail === null) {
-        window.sessionStorage.removeItem(VERIFY_EMAIL_STORAGE_KEY)
+        globalThis.window.sessionStorage.removeItem(VERIFY_EMAIL_STORAGE_KEY)
       } else {
-        window.sessionStorage.setItem(VERIFY_EMAIL_STORAGE_KEY, previousEmail)
+        globalThis.window.sessionStorage.setItem(VERIFY_EMAIL_STORAGE_KEY, previousEmail)
       }
     }
   }, [])
