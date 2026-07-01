@@ -24,7 +24,6 @@ export function BetterAuthPage(props: PropsWithChildren<BetterAuthPageProps>) {
       <BetterAuthViewTemplate
         view={props.view}
         redirectTo={props.redirectTo}
-        flash={props.flash}
         lastUsedLoginMethod={props.lastUsedLoginMethod}
         resetPasswordToken={props.resetPasswordToken}
       />

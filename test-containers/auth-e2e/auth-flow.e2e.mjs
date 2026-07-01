@@ -35,6 +35,7 @@ const headless = process.env.AT_EMAIL_ADMIN_AUTH_E2E_HEADLESS !== 'false'
 const verifyEmailGateTitle = 'Verify your email'
 const verifyEmailGateDescription =
   'An activation link has been sent to your email address. Please check your inbox and click the link to complete activation.'
+const emailVerifiedFlash = 'Your email has been verified.'
 
 const logs = [
   `[auth-e2e] runDir=${runDir}`,
@@ -99,7 +100,9 @@ try {
     timeout: 60_000,
     waitUntil: 'domcontentloaded'
   })
-  await waitForPath(page, isAuthenticatedLandingPath, 'email verification authenticated redirect')
+  await waitForPath(page, isDashboardPathWithoutSearch, 'email verification dashboard redirect')
+  await page.getByText(emailVerifiedFlash, { exact: true }).waitFor({ state: 'visible', timeout: 60_000 })
+  await assertNoFlashCookie(context)
   await page.screenshot({ fullPage: true, path: path.join(screenshotsDir, 'email-verified-dashboard.png') })
 
   const verifiedSession = await getSessionFromBrowser(page)
@@ -456,6 +459,14 @@ function isVerifyEmailGatePath(url) {
   return url.pathname === '/verify-email/' || url.pathname === '/verify-email'
 }
 
+function isDashboardPath(url) {
+  return url.pathname === '/dashboard/' || url.pathname === '/dashboard'
+}
+
+function isDashboardPathWithoutSearch(url) {
+  return isDashboardPath(url) && url.search === ''
+}
+
 function isAuthenticatedLandingPath(url) {
   return (
     url.pathname === '/dashboard/' ||
@@ -463,6 +474,12 @@ function isAuthenticatedLandingPath(url) {
     url.pathname === '/settings/' ||
     url.pathname === '/settings'
   )
+}
+
+async function assertNoFlashCookie(targetContext) {
+  const cookies = await targetContext.cookies(appOrigin)
+  const flashCookie = cookies.find((cookie) => cookie.name === '_flash')
+  assert(!flashCookie, 'expected email verification flash cookie to be cleared after authenticated dashboard render')
 }
 
 function installPageDiagnostics(targetPage) {
