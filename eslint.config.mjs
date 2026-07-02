@@ -15,7 +15,6 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import reactPerf from 'eslint-plugin-react-perf';
 import reactRefresh from 'eslint-plugin-react-refresh';
 import eslintPluginUnicorn from 'eslint-plugin-unicorn';
-// import simpleImportSort from 'eslint-plugin-simple-import-sort';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
@@ -243,7 +242,6 @@ export default defineConfig([
         }
       },
       plugins: {
-        // 'simple-import-sort': simpleImportSort,
         '@stylistic': stylistic,
         // Register unicorn plugin (no rules enabled) so eslint-disable comments work
         unicorn: eslintPluginUnicorn
@@ -268,26 +266,6 @@ export default defineConfig([
         '@typescript-eslint/array-type': 'off',
         '@typescript-eslint/no-inferrable-types': 'warn',
 
-        // 'simple-import-sort/imports': [
-        //   'error',
-        //   {
-        //     groups: [
-        //       // 1. Side effect imports at the start. For me this is important because I want to import reset.css and global styles at the top of my main file.
-        //       ['^\\u0000'],
-        //       // 2. `react` and packages: Things that start with a letter (or digit or underscore), or `@` followed by a letter.
-        //       ['^react$', '^@?\\w'],
-        //       // 3. Absolute imports and other imports such as Vue-style `@/foo`.
-        //       // Anything not matched in another group. (also relative imports starting with "../")
-        //       ['^@', '^'],
-        //       // 4. relative imports from same folder "./" (I like to have them grouped together)
-        //       ['^\\./'],
-        //       // 5. style module imports always come last, this helps to avoid CSS order issues
-        //       ['^.+\\.(module.css|module.scss)$'],
-        //       // 6. media imports
-        //       ['^.+\\.(gif|png|svg|jpg)$']
-        //     ]
-        //   }
-        // ],
 
         // 'unicorn/numeric-separators-style': 'off',
         // 'unicorn/no-null': 'off',
@@ -729,6 +707,13 @@ export default defineConfig([
       ],
       '@typescript-eslint/no-unnecessary-condition': 'off',
       'no-restricted-syntax': 'off',
+    }
+  },
+  {
+    name: 'proj-disable-import-ordering',
+    rules: {
+      'import/order': 'off',
+      'sort-imports': 'off'
     }
   }
 ]);
