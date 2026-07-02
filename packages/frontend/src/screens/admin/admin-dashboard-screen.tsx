@@ -17,6 +17,7 @@ import { Button } from '../../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
 import { Skeleton } from '../../components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table'
+import { LocalDateTime } from '../../components/local-date-time'
 import { fetchAdminDashboardSummary } from '../../lib/admin-dashboard-rpc'
 import { WebappProviders } from '../../partials/webapp/webapp-providers'
 import type * as React from 'react'
@@ -42,8 +43,11 @@ export function AdminDashboardScreen({
   sessionCleanupEnabled,
   summaryLoader = fetchAdminDashboardSummary
 }: AdminDashboardScreenProps) {
-  const summaryQuery = useQuery(adminDashboardSummaryQueryOptions(summaryLoader))
-  const summary = summaryQuery.data
+  const {
+    data: summary,
+    error: summaryError,
+    isError: summaryIsError
+  } = useQuery(adminDashboardSummaryQueryOptions(summaryLoader))
   const overallHealth = summary ? summarizeOverallHealth(summary) : null
 
   return (
@@ -95,10 +99,10 @@ export function AdminDashboardScreen({
             </div>
           </header>
 
-          {summaryQuery.isError ? (
+          {summaryIsError ? (
             <Alert variant='destructive'>
               <WarningCircleIcon />
-              <AlertDescription>{readErrorMessage(summaryQuery.error)}</AlertDescription>
+              <AlertDescription>{readErrorMessage(summaryError)}</AlertDescription>
             </Alert>
           ) : null}
 
@@ -199,7 +203,7 @@ function AdminDashboardSummaryView({ summary }: { summary: AdminDashboardSummary
                       <Badge variant={auditSeverityVariant(event.severity)}>{event.severity}</Badge>
                     </TableCell>
                     <TableCell className='text-muted-foreground text-right'>
-                      {formatDateTime(event.createdAt)}
+                      <LocalDateTime value={event.createdAt} />
                     </TableCell>
                   </TableRow>
                 ))}
@@ -332,13 +336,6 @@ function auditSeverityVariant(severity: string): 'destructive' | 'outline' | 'se
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat().format(value)
-}
-
-function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short'
-  }).format(new Date(value))
 }
 
 function readErrorMessage(error: unknown): string {

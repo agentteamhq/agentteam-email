@@ -3,6 +3,7 @@ import { agentMailCapabilityCatalog } from '@main/db/agent-mail-permission-schem
 
 import { formatApprovalConstraints } from '../routes/device/capabilities'
 import { AgentTrialClaimScreen } from '../screens/agent-trial-claim-screen'
+import { LocalDateTime } from '../components/local-date-time'
 import {
   DeviceCodeApprovalScreen,
   DeviceCodeVerificationScreen
@@ -528,7 +529,13 @@ function AgentCapabilityApprovalDescription({
       {approval.capabilityRequests.some((request) => request.approvalStrength === 'webauthn') ? (
         <span className='block'>Passkey verification is required for this approval.</span>
       ) : null}
-      <span className='block'>Expires {formatApprovalDateTime(approval.expiresAt)}</span>
+      <span className='block'>
+        Expires{' '}
+        <LocalDateTime
+          value={approval.expiresAt}
+          emptyFallback='never'
+        />
+      </span>
     </span>
   )
 }
@@ -547,15 +554,6 @@ function formatApprovalCapability(value: string, catalog: AgentMailCapabilityCat
     (option) => option.value === (value as AgentMailCapability)
   )
   return capability?.label ?? value
-}
-
-function formatApprovalDateTime(value: string | null) {
-  if (!value) {
-    return 'never'
-  }
-
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
 }
 
 const defaultAgentClaimRouteState = {

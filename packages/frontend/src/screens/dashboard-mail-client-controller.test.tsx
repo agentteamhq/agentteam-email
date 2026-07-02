@@ -2,12 +2,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { cloudflareOAuthCompletionPath } from './dashboard-cloudflare-oauth-routing'
-import {
-  cloudflareConnectionInputForSelectedDomain,
-  DashboardMailController
-} from './dashboard-mail-client-controller'
 import { validateDashboardSearch } from '../lib/dashboard-search'
+import { cloudflareConnectionInputForSelectedDomain } from './dashboard-cloudflare-connection-input'
+import { cloudflareOAuthCompletionPath } from './dashboard-cloudflare-oauth-routing'
+import { DashboardMailController } from './dashboard-mail-client-controller'
 import type { DashboardSearch } from '../lib/dashboard-search'
 import type { DashboardScreenProps } from './dashboard-screen'
 import type { PublicEnv } from '../types'

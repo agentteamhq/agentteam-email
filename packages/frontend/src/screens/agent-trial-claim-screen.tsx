@@ -15,6 +15,7 @@ import { Button } from '../components/ui/button'
 import { Label } from '../components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
 import { Spinner } from '../components/ui/spinner'
+import { LocalDateTime } from '../components/local-date-time'
 import { AuthScreenFrame } from './auth-view-screen'
 import type { AgentMailTrialClaim, AgentMailTrialClaimTarget } from '../lib/agent-access-rpc'
 import type { AgentMailCapability } from '@main/db/agent-mail-permission-schema'
@@ -159,7 +160,7 @@ export function AgentTrialClaimScreen({
                     <p className='text-muted-foreground text-xs font-medium uppercase'>Mailbox</p>
                     <p className='mt-1 truncate font-mono text-sm'>{claim.mailbox.address}</p>
                     <p className='text-muted-foreground mt-2 text-xs'>
-                      Claim expires {formatClaimDateTime(claim.claim.expires_at)}
+                      Claim expires <LocalDateTime value={claim.claim.expires_at} />
                     </p>
                     <Badge
                       className='mt-2'
@@ -391,9 +392,4 @@ function trialClaimClosedMessage(status: AgentTrialClaimStatus): string {
     return 'Trial claim has expired.'
   }
   return 'Trial claim is still pending.'
-}
-
-function formatClaimDateTime(value: string) {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
 }

@@ -3,6 +3,7 @@
 import eslintParserTypeScript from '@typescript-eslint/parser'
 import { defineConfig } from 'eslint/config'
 import eslintPluginBetterTailwindcss from 'eslint-plugin-better-tailwindcss'
+import eslintPluginReactDoctor from 'eslint-plugin-react-doctor'
 import globals from 'globals'
 
 import rootConfig, { betterTailwindCssRules } from '../../eslint.config.mjs'
@@ -414,6 +415,96 @@ const frontendMailBoundaryRules = {
   }
 }
 
+const frontendLocalDateTimeRules = {
+  rules: {
+    'no-direct-local-date-time-formatting': {
+      meta: {
+        type: 'problem',
+        docs: {
+          description:
+            'Require hydrated client-side date/time rendering for user-local date and time display'
+        },
+        messages: {
+          dateTimeFormat:
+            'Render user-local dates/times with LocalDateTime so SSR emits a skeleton and browser locale formatting happens after hydration.',
+          dateToLocale:
+            'Do not format Date values directly in render code. Render user-local dates/times with LocalDateTime.'
+        },
+        schema: []
+      },
+      create(context) {
+        const normalizedFilename = context.filename.replaceAll('\\', '/')
+        if (normalizedFilename.endsWith('/src/components/local-date-time.tsx')) {
+          return {}
+        }
+
+        const dateIdentifiers = new Set()
+
+        function isIntlDateTimeFormat(node) {
+          return (
+            isMemberExpression(node) &&
+            isGlobalIdentifierNamed(context, node.object, 'Intl') &&
+            getPropertyName(node.property) === 'DateTimeFormat'
+          )
+        }
+
+        function isDateConstructor(node) {
+          return node?.type === 'NewExpression' && isNewExpressionForGlobal(context, node, 'Date')
+        }
+
+        function isTrackedDateObject(node) {
+          return isDateConstructor(node) || (node?.type === 'Identifier' && dateIdentifiers.has(node.name))
+        }
+
+        function checkDateLocaleCall(node) {
+          if (!isMemberExpression(node.callee)) {
+            return
+          }
+
+          const propertyName = getPropertyName(node.callee.property)
+          if (
+            propertyName === 'toLocaleDateString' ||
+            propertyName === 'toLocaleTimeString' ||
+            (propertyName === 'toLocaleString' && isTrackedDateObject(node.callee.object))
+          ) {
+            context.report({
+              node: node.callee,
+              messageId: 'dateToLocale'
+            })
+          }
+        }
+
+        return {
+          CallExpression(node) {
+            if (isIntlDateTimeFormat(node.callee)) {
+              context.report({
+                node: node.callee,
+                messageId: 'dateTimeFormat'
+              })
+              return
+            }
+
+            checkDateLocaleCall(node)
+          },
+          NewExpression(node) {
+            if (isIntlDateTimeFormat(node.callee)) {
+              context.report({
+                node: node.callee,
+                messageId: 'dateTimeFormat'
+              })
+            }
+          },
+          VariableDeclarator(node) {
+            if (node.id.type === 'Identifier' && isDateConstructor(node.init)) {
+              dateIdentifiers.add(node.id.name)
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
 export default defineConfig([
   ...rootConfig,
   {
@@ -427,6 +518,9 @@ export default defineConfig([
       'src/lib/auth/**'
     ]
   },
+  eslintPluginReactDoctor.configs.recommended,
+  eslintPluginReactDoctor.configs['tanstack-start'],
+  eslintPluginReactDoctor.configs['tanstack-query'],
   {
     name: 'frontend-tanstack-router-boundaries',
     files: ['src/**/*.{ts,tsx}'],
@@ -445,6 +539,16 @@ export default defineConfig([
     },
     rules: {
       'frontend-mail/no-direct-wildduck-access': 'error'
+    }
+  },
+  {
+    name: 'frontend-local-date-time-boundaries',
+    files: ['src/**/*.{ts,tsx}'],
+    plugins: {
+      'frontend-local-date-time': frontendLocalDateTimeRules
+    },
+    rules: {
+      'frontend-local-date-time/no-direct-local-date-time-formatting': 'error'
     }
   },
   {

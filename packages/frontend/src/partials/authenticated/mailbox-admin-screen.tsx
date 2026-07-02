@@ -77,6 +77,7 @@ import {
 } from '../../components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table'
 import { Skeleton } from '../../components/ui/skeleton'
+import { LocalDateTime } from '../../components/local-date-time'
 import { mailboxLocalPart } from '../../lib/mail-addresses'
 import {
   formatMailboxCapability,
@@ -804,7 +805,10 @@ function PendingAgentEnrollmentTable({
                   />
                 </TableCell>
                 <TableCell className='hidden xl:table-cell'>
-                  {enrollment.tokenExpiresAt ? formatDateTimeLabel(enrollment.tokenExpiresAt) : 'No expiry'}
+                  <LocalDateTime
+                    value={enrollment.tokenExpiresAt}
+                    emptyFallback='No expiry'
+                  />
                 </TableCell>
                 <TableCell className='hidden 2xl:table-cell'>{enrollment.lastUpdated}</TableCell>
                 <TableCell>
@@ -2816,11 +2820,6 @@ function formatStatus(status: MailboxAdminStatus) {
     .split('_')
     .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
     .join(' ')
-}
-
-function formatDateTimeLabel(value: string) {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
 }
 
 function getRecipientOwner(agents: ReadonlyArray<MailboxAdminAgent>, recipient: string) {

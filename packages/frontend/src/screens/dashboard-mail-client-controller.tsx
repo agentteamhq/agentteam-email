@@ -54,6 +54,7 @@ import {
 } from '../lib/mail-rpc'
 import { mailboxAddress, mailboxLocalPart } from '../lib/mail-addresses'
 import { isMailboxAdminSectionId } from '../partials/authenticated/mailbox-admin-models'
+import { cloudflareConnectionInputForSelectedDomain } from './dashboard-cloudflare-connection-input'
 import { cloudflareOAuthCompletionPath } from './dashboard-cloudflare-oauth-routing'
 import { FIRST_USE_SETUP_NAV_ITEM_ID, findSystemFolder } from './dashboard-mail-sidebar-view'
 import { DashboardScreen } from './dashboard-screen'
@@ -75,7 +76,6 @@ import type {
   AgentMailWebThreadMessage,
   AgentMailWebWorkspace,
   CloudflareAccountSummary,
-  CloudflareConnectionInput,
   CloudflareOAuthReturnTarget,
   CloudflareStatusResult,
   CloudflareZoneSummary
@@ -211,6 +211,17 @@ interface DomainSettingsControllerResult {
   settingsState: DomainSettingsState
 }
 
+interface FirstMailboxDraft {
+  addressLocalPart: string
+  displayName: string
+  key: string
+}
+
+interface FirstMailboxErrorState {
+  key: string
+  message: string | null
+}
+
 function useAgentAccessController({
   agentAccessViewLoader,
   createdAgentEnrollment,
@@ -224,14 +235,13 @@ function useAgentAccessController({
 }): AgentAccessSettingsState {
   const router = useRouter()
   const queryClient = useQueryClient()
-  const agentAccessQuery = useQuery(agentAccessQueryOptions(agentAccessViewLoader))
   const {
     data: agentAccessView,
     error: agentAccessError,
     isError: isAgentAccessError,
     isFetching: isAgentAccessFetching,
     refetch: refetchAgentAccess
-  } = agentAccessQuery
+  } = useQuery(agentAccessQueryOptions(agentAccessViewLoader))
   const [message, setMessage] = React.useState<string | null>(null)
   const [mutationBusy, setMutationBusy] = React.useState(false)
   const agentAccessAllowedActions = agentAccessView?.allowedActions
@@ -926,25 +936,6 @@ function selectCloudflareConnectionPublicId(
   )
 }
 
-export function cloudflareConnectionInputForSelectedDomain({
-  account,
-  domain,
-  zone
-}: {
-  account: CloudflareAccountSummary
-  domain: string
-  zone: CloudflareZoneSummary
-}): CloudflareConnectionInput {
-  return {
-    cloudflareAccountId: account.id,
-    cloudflareAccountName: account.name,
-    cloudflareZoneId: zone.id,
-    cloudflareZoneName: zone.name,
-    domain,
-    grantPublicId: zone.grantPublicId
-  }
-}
-
 function firstEligibleCloudflareZone(
   zones: readonly CloudflareZoneSummary[],
   status: CloudflareStatusResult | null
@@ -1159,12 +1150,15 @@ export function DashboardMailController({
   const [mailboxAdminDialog, setMailboxAdminDialog] = React.useState<MailboxAdminDialogState | null>(null)
   const [createdAgentEnrollment, setCreatedAgentEnrollment] =
     React.useState<MailboxAdminAgentEnrollment | null>(null)
-  const [firstMailboxDraft, setFirstMailboxDraft] = React.useState({
+  const [firstMailboxDraftState, setFirstMailboxDraftState] = React.useState<FirstMailboxDraft>({
     addressLocalPart: '',
     displayName: '',
     key: ''
   })
-  const [firstMailboxError, setFirstMailboxError] = React.useState<string | null>(null)
+  const [firstMailboxErrorState, setFirstMailboxErrorState] = React.useState<FirstMailboxErrorState>({
+    key: '',
+    message: null
+  })
   const handleCopyAgentEnrollmentCommand = React.useCallback((command: string) => {
     const clipboard = globalThis.navigator?.clipboard ?? null
     if (!clipboard) {
@@ -1220,7 +1214,12 @@ export function DashboardMailController({
     () => mailWorkspaceQueryOptions(routeSearch, !activeMailboxAdminSection, mailWorkspaceLoader),
     [activeMailboxAdminSection, mailWorkspaceLoader, routeSearch]
   )
-  const workspaceQuery = useQuery(workspaceQueryOptions)
+  const {
+    data: workspace,
+    error: workspaceError,
+    refetch: refetchWorkspace,
+    status: workspaceStatus
+  } = useQuery(workspaceQueryOptions)
   const mailboxAdminSearchQuery = activeMailboxAdminSection
     ? (mailboxAdminSearchBySection[activeMailboxAdminSection] ?? '')
     : ''
@@ -1249,16 +1248,15 @@ export function DashboardMailController({
     () => mailboxAdminQueryOptions(mailboxAdminViewQuery, mailboxAdminViewLoader),
     [mailboxAdminViewLoader, mailboxAdminViewQuery]
   )
-  const mailboxAdminNavigationQuery = useQuery(mailboxAdminNavigationOptions)
-  const mailboxAdminQuery = useQuery(mailboxAdminOptions)
-  const mailboxAdminNavigationData = mailboxAdminNavigationQuery.data
-  const mailboxAdminData = mailboxAdminQuery.data
+  const { data: mailboxAdminNavigationData } = useQuery(mailboxAdminNavigationOptions)
+  const {
+    data: mailboxAdminData,
+    error: mailboxAdminError,
+    refetch: refetchMailboxAdmin,
+    status: mailboxAdminStatus
+  } = useQuery(mailboxAdminOptions)
   const allowedMailboxAdminSections =
     mailboxAdminData?.allowedSections ?? mailboxAdminNavigationData?.allowedSections
-  const mailboxAdminError = mailboxAdminQuery.error
-  const mailboxAdminStatus = mailboxAdminQuery.status
-  const refetchMailboxAdmin = mailboxAdminQuery.refetch
-  const workspace = workspaceQuery.data
   const selectedMessage = workspace?.selectedMessage ?? null
   const selectedMessageActionInput = React.useMemo(
     () =>
@@ -1517,23 +1515,35 @@ export function DashboardMailController({
   const firstMailboxDraftKey = firstMailboxDomain
     ? `${screenProps.routeState.user?.id ?? 'user'}:${firstMailboxDomain}`
     : ''
-
-  React.useEffect(() => {
-    if (!firstMailboxDraftKey || !firstMailboxDomain) {
-      return
-    }
-
-    setFirstMailboxDraft((current) =>
-      current.key === firstMailboxDraftKey
-        ? current
-        : {
-            addressLocalPart: firstMailboxDefaultLocalPart,
-            displayName: firstMailboxDefaultDisplayName,
-            key: firstMailboxDraftKey
-          }
-    )
-    setFirstMailboxError(null)
-  }, [firstMailboxDefaultDisplayName, firstMailboxDefaultLocalPart, firstMailboxDomain, firstMailboxDraftKey])
+  const firstMailboxDefaultDraft = React.useMemo<FirstMailboxDraft>(
+    () => ({
+      addressLocalPart: firstMailboxDefaultLocalPart,
+      displayName: firstMailboxDefaultDisplayName,
+      key: firstMailboxDraftKey
+    }),
+    [firstMailboxDefaultDisplayName, firstMailboxDefaultLocalPart, firstMailboxDraftKey]
+  )
+  const firstMailboxDraft =
+    firstMailboxDraftState.key === firstMailboxDraftKey ? firstMailboxDraftState : firstMailboxDefaultDraft
+  const firstMailboxError =
+    firstMailboxErrorState.key === firstMailboxDraftKey ? firstMailboxErrorState.message : null
+  const setFirstMailboxError = React.useCallback(
+    (message: string | null) => {
+      setFirstMailboxErrorState({
+        key: firstMailboxDraftKey,
+        message
+      })
+    },
+    [firstMailboxDraftKey]
+  )
+  const updateFirstMailboxDraft = React.useCallback(
+    (updateDraft: (draft: FirstMailboxDraft) => FirstMailboxDraft) => {
+      setFirstMailboxDraftState((current) =>
+        updateDraft(current.key === firstMailboxDraftKey ? current : firstMailboxDefaultDraft)
+      )
+    },
+    [firstMailboxDefaultDraft, firstMailboxDraftKey]
+  )
 
   const firstMailboxAddress =
     firstMailboxDomain && firstMailboxDraft.addressLocalPart
@@ -1556,14 +1566,14 @@ export function DashboardMailController({
             domain: firstMailboxDomain,
             errorDescription: firstMailboxError,
             onAddressLocalPartChange: (localPart) => {
-              setFirstMailboxDraft((current) => ({
+              updateFirstMailboxDraft((current) => ({
                 ...current,
                 addressLocalPart: mailboxLocalPart(localPart)
               }))
               setFirstMailboxError(null)
             },
             onDisplayNameChange: (displayName) => {
-              setFirstMailboxDraft((current) => ({
+              updateFirstMailboxDraft((current) => ({
                 ...current,
                 displayName
               }))
@@ -1601,6 +1611,8 @@ export function DashboardMailController({
       normalizedFirstMailboxAddress,
       providedFirstMailboxSetupState,
       saveAccount,
+      setFirstMailboxError,
+      updateFirstMailboxDraft,
       workspace?.accounts.length
     ]
   )
@@ -1615,11 +1627,11 @@ export function DashboardMailController({
         folderDelete,
         folderRename,
         routeSearch,
-        sidebarError: activeMailboxAdminSection ? mailboxAdminError : workspaceQuery.error,
-        sidebarStatus: activeMailboxAdminSection ? mailboxAdminStatus : workspaceQuery.status,
+        sidebarError: activeMailboxAdminSection ? mailboxAdminError : workspaceError,
+        sidebarStatus: activeMailboxAdminSection ? mailboxAdminStatus : workspaceStatus,
         workspace,
-        workspaceError: workspaceQuery.error,
-        workspaceStatus: workspaceQuery.status
+        workspaceError,
+        workspaceStatus
       }),
     [
       activeMailboxAdminSection,
@@ -1633,8 +1645,8 @@ export function DashboardMailController({
       mailboxAdminStatus,
       routeSearch,
       workspace,
-      workspaceQuery.error,
-      workspaceQuery.status
+      workspaceError,
+      workspaceStatus
     ]
   )
   const openMailboxFromAdmin = React.useCallback(
@@ -2395,10 +2407,10 @@ export function DashboardMailController({
         })
       }}
       onMailboxRefresh={() => {
-        runAsync(workspaceQuery.refetch())
+        runAsync(refetchWorkspace())
       }}
       onMailboxRetry={() => {
-        runAsync(workspaceQuery.refetch())
+        runAsync(refetchWorkspace())
       }}
       onMailboxSearchChange={(mailQuery) => {
         navigateMail({
@@ -2417,7 +2429,7 @@ export function DashboardMailController({
         })
       }}
       onMessageRetry={() => {
-        runAsync(workspaceQuery.refetch())
+        runAsync(refetchWorkspace())
       }}
       sidebarView={sidebarView}
     />
