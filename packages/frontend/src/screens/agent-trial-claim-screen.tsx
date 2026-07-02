@@ -3,8 +3,8 @@ import {
   BuildingsIcon,
   CheckCircleIcon,
   EnvelopeSimpleIcon,
-  RobotIcon,
   ShieldCheckIcon,
+  UserIcon,
   XCircleIcon
 } from '@phosphor-icons/react'
 import { agentMailCapabilityCatalog } from '@main/db/agent-mail-permission-schema'
@@ -119,7 +119,7 @@ export function AgentTrialClaimScreen({
             className='bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center
               rounded-md'
           >
-            <RobotIcon className='size-5' />
+            <UserIcon className='size-5' />
           </div>
           <div>
             <h1 className='text-xl font-semibold'>Claim trial agent</h1>
@@ -141,7 +141,7 @@ export function AgentTrialClaimScreen({
             <>
               <div className='bg-muted/50 rounded-md border p-4'>
                 <div className='flex items-start gap-3'>
-                  <RobotIcon className='text-muted-foreground mt-0.5 size-5 shrink-0' />
+                  <UserIcon className='text-muted-foreground mt-0.5 size-5 shrink-0' />
                   <div className='min-w-0 flex-1'>
                     <p className='text-muted-foreground text-xs font-medium uppercase'>Agent</p>
                     <p className='mt-1 truncate text-sm font-medium'>{claim.agent.name}</p>

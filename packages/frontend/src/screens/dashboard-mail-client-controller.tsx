@@ -544,8 +544,8 @@ function useDomainSettingsController({
 
       const result = await finalizeCloudflareOAuth(intentPublicId)
       setRuntimeMessage(
-        result.missingScopes.length > 0
-          ? `Missing Cloudflare scopes: ${result.missingScopes.join(', ')}`
+        result.missingRequiredScopeCount > 0
+          ? `Cloudflare needs ${formatRequiredPermissionCount(result.missingRequiredScopeCount)}. Reconnect Cloudflare to continue.`
           : 'Cloudflare account connected'
       )
 
@@ -649,47 +649,6 @@ function useDomainSettingsController({
     }
   }, [isInjectedState, readOnly, runtimeSelectedAccountId, runtimeSelectedGrantPublicId, runtimeStatus])
 
-  const connectDomain = React.useCallback(async () => {
-    if (isInjectedState || readOnly) {
-      return
-    }
-
-    if (!selectedAccount || !selectedZone || !runtimeDraftDomain) {
-      setRuntimeMessage('Select a Cloudflare account, zone, and domain')
-      return
-    }
-
-    setRuntimeBusy(true)
-    setRuntimeMessage(null)
-    try {
-      const nextStatus = await connectCloudflareDomain({
-        ...cloudflareConnectionInputForSelectedDomain({
-          account: selectedAccount,
-          domain: runtimeDraftDomain,
-          zone: selectedZone
-        })
-      })
-      setRuntimeStatus(nextStatus)
-      setRuntimeSelectedDomainPublicId(
-        selectCloudflareConnectionPublicId(
-          nextStatus,
-          nextStatus.connections.find(
-            (connection) =>
-              connection.cloudflareAccountId === selectedAccount.id &&
-              connection.cloudflareZoneId === selectedZone.id &&
-              connection.domain === runtimeDraftDomain
-          )?.publicId
-        )
-      )
-      setRuntimeMode('domain')
-      setRuntimeMessage('Cloudflare domain connected')
-    } catch (error) {
-      setRuntimeMessage(errorMessage(error, 'Failed to connect Cloudflare domain.'))
-    } finally {
-      setRuntimeBusy(false)
-    }
-  }, [isInjectedState, readOnly, runtimeDraftDomain, selectedAccount, selectedZone])
-
   const provisionDomain = React.useCallback(
     async (connectionPublicId: NonNullable<DomainSettingsState['selectedDomainPublicId']>) => {
       if (isInjectedState || readOnly) {
@@ -744,22 +703,25 @@ function useDomainSettingsController({
         throw new Error('Cloudflare connection was not returned.')
       }
 
-      setRuntimeStatus(connectedStatus)
-      setRuntimeSelectedDomainPublicId(connectionPublicId)
-      setRuntimeMode('domain')
-
       const provisionedStatus = await provisionCloudflareConnection(connectionPublicId)
       setRuntimeStatus(provisionedStatus)
       setRuntimeSelectedDomainPublicId(
         selectCloudflareConnectionPublicId(provisionedStatus, connectionPublicId)
       )
-      setRuntimeMessage('Domain setup complete')
+      setRuntimeMode('domain')
+      setRuntimeMessage(
+        isCloudflareConnectionProvisioned(provisionedStatus, connectionPublicId)
+          ? 'Domain setup complete'
+          : 'Cloudflare email setup needs attention.'
+      )
     } catch (error) {
+      await refreshStatus().catch(() => null)
+      setRuntimeMode('addDomain')
       setRuntimeMessage(errorMessage(error, 'Failed to set up Cloudflare domain.'))
     } finally {
       setRuntimeBusy(false)
     }
-  }, [isInjectedState, readOnly, runtimeDraftDomain, selectedAccount, selectedZone])
+  }, [isInjectedState, readOnly, refreshStatus, runtimeDraftDomain, selectedAccount, selectedZone])
 
   const disconnectCloudflare = React.useCallback(
     async (grantPublicId: CloudflareGrantPublicId) => {
@@ -806,9 +768,6 @@ function useDomainSettingsController({
         }
         setRuntimeMode('addDomain')
         setRuntimeMessage(null)
-      },
-      onConnectDomain: () => {
-        connectDomain().catch(handleUnexpectedCloudflareActionError)
       },
       onDisconnectCloudflare: (grantPublicId) => {
         disconnectCloudflare(grantPublicId).catch(handleUnexpectedCloudflareActionError)
@@ -897,6 +856,15 @@ function selectCloudflareConnectionPublicId(
   )
 }
 
+function isCloudflareConnectionProvisioned(
+  status: CloudflareStatusResult,
+  connectionPublicId: DomainSettingsState['selectedDomainPublicId']
+): boolean {
+  const connection = status.connections.find((candidate) => candidate.publicId === connectionPublicId)
+
+  return connection?.status === 'active' && connection.provisioningStatus === 'succeeded'
+}
+
 function firstEligibleCloudflareZone(
   zones: readonly CloudflareZoneSummary[],
   status: CloudflareStatusResult | null
@@ -907,15 +875,11 @@ function firstEligibleCloudflareZone(
 function usableCloudflareGrantPublicIds(
   status: CloudflareStatusResult | null
 ): Set<CloudflareAccountSummary['grantPublicId']> {
-  return new Set(
-    status?.grants
-      .filter(
-        (grant) =>
-          grant.status === 'active' &&
-          grant.requiredScopes.every((scope) => grant.grantedScopes.includes(scope))
-      )
-      .map((grant) => grant.publicId) ?? []
-  )
+  return new Set(status?.grants.filter((grant) => grant.isUsable).map((grant) => grant.publicId) ?? [])
+}
+
+function formatRequiredPermissionCount(count: number): string {
+  return `${count} required permission${count === 1 ? '' : 's'}`
 }
 
 function parseCloudflareZoneSelectionValue(value: string): {

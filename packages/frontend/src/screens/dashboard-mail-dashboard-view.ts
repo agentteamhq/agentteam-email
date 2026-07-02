@@ -80,12 +80,7 @@ function toFirstUseDashboardOnboardingPrompt(
   firstMailboxSetupState?: FirstMailboxSetupState
 ): NonNullable<AuthenticatedDashboardView['onboardingPrompt']> {
   const status = domainSettingsState.status
-  const hasUsableGrant =
-    status?.grants.some(
-      (grant) =>
-        grant.status === 'active' &&
-        grant.requiredScopes.every((scope) => grant.grantedScopes.includes(scope))
-    ) ?? false
+  const hasUsableGrant = status?.grants.some((grant) => grant.isUsable) ?? false
   const hasConnection = (status?.connections.length ?? 0) > 0
   const isDomainSetupPending =
     status?.connections.some(

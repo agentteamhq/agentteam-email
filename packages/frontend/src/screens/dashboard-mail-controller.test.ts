@@ -4,11 +4,7 @@ import { QueryClient } from '@tanstack/react-query'
 import { invalidateMailboxAdminQueries } from './dashboard-mailbox-admin-query-cache'
 import { toDashboardView } from './dashboard-mail-dashboard-view'
 import { mailboxAdminViewQueryForSection } from './dashboard-mailbox-admin-query'
-import {
-  FIRST_USE_SETUP_NAV_ITEM_ID,
-  actionsForMessage,
-  toSidebarView
-} from './dashboard-mail-sidebar-view'
+import { FIRST_USE_SETUP_NAV_ITEM_ID, actionsForMessage, toSidebarView } from './dashboard-mail-sidebar-view'
 import { toMailboxAdminView } from './dashboard-mailbox-admin-view'
 import type { AgentMailWebWorkspace } from '@main/backend'
 import type { MailboxAdminView } from '../partials/authenticated/mailbox-admin-models'
@@ -246,13 +242,7 @@ describe('mailbox admin controller view mapping', () => {
 describe('mail client controller view mapping', () => {
   it('starts first-use dashboard onboarding with Cloudflare authorization when no grant exists', () => {
     expect.hasAssertions()
-    const view = toDashboardView(
-      'success',
-      null,
-      undefined,
-      firstUseMailWorkspace(),
-      domainSettings()
-    )
+    const view = toDashboardView('success', null, undefined, firstUseMailWorkspace(), domainSettings())
 
     expect(view.state).toBe('empty')
     expect(view.onboardingPrompt).toMatchObject({
@@ -328,8 +318,11 @@ describe('mail client controller view mapping', () => {
           connections: [],
           grants: [
             cloudflareGrant({
-              grantedScopes: ['account:read'],
-              publicId: 'grant-missing-scope-public-id' as DomainSettingsStatus['grants'][number]['publicId']
+              isUsable: false,
+              missingRequiredScopeCount: 1,
+              publicId:
+                'grant-missing-permission-public-id' as DomainSettingsStatus['grants'][number]['publicId'],
+              requiresReconnect: true
             }),
             cloudflareGrant({
               publicId: 'grant-usable-public-id' as DomainSettingsStatus['grants'][number]['publicId']
@@ -347,7 +340,7 @@ describe('mail client controller view mapping', () => {
     })
   })
 
-  it('keeps first-use dashboard OAuth when active Cloudflare grants are missing required scopes', () => {
+  it('keeps first-use dashboard OAuth when active Cloudflare grants are missing required permissions', () => {
     expect.hasAssertions()
     const view = toDashboardView(
       'success',
@@ -359,7 +352,9 @@ describe('mail client controller view mapping', () => {
           connections: [],
           grants: [
             cloudflareGrant({
-              grantedScopes: ['account:read']
+              isUsable: false,
+              missingRequiredScopeCount: 1,
+              requiresReconnect: true
             })
           ]
         }
@@ -798,12 +793,11 @@ function cloudflareGrant(
 ): DomainSettingsStatus['grants'][number] {
   return {
     cloudflareEmail: 'admin@example.com',
-    cloudflareUserId: 'cloudflare-user-id',
-    grantedScopes: ['account:read', 'zone:read'],
+    isUsable: true,
     lastErrorMessage: null,
-    lastTokenCheckAt: new Date('2026-06-21T16:12:00.000Z'),
+    missingRequiredScopeCount: 0,
     publicId: 'grant-public-id' as DomainSettingsStatus['grants'][number]['publicId'],
-    requiredScopes: ['account:read', 'zone:read'],
+    requiresReconnect: false,
     status: 'active',
     ...overrides
   }

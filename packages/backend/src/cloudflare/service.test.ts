@@ -122,8 +122,10 @@ describe('Cloudflare public views', () => {
     })
     expect(grantView).toMatchObject({
       cloudflareEmail: 'admin@example.test',
-      cloudflareUserId: 'cloudflare-user-1',
+      isUsable: true,
+      missingRequiredScopeCount: 0,
       publicId: expect.any(String),
+      requiresReconnect: false,
       status: 'active'
     })
     expect(connectionView).not.toHaveProperty('id')
@@ -138,8 +140,18 @@ describe('Cloudflare public views', () => {
     expect(grantView).not.toHaveProperty('userId')
     expect(grantView).not.toHaveProperty('organizationId')
     expect(grantView).not.toHaveProperty('betterAuthAccountId')
+    expect(grantView).not.toHaveProperty('cloudflareUserId')
+    expect(grantView).not.toHaveProperty('grantedScopes')
+    expect(grantView).not.toHaveProperty('requiredScopes')
+    expect(grantView).not.toHaveProperty('lastErrorCode')
+    expect(grantView).not.toHaveProperty('lastRefreshAt')
+    expect(grantView).not.toHaveProperty('lastTokenCheckAt')
+    expect(grantView).not.toHaveProperty('createdAt')
+    expect(grantView).not.toHaveProperty('updatedAt')
     expect(serialized).not.toContain('encrypted-worker-webhook-signing-secret')
     expect(serialized).not.toContain('cloudflare-worker:secret')
+    expect(serialized).not.toContain('cloudflare-user-1')
+    expect(serialized).not.toContain('zone:read')
     expect(serialized).not.toContain('agent-mail-archive')
     expect(serialized).not.toContain('https://example.r2.cloudflarestorage.com')
   })
@@ -316,19 +328,19 @@ describe('Cloudflare OAuth finalize service', () => {
     })
     const { finalizeCloudflareOAuth } = await import('./service')
 
-    await expect(
-      finalizeCloudflareOAuth({
-        headers: new Headers(),
-        intentPublicId: TEST_INTENT_PUBLIC_ID
-      })
-    ).resolves.toMatchObject({
-      grant: {
-        cloudflareUserId: 'cloudflare-user-shared',
-        publicId: TEST_CURRENT_USER_GRANT_PUBLIC_ID,
-        status: 'active'
-      }
+    const result = await finalizeCloudflareOAuth({
+      headers: new Headers(),
+      intentPublicId: TEST_INTENT_PUBLIC_ID
     })
 
+    expect(result.grant).toMatchObject({
+      isUsable: false,
+      publicId: TEST_CURRENT_USER_GRANT_PUBLIC_ID,
+      requiresReconnect: true,
+      status: 'active'
+    })
+    expect(result.grant.missingRequiredScopeCount).toBeGreaterThan(0)
+    expect(result.missingRequiredScopeCount).toBe(result.grant.missingRequiredScopeCount)
     expect(grants).toHaveLength(2)
     expect(grants.find((grant) => grant._id === TEST_OTHER_USER_GRANT_ID)).toMatchObject({
       cloudflareUserId: 'cloudflare-user-shared',
@@ -423,7 +435,9 @@ describe('Cloudflare domain authorization', () => {
       ],
       grants: [
         {
-          cloudflareUserId: 'cloudflare-user-1',
+          isUsable: true,
+          missingRequiredScopeCount: 0,
+          requiresReconnect: false,
           status: 'active'
         }
       ]
@@ -791,11 +805,11 @@ describe('Cloudflare disconnect service', () => {
     ).resolves.toMatchObject({
       grants: expect.arrayContaining([
         expect.objectContaining({
-          cloudflareUserId: 'cloudflare-user-old',
+          publicId: TEST_OLDER_GRANT_PUBLIC_ID,
           status: 'revoked'
         }),
         expect.objectContaining({
-          cloudflareUserId: 'cloudflare-user-new',
+          publicId: TEST_NEWER_GRANT_PUBLIC_ID,
           status: 'active'
         })
       ])
@@ -1467,14 +1481,16 @@ function cloudflareDisconnectGlobals() {
       }
       return sortedQuery(connections)
     }),
-    connectionUpdateMany: vi.fn((query: Record<string, unknown>, update: { $set: Record<string, unknown> }) => {
-      for (const connection of connections) {
-        if (recordMatchesQuery(connection, query)) {
-          Object.assign(connection, update.$set)
+    connectionUpdateMany: vi.fn(
+      (query: Record<string, unknown>, update: { $set: Record<string, unknown> }) => {
+        for (const connection of connections) {
+          if (recordMatchesQuery(connection, query)) {
+            Object.assign(connection, update.$set)
+          }
         }
+        return execQuery({ modifiedCount: connections.length })
       }
-      return execQuery({ modifiedCount: connections.length })
-    }),
+    ),
     deploymentUpdateMany: vi.fn(() => execQuery({ modifiedCount: 1 })),
     domainUpdateMany: vi.fn(() => execQuery({ modifiedCount: 1 })),
     grantFind: vi.fn(() => sortedQuery(grants)),
@@ -1730,9 +1746,7 @@ function cloudflareSelectionGrant(kind: 'older' | 'newer') {
     organizationId: TEST_ORGANIZATION_ID,
     requiredScopes: ['zone:read'],
     status: 'active',
-    updatedAt: isOlder
-      ? new Date('2026-06-23T10:00:00.000Z')
-      : new Date('2026-06-24T10:00:00.000Z'),
+    updatedAt: isOlder ? new Date('2026-06-23T10:00:00.000Z') : new Date('2026-06-24T10:00:00.000Z'),
     userId: TEST_USER_ID
   }
 }

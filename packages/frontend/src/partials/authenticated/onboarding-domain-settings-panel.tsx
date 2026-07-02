@@ -37,7 +37,7 @@ interface OnboardingDomainSettingsController {
   busy: boolean
   draftDomain: string
   message: string | null
-  missingScopes: readonly string[]
+  missingRequiredScopeCount: number
   onLoadAccounts: () => void
   onSelectZone: (zoneId: string) => void
   onSetupDomain: () => void
@@ -82,9 +82,9 @@ function onboardingDomainSettingsControllerFromState(
   const selectedZoneId = state?.selectedZoneId || selectedConnection?.cloudflareZoneId || ''
   const draftDomain = state?.draftDomain || selectedConnection?.domain || ''
   const activeGrants = grants.filter((grant) => grant.status === 'active')
-  const usableGrants = activeGrants.filter((grant) => getMissingScopes(grant).length === 0)
+  const usableGrants = activeGrants.filter((grant) => grant.isUsable)
   const activeGrant = usableGrants[0] ?? activeGrants[0] ?? null
-  const missingScopes = activeGrant ? getMissingScopes(activeGrant) : []
+  const missingRequiredScopeCount = activeGrant?.missingRequiredScopeCount ?? 0
   const action =
     <TArgs extends unknown[]>(handler: ((...args: TArgs) => void) | undefined) =>
     (...args: TArgs) => {
@@ -98,7 +98,7 @@ function onboardingDomainSettingsControllerFromState(
     busy: state?.busy ?? false,
     draftDomain,
     message,
-    missingScopes,
+    missingRequiredScopeCount,
     onLoadAccounts: action(state?.onLoadAccounts),
     onSelectZone: action(state?.onSelectZone),
     onSetupDomain: action(state?.onSetupDomain),
@@ -151,7 +151,7 @@ function OnboardingAddDomainPanel({ settings }: { settings: OnboardingDomainSett
   const primaryDisabled =
     settings.busy ||
     settings.readOnly ||
-    settings.missingScopes.length > 0 ||
+    settings.missingRequiredScopeCount > 0 ||
     (hasDomains && (!selectedZone || !selectedDomainName))
 
   if (!hasUsableGrant) {
@@ -169,7 +169,7 @@ function OnboardingAddDomainPanel({ settings }: { settings: OnboardingDomainSett
                 </CardTitle>
                 <CardDescription className='mt-1'>
                   {activeGrant
-                    ? 'Reconnect Cloudflare with the scopes required to choose domains.'
+                    ? 'Reconnect Cloudflare with the permissions required to choose domains.'
                     : 'Connect Cloudflare to choose your domain.'}
                 </CardDescription>
               </div>
@@ -188,9 +188,10 @@ function OnboardingAddDomainPanel({ settings }: { settings: OnboardingDomainSett
             </CardAction>
           </CardHeader>
         </Card>
-        {settings.missingScopes.length > 0 ? (
+        {settings.missingRequiredScopeCount > 0 ? (
           <div className='border-destructive/40 text-destructive rounded-lg border p-3 text-sm'>
-            Missing Cloudflare scopes: {settings.missingScopes.join(', ')}
+            Reconnect Cloudflare to grant{' '}
+            {formatOnboardingMissingPermissionCount(settings.missingRequiredScopeCount)}.
           </div>
         ) : null}
         {settings.message ? <p className='text-muted-foreground text-sm'>{settings.message}</p> : null}
@@ -255,7 +256,7 @@ function OnboardingAddDomainPanel({ settings }: { settings: OnboardingDomainSett
           items={[
             {
               label: 'Cloudflare authorization confirmed',
-              state: settings.missingScopes.length > 0 ? 'error' : 'complete'
+              state: settings.missingRequiredScopeCount > 0 ? 'error' : 'complete'
             },
             {
               label: 'Route incoming mail through AgentTeam Email',
@@ -272,9 +273,10 @@ function OnboardingAddDomainPanel({ settings }: { settings: OnboardingDomainSett
           ]}
         />
 
-        {settings.missingScopes.length > 0 ? (
+        {settings.missingRequiredScopeCount > 0 ? (
           <div className='border-destructive/40 text-destructive rounded-lg border p-3 text-sm'>
-            Missing Cloudflare scopes: {settings.missingScopes.join(', ')}
+            Reconnect Cloudflare to grant{' '}
+            {formatOnboardingMissingPermissionCount(settings.missingRequiredScopeCount)}.
           </div>
         ) : null}
         {settings.message ? <p className='text-muted-foreground text-sm'>{settings.message}</p> : null}
@@ -431,13 +433,13 @@ function onboardingCloudflareZoneSelectionValue(zone: CloudflareZoneSummary): st
   return `${zone.grantPublicId}|${zone.id}`
 }
 
-function getMissingScopes(grant: CloudflareGrantView): string[] {
-  return grant.requiredScopes.filter((scope) => !grant.grantedScopes.includes(scope))
-}
-
 function formatOnboardingReferenceId(value: string | null | undefined): string | null {
   if (!value) {
     return null
   }
   return value.length > 12 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value
+}
+
+function formatOnboardingMissingPermissionCount(count: number): string {
+  return `${count} required permission${count === 1 ? '' : 's'}`
 }

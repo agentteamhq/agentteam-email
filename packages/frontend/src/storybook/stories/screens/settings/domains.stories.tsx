@@ -2,17 +2,15 @@ import {
   DomainsAddDomainAuthorizeCloudflare as DomainsAddDomainAuthorizeCloudflareStory,
   DomainsAddDomainSelectZone as DomainsAddDomainSelectZoneStory,
   DomainsDenseDomainList as DomainsDenseDomainListStory,
-  DomainsDomainConnected as DomainsDomainConnectedStory,
   DomainsDomainDisconnected as DomainsDomainDisconnectedStory,
   DomainsDomainLive as DomainsDomainLiveStory,
   DomainsDomainNeedsAttention as DomainsDomainNeedsAttentionStory,
-  DomainsDomainProvisioning as DomainsDomainProvisioningStory,
   DomainsDomainRetryBusy as DomainsDomainRetryBusyStory,
-  DomainsLoadDomains as DomainsLoadDomainsStory,
   DomainsLoadDomainsBusy as DomainsLoadDomainsBusyStory,
+  DomainsLoadDomains as DomainsLoadDomainsStory,
   DomainsLoadErrorMessage as DomainsLoadErrorMessageStory,
   DomainsLoading as DomainsLoadingStory,
-  DomainsMissingCloudflareScopes as DomainsMissingCloudflareScopesStory,
+  DomainsMissingCloudflarePermissions as DomainsMissingCloudflarePermissionsStory,
   settingsScreenStoryMeta
 } from '../../settings-dialog.definitions'
 import type { Meta, StoryObj } from '@storybook/react'
@@ -41,9 +39,9 @@ export const DomainsAddDomainAuthorizeCloudflare: Story = {
   name: 'Add domain authorize Cloudflare'
 }
 
-export const DomainsMissingCloudflareScopes: Story = {
-  ...DomainsMissingCloudflareScopesStory,
-  name: 'Missing Cloudflare scopes'
+export const DomainsMissingCloudflarePermissions: Story = {
+  ...DomainsMissingCloudflarePermissionsStory,
+  name: 'Missing Cloudflare permissions'
 }
 
 export const DomainsLoadDomains: Story = {
@@ -59,16 +57,6 @@ export const DomainsLoadDomainsBusy: Story = {
 export const DomainsAddDomainSelectZone: Story = {
   ...DomainsAddDomainSelectZoneStory,
   name: 'Add domain select zone'
-}
-
-export const DomainsDomainConnected: Story = {
-  ...DomainsDomainConnectedStory,
-  name: 'Domain connected'
-}
-
-export const DomainsDomainProvisioning: Story = {
-  ...DomainsDomainProvisioningStory,
-  name: 'Domain provisioning'
 }
 
 export const DomainsDomainLive: Story = {

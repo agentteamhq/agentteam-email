@@ -1,21 +1,19 @@
-import { expect, fn, within } from 'storybook/test'
+import { expect, fn, userEvent, within } from 'storybook/test'
 
 import {
   domainSettingsAddDomainAuthorizeCloudflareState,
   domainSettingsAddDomainSelectZoneState,
   domainSettingsDenseDomainListState,
-  domainSettingsDomainConnectedState,
   domainSettingsDomainDisconnectedState,
   domainSettingsDomainLiveState,
   domainSettingsDomainNeedsAttentionState,
-  domainSettingsDomainProvisioningState,
   domainSettingsDomainRetryBusyState,
   domainSettingsEmptyFirstUseState,
   domainSettingsLoadDomainsBusyState,
   domainSettingsLoadDomainsState,
   domainSettingsLoadErrorState,
   domainSettingsLoadingState,
-  domainSettingsMissingCloudflareScopesState
+  domainSettingsMissingCloudflarePermissionsState
 } from '../authenticated-section-fixtures'
 import {
   agentAccessActionableState,
@@ -416,11 +414,65 @@ export const ConnectedAccountsCloudflare: Story = {
     await expect(args.storyPath).toBe('/settings/connected-accounts/')
     await expect(await canvas.findByText('Connected accounts', { selector: 'p' })).toBeInTheDocument()
     await expect(await canvas.findByText('admin@example.com')).toBeInTheDocument()
+    await expect((await canvas.findAllByText('Connected')).length).toBeGreaterThan(0)
     await expect(await canvas.findByRole('button', { name: 'Connect another account' })).toBeEnabled()
     await expect(
       (await canvas.findAllByRole('button', { name: /^disconnect account$/i })).length
     ).toBeGreaterThan(0)
     await expect(canvas.queryByRole('button', { name: /^disconnect cloudflare$/i })).not.toBeInTheDocument()
+    await expect(canvas.queryByText(/cloudflare-user/iu)).not.toBeInTheDocument()
+    await expect(canvas.queryByText(/grant /iu)).not.toBeInTheDocument()
+    await expect(canvas.queryByText(/last checked/iu)).not.toBeInTheDocument()
+  }
+}
+
+export const ConnectedAccountsReconnectRequired: Story = {
+  args: buildSettingsScreenArgs({
+    domainSettingsState: domainSettingsMissingCloudflarePermissionsState,
+    settingsSection: 'connected-accounts'
+  }),
+  play: async ({ canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+
+    await expect(await canvas.findByText('limited-admin@example.com')).toBeInTheDocument()
+    await expect(await canvas.findByText('Reconnect required')).toBeInTheDocument()
+    await expect(await canvas.findByText(/1 required permission/iu)).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /^reconnect account$/i })).toBeEnabled()
+  }
+}
+
+export const ConnectedAccountsDisconnectConfirmation: Story = {
+  args: buildSettingsScreenArgs({
+    domainSettingsState: {
+      ...domainSettingsAddDomainSelectZoneState,
+      onDisconnectCloudflare: fn()
+    },
+    settingsSection: 'connected-accounts'
+  }),
+  play: async ({ args, canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+    const body = within(document.body)
+    const disconnectCloudflare = args.domainSettingsState?.onDisconnectCloudflare
+    const grantPublicId = domainSettingsAddDomainSelectZoneState.status.grants[0]?.publicId
+
+    if (!disconnectCloudflare) {
+      throw new Error('Expected disconnect handler for confirmation story.')
+    }
+    if (!grantPublicId) {
+      throw new Error('Expected a connected Cloudflare grant for confirmation story.')
+    }
+
+    await userEvent.click((await canvas.findAllByRole('button', { name: /^disconnect account$/i }))[0])
+    await expect(disconnectCloudflare).not.toHaveBeenCalled()
+
+    const dialog = await body.findByRole('alertdialog', { name: /^disconnect cloudflare account\\?/i })
+    await expect(dialog).toBeInTheDocument()
+    await expect(
+      await within(dialog).findByText(/domains tied to this cloudflare account/iu)
+    ).toBeInTheDocument()
+
+    await userEvent.click(await within(dialog).findByRole('button', { name: /^disconnect account$/i }))
+    await expect(disconnectCloudflare).toHaveBeenCalledWith(grantPublicId)
   }
 }
 
@@ -476,9 +528,9 @@ export const DomainsAddDomainAuthorizeCloudflare: Story = {
   }
 }
 
-export const DomainsMissingCloudflareScopes: Story = {
+export const DomainsMissingCloudflarePermissions: Story = {
   args: buildSettingsScreenArgs({
-    domainSettingsState: domainSettingsMissingCloudflareScopesState,
+    domainSettingsState: domainSettingsMissingCloudflarePermissionsState,
     settingsSection: 'domains'
   }),
   play: async ({ args, canvasElement }) => {
@@ -515,20 +567,6 @@ export const DomainsLoadDomainsBusy: Story = {
 export const DomainsAddDomainSelectZone: Story = {
   args: buildSettingsScreenArgs({
     domainSettingsState: domainSettingsAddDomainSelectZoneState,
-    settingsSection: 'domains'
-  })
-}
-
-export const DomainsDomainConnected: Story = {
-  args: buildSettingsScreenArgs({
-    domainSettingsState: domainSettingsDomainConnectedState,
-    settingsSection: 'domains'
-  })
-}
-
-export const DomainsDomainProvisioning: Story = {
-  args: buildSettingsScreenArgs({
-    domainSettingsState: domainSettingsDomainProvisioningState,
     settingsSection: 'domains'
   })
 }

@@ -27,6 +27,11 @@ describe('settings Cloudflare account and domain separation', () => {
     expect(markup).toContain('Connected accounts')
     expect(markup).toContain('Disconnect account')
     expect(markup).not.toContain('Disconnect Cloudflare')
+    expect(markup).not.toContain('cloudflare-user-id')
+    expect(markup).not.toContain('grant-public-id')
+    expect(markup).not.toContain('account:read')
+    expect(markup).not.toContain('zone:read')
+    expect(markup).not.toContain('Last checked')
   })
 })
 
@@ -44,12 +49,11 @@ function domainSettingsState(): DomainSettingsState {
 function cloudflareGrant(): DomainSettingsStatus['grants'][number] {
   return {
     cloudflareEmail: 'admin@example.com',
-    cloudflareUserId: 'cloudflare-user-id',
-    grantedScopes: ['account:read', 'zone:read'],
+    isUsable: true,
     lastErrorMessage: null,
-    lastTokenCheckAt: new Date('2026-06-21T16:12:00.000Z'),
+    missingRequiredScopeCount: 0,
     publicId: 'grant-public-id' as DomainSettingsStatus['grants'][number]['publicId'],
-    requiredScopes: ['account:read', 'zone:read'],
+    requiresReconnect: false,
     status: 'active'
   }
 }

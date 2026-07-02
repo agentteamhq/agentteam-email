@@ -26,39 +26,29 @@ type CloudflareConnectionFixture = DomainSettingsStatus['connections'][number]
 const cloudflareGrantPublicId = (value: string) => value as CloudflareGrantFixture['publicId']
 const cloudflareConnectionPublicId = (value: string) => value as CloudflareConnectionFixture['publicId']
 
-const requiredCloudflareScopes = [
-  'account:read',
-  'user:read',
-  'zone:read',
-  'workers:write',
-  'workers_routes:write',
-  'r2:write'
-]
-
 const activeCloudflareGrant = {
   publicId: cloudflareGrantPublicId('4k8wVa7Z5pM9eT2hQ0nYbC'),
-  cloudflareUserId: 'cloudflare-user-9f52',
   cloudflareEmail: 'admin@example.com',
-  grantedScopes: requiredCloudflareScopes,
-  requiredScopes: requiredCloudflareScopes,
+  isUsable: true,
+  missingRequiredScopeCount: 0,
+  requiresReconnect: false,
   status: 'active',
-  lastTokenCheckAt: new Date('2026-06-21T16:12:00.000Z'),
   lastErrorMessage: null
 } satisfies CloudflareGrantFixture
 
 const secondaryCloudflareGrant = {
   ...activeCloudflareGrant,
   publicId: cloudflareGrantPublicId('7n2bQa9K4rT0wCx6Pd3LmS'),
-  cloudflareUserId: 'cloudflare-user-a381',
-  cloudflareEmail: 'ops@example.com',
-  lastTokenCheckAt: new Date('2026-06-21T16:14:00.000Z')
+  cloudflareEmail: 'ops@example.com'
 } satisfies CloudflareGrantFixture
 
-const missingScopeCloudflareGrant = {
+const missingPermissionCloudflareGrant = {
   ...activeCloudflareGrant,
   publicId: cloudflareGrantPublicId('2x9pRc5N8vH1mYs4Jd6FgB'),
   cloudflareEmail: 'limited-admin@example.com',
-  grantedScopes: requiredCloudflareScopes.filter((scope) => scope !== 'r2:write')
+  isUsable: false,
+  missingRequiredScopeCount: 1,
+  requiresReconnect: true
 } satisfies CloudflareGrantFixture
 
 const connectedCloudflareAccounts = [
@@ -95,7 +85,7 @@ const connectedCloudflareZones = [
   }
 ] satisfies DomainSettingsState['zones']
 
-const pendingCloudflareConnection = {
+const baseCloudflareConnection = {
   publicId: cloudflareConnectionPublicId('5Ue0nPqJ3xVb1ZyL8sTaMn'),
   cloudflareAccountId: '3d6f2b2d8e2a49a2bb6f2fb97e4c9d17',
   cloudflareAccountName: 'AgentTeam Production',
@@ -103,31 +93,22 @@ const pendingCloudflareConnection = {
   cloudflareZoneName: 'agentteam.example',
   domain: 'agentteam.example',
   workerScriptName: null,
-  status: 'provisioning',
-  provisioningStatus: 'pending',
+  status: 'active',
+  provisioningStatus: 'succeeded',
   lastProvisionedAt: null,
   lastErrorMessage: null,
   updatedAt: new Date('2026-06-21T16:18:00.000Z')
 } satisfies CloudflareConnectionFixture
 
 const liveCloudflareConnection = {
-  ...pendingCloudflareConnection,
+  ...baseCloudflareConnection,
   workerScriptName: 'agent-mail-ingest-agentteam-example',
-  status: 'active',
-  provisioningStatus: 'succeeded',
   lastProvisionedAt: new Date('2026-06-21T16:24:00.000Z'),
   updatedAt: new Date('2026-06-21T16:26:00.000Z')
 } satisfies CloudflareConnectionFixture
 
-const connectedCloudflareConnection = {
-  ...pendingCloudflareConnection,
-  status: 'connected',
-  provisioningStatus: 'not_started',
-  updatedAt: new Date('2026-06-21T16:16:00.000Z')
-} satisfies CloudflareConnectionFixture
-
 const degradedCloudflareConnection = {
-  ...pendingCloudflareConnection,
+  ...baseCloudflareConnection,
   status: 'degraded',
   provisioningStatus: 'failed',
   lastErrorMessage: 'Cloudflare worker route could not be applied to the selected zone.',
@@ -135,7 +116,7 @@ const degradedCloudflareConnection = {
 } satisfies CloudflareConnectionFixture
 
 const disconnectedCloudflareConnection = {
-  ...connectedCloudflareConnection,
+  ...baseCloudflareConnection,
   publicId: cloudflareConnectionPublicId('4Bd0nPqJ3xVb1ZyL8sTaCx'),
   domain: 'disconnected.agentteam.example',
   cloudflareZoneName: 'disconnected.agentteam.example',
@@ -156,10 +137,12 @@ const denseCloudflareConnections = [
     updatedAt: new Date('2026-06-21T16:31:00.000Z')
   },
   {
-    ...connectedCloudflareConnection,
+    ...liveCloudflareConnection,
     publicId: cloudflareConnectionPublicId('7Tq0nPqJ3xVb1ZyL8sTbRc'),
     domain: 'support.agentteam.example',
-    cloudflareZoneName: 'support.agentteam.example'
+    cloudflareZoneName: 'support.agentteam.example',
+    workerScriptName: 'agent-mail-ingest-support-agentteam-example',
+    updatedAt: new Date('2026-06-21T16:34:00.000Z')
   },
   {
     ...degradedCloudflareConnection,
@@ -167,12 +150,7 @@ const denseCloudflareConnections = [
     domain: 'reply.agentteam.example',
     cloudflareZoneName: 'reply.agentteam.example'
   },
-  {
-    ...pendingCloudflareConnection,
-    publicId: cloudflareConnectionPublicId('9Da0nPqJ3xVb1ZyL8sTbTe'),
-    domain: 'notify.agentteam.example',
-    cloudflareZoneName: 'notify.agentteam.example'
-  }
+  disconnectedCloudflareConnection
 ] satisfies CloudflareConnectionFixture[]
 
 export const domainSettingsEmptyFirstUseState = {
@@ -196,11 +174,11 @@ export const domainSettingsLoadErrorState = {
   status: null
 } satisfies DomainSettingsState
 
-export const domainSettingsMissingCloudflareScopesState = {
+export const domainSettingsMissingCloudflarePermissionsState = {
   mode: 'addDomain',
   status: {
     connections: [],
-    grants: [missingScopeCloudflareGrant]
+    grants: [missingPermissionCloudflareGrant]
   }
 } satisfies DomainSettingsState
 
@@ -232,27 +210,6 @@ export const domainSettingsAddDomainSelectZoneState = {
     grants: [activeCloudflareGrant, secondaryCloudflareGrant]
   },
   zones: connectedCloudflareZones
-} satisfies DomainSettingsState
-
-export const domainSettingsDomainConnectedState = {
-  ...domainSettingsAddDomainSelectZoneState,
-  mode: 'domain',
-  selectedDomainPublicId: connectedCloudflareConnection.publicId,
-  status: {
-    connections: [connectedCloudflareConnection],
-    grants: [activeCloudflareGrant, secondaryCloudflareGrant]
-  }
-} satisfies DomainSettingsState
-
-export const domainSettingsDomainProvisioningState = {
-  ...domainSettingsAddDomainSelectZoneState,
-  message: 'Domain provisioning is queued for Cloudflare.',
-  mode: 'domain',
-  selectedDomainPublicId: pendingCloudflareConnection.publicId,
-  status: {
-    connections: [pendingCloudflareConnection],
-    grants: [activeCloudflareGrant, secondaryCloudflareGrant]
-  }
 } satisfies DomainSettingsState
 
 export const domainSettingsDomainLiveState = {

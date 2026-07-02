@@ -24,17 +24,12 @@ export interface CloudflareOAuthConnectionIntentPublicView {
 
 export interface CloudflareOAuthGrantPublicView {
   cloudflareEmail?: string | null
-  cloudflareUserId: string
-  createdAt?: Date
-  grantedScopes: string[]
-  lastErrorCode?: string | null
+  isUsable: boolean
   lastErrorMessage?: string | null
-  lastRefreshAt?: Date | null
-  lastTokenCheckAt?: Date | null
+  missingRequiredScopeCount: number
   publicId: CloudflareOAuthGrantPublicId
-  requiredScopes: string[]
+  requiresReconnect: boolean
   status: CloudflareOAuthGrantStatus
-  updatedAt?: Date
 }
 
 export interface CloudflareConnectionPublicView {
@@ -71,20 +66,23 @@ export function cloudflareOAuthConnectionIntentPublicView(
 export function cloudflareOAuthGrantPublicView(
   grant: CloudflareOAuthGrantDocument
 ): CloudflareOAuthGrantPublicView {
+  const missingRequiredScopeCount = missingRequiredCloudflareScopeCount(grant)
+  const isUsable = grant.status === 'active' && missingRequiredScopeCount === 0
+
   return {
     publicId: publicIdFromUUIDv7(grant._id) as CloudflareOAuthGrantPublicId,
-    cloudflareUserId: grant.cloudflareUserId,
     cloudflareEmail: grant.cloudflareEmail,
-    grantedScopes: grant.grantedScopes,
-    requiredScopes: grant.requiredScopes,
+    isUsable,
     status: grant.status,
-    lastTokenCheckAt: grant.lastTokenCheckAt,
-    lastRefreshAt: grant.lastRefreshAt,
-    lastErrorCode: grant.lastErrorCode,
-    lastErrorMessage: publicCloudflareOperationalMessage(grant.lastErrorCode, grant.lastErrorMessage),
-    createdAt: grant.createdAt,
-    updatedAt: grant.updatedAt
+    missingRequiredScopeCount,
+    requiresReconnect: !isUsable,
+    lastErrorMessage: publicCloudflareOperationalMessage(grant.lastErrorCode, grant.lastErrorMessage)
   }
+}
+
+function missingRequiredCloudflareScopeCount(grant: CloudflareOAuthGrantDocument): number {
+  const grantedScopes = new Set(grant.grantedScopes)
+  return grant.requiredScopes.filter((scope) => !grantedScopes.has(scope)).length
 }
 
 export function cloudflareConnectionPublicView(

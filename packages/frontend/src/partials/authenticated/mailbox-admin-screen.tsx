@@ -6,7 +6,7 @@ import {
   EnvelopeSimpleIcon,
   MagnifyingGlassIcon,
   PlusIcon,
-  RobotIcon,
+  UserIcon,
   UsersThreeIcon
 } from '@phosphor-icons/react'
 
@@ -125,7 +125,7 @@ const sectionMeta = {
     description: 'Manage agent identities, primary accounts, and account-level access.',
     emptyDescription: 'Create an agent before assigning mailbox access.',
     emptyTitle: 'No agents',
-    icon: RobotIcon,
+    icon: UserIcon,
     title: 'Agents'
   },
   groups: {

@@ -35,17 +35,12 @@ const optionalNullableStringSchema = t.Optional(t.Nullable(t.String()))
 const cloudflareOAuthReturnTargetSchema = t.Enum(enumObject(CloudflareOAuthReturnTargetValues))
 const cloudflareOAuthGrantResponseSchema = t.Object({
   cloudflareEmail: optionalNullableStringSchema,
-  cloudflareUserId: t.String(),
-  createdAt: optionalDateLikeSchema,
-  grantedScopes: t.Array(t.String()),
-  lastErrorCode: optionalNullableStringSchema,
+  isUsable: t.Boolean(),
   lastErrorMessage: optionalNullableStringSchema,
-  lastRefreshAt: optionalDateLikeSchema,
-  lastTokenCheckAt: optionalDateLikeSchema,
+  missingRequiredScopeCount: t.Number({ minimum: 0 }),
   publicId: t.String(),
-  requiredScopes: t.Array(t.String()),
-  status: t.String(),
-  updatedAt: optionalDateLikeSchema
+  requiresReconnect: t.Boolean(),
+  status: t.String()
 })
 const cloudflareConnectionResponseSchema = t.Object({
   cloudflareAccountId: t.String(),
@@ -148,7 +143,7 @@ const cloudflare = new Elysia({
         200: typedResponseSchema<FinalizeCloudflareOAuthResult>(
           t.Object({
             grant: cloudflareOAuthGrantResponseSchema,
-            missingScopes: t.Array(t.String())
+            missingRequiredScopeCount: t.Number({ minimum: 0 })
           })
         ),
         ...cloudflareErrorResponseSchemas

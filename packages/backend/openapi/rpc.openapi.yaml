@@ -6705,15 +6705,15 @@ paths:
                 type: object
                 required:
                   - grant
-                  - missingScopes
+                  - missingRequiredScopeCount
                 properties:
                   grant:
                     type: object
                     required:
-                      - cloudflareUserId
-                      - grantedScopes
+                      - isUsable
+                      - missingRequiredScopeCount
                       - publicId
-                      - requiredScopes
+                      - requiresReconnect
                       - status
                     properties:
                       cloudflareEmail:
@@ -6721,38 +6721,25 @@ paths:
                         anyOf:
                           - type: string
                           - type: "null"
-                      cloudflareUserId:
-                        type: string
-                      createdAt: {}
-                      grantedScopes:
-                        type: array
-                        items:
-                          type: string
-                      lastErrorCode:
-                        nullable: true
-                        anyOf:
-                          - type: string
-                          - type: "null"
+                      isUsable:
+                        type: boolean
                       lastErrorMessage:
                         nullable: true
                         anyOf:
                           - type: string
                           - type: "null"
-                      lastRefreshAt: {}
-                      lastTokenCheckAt: {}
+                      missingRequiredScopeCount:
+                        minimum: 0
+                        type: number
                       publicId:
                         type: string
-                      requiredScopes:
-                        type: array
-                        items:
-                          type: string
+                      requiresReconnect:
+                        type: boolean
                       status:
                         type: string
-                      updatedAt: {}
-                  missingScopes:
-                    type: array
-                    items:
-                      type: string
+                  missingRequiredScopeCount:
+                    minimum: 0
+                    type: number
         "401":
           description: Response for status 401
           content:
@@ -7253,10 +7240,10 @@ paths:
                     items:
                       type: object
                       required:
-                        - cloudflareUserId
-                        - grantedScopes
+                        - isUsable
+                        - missingRequiredScopeCount
                         - publicId
-                        - requiredScopes
+                        - requiresReconnect
                         - status
                       properties:
                         cloudflareEmail:
@@ -7264,34 +7251,22 @@ paths:
                           anyOf:
                             - type: string
                             - type: "null"
-                        cloudflareUserId:
-                          type: string
-                        createdAt: {}
-                        grantedScopes:
-                          type: array
-                          items:
-                            type: string
-                        lastErrorCode:
-                          nullable: true
-                          anyOf:
-                            - type: string
-                            - type: "null"
+                        isUsable:
+                          type: boolean
                         lastErrorMessage:
                           nullable: true
                           anyOf:
                             - type: string
                             - type: "null"
-                        lastRefreshAt: {}
-                        lastTokenCheckAt: {}
+                        missingRequiredScopeCount:
+                          minimum: 0
+                          type: number
                         publicId:
                           type: string
-                        requiredScopes:
-                          type: array
-                          items:
-                            type: string
+                        requiresReconnect:
+                          type: boolean
                         status:
                           type: string
-                        updatedAt: {}
         "401":
           description: Response for status 401
           content:
@@ -7415,10 +7390,10 @@ paths:
                     items:
                       type: object
                       required:
-                        - cloudflareUserId
-                        - grantedScopes
+                        - isUsable
+                        - missingRequiredScopeCount
                         - publicId
-                        - requiredScopes
+                        - requiresReconnect
                         - status
                       properties:
                         cloudflareEmail:
@@ -7426,34 +7401,22 @@ paths:
                           anyOf:
                             - type: string
                             - type: "null"
-                        cloudflareUserId:
-                          type: string
-                        createdAt: {}
-                        grantedScopes:
-                          type: array
-                          items:
-                            type: string
-                        lastErrorCode:
-                          nullable: true
-                          anyOf:
-                            - type: string
-                            - type: "null"
+                        isUsable:
+                          type: boolean
                         lastErrorMessage:
                           nullable: true
                           anyOf:
                             - type: string
                             - type: "null"
-                        lastRefreshAt: {}
-                        lastTokenCheckAt: {}
+                        missingRequiredScopeCount:
+                          minimum: 0
+                          type: number
                         publicId:
                           type: string
-                        requiredScopes:
-                          type: array
-                          items:
-                            type: string
+                        requiresReconnect:
+                          type: boolean
                         status:
                           type: string
-                        updatedAt: {}
         "401":
           description: Response for status 401
           content:
