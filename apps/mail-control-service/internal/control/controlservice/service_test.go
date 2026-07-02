@@ -2,6 +2,9 @@ package controlservice
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -20,6 +23,7 @@ import (
 
 	gosasl "github.com/emersion/go-sasl"
 	gosmtp "github.com/emersion/go-smtp"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func TestRuntimeSecretsFromEnvRequiresRelayPassword(t *testing.T) {
@@ -53,6 +57,96 @@ func clearRuntimeSecretEnv(t *testing.T) {
 
 	t.Setenv("AT_EMAIL_ADMIN_ZONEMTA_RELAY_PASSWORD", "")
 	t.Setenv("AT_EMAIL_ADMIN_FEEDBACK_MAILBOX_PASSWORD", "")
+}
+
+func TestWorkerArchiveCredentialIssuerSignsScopedR2TemporaryCredentialsLocally(t *testing.T) {
+	issuer := &cloudflareWorkerArchiveCredentialIssuer{
+		accountID:             "account-id-123",
+		bucket:                "agent-mail-archive",
+		endpoint:              "https://account-id-123.r2.cloudflarestorage.com",
+		endpointAudience:      "account-id-123.r2.cloudflarestorage.com",
+		region:                "auto",
+		parentAccessKeyID:     "parent-access-key-id",
+		parentSecretAccessKey: "parent-secret-access-key",
+	}
+	now := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+
+	result, err := issuer.IssueWorkerArchiveCredentials(context.Background(), controlapi.WorkerArchiveCredentialsParams{
+		OrganizationID:           "org-1",
+		OrganizationPublicID:     "org_pub_123",
+		Domain:                   "example.com",
+		ArchivePrefix:            "orgs/org_pub_123/domains/example.com/mail/inbound",
+		WorkerConnectionID:       "worker-connection-1",
+		WorkerDomainDeploymentID: "worker-deployment-1",
+	}, now)
+	if err != nil {
+		t.Fatalf("IssueWorkerArchiveCredentials returned error: %v", err)
+	}
+
+	if result.AccessKeyID != issuer.parentAccessKeyID {
+		t.Fatalf("access key id = %q, want parent access key id", result.AccessKeyID)
+	}
+	if result.Bucket != issuer.bucket || result.Endpoint != issuer.endpoint || result.Region != issuer.region {
+		t.Fatalf("R2 target = %#v, want configured bucket/endpoint/region", result)
+	}
+	if result.ExpiresAt.Unix() != now.Add(workerArchiveCredentialTTL).Unix() {
+		t.Fatalf("expires_at = %s, want %s", result.ExpiresAt, now.Add(workerArchiveCredentialTTL))
+	}
+
+	decodedSessionToken, err := base64.StdEncoding.DecodeString(result.SessionToken)
+	if err != nil {
+		t.Fatalf("session token is not base64: %v", err)
+	}
+	signedJWT := strings.TrimPrefix(string(decodedSessionToken), "jwt/")
+	if signedJWT == string(decodedSessionToken) {
+		t.Fatalf("session token does not use Cloudflare R2 jwt/ prefix")
+	}
+	temporarySecret := sha256.Sum256([]byte(signedJWT))
+	if result.SecretAccessKey != hex.EncodeToString(temporarySecret[:]) {
+		t.Fatalf("secret access key was not derived from signed JWT")
+	}
+
+	claims := &r2TemporaryCredentialClaims{}
+	token, err := jwt.ParseWithClaims(signedJWT, claims, func(token *jwt.Token) (any, error) {
+		if token.Method != jwt.SigningMethodHS256 {
+			t.Fatalf("JWT signing method = %s, want HS256", token.Method.Alg())
+		}
+		return []byte(issuer.parentSecretAccessKey), nil
+	}, jwt.WithAudience(issuer.endpointAudience), jwt.WithIssuer(issuer.parentAccessKeyID), jwt.WithSubject(issuer.accountID))
+	if err != nil {
+		t.Fatalf("parse signed JWT: %v", err)
+	}
+	if !token.Valid {
+		t.Fatal("signed JWT is not valid")
+	}
+	if claims.Bucket != issuer.bucket || claims.Scope != "object-read-write" {
+		t.Fatalf("claims bucket/scope = %q/%q", claims.Bucket, claims.Scope)
+	}
+	wantPrefix := "orgs/org_pub_123/domains/example.com/mail/inbound/"
+	if len(claims.Paths.PrefixPaths) != 1 || claims.Paths.PrefixPaths[0] != wantPrefix {
+		t.Fatalf("claims prefix paths = %#v, want %q", claims.Paths.PrefixPaths, wantPrefix)
+	}
+	if len(claims.Paths.ObjectPaths) != 0 {
+		t.Fatalf("claims object paths = %#v, want none", claims.Paths.ObjectPaths)
+	}
+}
+
+func TestWorkerArchiveCredentialIssuerKeepsR2APITokenConfigRequirement(t *testing.T) {
+	t.Setenv("AT_EMAIL_ADMIN_R2_API_TOKEN", "")
+	t.Setenv("AT_EMAIL_ADMIN_R2_ACCOUNT_ID", "account-id-123")
+	t.Setenv("AT_EMAIL_ADMIN_R2_BUCKET", "agent-mail-archive")
+	t.Setenv("AT_EMAIL_ADMIN_R2_ENDPOINT", "https://account-id-123.r2.cloudflarestorage.com")
+	t.Setenv("AT_EMAIL_ADMIN_R2_REGION", "auto")
+	t.Setenv("AT_EMAIL_ADMIN_R2_ACCESS_KEY_ID", "parent-access-key-id")
+	t.Setenv("AT_EMAIL_ADMIN_R2_SECRET_ACCESS_KEY", "parent-secret-access-key")
+
+	_, err := newCloudflareWorkerArchiveCredentialIssuer()
+	if err == nil {
+		t.Fatal("newCloudflareWorkerArchiveCredentialIssuer succeeded without AT_EMAIL_ADMIN_R2_API_TOKEN")
+	}
+	if !strings.Contains(err.Error(), "AT_EMAIL_ADMIN_R2_API_TOKEN") {
+		t.Fatalf("error = %q, want missing AT_EMAIL_ADMIN_R2_API_TOKEN", err)
+	}
 }
 
 func TestCanonicalModuleConfigUsesRuntimeSecrets(t *testing.T) {

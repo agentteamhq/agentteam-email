@@ -753,7 +753,7 @@ function useDomainSettingsController({
       setRuntimeSelectedDomainPublicId(
         selectCloudflareConnectionPublicId(provisionedStatus, connectionPublicId)
       )
-      setRuntimeMessage('Domain setup complete')
+      setRuntimeMessage(null)
     } catch (error) {
       setRuntimeMessage(errorMessage(error, 'Failed to set up Cloudflare domain.'))
     } finally {
