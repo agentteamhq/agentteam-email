@@ -40,6 +40,8 @@ const (
 	outboundProviderSES        = "ses"
 )
 
+var relayLogEmailPattern = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
+
 type Config struct {
 	ListenAddress string              `yaml:"listen_address"`
 	Hostname      string              `yaml:"hostname"`
@@ -827,10 +829,10 @@ func (s *Session) deliverProvider(ctx context.Context, archive outboundArchive, 
 		return err
 	}
 	if sendErr != nil {
-		log.Printf("agent-mail-provider-relay event=provider_failed send_id=%s zonemta_queue_id=%s sender_domain=%s provider=%s result_key=%s error=%q", archive.SendID, submission.ZoneMTAQueueID, archive.SenderDomain, provider, archive.Bundle.ResultKey, sendErr)
+		log.Printf("agent-mail-provider-relay event=provider_failed send_id=%s zonemta_queue_id=%s sender_domain=%s provider=%s has_result_key=%t error=%q", archive.SendID, submission.ZoneMTAQueueID, archive.SenderDomain, provider, archive.Bundle.ResultKey != "", sanitizeRelayLogError(sendErr))
 		return sendErr
 	}
-	log.Printf("agent-mail-provider-relay event=provider_accepted send_id=%s zonemta_queue_id=%s sender_domain=%s provider=%s result_key=%s provider_message_id=%s", archive.SendID, submission.ZoneMTAQueueID, archive.SenderDomain, provider, archive.Bundle.ResultKey, result.ProviderMessageID)
+	log.Printf("agent-mail-provider-relay event=provider_accepted send_id=%s zonemta_queue_id=%s sender_domain=%s provider=%s has_result_key=%t provider_message_id=%s", archive.SendID, submission.ZoneMTAQueueID, archive.SenderDomain, provider, archive.Bundle.ResultKey != "", result.ProviderMessageID)
 
 	return nil
 }
@@ -1060,11 +1062,31 @@ func (s *Session) deliverLocal(ctx context.Context, archive outboundArchive, sub
 		return err
 	}
 	if deliverErr != nil {
-		log.Printf("agent-mail-provider-relay event=local_route_failed send_id=%s local_route_id=%s zonemta_queue_id=%s source_domain=%s target_mailbox=%s result_key=%s error=%q", archive.SendID, route.LocalRouteID, submission.ZoneMTAQueueID, route.SourceDomain, route.TargetMailbox, archive.Bundle.ResultKey, deliverErr)
+		log.Printf("agent-mail-provider-relay event=local_route_failed send_id=%s local_route_id=%s zonemta_queue_id=%s source_domain=%s target_domain=%s has_result_key=%t error=%q", archive.SendID, route.LocalRouteID, submission.ZoneMTAQueueID, route.SourceDomain, mailboxDomain(route.TargetMailbox), archive.Bundle.ResultKey != "", sanitizeRelayLogError(deliverErr))
 		return deliverErr
 	}
-	log.Printf("agent-mail-provider-relay event=local_routed send_id=%s local_route_id=%s zonemta_queue_id=%s source_domain=%s target_mailbox=%s result_key=%s target_result_key=%s delivery_source=%s", archive.SendID, route.LocalRouteID, submission.ZoneMTAQueueID, route.SourceDomain, route.TargetMailbox, archive.Bundle.ResultKey, route.TargetInboundResultKey, deliverySource)
+	log.Printf("agent-mail-provider-relay event=local_routed send_id=%s local_route_id=%s zonemta_queue_id=%s source_domain=%s target_domain=%s has_result_key=%t has_target_result_key=%t delivery_source=%s", archive.SendID, route.LocalRouteID, submission.ZoneMTAQueueID, route.SourceDomain, mailboxDomain(route.TargetMailbox), archive.Bundle.ResultKey != "", route.TargetInboundResultKey != "", deliverySource)
 	return nil
+}
+
+func mailboxDomain(address string) string {
+	domain, err := structured.DomainFromMailbox(address)
+	if err != nil {
+		return ""
+	}
+	return domain
+}
+
+func sanitizeRelayLogError(err error) string {
+	if err == nil {
+		return ""
+	}
+	message := strings.TrimSpace(strings.Join(strings.Fields(err.Error()), " "))
+	message = relayLogEmailPattern.ReplaceAllString(message, "[email]")
+	if len(message) > 240 {
+		return message[:240]
+	}
+	return message
 }
 
 func (p *localDeliveryProof) FindExisting(ctx context.Context, targetMailbox string, query localRouteProofQuery) (localDeliveryRecord, bool, error) {

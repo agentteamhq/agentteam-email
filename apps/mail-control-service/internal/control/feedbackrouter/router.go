@@ -13,6 +13,7 @@ import (
 	"net/smtp"
 	"net/textproto"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -26,6 +27,8 @@ import (
 )
 
 const reconnectDelay = 10 * time.Second
+
+var feedbackLogEmailPattern = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
 
 type Config struct {
 	WildDuck struct {
@@ -143,13 +146,13 @@ func newRouter(cfg Config, source RouteSource) (*Router, error) {
 }
 
 func (r *Router) Run(ctx context.Context) error {
-	log.Printf("agent-mail-feedback-router starting username=%s mailbox=%s haraka=%s", r.cfg.IMAPUsername, r.cfg.IMAPMailbox, r.cfg.HarakaAddress)
+	log.Printf("agent-mail-feedback-router event=starting username_configured=%t username_is_address=%t mailbox=%s haraka=%s", r.cfg.IMAPUsername != "", r.cfg.IMAPUsernameIsAddr, r.cfg.IMAPMailbox, r.cfg.HarakaAddress)
 	for {
 		if err := r.runSession(ctx); err != nil {
 			if errors.Is(err, context.Canceled) {
 				return nil
 			}
-			log.Printf("feedback router session failed: %v", err)
+			log.Printf("agent-mail-feedback-router event=feedback_session_failed mailbox=%s operation=session error=%q", r.cfg.IMAPMailbox, sanitizeFeedbackLogError(err))
 		}
 
 		select {
@@ -191,6 +194,7 @@ func (r *Router) Status(ctx context.Context) Status {
 	if err != nil {
 		status.OK = false
 		status.Issues = append(status.Issues, "feedback_routes_failed: "+err.Error())
+		log.Printf("agent-mail-feedback-router event=feedback_status_degraded domains_source=%s mailbox=%s issue=feedback_routes_failed error=%q", status.DomainsSource, r.cfg.IMAPMailbox, sanitizeFeedbackLogError(err))
 		return status
 	}
 	status.ActiveDomains = len(routes)
@@ -236,7 +240,7 @@ func (r *Router) runSession(ctx context.Context) error {
 	if _, err := client.Select(r.cfg.IMAPMailbox, nil).Wait(); err != nil {
 		return fmt.Errorf("imap select %s: %w", r.cfg.IMAPMailbox, err)
 	}
-	log.Printf("agent-mail-feedback-router watching mailbox=%s username=%s", r.cfg.IMAPMailbox, login.Username)
+	log.Printf("agent-mail-feedback-router event=watching mailbox=%s username_is_address=%t", r.cfg.IMAPMailbox, login.IsAddress)
 	if err := r.processUnseen(ctx, client); err != nil {
 		return err
 	}
@@ -293,13 +297,13 @@ func (r *Router) ensureMailbox(ctx context.Context, login feedbackLogin) error {
 			Name:      r.cfg.IMAPDisplayName,
 			SpamLevel: r.cfg.IMAPSpamLevel,
 		}); err != nil {
-			return fmt.Errorf("update feedback mailbox %s: %w", r.cfg.IMAPUsername, err)
+			return fmt.Errorf("update feedback mailbox: %w", err)
 		}
-		log.Printf("feedback mailbox %s already exists; managed login fields converged", login.Username)
+		log.Printf("agent-mail-feedback-router event=feedback_mailbox_converged username_is_address=%t wildduck_user_id=%s", login.IsAddress, userID)
 		return nil
 	}
 	if !errors.Is(err, errWildDuckNotFound) {
-		return fmt.Errorf("resolve feedback mailbox %s: %w", login.Username, err)
+		return fmt.Errorf("resolve feedback mailbox: %w", err)
 	}
 
 	cfg := wildDuckUserConfig{
@@ -315,9 +319,9 @@ func (r *Router) ensureMailbox(ctx context.Context, login feedbackLogin) error {
 	}
 	userID, err = r.wd.createUser(ctx, cfg)
 	if err != nil {
-		return fmt.Errorf("create feedback mailbox %s: %w", login.Username, err)
+		return fmt.Errorf("create feedback mailbox: %w", err)
 	}
-	log.Printf("created feedback mailbox %s user=%s", login.Username, userID)
+	log.Printf("agent-mail-feedback-router event=feedback_mailbox_created username_is_address=%t wildduck_user_id=%s", login.IsAddress, userID)
 	return nil
 }
 
@@ -380,7 +384,7 @@ func (r *Router) processUnseen(ctx context.Context, client *imapclient.Client) e
 		}
 		markSeen, err := r.processUID(ctx, client, uid)
 		if err != nil {
-			log.Printf("failed to process feedback message uid=%d: %v", uid, err)
+			log.Printf("agent-mail-feedback-router event=feedback_message_failed uid=%d mailbox=%s mark_seen=%t operation=process_unseen error=%q", uid, r.cfg.IMAPMailbox, markSeen, sanitizeFeedbackLogError(err))
 		}
 		if markSeen {
 			if err := markUIDSeen(client, uid); err != nil {
@@ -420,8 +424,28 @@ func (r *Router) processRawFeedback(ctx context.Context, uid imap.UID, raw []byt
 		}
 		return false, err
 	}
-	log.Printf("routed feedback uid=%d to original_sender=%s", uid, originalSender)
+	log.Printf("agent-mail-feedback-router event=feedback_routed uid=%d mailbox=%s sender_domain=%s mark_seen=true", uid, r.cfg.IMAPMailbox, mailboxDomain(originalSender))
 	return true, nil
+}
+
+func mailboxDomain(address string) string {
+	mailbox, err := structured.ParseMailbox(address)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(mailbox.Domain)
+}
+
+func sanitizeFeedbackLogError(err error) string {
+	if err == nil {
+		return ""
+	}
+	message := strings.TrimSpace(strings.Join(strings.Fields(err.Error()), " "))
+	message = feedbackLogEmailPattern.ReplaceAllString(message, "[email]")
+	if len(message) > 240 {
+		return message[:240]
+	}
+	return message
 }
 
 func isPermanentSMTPRecipientFailure(err error) bool {
@@ -847,7 +871,7 @@ func (c *wildDuckAdmin) resolveAddress(ctx context.Context, address string) (str
 		return "", err
 	}
 	if result.User == "" {
-		return "", fmt.Errorf("wildduck resolve address %s returned empty user id", address)
+		return "", fmt.Errorf("wildduck resolve address returned empty user id")
 	}
 	return result.User, nil
 }
@@ -864,7 +888,7 @@ func (c *wildDuckAdmin) resolveUser(ctx context.Context, username string) (strin
 		return "", err
 	}
 	if result.ID == "" {
-		return "", fmt.Errorf("wildduck resolve user %s returned empty user id", username)
+		return "", fmt.Errorf("wildduck resolve user returned empty user id")
 	}
 	return result.ID, nil
 }
@@ -893,7 +917,7 @@ func (c *wildDuckAdmin) createUser(ctx context.Context, cfg wildDuckUserConfig) 
 		return "", err
 	}
 	if result.ID == "" {
-		return "", fmt.Errorf("wildduck create user %s returned empty id", cfg.Address)
+		return "", fmt.Errorf("wildduck create user returned empty id")
 	}
 	return result.ID, nil
 }

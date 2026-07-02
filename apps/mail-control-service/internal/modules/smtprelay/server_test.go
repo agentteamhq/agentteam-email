@@ -2,6 +2,7 @@ package smtprelay
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -26,6 +27,17 @@ func TestUniqueStrings(t *testing.T) {
 	}
 	if got[0] != "other@example.com" || got[1] != "user@example.com" {
 		t.Fatalf("unexpected unique result: %#v", got)
+	}
+}
+
+func TestSanitizeRelayLogErrorRedactsMailbox(t *testing.T) {
+	got := sanitizeRelayLogError(errors.New("delivery failed for Agent.One+tag@example.com\nwith details"))
+
+	if strings.Contains(got, "Agent.One") || strings.Contains(got, "\n") {
+		t.Fatalf("sanitized relay error retained sensitive or multiline value: %q", got)
+	}
+	if !strings.Contains(got, "[email]") {
+		t.Fatalf("sanitized relay error did not include email redaction marker: %q", got)
 	}
 }
 

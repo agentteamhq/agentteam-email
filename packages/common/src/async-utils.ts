@@ -3,6 +3,24 @@ import debug from 'debug'
 
 const log = debug('app:async')
 
+const SAFE_ERROR_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_.:-]{0,79}$/
+
+function valueType(value: unknown): string {
+  if (value === null) {
+    return 'null'
+  }
+
+  if (value instanceof Promise) {
+    return 'promise'
+  }
+
+  if (value instanceof Error) {
+    return SAFE_ERROR_NAME_PATTERN.test(value.name) ? value.name : 'Error'
+  }
+
+  return typeof value
+}
+
 /**
  * Explicitly fire and forget a Promise.
  * Use this when you don't want to await something, but want clarity.
@@ -10,8 +28,7 @@ const log = debug('app:async')
 export function nowait(promise: Promise<unknown>): void {
   // eslint-disable-next-line no-void
   void promise.catch((err: unknown) => {
-    // Optional: log errors to Sentry or console
-    log('Unhandled nowait error:', err)
+    log('async operation failed', { operation: 'nowait', errorType: valueType(err) })
   })
 }
 
@@ -105,12 +122,26 @@ export async function asyncRetry<T>(
       return await fn() // success
     } catch (err) {
       if (attempt >= retries) {
+        log('async operation exhausted retries', {
+          operation: 'asyncRetry',
+          attempt,
+          maxAttempts: retries,
+          errorType: valueType(err)
+        })
         throw err
       } // out of attempts
 
       // compute next delay
       const jitterOffset = delay * jitter * (Math.random() * 2 - 1) // ±
       const wait = Math.max(0, delay + jitterOffset)
+
+      log('async operation retry scheduled', {
+        operation: 'asyncRetry',
+        attempt,
+        maxAttempts: retries,
+        backoffMs: wait,
+        errorType: valueType(err)
+      })
 
       onRetry?.(err, { attempt, delay: wait })
 
@@ -147,13 +178,22 @@ export function promiseRetry<T>(
           })
           .catch((err: unknown) => {
             if (!quiet) {
-              // eslint-disable-next-line no-console
-              console.error('PROMISE RETRY promise-err: ', err)
+              log('async operation attempt failed', {
+                operation: 'promiseRetry',
+                attempt: counter + 1,
+                maxAttempts: MAX_RETRIES,
+                errorType: valueType(err)
+              })
             }
             const backoff = (counter + 2) * (counter + 2) * wait
             if (!quiet) {
-              // eslint-disable-next-line no-console
-              console.error('PROMISE RETRY: backing off for ', backoff)
+              log('async operation retry scheduled', {
+                operation: 'promiseRetry',
+                attempt: counter + 1,
+                maxAttempts: MAX_RETRIES,
+                backoffMs: backoff,
+                errorType: valueType(err)
+              })
             }
             setTimeout(() => {
               // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors, @typescript-eslint/no-confusing-void-expression
@@ -162,13 +202,22 @@ export function promiseRetry<T>(
           })
       } catch (e) {
         if (!quiet) {
-          // eslint-disable-next-line no-console
-          console.error('PROMISE RETRY catch-err: ', e)
+          log('async operation attempt failed', {
+            operation: 'promiseRetry',
+            attempt: counter + 1,
+            maxAttempts: MAX_RETRIES,
+            errorType: valueType(e)
+          })
         }
         const backoff = (counter + 2) * (counter + 2) * wait
         if (!quiet) {
-          // eslint-disable-next-line no-console
-          console.error('PROMISE RETRY: backing off for ', backoff)
+          log('async operation retry scheduled', {
+            operation: 'promiseRetry',
+            attempt: counter + 1,
+            maxAttempts: MAX_RETRIES,
+            backoffMs: backoff,
+            errorType: valueType(e)
+          })
         }
         setTimeout(() => {
           // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors, @typescript-eslint/no-confusing-void-expression
@@ -246,12 +295,14 @@ export function promiseForeach<T>(
       }
       const p = each(counter, previousResult as Promise<T> | undefined)
       counter++
-      // console.log('p: ', p)
       if (p instanceof Promise) {
         p.then(resolve).catch(run)
       } else {
-        // eslint-disable-next-line no-console
-        console.log('unknown promise: ', p)
+        log('async operation returned unexpected value', {
+          operation: 'promiseForeach',
+          attempt: counter,
+          valueType: valueType(p)
+        })
         // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
         reject(p)
       }

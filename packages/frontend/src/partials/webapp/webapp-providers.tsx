@@ -18,6 +18,48 @@ export interface WebappProvidersProps extends EnvContextValue {
   sessionCleanupEnabled?: boolean
 }
 
+const SAFE_ERROR_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_.:-]{0,79}$/
+
+interface ErrorBoundaryInfo {
+  componentStack?: string | null
+}
+
+function getErrorName(error: unknown) {
+  if (!(error instanceof Error)) {
+    return undefined
+  }
+
+  return SAFE_ERROR_NAME_PATTERN.test(error.name) ? error.name : 'Error'
+}
+
+function getErrorType(error: unknown) {
+  if (error === null) {
+    return 'null'
+  }
+
+  if (Array.isArray(error)) {
+    return 'array'
+  }
+
+  if (error instanceof Error) {
+    return 'error'
+  }
+
+  return typeof error
+}
+
+function logWebappProviderError(error: unknown, info: ErrorBoundaryInfo) {
+  const diagnostic = {
+    boundaryName: 'webapp-providers',
+    errorName: getErrorName(error),
+    errorType: getErrorType(error),
+    hasComponentStack: Boolean(info.componentStack)
+  }
+
+  // eslint-disable-next-line no-console
+  console.error('Error boundary caught an error', diagnostic)
+}
+
 export function WebappProviders(props: PropsWithChildren<WebappProvidersProps>) {
   return (
     <StrictMode>
@@ -28,9 +70,7 @@ export function WebappProviders(props: PropsWithChildren<WebappProvidersProps>) 
         <ErrorBoundary
           FallbackComponent={ErrorPage}
           onError={(error, info) => {
-            // Additional logging or reporting can go here
-            // eslint-disable-next-line no-console
-            console.error('Error logged via onError:', error, info)
+            logWebappProviderError(error, info)
           }}
         >
           <ThemeProvider
