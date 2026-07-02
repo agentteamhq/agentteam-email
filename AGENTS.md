@@ -13,6 +13,11 @@ encryption, sessions, cookies, API keys, tokens, JWT, OAuth, JWKS, secret
 storage, security-sensitive routes, or anything that could be security related,
 agents must stop, read [SECURITY.md](SECURITY.md), and follow it.
 
+Before changing existing product concepts, architecture boundaries, route
+surfaces, authentication terms, integration terms, account/domain ownership, or
+settings semantics, agents must read [ARCHITECTURE.md](ARCHITECTURE.md) and
+preserve the vocabulary and ownership model defined there.
+
 ## Fixes And Failures
 
 When fixing a bug, test failure, CI failure, or broken workflow, agents must

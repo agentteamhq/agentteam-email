@@ -2,6 +2,11 @@
 
 This directory owns internal app and control RPC under `/rpc/*`.
 
+Before changing RPC routes, DTOs, or browser-consumed states for existing
+product concepts, read [../../../../ARCHITECTURE.md](../../../../ARCHITECTURE.md)
+and preserve its account, connected-account, integration, domain, and public
+boundary vocabulary.
+
 ## App RPC Boundary
 
 - `/rpc/*` is not an external product API. Do not add CLI, integration,

@@ -36,6 +36,31 @@ and performs the internal call server-side. Public clients must not receive
 WildDuck admin credentials, WildDuck mailbox tokens, or raw internal service
 URLs.
 
+## Account And Integration Vocabulary
+
+Linked accounts, connected accounts, integrations, and domains are distinct
+product concepts.
+
+Linked accounts are Better Auth account-linking identities used for sign-in,
+such as social or OIDC providers attached to a user account. They belong to the
+Better Auth account or security settings surface. Linked accounts do not grant
+AgentTeam Email authority to provision or control external provider resources.
+
+Connected accounts are upstream provider connections where AgentTeam Email is
+the OAuth client and stores a user-authorized external provider grant. Connected
+accounts authorize AgentTeam Email to read or mutate provider resources needed
+by the product, such as Cloudflare accounts and zones for domain provisioning.
+Cloudflare is the current connected-account provider, but the concept is
+provider-generic.
+
+Integrations are downstream OAuth clients where AgentTeam Email is the OAuth
+authorization server and resource server. Integrations receive authorization to
+call AgentTeam Email according to the scopes, grants, mailbox policy, and
+revocation state owned at the web-server boundary.
+
+Domains consume connected-account authority for provider setup, status, retries,
+and remediation. Domain state is not the connected-account inventory itself.
+
 ## Paperclip OAuth Integration
 
 Paperclip connects to AgentTeam Email as an OAuth client of the AgentTeam Email
