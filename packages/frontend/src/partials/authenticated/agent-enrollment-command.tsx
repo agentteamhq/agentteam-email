@@ -3,6 +3,7 @@ import { CopyIcon } from '@phosphor-icons/react'
 
 import { Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
+import { LocalDateTime } from '../../components/local-date-time'
 import { cn } from '../../lib/utils'
 import type { AgentMailAdminAgentEnrollment } from '@main/backend'
 
@@ -47,8 +48,20 @@ export function AgentEnrollmentCommandSummary({
       </code>
       <div className='text-muted-foreground grid gap-1 sm:grid-cols-3'>
         <span>Host {formatReferenceId(enrollment.hostId)}</span>
-        <span>Token expires {formatDateTime(enrollment.enrollmentTokenExpiresAt)}</span>
-        <span>Grants expire {formatDateTime(enrollment.grantExpiresAt)}</span>
+        <span>
+          Token expires{' '}
+          <LocalDateTime
+            value={enrollment.enrollmentTokenExpiresAt}
+            emptyFallback='Never'
+          />
+        </span>
+        <span>
+          Grants expire{' '}
+          <LocalDateTime
+            value={enrollment.grantExpiresAt}
+            emptyFallback='Never'
+          />
+        </span>
       </div>
       <div>
         <Button
@@ -67,22 +80,6 @@ export function AgentEnrollmentCommandSummary({
 
 function formatAgentEnrollmentCommand(enrollmentToken: string): string {
   return `at-email agent enroll ${enrollmentToken}`
-}
-
-function formatDateTime(value: Date | string | null | undefined): string {
-  if (!value) {
-    return 'Never'
-  }
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return 'Unknown'
-  }
-
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short'
-  }).format(date)
 }
 
 function formatReferenceId(value: string | null | undefined): string {

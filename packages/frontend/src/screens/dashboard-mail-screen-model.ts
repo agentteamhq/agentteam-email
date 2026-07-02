@@ -1,7 +1,6 @@
 import { mailboxAddressOrRaw, mailboxDisplayName } from '../lib/mail-addresses'
 import {
   actionsForMessage,
-  formatMessageDate,
   threadActionsForMessage,
   toSidebarView
 } from './dashboard-mail-sidebar-view'
@@ -115,7 +114,7 @@ export function toEmailPreview(
     isDraft: message.isDraft,
     isStarred: message.isStarred,
     isUnread: message.unread,
-    receivedAt: formatMessageDate(message.receivedAt),
+    receivedAt: message.receivedAt ?? '',
     recipientEmail: message.to.join(', '),
     senderEmail: mailboxAddressOrRaw(message.from),
     senderName: mailboxDisplayName(message.from),
@@ -145,7 +144,7 @@ function toEmailThreadMessage(
     html: message.html,
     id: message.id,
     isDraft: message.isDraft,
-    receivedAt: formatMessageDate(message.receivedAt),
+    receivedAt: message.receivedAt ?? '',
     recipientEmail: message.to.join(', '),
     senderEmail: mailboxAddressOrRaw(message.from),
     senderName: mailboxDisplayName(message.from),

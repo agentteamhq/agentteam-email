@@ -14,6 +14,7 @@ import { normalizeDeviceUserCode } from '../../lib/device-auth-api'
 import { authReactClient } from '../../lib/auth-react-client'
 import { createSignInRedirectHref, throwRouteRedirect } from '../../lib/route-redirect'
 import { createWebAuthnAssertionResponse } from '../../lib/webauthn-assertion'
+import { LocalDateTime } from '../../components/local-date-time'
 import { resolveFrontendServerRouteContext } from '../../server-route-context'
 import { DeviceCodeApprovalScreen } from '../../screens/device-authorization-screen'
 import { SITE_STRINGS, formatSiteTitle } from '../../strings'
@@ -117,15 +118,20 @@ function AgentCapabilityApprovalRouteScreen() {
   const hasApprovalLocator = Boolean(agentId || approvalId || userCode)
   const initialError =
     hasApprovalLocator ? null : 'Agent approval link is missing its approval code or identifier.'
-  const approvalQuery = useQuery(agentCapabilityApprovalQueryOptions({ agentId, approvalId, userCode }))
-  const approval = approvalQuery.data?.approval ?? null
+  const {
+    data: approvalData,
+    isError: approvalLookupError,
+    isLoading: approvalLookupLoading,
+    isSuccess: approvalLookupSuccess
+  } = useQuery(agentCapabilityApprovalQueryOptions({ agentId, approvalId, userCode }))
+  const approval = approvalData?.approval ?? null
   const approvalLookupEnabled = hasApprovalLocator
   const approvalLookupMessage =
-    approvalLookupEnabled && approvalQuery.isError
+    approvalLookupEnabled && approvalLookupError
       ? 'Agent authorization request could not be loaded.'
-      : approvalLookupEnabled && approvalQuery.isSuccess && !approval
+      : approvalLookupEnabled && approvalLookupSuccess && !approval
         ? 'Agent authorization request was not found.'
-        : approvalLookupEnabled && approvalQuery.isLoading
+        : approvalLookupEnabled && approvalLookupLoading
           ? 'Loading agent authorization request.'
           : null
   const decisionState = getApprovalDecisionState(approval)
@@ -142,7 +148,7 @@ function AgentCapabilityApprovalRouteScreen() {
         approval ? (
           <AgentCapabilityApprovalDescription
             approval={approval}
-            capabilityCatalog={approvalQuery.data?.capabilityCatalog ?? agentMailCapabilityCatalog}
+            capabilityCatalog={approvalData?.capabilityCatalog ?? agentMailCapabilityCatalog}
           />
         ) : undefined
       }
@@ -337,7 +343,13 @@ function AgentCapabilityApprovalDescription({
       ) ? (
         <span className='block'>Passkey verification is required for this approval.</span>
       ) : null}
-      <span className='block'>Expires {formatApprovalDateTime(approval.expiresAt)}</span>
+      <span className='block'>
+        Expires{' '}
+        <LocalDateTime
+          value={approval.expiresAt}
+          emptyFallback='never'
+        />
+      </span>
     </span>
   )
 }
@@ -403,13 +415,4 @@ function formatApprovalConstraintValue(value: unknown): string {
   }
 
   return JSON.stringify(value)
-}
-
-function formatApprovalDateTime(value: string | null) {
-  if (!value) {
-    return 'never'
-  }
-
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
 }

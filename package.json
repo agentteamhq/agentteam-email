@@ -71,6 +71,7 @@
     "eslint-plugin-better-tailwindcss": "catalog:",
     "eslint-plugin-react": "catalog:",
     "eslint-plugin-react-hooks": "catalog:",
+    "eslint-plugin-react-doctor": "catalog:",
     "eslint-plugin-react-perf": "catalog:",
     "eslint-plugin-react-refresh": "catalog:",
     "eslint-plugin-simple-import-sort": "catalog:",

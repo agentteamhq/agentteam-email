@@ -336,7 +336,7 @@ function toNavItem(folder: AgentMailWebFolder): AuthenticatedSidebarView['navMai
 function toMailItem(message: AgentMailWebMessageSummary): AuthenticatedMailItem {
   return {
     attachmentCountLabel: message.attachmentCount ? String(message.attachmentCount) : undefined,
-    date: formatMessageDate(message.receivedAt),
+    date: message.receivedAt ?? '',
     email: mailboxAddressOrRaw(message.from),
     folderId: message.mailboxId,
     id: message.id,
@@ -489,19 +489,6 @@ export function findSystemFolder(
     folders.find((folder) => folder.specialUse?.toLowerCase() === normalizedSpecialUse) ??
     folders.find((folder) => folder.path.toLowerCase() === normalizedPath)
   )
-}
-
-export function formatMessageDate(value: string | undefined) {
-  if (!value) {
-    return ''
-  }
-  const date = new Date(value)
-  return Number.isFinite(date.getTime())
-    ? new Intl.DateTimeFormat(undefined, {
-        dateStyle: 'medium',
-        timeStyle: 'short'
-      }).format(date)
-    : value
 }
 
 function errorMessage(error: unknown, fallback: string) {

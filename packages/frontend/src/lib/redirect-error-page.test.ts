@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { CloudflareOAuthReturnTarget } from '@main/backend'
 
 import { createRedirectErrorViewState } from './redirect-error-page'
+import type { CloudflareOAuthReturnTarget } from '@main/backend'
 
 const cloudflareReturnTargetRetryCases = [
   {

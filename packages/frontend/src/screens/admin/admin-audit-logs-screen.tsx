@@ -18,6 +18,7 @@ import { Input } from '../../components/ui/input'
 import { NativeSelect, NativeSelectOption } from '../../components/ui/native-select'
 import { Skeleton } from '../../components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table'
+import { LocalDateTime } from '../../components/local-date-time'
 import { fetchAdminAuditLogList } from '../../lib/admin-audit-logs-rpc'
 import { WebappProviders } from '../../partials/webapp/webapp-providers'
 import type {
@@ -71,8 +72,12 @@ export function AdminAuditLogsScreen({
     },
     [routeAction]
   )
-  const auditLogQuery = useQuery(adminAuditLogListQueryOptions(auditLogListLoader, routeSearch))
-  const auditLogList = auditLogQuery.data
+  const {
+    data: auditLogList,
+    error: auditLogError,
+    isError: auditLogIsError,
+    isLoading: auditLogIsLoading
+  } = useQuery(adminAuditLogListQueryOptions(auditLogListLoader, routeSearch))
 
   return (
     <WebappProviders
@@ -135,10 +140,10 @@ export function AdminAuditLogsScreen({
             </div>
           </header>
 
-          {auditLogQuery.isError ? (
+          {auditLogIsError ? (
             <Alert variant='destructive'>
               <WarningCircleIcon />
-              <AlertDescription>{readErrorMessage(auditLogQuery.error)}</AlertDescription>
+              <AlertDescription>{readErrorMessage(auditLogError)}</AlertDescription>
             </Alert>
           ) : null}
 
@@ -162,11 +167,11 @@ export function AdminAuditLogsScreen({
             <CardContent className='grid gap-4'>
               <AuditLogTable
                 auditLogList={auditLogList}
-                loading={auditLogQuery.isLoading}
+                loading={auditLogIsLoading}
               />
               <AuditLogPagination
                 auditLogList={auditLogList}
-                loading={auditLogQuery.isLoading}
+                loading={auditLogIsLoading}
                 onSearchChange={onSearchChange}
                 routeSearch={routeSearch}
               />
@@ -363,7 +368,7 @@ function AuditLogTable({
         {auditLogList.events.map((event) => (
           <TableRow key={event.id}>
             <TableCell className='text-muted-foreground whitespace-nowrap'>
-              {formatDateTime(event.createdAt)}
+              <LocalDateTime value={event.createdAt} />
             </TableCell>
             <TableCell className='font-medium'>{event.action}</TableCell>
             <TableCell>
@@ -467,13 +472,6 @@ function auditSeverityVariant(severity: string): 'destructive' | 'outline' | 'se
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat().format(value)
-}
-
-function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short'
-  }).format(new Date(value))
 }
 
 function readErrorMessage(error: unknown): string {

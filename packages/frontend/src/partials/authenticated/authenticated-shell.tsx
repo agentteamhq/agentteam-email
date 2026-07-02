@@ -33,6 +33,7 @@ import {
 } from '@phosphor-icons/react'
 
 import { UserButton } from '../../components/auth/user/user-button'
+import { LocalDateTime } from '../../components/local-date-time'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -2284,7 +2285,10 @@ function EmailMessageMeta({
           <div className='text-muted-foreground text-xs'>To: {recipientEmail}</div>
         </div>
       </div>
-      <time className='text-muted-foreground shrink-0 text-xs whitespace-nowrap'>{receivedAt}</time>
+      <LocalDateTime
+        className='text-muted-foreground shrink-0 text-xs whitespace-nowrap'
+        value={receivedAt}
+      />
     </div>
   )
 }
@@ -2921,9 +2925,10 @@ function EmailCollapsedThreadMessage({
                 {message.senderName}{' '}
                 <span className='text-muted-foreground font-normal'>{message.senderEmail}</span>
               </span>
-              <time className='text-muted-foreground shrink-0 text-xs whitespace-nowrap'>
-                {message.receivedAt}
-              </time>
+              <LocalDateTime
+                className='text-muted-foreground shrink-0 text-xs whitespace-nowrap'
+                value={message.receivedAt}
+              />
             </span>
             <span className='text-muted-foreground truncate text-xs'>To: {message.recipientEmail}</span>
             {message.teaser ? (
@@ -3279,7 +3284,10 @@ function MailboxList({
               <span>{mail.attachmentCountLabel}</span>
             </span>
           ) : null}
-          <span className='text-muted-foreground ml-auto shrink-0 text-xs'>{mail.date}</span>
+          <LocalDateTime
+            className='text-muted-foreground ml-auto shrink-0 text-xs'
+            value={mail.date}
+          />
         </div>
         <span className={cn('line-clamp-1 max-w-full font-medium', mail.isUnread && 'font-semibold')}>
           {mail.subject}

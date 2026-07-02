@@ -67,6 +67,7 @@ import {
   SidebarMenuItem,
   SidebarProvider
 } from '../../components/ui/sidebar'
+import { LocalDateTime } from '../../components/local-date-time'
 import { cn } from '../../lib/utils'
 import { AgentEnrollmentCommandSummary } from './agent-enrollment-command'
 import { CloudflareConnectButton, CloudflareLogo } from './cloudflare-brand'
@@ -975,7 +976,13 @@ function AgentAccessAgentRow({
         <span>{agent.pendingCapabilityCount} pending grants</span>
         <span>Host {host?.name ?? formatReferenceId(agent.hostId)}</span>
         <span>Workspace {formatReferenceId(agent.organizationId)}</span>
-        <span>Last used {formatDateTime(agent.lastUsedAt)}</span>
+        <span>
+          Last used{' '}
+          <LocalDateTime
+            value={agent.lastUsedAt}
+            emptyFallback='Never'
+          />
+        </span>
       </div>
       {canRevokeAgent ? (
         <div>
@@ -1010,7 +1017,13 @@ function AgentAccessHostRow({ host }: { host: AgentAccessHost }) {
         <span>{host.agentCount} agents</span>
         <span>{host.defaultCapabilities.length} default capabilities</span>
         <span>Workspace {formatReferenceId(host.organizationId)}</span>
-        <span>Last used {formatDateTime(host.lastUsedAt)}</span>
+        <span>
+          Last used{' '}
+          <LocalDateTime
+            value={host.lastUsedAt}
+            emptyFallback='Never'
+          />
+        </span>
       </div>
     </div>
   )
@@ -1050,7 +1063,10 @@ function AgentAccessGrantRow({
       <p className='text-muted-foreground text-xs'>
         Agent {agent?.name ?? formatReferenceId(grant.agentId)} · Workspace{' '}
         {formatReferenceId(grant.organizationId) ?? 'Unknown'} · {formatGrantActor(grant)} · Expires{' '}
-        {formatDateTime(grant.expiresAt)}
+        <LocalDateTime
+          value={grant.expiresAt}
+          emptyFallback='Never'
+        />
       </p>
       {canRevokeGrant ? (
         <div>
@@ -1132,7 +1148,11 @@ function AgentAccessApprovalRow({
       <p className='text-muted-foreground text-xs'>
         Agent {agent?.name ?? formatReferenceId(approval.agentId) ?? 'Pending'} · Host{' '}
         {host?.name ?? formatReferenceId(approval.hostId) ?? 'Pending'} · {formatStatusLabel(approval.method)}{' '}
-        · Expires {formatDateTime(approval.expiresAt)}
+        · Expires{' '}
+        <LocalDateTime
+          value={approval.expiresAt}
+          emptyFallback='Never'
+        />
       </p>
       <div className='flex flex-wrap gap-2'>
         <Button
@@ -1424,7 +1444,13 @@ function ConnectedAccountGrantRow({
       </div>
       <div className='text-muted-foreground grid gap-1 sm:grid-cols-3'>
         <span>{formatCloudflareGrantScopeSummary(grant)}</span>
-        <span>Last checked {formatDateTime(grant.lastTokenCheckAt)}</span>
+        <span>
+          Last checked{' '}
+          <LocalDateTime
+            value={grant.lastTokenCheckAt}
+            emptyFallback='Never'
+          />
+        </span>
         <span>
           {missingScopes.length > 0 ? `${missingScopes.length} missing scopes` : 'Required scopes ready'}
         </span>
@@ -1726,7 +1752,10 @@ function DomainDetailPanel({ settings }: { settings: DomainSettingsController })
           <div className='flex items-center justify-between gap-4'>
             <span>Last setup</span>
             <span className='text-foreground min-w-0 truncate text-right font-medium'>
-              {formatDateTime(domain.lastProvisionedAt)}
+              <LocalDateTime
+                value={domain.lastProvisionedAt}
+                emptyFallback='Never'
+              />
             </span>
           </div>
         </div>
@@ -1904,20 +1933,33 @@ function getMissingScopes(grant: CloudflareGrantView): string[] {
   return grant.requiredScopes.filter((scope) => !grant.grantedScopes.includes(scope))
 }
 
-function formatDateTime(value: Date | string | null | undefined): string {
-  if (!value) {
-    return 'Never'
+function aggregateMailRuntimeQueue(status: AgentMailPublicStatus) {
+  let pending = 0
+  let retryWait = 0
+  let seen = false
+
+  for (const moduleStatus of Object.values(status.modules)) {
+    if (!moduleStatus.queue) {
+      continue
+    }
+    pending += moduleStatus.queue.pending ?? 0
+    retryWait += moduleStatus.queue.retryWait ?? 0
+    seen = true
   }
 
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return 'Unknown'
+  return seen ? { pending, retryWait } : null
+}
+
+function summarizeMailRuntimeModules(status: AgentMailPublicStatus) {
+  const modules = Object.values(status.modules)
+  if (modules.length === 0) {
+    return null
   }
 
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short'
-  }).format(date)
+  return {
+    ok: modules.filter((moduleStatus) => moduleStatus.ok === true).length,
+    total: modules.length
+  }
 }
 
 function formatStatusLabel(value: string): string {

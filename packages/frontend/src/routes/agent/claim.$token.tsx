@@ -45,17 +45,20 @@ function AgentClaimRouteScreen() {
   const { token } = Route.useParams()
   const routeState = Route.useLoaderData()
   const queryClient = useQueryClient()
-  const claimQuery = useQuery(agentTrialClaimQueryOptions(token))
+  const {
+    data: claim = null,
+    error: claimError,
+    isLoading: claimLoading
+  } = useQuery(agentTrialClaimQueryOptions(token))
   const claimQueryKey = agentTrialClaimQueryKey(token)
-  const claim = claimQuery.data ?? null
-  const loadError = claimQuery.error instanceof Error ? claimQuery.error.message : null
+  const loadError = claimError instanceof Error ? claimError.message : null
 
   return (
     <AgentTrialClaimScreen
       key={claim?.trial_id ?? token}
       claim={claim}
       loadError={loadError}
-      loading={claimQuery.isLoading}
+      loading={claimLoading}
       userEmail={routeState.user?.email}
       userName={routeState.user?.name}
       onApprove={async ({ targetOrganizationId }) => {
