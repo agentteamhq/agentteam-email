@@ -28,6 +28,13 @@ These rules apply to `packages/backend`.
 
 ## Backend Security Contracts
 
+- The deployable web server must expose one backend Elysia route boundary for
+  backend package HTTP traffic. That boundary must own both `/api/*` and
+  `/rpc/*` dispatch.
+- Do not expose separate backend Elysia mounts, apps, or public route
+  collections for `/api/*` and `/rpc/*` at the web-server boundary. Internal
+  Elysia groups, subapps, or handlers may separate API and RPC logic only inside
+  the single exposed backend boundary.
 - Backend HTTP entrypoints must route through a backend-owned boundary before
   dispatching to RPC, API, Better Auth, metadata, worker, or internal service
   handlers.
