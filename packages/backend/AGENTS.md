@@ -28,6 +28,18 @@ These rules apply to `packages/backend`.
 
 ## Backend Security Contracts
 
+- Backend HTTP entrypoints must route through a backend-owned boundary before
+  dispatching to RPC, API, Better Auth, metadata, worker, or internal service
+  handlers.
+- Backend-exposed routes must declare their public surface, accepted consumer
+  class, accepted credential class, context resolver, and response boundary in
+  the owning route boundary registry before protected logic runs.
+- `/rpc/*` consumers are limited to the first-party browser UI, the mail
+  control service, Worker ingest webhooks, Better Auth/Agent Auth protocol
+  mounts, and explicitly documented public exceptions.
+- `/api/*` consumers are external agents, CLI clients, or API clients using API
+  keys, OAuth access tokens, or Agent Auth credentials. API credentials must not
+  authorize browser RPC routes.
 - Backend service functions used by protected RPC routes must accept an
   authenticated context or derive one through the owning auth helper before
   reading protected records, external service state, or operational status.

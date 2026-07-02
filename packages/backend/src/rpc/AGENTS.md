@@ -5,6 +5,9 @@ This directory owns same-origin app RPC under `/rpc/*`.
 ## App RPC Boundary
 
 - `/rpc/*` is for the first-party web UI and internal compatibility.
+- `/rpc/*` routes must be registered through the backend RPC route boundary
+  registry before dispatch. Route modules must not add unregistered Elysia
+  routes or mount subapps that bypass the registry.
 - Product UI workflows that need same-origin app data must use RPC
   routes owned here, not public `/api/*` routes, unless the same operation is
   also an explicitly documented public API contract.
@@ -18,9 +21,22 @@ This directory owns same-origin app RPC under `/rpc/*`.
 
 ## Authorization And Data Boundary
 
-- Every `/rpc/*` route must declare its accepted principal class by using the
+- Every `/rpc/*` route must declare exactly one accepted principal class:
+  `public`, `optional_browser_session`, `browser_session`, `browser_org`,
+  `browser_mail_org`, `global_admin`, `trial_admission`,
+  `mail_control_service`, `signed_worker_webhook`, `e2e_test`, or
+  `better_auth_protocol`.
+- Every `/rpc/*` route must declare its accepted principal class through the
+  route boundary registry and, unless it is a `public` registry entry, use the
   owning Better Auth session helper, bearer agent/OAuth/API-key helper, or
   explicit internal service-token helper before protected service logic runs.
+- Browser RPC route handlers must pass browser-only headers to downstream
+  services. Browser RPC routes must not forward API keys, OAuth bearer tokens,
+  Agent Auth JWTs, Paperclip run-context headers, or caller-supplied
+  organization override headers into authorization helpers.
+- Public API, agent CLI, OAuth bearer, API-key, and Agent Auth credential
+  consumers must use the `/api/*` boundary or an explicitly documented
+  Better Auth/Agent Auth protocol exception, not browser app RPC routes.
 - Protected RPC routes must authenticate the caller, derive the authoritative
   user, organization, and principal context on the server, and authorize the
   exact action through the owning permission contract.
@@ -35,10 +51,13 @@ This directory owns same-origin app RPC under `/rpc/*`.
   `userId`, and/or principal id before mapping response DTOs.
 - Cross-organization and global operational data must live only behind
   global-admin or internal service-token routes.
-- `/rpc/internal/*`, debug, test, e2e, and setup routes must require explicit
-  internal, test, or setup credentials before returning data or mutating state.
+- `/rpc/admin/setup/first-admin` is the only public setup route. It must stop
+  accepting setup once an admin exists and must not introduce a setup secret
+  environment variable.
+- `/rpc/internal/*`, debug, test, and e2e routes must require explicit
+  internal or test credentials before returning data or mutating state.
   Environment flags are not authorization.
-- Shared admission, setup, or service credentials must not be accepted in JSON
+- Shared admission or service credentials must not be accepted in JSON
   bodies. Use `Authorization: Bearer` or a named internal header and compare
   credentials in constant time.
 - RPC tests for protected routes must prove unauthenticated rejection,
