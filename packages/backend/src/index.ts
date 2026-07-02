@@ -85,7 +85,6 @@ export {
   type AgentMailAdminPermissionOption,
   type AgentMailCapabilityCatalog
 } from '@main/db'
-export type { AgentMailPublicStatus } from './agent-mail/service'
 export type {
   AdminAuditLogList,
   AdminAuditLogListFilters,

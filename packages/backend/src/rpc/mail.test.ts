@@ -7,7 +7,6 @@ const mailRpcTestState = vi.hoisted(() => ({
   disableAgentMailAccountForWeb: vi.fn(),
   getAgentMailAccountsForWeb: vi.fn(),
   getAgentMailOriginalSourceForWeb: vi.fn(),
-  getAgentMailStatusForWeb: vi.fn(),
   getAgentMailAdminNavigationForWeb: vi.fn(),
   getAgentMailAdminViewForWeb: vi.fn(),
   getAgentMailWorkspaceForWeb: vi.fn(),
@@ -25,7 +24,6 @@ const mailRpcTestState = vi.hoisted(() => ({
 }))
 
 vi.mock('../agent-mail/service', () => ({
-  getAgentMailStatusForWeb: mailRpcTestState.getAgentMailStatusForWeb,
   isAgentMailAccessError: (error: unknown) => error instanceof Error && error.name === 'AgentMailAccessError',
   submitAgentMailOutboundFromWeb: vi.fn()
 }))
@@ -85,7 +83,6 @@ describe('mail RPC routes', () => {
     mailRpcTestState.getAgentMailAdminNavigationForWeb.mockReset()
     mailRpcTestState.getAgentMailAdminViewForWeb.mockReset()
     mailRpcTestState.getAgentMailOriginalSourceForWeb.mockReset()
-    mailRpcTestState.getAgentMailStatusForWeb.mockReset()
     mailRpcTestState.getAgentMailWorkspaceForWeb.mockReset()
     mailRpcTestState.renameAgentMailFolderForWeb.mockReset()
     mailRpcTestState.revokeAgentMailAgentEnrollmentForWeb.mockReset()
@@ -97,21 +94,6 @@ describe('mail RPC routes', () => {
     mailRpcTestState.updateAgentMailPrincipalMailboxGrantsForWeb.mockReset()
     mailRpcTestState.updateAgentMailPrincipalSystemPermissionsForWeb.mockReset()
     mailRpcTestState.updateAgentMailForwardingGroupForWeb.mockReset()
-  })
-
-  it('returns a Bearer challenge for authenticated mail routes that fail with 401', async () => {
-    expect.hasAssertions()
-    const error = new Error('Authentication required') as Error & { status: 401 }
-    error.name = 'AgentMailAccessError'
-    error.status = 401
-    mailRpcTestState.getAgentMailStatusForWeb.mockRejectedValue(error)
-
-    const { default: mail } = await import('./mail')
-    const response = await mail.handle(new Request('https://mail.example.com/mail/status'))
-
-    expect(response.status).toBe(401)
-    expect(response.headers.get('www-authenticate')).toBe('Bearer realm="agentteam-email"')
-    await expect(response.json()).resolves.toStrictEqual({ error: 'Authentication required' })
   })
 
   it('passes mailbox admin pagination and filters through the RPC boundary', async () => {

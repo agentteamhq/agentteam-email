@@ -680,6 +680,85 @@ describe('Cloudflare domain authorization', () => {
       { returnDocument: 'after', upsert: true }
     )
   })
+
+  it('records worker credential issuance failures during connected domain provisioning', async () => {
+    expect.hasAssertions()
+    const { connection, domain, globals, mocks } = cloudflareProvisioningGlobals()
+    const connectionPublicId = publicIdFromUUIDv7(connection._id)
+    const controlError = Object.assign(new Error('control API returned secret control_secret_123'), {
+      method: 'agentMail.worker.archiveCredentials.issue',
+      name: 'AgentMailControlAPIError',
+      status: 400
+    })
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    cloudflareServiceTestState.requireAgentMailOrganizationContext.mockResolvedValue({
+      ability: { cannot: vi.fn(() => false) },
+      organizationId: TEST_ORGANIZATION_ID
+    })
+    cloudflareServiceTestState.createAgentMailWorkerCredentials.mockRejectedValue(controlError)
+    const { applyCloudflareConnectionProvisioning } = await import('./service')
+
+    const result = await applyCloudflareConnectionProvisioning({
+      connectionPublicId,
+      headers: new Headers()
+    })
+    const serialized = JSON.stringify(result)
+
+    expect(result).toMatchObject({
+      publicId: connectionPublicId,
+      domain: connection.domain,
+      lastErrorCode: 'AT_EMAIL_ADMIN_CONTROL_CREDENTIALS_FAILED',
+      provisioningStatus: 'failed',
+      status: 'degraded'
+    })
+    expect(serialized).not.toContain('control_secret_123')
+    expect(mocks.connectionUpdateOne).toHaveBeenCalledWith(
+      { _id: connection._id },
+      {
+        $set: {
+          status: 'provisioning',
+          provisioningStatus: 'pending',
+          lastErrorCode: null,
+          lastErrorMessage: null
+        }
+      }
+    )
+    expect(cloudflareServiceTestState.createAgentMailWorkerCredentials).toHaveBeenCalledWith({
+      organization_id: TEST_ORGANIZATION_ID,
+      organization_public_id: publicIdFromUUIDv7(TEST_ORGANIZATION_ID),
+      domain: connection.domain,
+      archive_prefix: `orgs/${publicIdFromUUIDv7(TEST_ORGANIZATION_ID)}/domains/example.com/mail/inbound`,
+      worker_connection_id: connectionPublicId,
+      worker_domain_deployment_id: publicIdFromUUIDv7(domain._id)
+    })
+    expect(cloudflareServiceTestState.applyCloudflareProvisioning).not.toHaveBeenCalled()
+    expect(mocks.connectionFindByIdAndUpdate).toHaveBeenCalledWith(
+      connection._id,
+      {
+        $set: {
+          lastErrorCode: 'AT_EMAIL_ADMIN_CONTROL_CREDENTIALS_FAILED',
+          lastErrorMessage:
+            'Agent Mail worker credential issuance failed. Try again or check runtime health.',
+          provisioningStatus: 'failed',
+          status: 'degraded'
+        }
+      },
+      { returnDocument: 'after' }
+    )
+    expect(mocks.domainUpdateOne).toHaveBeenCalledWith(
+      { _id: domain._id },
+      {
+        $set: {
+          lastErrorCode: 'AT_EMAIL_ADMIN_CONTROL_CREDENTIALS_FAILED',
+          lastErrorMessage:
+            'Agent Mail worker credential issuance failed. Try again or check runtime health.',
+          status: 'degraded'
+        }
+      }
+    )
+    expect(mocks.deploymentFindOne).not.toHaveBeenCalled()
+    expect(mocks.credentialRefreshCreate).not.toHaveBeenCalled()
+  })
 })
 
 describe('Cloudflare disconnect service', () => {
@@ -1520,6 +1599,109 @@ function cloudflareGrantSelectionGlobals() {
           },
           cloudflareOAuthGrant: {
             find: mocks.grantFind,
+            findOne: mocks.grantFindOne,
+            updateOne: mocks.grantUpdateOne
+          },
+          member: {
+            findOne: mocks.memberFindOne
+          },
+          organization: {
+            findById: mocks.organizationFindById
+          }
+        }
+      }
+    },
+    mocks
+  }
+}
+
+function cloudflareProvisioningGlobals() {
+  const connection = cloudflareSelectionConnection()
+  const domain = {
+    _id: '01960000-0000-7000-8000-000000000032',
+    archivePrefix: 'orgs/org_public_test/domains/example.com/mail/inbound',
+    cloudflareAccountId: connection.cloudflareAccountId,
+    cloudflareConnectionId: connection._id,
+    cloudflareZoneId: connection.cloudflareZoneId,
+    domain: connection.domain,
+    organizationId: TEST_ORGANIZATION_ID,
+    organizationPublicId: 'org_public_test',
+    status: 'provisioning',
+    userId: TEST_USER_ID
+  }
+  const grant = cloudflareSelectionGrant('older')
+  const mocks = {
+    authGetAccessToken: vi.fn(() =>
+      Promise.resolve({
+        accessToken: 'better-auth-cloudflare-access-token'
+      })
+    ),
+    authGetSession: vi.fn(() =>
+      Promise.resolve({
+        session: {
+          activeOrganizationId: TEST_ORGANIZATION_ID,
+          id: 'session-1'
+        },
+        user: {
+          id: TEST_USER_ID
+        }
+      })
+    ),
+    connectionFindByIdAndUpdate: vi.fn((_id: string, update: { $set: Record<string, unknown> }) =>
+      execQuery({
+        ...connection,
+        ...update.$set
+      })
+    ),
+    connectionFindOne: vi.fn((query: Record<string, unknown>) =>
+      execQuery(
+        recordMatchesQuery(connection, { _id: query._id, organizationId: query.organizationId })
+          ? connection
+          : null
+      )
+    ),
+    connectionUpdateOne: vi.fn(() => execQuery({ modifiedCount: 1 })),
+    credentialRefreshCreate: vi.fn(() => Promise.resolve({ _id: 'refresh-1' })),
+    deploymentFindOne: vi.fn(() => execQuery(null)),
+    deploymentFindOneAndUpdate: vi.fn(() => execQuery(null)),
+    domainFindOneAndUpdate: vi.fn(() => execQuery(domain)),
+    domainUpdateOne: vi.fn(() => execQuery({ modifiedCount: 1 })),
+    grantFindOne: vi.fn((query: Record<string, unknown>) =>
+      execQuery(recordMatchesQuery(grant, query) ? grant : null)
+    ),
+    grantUpdateOne: vi.fn(() => execQuery({ modifiedCount: 1 })),
+    memberFindOne: vi.fn(() => execQuery({ role: 'member' })),
+    organizationFindById: vi.fn(() => execQuery({ _id: TEST_ORGANIZATION_ID }))
+  }
+  return {
+    connection,
+    domain,
+    globals: {
+      auth: {
+        api: {
+          getAccessToken: mocks.authGetAccessToken,
+          getSession: mocks.authGetSession
+        }
+      },
+      db: {
+        models: {
+          agentMailDomain: {
+            findOneAndUpdate: mocks.domainFindOneAndUpdate,
+            updateOne: mocks.domainUpdateOne
+          },
+          agentMailWorkerCredentialRefresh: {
+            create: mocks.credentialRefreshCreate
+          },
+          agentMailWorkerDeployment: {
+            findOne: mocks.deploymentFindOne,
+            findOneAndUpdate: mocks.deploymentFindOneAndUpdate
+          },
+          cloudflareConnection: {
+            findByIdAndUpdate: mocks.connectionFindByIdAndUpdate,
+            findOne: mocks.connectionFindOne,
+            updateOne: mocks.connectionUpdateOne
+          },
+          cloudflareOAuthGrant: {
             findOne: mocks.grantFindOne,
             updateOne: mocks.grantUpdateOne
           },

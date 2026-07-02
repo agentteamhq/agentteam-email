@@ -59,3 +59,10 @@ Mock stories must include `Mock` in the Storybook title or story name and must s
 - Frontend `/rpc/*` calls must use the typed Elysia Eden client derived from `@main/backend`
   `BackendRpcAppType`; raw `fetch` helpers, `as any`/`as unknown as`, and local RPC payload/client
   redeclarations are forbidden.
+- Production frontend code must not call `/rpc/internal/*`, debug, test, e2e,
+  setup, or unauthenticated diagnostic RPC routes.
+- User-facing screens must not require backend operational diagnostics from
+  non-admin RPC routes.
+- Frontend state, fixtures, and Storybook stories must not define live product
+  contracts that include backend diagnostics, internal ids, worker names, queue
+  counts, credential metadata, or cross-organization snapshots.

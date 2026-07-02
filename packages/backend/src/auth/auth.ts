@@ -18,7 +18,6 @@ import {
   lastLoginMethod,
   magicLink,
   multiSession,
-  openAPI,
   organization
 } from 'better-auth/plugins'
 import { auditLog } from 'better-auth-audit-logs'
@@ -351,7 +350,6 @@ export function createGlobalAuth(db: Database): GlobalAuth {
         strategy: 'hash'
       }
     }),
-    ...(PUBLIC_VARS.DEV ? [openAPI()] : []),
     ...(cloudflareOAuthConfig ? [genericOAuth({ config: [cloudflareOAuthConfig] })] : []),
     passkey(),
     multiSession(),

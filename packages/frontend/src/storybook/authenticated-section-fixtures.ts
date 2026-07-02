@@ -157,64 +157,6 @@ const denseCloudflareConnections = [
   }
 ] satisfies CloudflareConnectionFixture[]
 
-const mailRuntimeStatus = {
-  controlState: {
-    domainsActive: 1,
-    domainsDisabled: 0,
-    domainsTotal: 1,
-    issues: [],
-    ok: true,
-    schema: 'agent-mail.control-state.v1',
-    updatedAt: '2026-06-21T16:25:00.000Z'
-  },
-  dependencies: {
-    cloudflare_api: {
-      configured: true,
-      issues: [],
-      ok: true
-    },
-    wildduck_api: {
-      configured: true,
-      issues: [],
-      ok: true
-    }
-  },
-  domains: [
-    {
-      domain: 'agentteam.example',
-      issues: [],
-      status: 'active'
-    }
-  ],
-  generatedAt: '2026-06-21T16:26:00.000Z',
-  issues: [],
-  modules: {
-    poller: {
-      activeDomains: 1,
-      configured: true,
-      issues: [],
-      ok: true,
-      queue: {
-        blocked: 0,
-        completed: 128,
-        delivered: 124,
-        leased: 1,
-        pending: 2,
-        retryWait: 0
-      }
-    },
-    smtp_relay: {
-      configured: true,
-      issues: [],
-      ok: true,
-      provider: 'cloudflare'
-    }
-  },
-  ok: true,
-  selectedProvider: 'cloudflare',
-  status: 'ready'
-} satisfies NonNullable<DomainSettingsState['mailStatus']>
-
 export const domainSettingsEmptyFirstUseState = {
   mode: 'addDomain',
   status: {
@@ -251,11 +193,6 @@ export const domainSettingsDomainConnectedState = {
 
 export const domainSettingsDomainProvisioningState = {
   ...domainSettingsAddDomainSelectZoneState,
-  mailStatus: {
-    ...mailRuntimeStatus,
-    ok: false,
-    status: 'provisioning'
-  },
   message: 'Domain provisioning is queued for Cloudflare.',
   mode: 'domain',
   selectedDomainPublicId: pendingCloudflareConnection.publicId,
@@ -267,7 +204,6 @@ export const domainSettingsDomainProvisioningState = {
 
 export const domainSettingsDomainLiveState = {
   ...domainSettingsAddDomainSelectZoneState,
-  mailStatus: mailRuntimeStatus,
   mode: 'domain',
   selectedDomainPublicId: liveCloudflareConnection.publicId,
   status: {
@@ -278,12 +214,6 @@ export const domainSettingsDomainLiveState = {
 
 export const domainSettingsDomainNeedsAttentionState = {
   ...domainSettingsAddDomainSelectZoneState,
-  mailStatus: {
-    ...mailRuntimeStatus,
-    issues: ['Cloudflare route requires attention'],
-    ok: false,
-    status: 'degraded'
-  },
   mode: 'domain',
   selectedDomainPublicId: degradedCloudflareConnection.publicId,
   status: {
@@ -294,14 +224,6 @@ export const domainSettingsDomainNeedsAttentionState = {
 
 export const domainSettingsDenseDomainListState = {
   ...domainSettingsAddDomainSelectZoneState,
-  mailStatus: {
-    ...mailRuntimeStatus,
-    controlState: {
-      ...mailRuntimeStatus.controlState,
-      domainsActive: 2,
-      domainsTotal: 5
-    }
-  },
   mode: 'domain',
   selectedDomainPublicId: denseCloudflareConnections[0]?.publicId,
   status: {

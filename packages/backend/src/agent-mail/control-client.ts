@@ -129,10 +129,6 @@ export async function enqueueAgentMailIngest(
   )
 }
 
-export async function getAgentMailControlStatus(): Promise<unknown> {
-  return callControlRPC('agentMail.status.get', { include_source_files: false }, (value) => value)
-}
-
 export async function syncAgentMailRuntime(
   domains: AgentMailRuntimeDomainProjection[]
 ): Promise<AgentMailRuntimeSyncResult> {

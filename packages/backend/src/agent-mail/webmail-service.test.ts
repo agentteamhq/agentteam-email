@@ -226,7 +226,6 @@ vi.mock('./wildduck-client', () => ({
 }))
 
 vi.mock('./control-client', () => ({
-  getAgentMailControlStatus: vi.fn(),
   submitAgentMailSend: webmailTestState.submitAgentMailSend
 }))
 
