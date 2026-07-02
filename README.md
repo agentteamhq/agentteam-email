@@ -154,8 +154,7 @@ at-email agent enroll TOKEN
 ```
 
 The canonical skill lives in [skills/at-email-cli](skills/at-email-cli).
-Publishing and marketplace notes live in
-[SKILL-PUBLISHING.md](SKILL-PUBLISHING.md).
+Publishing and marketplace notes live in [RELEASE.md](RELEASE.md).
 
 ## Development
 
