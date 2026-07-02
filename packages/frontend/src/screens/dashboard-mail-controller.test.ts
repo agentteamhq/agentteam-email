@@ -436,6 +436,42 @@ describe('mail client controller view mapping', () => {
     })
   })
 
+  it('does not return first-use dashboard onboarding to domain setup after domain setup succeeds', () => {
+    expect.hasAssertions()
+    const view = toDashboardView(
+      'success',
+      null,
+      undefined,
+      firstUseMailWorkspace(),
+      domainSettings({
+        mode: 'domain',
+        selectedDomainPublicId: cloudflareConnection().publicId,
+        status: {
+          connections: [
+            cloudflareConnection({
+              provisioningStatus: 'succeeded',
+              status: 'active'
+            })
+          ],
+          grants: [cloudflareGrant()]
+        }
+      })
+    )
+
+    expect(view.state).toBe('empty')
+    expect(view.onboardingPrompt).toMatchObject({
+      actionLabel: 'Create mailbox',
+      mode: 'createMailbox',
+      state: 'ready',
+      title: 'Create your first mailbox'
+    })
+    expect(view.onboardingPrompt).not.toMatchObject({
+      actionLabel: 'Connect domain',
+      mode: 'configureDomain',
+      title: 'Choose your domain'
+    })
+  })
+
   it('prompts Cloudflare onboarding when the workspace has no accounts', () => {
     expect.hasAssertions()
     const view = toSidebarView(

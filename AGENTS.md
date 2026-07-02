@@ -195,6 +195,18 @@ Frontend product icons must use `@phosphor-icons/react`.
 New or substantially changed app screens, workflows, and reusable frontend
 components must include Storybook coverage for meaningful UI states.
 
+Every production-reachable user-visible screen state must be represented in
+Storybook. Production frontend code must not render user-visible UI states,
+status messages, empty states, success states, error states, loading states,
+gated states, or workflow steps that are absent from the owning Storybook screen
+catalog.
+
+Storybook screen stories and production routes must render the same route,
+page, controller, or canonical component contract. Storybook may mock loader,
+RPC, API, or service data at the boundary, but must pass that data into the same
+owner used by the app instead of recreating layout, component hierarchy, state
+transitions, or product behavior separately.
+
 Product UI copy and fixtures must describe current product behavior with
 realistic data.
 

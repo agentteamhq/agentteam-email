@@ -1,15 +1,15 @@
 package controlservice
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"net"
-	"net/http"
 	"net/smtp"
 	"net/url"
 	"os"
@@ -29,6 +29,7 @@ import (
 	"mail-control-service/internal/provisioning/wildduckprovisioner"
 	"mail-control-service/internal/registry/domainregistry"
 
+	"github.com/golang-jwt/jwt/v5"
 	"go.mongodb.org/mongo-driver/v2/x/mongo/driver/connstring"
 )
 
@@ -75,14 +76,25 @@ type controlRuntimeAPI struct {
 const workerArchiveCredentialTTL = 7 * 24 * time.Hour
 
 type cloudflareWorkerArchiveCredentialIssuer struct {
-	apiBaseURL        string
-	accountID         string
-	apiToken          string
-	bucket            string
-	endpoint          string
-	region            string
-	parentAccessKeyID string
-	httpClient        *http.Client
+	accountID             string
+	bucket                string
+	endpoint              string
+	endpointAudience      string
+	region                string
+	parentAccessKeyID     string
+	parentSecretAccessKey string
+}
+
+type r2TemporaryCredentialClaims struct {
+	Bucket string                     `json:"bucket"`
+	Scope  string                     `json:"scope"`
+	Paths  r2TemporaryCredentialPaths `json:"paths"`
+	jwt.RegisteredClaims
+}
+
+type r2TemporaryCredentialPaths struct {
+	PrefixPaths []string `json:"prefixPaths"`
+	ObjectPaths []string `json:"objectPaths"`
 }
 
 func (a *controlRuntimeAPI) EnqueueNotification(ctx context.Context, notification poller.Notification) (r2archive.InboundBundle, error) {
@@ -161,8 +173,7 @@ func validateIngestNotificationMatchesRecord(notification poller.Notification, r
 }
 
 func newCloudflareWorkerArchiveCredentialIssuer() (*cloudflareWorkerArchiveCredentialIssuer, error) {
-	apiToken, err := configfile.RequireEnv("AT_EMAIL_ADMIN_R2_API_TOKEN")
-	if err != nil {
+	if _, err := configfile.RequireEnv("AT_EMAIL_ADMIN_R2_API_TOKEN"); err != nil {
 		return nil, err
 	}
 	accountID, err := configfile.RequireEnv("AT_EMAIL_ADMIN_R2_ACCOUNT_ID")
@@ -185,27 +196,37 @@ func newCloudflareWorkerArchiveCredentialIssuer() (*cloudflareWorkerArchiveCrede
 	if err != nil {
 		return nil, err
 	}
+	parentSecretAccessKey, err := configfile.RequireEnv("AT_EMAIL_ADMIN_R2_SECRET_ACCESS_KEY")
+	if err != nil {
+		return nil, err
+	}
+	endpointAudience, err := r2EndpointAudience(endpoint)
+	if err != nil {
+		return nil, err
+	}
 	return &cloudflareWorkerArchiveCredentialIssuer{
-		apiBaseURL:        cloudflareAPIBaseURL(),
-		accountID:         accountID,
-		apiToken:          apiToken,
-		bucket:            bucket,
-		endpoint:          endpoint,
-		region:            region,
-		parentAccessKeyID: parentAccessKeyID,
-		httpClient:        http.DefaultClient,
+		accountID:             accountID,
+		bucket:                bucket,
+		endpoint:              endpoint,
+		endpointAudience:      endpointAudience,
+		region:                region,
+		parentAccessKeyID:     parentAccessKeyID,
+		parentSecretAccessKey: parentSecretAccessKey,
 	}, nil
 }
 
-func cloudflareAPIBaseURL() string {
-	apiBaseURL := strings.TrimRight(os.Getenv("AT_EMAIL_ADMIN_CF_API_BASE_URL"), "/")
-	if apiBaseURL == "" {
-		return "https://api.cloudflare.com/client/v4"
+func r2EndpointAudience(endpoint string) (string, error) {
+	parsed, err := url.Parse(endpoint)
+	if err != nil {
+		return "", fmt.Errorf("parse AT_EMAIL_ADMIN_R2_ENDPOINT: %w", err)
 	}
-	return apiBaseURL
+	if parsed.Scheme == "" || parsed.Host == "" {
+		return "", fmt.Errorf("AT_EMAIL_ADMIN_R2_ENDPOINT must include scheme and host")
+	}
+	return parsed.Host, nil
 }
 
-func (i *cloudflareWorkerArchiveCredentialIssuer) IssueWorkerArchiveCredentials(ctx context.Context, params controlapi.WorkerArchiveCredentialsParams, now time.Time) (controlapi.WorkerArchiveCredentialsResult, error) {
+func (i *cloudflareWorkerArchiveCredentialIssuer) IssueWorkerArchiveCredentials(_ context.Context, params controlapi.WorkerArchiveCredentialsParams, now time.Time) (controlapi.WorkerArchiveCredentialsResult, error) {
 	if i == nil {
 		return controlapi.WorkerArchiveCredentialsResult{}, fmt.Errorf("worker archive credential issuer is not configured")
 	}
@@ -233,54 +254,30 @@ func (i *cloudflareWorkerArchiveCredentialIssuer) IssueWorkerArchiveCredentials(
 		return controlapi.WorkerArchiveCredentialsResult{}, fmt.Errorf("worker_domain_deployment_id is required")
 	}
 
-	body := map[string]any{
-		"bucket":            i.bucket,
-		"parentAccessKeyId": i.parentAccessKeyID,
-		"permission":        "object-read-write",
-		"prefixes":          []string{archivePrefix.ArchivePrefix + "/"},
-		"ttlSeconds":        int(workerArchiveCredentialTTL.Seconds()),
+	tokenExpiresAt := now.UTC().Add(workerArchiveCredentialTTL)
+	claims := r2TemporaryCredentialClaims{
+		Bucket: i.bucket,
+		Scope:  "object-read-write",
+		Paths: r2TemporaryCredentialPaths{
+			PrefixPaths: []string{archivePrefix.ArchivePrefix + "/"},
+			ObjectPaths: []string{},
+		},
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   i.accountID,
+			Issuer:    i.parentAccessKeyID,
+			Audience:  jwt.ClaimStrings{i.endpointAudience},
+			IssuedAt:  jwt.NewNumericDate(now.UTC()),
+			ExpiresAt: jwt.NewNumericDate(tokenExpiresAt),
+		},
 	}
-	bodyBytes, err := json.Marshal(body)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	token.Header["typ"] = "JWT"
+	signedJWT, err := token.SignedString([]byte(i.parentSecretAccessKey))
 	if err != nil {
-		return controlapi.WorkerArchiveCredentialsResult{}, fmt.Errorf("marshal Cloudflare temporary credential request: %w", err)
+		return controlapi.WorkerArchiveCredentialsResult{}, fmt.Errorf("sign Cloudflare R2 temporary credential JWT: %w", err)
 	}
-	requestURL, err := url.JoinPath(i.apiBaseURL, "accounts", url.PathEscape(i.accountID), "r2", "temp-access-credentials")
-	if err != nil {
-		return controlapi.WorkerArchiveCredentialsResult{}, fmt.Errorf("build Cloudflare temporary credential request URL: %w", err)
-	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, bytes.NewReader(bodyBytes))
-	if err != nil {
-		return controlapi.WorkerArchiveCredentialsResult{}, fmt.Errorf("create Cloudflare temporary credential request: %w", err)
-	}
-	request.Header.Set("Authorization", "Bearer "+i.apiToken)
-	request.Header.Set("Content-Type", "application/json")
-
-	response, err := i.httpClient.Do(request)
-	if err != nil {
-		return controlapi.WorkerArchiveCredentialsResult{}, fmt.Errorf("call Cloudflare temporary credential API: %w", err)
-	}
-	defer response.Body.Close()
-
-	var payload struct {
-		Success bool `json:"success"`
-		Result  struct {
-			AccessKeyID     string `json:"accessKeyId"`
-			SecretAccessKey string `json:"secretAccessKey"`
-			SessionToken    string `json:"sessionToken"`
-		} `json:"result"`
-		Errors []struct {
-			Message string `json:"message"`
-		} `json:"errors"`
-	}
-	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
-		return controlapi.WorkerArchiveCredentialsResult{}, fmt.Errorf("decode Cloudflare temporary credential response: %w", err)
-	}
-	if response.StatusCode < 200 || response.StatusCode >= 300 || !payload.Success {
-		return controlapi.WorkerArchiveCredentialsResult{}, fmt.Errorf("Cloudflare temporary credential API failed with HTTP %d", response.StatusCode)
-	}
-	if payload.Result.AccessKeyID == "" || payload.Result.SecretAccessKey == "" || payload.Result.SessionToken == "" {
-		return controlapi.WorkerArchiveCredentialsResult{}, fmt.Errorf("Cloudflare temporary credential response was missing credential material")
-	}
+	temporarySecretAccessKey := sha256.Sum256([]byte(signedJWT))
+	sessionToken := base64.StdEncoding.EncodeToString([]byte("jwt/" + signedJWT))
 
 	return controlapi.WorkerArchiveCredentialsResult{
 		Status:          "issued",
@@ -288,10 +285,10 @@ func (i *cloudflareWorkerArchiveCredentialIssuer) IssueWorkerArchiveCredentials(
 		Bucket:          i.bucket,
 		Endpoint:        i.endpoint,
 		Region:          i.region,
-		AccessKeyID:     payload.Result.AccessKeyID,
-		SecretAccessKey: payload.Result.SecretAccessKey,
-		SessionToken:    payload.Result.SessionToken,
-		ExpiresAt:       now.UTC().Add(workerArchiveCredentialTTL),
+		AccessKeyID:     i.parentAccessKeyID,
+		SecretAccessKey: hex.EncodeToString(temporarySecretAccessKey[:]),
+		SessionToken:    sessionToken,
+		ExpiresAt:       tokenExpiresAt,
 		RotationDate:    now.UTC().Format("2006-01-02"),
 	}, nil
 }

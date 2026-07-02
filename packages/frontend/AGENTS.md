@@ -18,6 +18,18 @@ their owning CLI or generated workflow with explicit current-task approval.
 
 Storybook stories must render canonical product components only.
 
+Every production-reachable user-visible state in the frontend must have
+Storybook coverage in the owning `Screens/*` catalog. Frontend code must not
+display user-visible states, status messages, empty states, success states,
+error states, loading states, gated states, or workflow steps that are absent
+from the owning Storybook screen catalog.
+
+Storybook `Screens/*` catalogs are the canonical inventory of user-visible
+screen states. Production routes and Storybook stories must drive the same
+route, page, controller, or canonical component contract with the same
+controller-derived props or the same mocked loader, RPC, API, or service
+boundary data.
+
 Storybook `meta.title` must use the approved sidebar roots (`Screens`, `Components`, `Mocks`, `Showcase`, and existing `Controllers`); story `name` values must be flat human-readable labels and must not contain `/` because story names do not create sidebar groups.
 
 Storybook stories must be grouped by the rendered product surface; implementation-backed stories, including controller, route, RPC, loader, and interaction-test stories, must live under that product surface's `Integration` subgroup.

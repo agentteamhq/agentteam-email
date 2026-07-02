@@ -87,20 +87,24 @@ function toFirstUseDashboardOnboardingPrompt(
         grant.requiredScopes.every((scope) => grant.grantedScopes.includes(scope))
     ) ?? false
   const hasConnection = (status?.connections.length ?? 0) > 0
+  const hasReadyDomain =
+    status?.connections.some(
+      (connection) => connection.status === 'active' && connection.provisioningStatus === 'succeeded'
+    ) ?? false
   const isDomainSetupPending =
     status?.connections.some(
       (connection) => connection.status === 'provisioning' || connection.provisioningStatus === 'pending'
     ) ?? false
   const isBusy = domainSettingsState.busy === true
 
-  if (firstMailboxSetupState) {
+  if (hasReadyDomain || firstMailboxSetupState) {
     return {
       ...FIRST_USE_DASHBOARD_MAILBOX_SETUP_PROMPT,
-      errorDescription: firstMailboxSetupState.errorDescription ?? undefined,
+      errorDescription: firstMailboxSetupState?.errorDescription ?? undefined,
       state:
-        firstMailboxSetupState.state === 'creating'
+        firstMailboxSetupState?.state === 'creating'
           ? 'connecting'
-          : firstMailboxSetupState.state === 'error'
+          : firstMailboxSetupState?.state === 'error'
             ? 'error'
             : 'ready'
     }

@@ -54,6 +54,13 @@ These rules apply to `packages/backend`.
   boundaries must contain user-actionable product state only. They must not
   expose backend topology, dependency state, queue state, unscoped runtime
   snapshots, deployment identifiers, or credential lifecycle metadata.
+- Backend DTOs, status enums, error codes, and workflow states consumed by the
+  first-party browser UI must not introduce new user-visible frontend states
+  unless the owning frontend controller maps that state and the owning
+  Storybook `Screens/*` catalog covers it.
+- Backend changes that add, remove, or reinterpret browser-consumed product
+  states must update the frontend controller contract and Storybook state
+  catalog in the same change.
 - Security-boundary tests must prove unauthenticated rejection,
   wrong-organization rejection, insufficient-authority rejection, and
   non-disclosure of operational diagnostics for every backend service used by
