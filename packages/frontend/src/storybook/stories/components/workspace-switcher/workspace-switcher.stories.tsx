@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { AddressBookIcon, ArchiveIcon, PaperPlaneTiltIcon, TrayIcon } from '@phosphor-icons/react'
-import { expect, fn, within } from 'storybook/test'
+import { expect, fn, userEvent, within } from 'storybook/test'
 
 import {
   longWorkspaceSwitcherMailboxes,
@@ -49,7 +49,22 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 export const Default: Story = {
-  name: 'Default'
+  name: 'Default',
+  play: async ({ canvasElement }) => {
+    const trigger = canvasElement.querySelector('button[aria-label="Open workspace and mailbox switcher"]')
+
+    await expect(trigger).not.toBeNull()
+    if (!(trigger instanceof HTMLButtonElement)) {
+      throw new TypeError('Expected workspace switcher trigger to render as a button.')
+    }
+
+    const logoSvgs = trigger.querySelectorAll('svg[viewBox="0 0 512 512"]')
+
+    await expect(trigger.querySelector('img')).toBeNull()
+    await expect(logoSvgs).toHaveLength(2)
+    await expect(logoSvgs[0]).toHaveClass('hidden', 'size-8', 'dark:block')
+    await expect(logoSvgs[1]).toHaveClass('block', 'size-8', 'dark:hidden')
+  }
 }
 
 export const LongMailboxList: Story = {
@@ -73,10 +88,34 @@ export const MultipleWorkspaces: Story = {
     mailboxes: workspaceSwitcherMailboxes,
     workspaces: multiWorkspaceSwitcherWorkspaces
   },
-  play: async ({ canvasElement }) => {
+  play: async ({ args, canvasElement }) => {
     const body = within(canvasElement.ownerDocument.body)
 
     await expect((await body.findAllByText('Partner Mail Ops')).length).toBeGreaterThanOrEqual(1)
+    const switcherTrigger = canvasElement.querySelector(
+      'button[aria-label="Open workspace and mailbox switcher"]'
+    )
+    if (!(switcherTrigger instanceof HTMLButtonElement)) {
+      throw new TypeError('Expected workspace switcher trigger to render as a button.')
+    }
+
+    let targetWorkspace = body.queryByRole('menuitem', { name: /partner mail ops/i })
+    let targetWorkspaceId = 'partner-mail-ops'
+    if (!targetWorkspace) {
+      targetWorkspace = body.queryByRole('menuitem', { name: /northstar ops/i })
+      targetWorkspaceId = 'northstar-ops'
+    }
+    if (!targetWorkspace) {
+      await userEvent.click(switcherTrigger)
+      targetWorkspace = body.queryByRole('menuitem', { name: /partner mail ops/i })
+      targetWorkspaceId = 'partner-mail-ops'
+    }
+    if (!targetWorkspace) {
+      throw new Error('Expected a switchable workspace menu item.')
+    }
+
+    await userEvent.click(targetWorkspace)
+    await expect(args.onWorkspaceSelect).toHaveBeenCalledWith(targetWorkspaceId)
   }
 }
 
