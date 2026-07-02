@@ -121,7 +121,7 @@ const disconnectedCloudflareConnection = {
   domain: 'disconnected.agentteam.example',
   cloudflareZoneName: 'disconnected.agentteam.example',
   status: 'disconnected',
-  provisioningStatus: 'disconnected',
+  provisioningStatus: 'failed',
   lastErrorMessage: 'Cloudflare access was disconnected before email routing finished.',
   updatedAt: new Date('2026-06-21T16:28:00.000Z')
 } satisfies CloudflareConnectionFixture

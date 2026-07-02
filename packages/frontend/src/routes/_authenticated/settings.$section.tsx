@@ -27,7 +27,7 @@ export const Route = createFileRoute('/_authenticated/settings/$section')({
       },
       {
         name: 'description',
-        content: `Manage ${SITE_STRINGS.BRAND_NAME} account, security, connected account, organization, and domain settings.`
+        content: `Manage ${SITE_STRINGS.BRAND_NAME} account, security, integration, organization, and domain settings.`
       }
     ]
   }),
@@ -44,6 +44,8 @@ function SettingsSectionRouteScreen() {
     notFound({ throw: true })
     return null
   }
+  const activeSettingsSection: SettingsSectionId =
+    search.integrationSource === 'paperclip' ? 'integrations' : settingsSection
 
   return (
     <DashboardMailController
@@ -59,7 +61,7 @@ function SettingsSectionRouteScreen() {
       routeState={routeState}
       routeSearch={search}
       settingsOpen
-      settingsSection={settingsSection}
+      settingsSection={activeSettingsSection}
     />
   )
 }

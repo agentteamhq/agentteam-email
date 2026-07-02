@@ -8,8 +8,6 @@ import {
   AgentAccessEmpty as AgentAccessEmptyStory,
   AgentAccessError as AgentAccessErrorStory,
   AgentAccessLoading as AgentAccessLoadingStory,
-  AgentAccessPaperclipConnected as AgentAccessPaperclipConnectedStory,
-  AgentAccessPaperclipHandoff as AgentAccessPaperclipHandoffStory,
   AgentAccessPartialActions as AgentAccessPartialActionsStory,
   AgentAccessPendingApproval as AgentAccessPendingApprovalStory,
   AgentAccessRevokedExpired as AgentAccessRevokedExpiredStory,
@@ -44,16 +42,6 @@ export const AgentAccessEmpty: Story = {
 export const AgentAccessActive: Story = {
   ...AgentAccessActiveStory,
   name: 'Active'
-}
-
-export const AgentAccessPaperclipHandoff: Story = {
-  ...AgentAccessPaperclipHandoffStory,
-  name: 'Paperclip handoff'
-}
-
-export const AgentAccessPaperclipConnected: Story = {
-  ...AgentAccessPaperclipConnectedStory,
-  name: 'Paperclip connected'
 }
 
 export const AgentAccessPendingApproval: Story = {

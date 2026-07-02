@@ -262,7 +262,26 @@ const storyAuthClientOverrides = {
   }
 }
 
-export const storyAuthClient = Object.assign(
-  Object.create(authReactClient),
-  storyAuthClientOverrides
-) as AuthProviderProps['authClient']
+type StoryAuthClientOverrides = Partial<typeof storyAuthClientOverrides>
+
+export function createStoryAuthClient(overrides: StoryAuthClientOverrides = {}): AuthProviderProps['authClient'] {
+  return Object.assign(Object.create(authReactClient), storyAuthClientOverrides, overrides) as AuthProviderProps['authClient']
+}
+
+export const storyAuthClient = createStoryAuthClient()
+
+export const storyAuthClientEmptySecurity = createStoryAuthClient({
+  apiKey: {
+    ...storyAuthClientOverrides.apiKey,
+    list: async () => ({
+      apiKeys: [],
+      total: 0
+    })
+  },
+  listAccounts: async () => [storyAccounts[0]],
+  listSessions: async () => [storySession],
+  passkey: {
+    ...storyAuthClientOverrides.passkey,
+    listUserPasskeys: async () => []
+  }
+})

@@ -65,7 +65,7 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 export const CloudflareConnectionFailed: Story = {
-  name: 'Cloudflare connected account failed',
+  name: 'Cloudflare integration failed',
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
 
@@ -73,7 +73,7 @@ export const CloudflareConnectionFailed: Story = {
     await expect(await canvas.findByText('invalid_request')).toBeInTheDocument()
     await expect(await canvas.findByRole('link', { name: /try again/i })).toHaveAttribute(
       'href',
-      '/settings/connected-accounts/'
+      '/settings/integrations/'
     )
   }
 }

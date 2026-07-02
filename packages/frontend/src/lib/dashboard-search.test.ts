@@ -11,6 +11,7 @@ describe('dashboard route search', () => {
       'agent-access',
       'agentAccess',
       'connected-accounts',
+      'integrations',
       'domains',
       'connectedAccounts',
       'security'
@@ -28,6 +29,7 @@ describe('dashboard route search', () => {
     })
 
     expect(search).not.toHaveProperty('agentAccessSource')
+    expect(search).not.toHaveProperty('integrationSource')
     expect(search).not.toHaveProperty('paperclipCompanyId')
     expect(search).not.toHaveProperty('paperclipPluginId')
   })
@@ -49,11 +51,12 @@ describe('dashboard route search', () => {
     })
     expect(search).not.toHaveProperty('settings')
     expect(search).not.toHaveProperty('agentAccessSource')
+    expect(search).not.toHaveProperty('integrationSource')
   })
 })
 
 describe('settings route search', () => {
-  it('maps Paperclip connection handoff query values to Agent Access state', () => {
+  it('maps Paperclip connection handoff query values to integration state', () => {
     expect.hasAssertions()
     expect(
       validateSettingsSearch({
@@ -62,7 +65,22 @@ describe('settings route search', () => {
         source: 'paperclip'
       })
     ).toMatchObject({
-      agentAccessSource: 'paperclip',
+      integrationSource: 'paperclip',
+      paperclipCompanyId: 'paperclip-company-1',
+      paperclipPluginId: 'agentteam.paperclip-email-plugin'
+    })
+  })
+
+  it('keeps the legacy Agent Access handoff key as a Paperclip integration alias', () => {
+    expect.hasAssertions()
+    expect(
+      validateSettingsSearch({
+        agentAccessSource: 'paperclip',
+        paperclipCompanyId: 'paperclip-company-1',
+        paperclipPluginId: 'agentteam.paperclip-email-plugin'
+      })
+    ).toMatchObject({
+      integrationSource: 'paperclip',
       paperclipCompanyId: 'paperclip-company-1',
       paperclipPluginId: 'agentteam.paperclip-email-plugin'
     })

@@ -15,7 +15,7 @@ export interface DashboardSearch {
 }
 
 export interface SettingsRouteSearch extends DashboardSearch {
-  agentAccessSource?: 'paperclip'
+  integrationSource?: 'paperclip'
   paperclipCompanyId?: string
   paperclipPluginId?: string
 }
@@ -27,7 +27,10 @@ export function validateDashboardSearch(search: Record<string, unknown>): Dashbo
 }
 
 export function validateSettingsSearch(search: Record<string, unknown>): SettingsRouteSearch {
-  const paperclipSource = search.source === 'paperclip' || search.agentAccessSource === 'paperclip'
+  const paperclipSource =
+    search.source === 'paperclip' ||
+    search.integrationSource === 'paperclip' ||
+    search.agentAccessSource === 'paperclip'
   const paperclipCompanyId =
     readSearchString(search.paperclip_company_id) ?? readSearchString(search.paperclipCompanyId)
   const paperclipPluginId =
@@ -35,7 +38,7 @@ export function validateSettingsSearch(search: Record<string, unknown>): Setting
 
   return {
     ...validateDashboardBaseSearch(search),
-    agentAccessSource: paperclipSource ? 'paperclip' : undefined,
+    integrationSource: paperclipSource ? 'paperclip' : undefined,
     paperclipCompanyId,
     paperclipPluginId
   }

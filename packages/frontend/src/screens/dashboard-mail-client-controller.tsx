@@ -601,7 +601,7 @@ function useDomainSettingsController({
     startOAuth('dashboard-onboarding').catch(handleUnexpectedCloudflareActionError)
   }, [handleUnexpectedCloudflareActionError, startOAuth])
 
-  const startSettingsConnectedAccountsOAuth = React.useCallback(() => {
+  const startSettingsIntegrationOAuth = React.useCallback(() => {
     startOAuth('settings-connected-accounts').catch(handleUnexpectedCloudflareActionError)
   }, [handleUnexpectedCloudflareActionError, startOAuth])
 
@@ -824,7 +824,7 @@ function useDomainSettingsController({
       onSetupDomain: () => {
         setupDomain().catch(handleUnexpectedCloudflareActionError)
       },
-      onStartConnectedAccountOAuth: startSettingsConnectedAccountsOAuth,
+      onStartConnectedAccountOAuth: startSettingsIntegrationOAuth,
       onStartOAuth: startSettingsDomainsOAuth,
       readOnly,
       selectedGrantPublicId: runtimeSelectedGrantPublicId || undefined,
@@ -967,7 +967,7 @@ function cleanSearchValue(value: string | undefined) {
 function paperclipConnectionHandoffFromSearch(
   routeSearch: SettingsRouteSearch | undefined
 ): AgentAccessConnectionHandoff | null {
-  if (routeSearch?.agentAccessSource !== 'paperclip') {
+  if (routeSearch?.integrationSource !== 'paperclip') {
     return null
   }
 
