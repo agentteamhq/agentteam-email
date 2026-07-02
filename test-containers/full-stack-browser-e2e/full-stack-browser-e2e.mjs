@@ -1,16 +1,17 @@
 import { spawn } from 'node:child_process'
 import { createWriteStream } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
+import { createServer } from 'node:net'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const suiteRoot = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(suiteRoot, '../..')
-const artifactSubmitWorkdir = path.posix.join(path.posix.sep, 'work')
 const runId =
   process.env.TEST_RUN_ID || new Date().toISOString().replaceAll(/[-:]/g, '').replace(/\..+$/u, 'Z')
 const runDir = path.resolve(process.env.TEST_RUN_DIR || path.join(suiteRoot, 'tmp', `run-${runId}`))
 const logsDir = path.join(runDir, 'logs')
+const containersDir = path.join(runDir, 'containers')
 const diagnosticsDir = path.join(runDir, 'diagnostics')
 const reportsDir = path.join(runDir, 'reports')
 const scenariosDir = path.join(runDir, 'scenarios')
@@ -31,7 +32,22 @@ const browserImage =
 const minioAccessKey = 'full-stack-browser-e2e-minio'
 const minioSecretKey = 'full-stack-browser-e2e-minio-secret'
 const archiveBucket = 'full-stack-browser-e2e-archive'
-const stackEnv = createStackEnvironment()
+const hostPortEnvKeys = [
+  'AT_EMAIL_ADMIN_DEV_HARAKA_SMTP_PORT',
+  'AT_EMAIL_ADMIN_DEV_MAILPIT_HTTP_PORT',
+  'AT_EMAIL_ADMIN_DEV_MAILPIT_SMTP_PORT',
+  'AT_EMAIL_ADMIN_DEV_MINIO_CONSOLE_PORT',
+  'AT_EMAIL_ADMIN_DEV_MINIO_PORT',
+  'AT_EMAIL_ADMIN_DEV_MONGO_PORT',
+  'AT_EMAIL_ADMIN_DEV_REDIS_PORT',
+  'AT_EMAIL_ADMIN_DEV_RSPAMD_PORT',
+  'AT_EMAIL_ADMIN_DEV_WILDDUCK_API_PORT',
+  'AT_EMAIL_ADMIN_DEV_WILDDUCK_IMAP_PORT',
+  'AT_EMAIL_ADMIN_DEV_ZONEMTA_DSN_PORT',
+  'AT_EMAIL_ADMIN_FRONTEND_PORT'
+]
+const hostPortAllocations = await allocateHostPorts(hostPortEnvKeys)
+const stackEnv = createStackEnvironment(hostPortAllocations)
 const composeServices = [
   'mongodb-1',
   'redis-1',
@@ -45,6 +61,8 @@ const composeServices = [
   'atemail-web-server-1'
 ]
 const results = []
+const containerLogStreams = []
+let resolvedComposeCommand
 
 if (!process.env.DOCKER_HOST && process.env.PODMAN_SOCK) {
   process.env.DOCKER_HOST = process.env.PODMAN_SOCK
@@ -57,6 +75,7 @@ if (process.env.DOCKER_HOST?.includes('podman')) {
 const { DockerComposeEnvironment, GenericContainer, Network, Wait } = await import('testcontainers')
 
 await mkdir(logsDir, { recursive: true })
+await mkdir(containersDir, { recursive: true })
 await mkdir(diagnosticsDir, { recursive: true })
 await mkdir(reportsDir, { recursive: true })
 await mkdir(scenariosDir, { recursive: true })
@@ -66,21 +85,29 @@ await log(`run directory: ${path.relative(suiteRoot, runDir)}`)
 await log(`project: ${projectName}`)
 await log(`web image: ${webServerImage}`)
 await log(`mail-control image: ${mailControlServiceImage}`)
+await log(`allocated host ports: ${Object.keys(hostPortAllocations).length}`)
+await writeJson(path.join(diagnosticsDir, 'host-port-allocations.json'), hostPortAllocations)
 await writeJson(path.join(diagnosticsDir, 'stack-environment.json'), redactEnvironment(stackEnv))
+await writeRunContext()
 
 let network
 let fakeCloudflare
 let composeEnvironment
 let browserContainer
+let composeOverrideFile
+let composeLoggerHandle
 let setupFailure = null
 
 try {
   network = await startNetwork()
-  const composeOverrideFile = await writeComposeOverride(network.getName())
+  composeOverrideFile = await writeComposeOverride(network.getName())
   await renderComposeConfigs(composeOverrideFile)
   fakeCloudflare = await startFakeCloudflare(network)
+  await writeTopology()
   composeEnvironment = await startComposeEnvironment(composeOverrideFile)
+  await writeTopology()
   browserContainer = await startBrowserContainer(network)
+  await writeTopology()
   await runBrowserScenario(browserContainer)
   await recordResult({
     name: 'full-product-walkthrough',
@@ -98,8 +125,8 @@ try {
 } finally {
   await collectDiagnostics()
   await stopRuntime()
+  await finalizeContainerLogStreams()
   await writeReports()
-  await submitArtifacts()
 }
 
 const failed = results.filter((result) => result.status === 'failed')
@@ -140,7 +167,7 @@ async function renderComposeConfigs(composeOverrideFile) {
   const configDir = path.join(generatedInputsDir, 'compose-config')
   await mkdir(configDir, { recursive: true })
   const renderedCompose = path.join(configDir, 'compose.rendered.yaml')
-  const composeCommand = await resolveComposeCommand()
+  const composeCommand = await getResolvedComposeCommand()
   const composeArgs = [
     ...composeCommand.prefix,
     '-f',
@@ -165,45 +192,58 @@ async function renderComposeConfigs(composeOverrideFile) {
 async function startFakeCloudflare(startedNetwork) {
   await log('starting fake Cloudflare provider')
   const serverFile = path.join(repoRoot, 'test-containers/full-stack-e2e/fake-cloudflare/server.mjs')
-  return new GenericContainer('docker.io/library/node:26.4.0-bookworm-slim')
-    .withNetwork(startedNetwork)
-    .withNetworkAliases('fake-cloudflare')
-    .withCopyFilesToContainer([{ source: serverFile, target: '/app/server.mjs' }])
-    .withEnvironment({
-      AT_EMAIL_ADMIN_FAKE_CF_OAUTH_EMAIL: `cloudflare-${safeRunId}@example.test`,
-      AT_EMAIL_ADMIN_FAKE_CF_OAUTH_SUB: `cloudflare-user-${safeRunId}`,
-      FAKE_CLOUDFLARE_INTERACTIVE_OAUTH: '1',
-      PORT: '8788'
-    })
-    .withExposedPorts(8788)
-    .withCommand(['node', '/app/server.mjs'])
-    .withWaitStrategy(Wait.forHttp('/health', 8788).forStatusCode(200))
-    .withStartupTimeout(120_000)
-    .start()
+  const container = await withHeartbeatLog('fake Cloudflare startup', () =>
+    new GenericContainer('docker.io/library/node:26.4.0-bookworm-slim')
+      .withNetwork(startedNetwork)
+      .withNetworkAliases('fake-cloudflare')
+      .withCopyFilesToContainer([{ source: serverFile, target: '/app/server.mjs' }])
+      .withEnvironment({
+        AT_EMAIL_ADMIN_FAKE_CF_OAUTH_EMAIL: `cloudflare-${safeRunId}@example.test`,
+        AT_EMAIL_ADMIN_FAKE_CF_OAUTH_SUB: `cloudflare-user-${safeRunId}`,
+        FAKE_CLOUDFLARE_INTERACTIVE_OAUTH: '1',
+        PORT: '8788'
+      })
+      .withExposedPorts(8788)
+      .withCommand(['node', '/app/server.mjs'])
+      .withWaitStrategy(Wait.forHttp('/health', 8788).forStatusCode(200))
+      .withStartupTimeout(120_000)
+      .start()
+  )
+  await attachContainerLogs(container, 'fake-cloudflare')
+  return container
 }
 
 async function startComposeEnvironment(composeOverrideFile) {
   await log('starting production-like Compose stack through Testcontainers')
+  const composeCommand = await getResolvedComposeCommand()
   const composeFiles = ['compose.yaml', 'compose.dev.yaml', path.relative(repoRoot, composeOverrideFile)]
+  composeLoggerHandle = createComposeLogger('compose-up')
   const environment = new DockerComposeEnvironment(repoRoot, composeFiles)
     .withProjectName(projectName)
     .withEnvironment(stackEnv)
+    .withClientOptions({ executable: composeCommand.executable, logger: composeLoggerHandle.logger })
     .withStartupTimeout(600_000)
 
-  return environment.up()
+  const startedEnvironment = await withHeartbeatLog('Compose stack startup', () => environment.up())
+  await attachComposeContainerLogs(startedEnvironment)
+  return startedEnvironment
 }
 
 async function startBrowserContainer(startedNetwork) {
   await log('starting Playwright browser runner container')
-  return new GenericContainer(browserImage)
-    .withNetwork(startedNetwork)
-    .withBindMounts([{ source: repoRoot, target: '/work', mode: 'Z' }])
-    .withWorkingDir('/work')
-    .withSharedMemorySize(2 * 1024 * 1024 * 1024)
-    .withCommand(['bash', '-lc', 'tail -f /dev/null'])
-    .withWaitStrategy(Wait.forSuccessfulCommand('node --version'))
-    .withStartupTimeout(180_000)
-    .start()
+  const container = await withHeartbeatLog('Playwright browser runner startup', () =>
+    new GenericContainer(browserImage)
+      .withNetwork(startedNetwork)
+      .withBindMounts([{ source: repoRoot, target: '/work', mode: 'Z' }])
+      .withWorkingDir('/work')
+      .withSharedMemorySize(2 * 1024 * 1024 * 1024)
+      .withCommand(['bash', '-lc', 'tail -f /dev/null'])
+      .withWaitStrategy(Wait.forSuccessfulCommand('node --version'))
+      .withStartupTimeout(180_000)
+      .start()
+  )
+  await attachContainerLogs(container, 'browser-runner')
+  return container
 }
 
 async function runBrowserScenario(container) {
@@ -212,29 +252,47 @@ async function runBrowserScenario(container) {
     '/work',
     path.relative(repoRoot, runDir).split(path.sep).join(path.posix.sep)
   )
-  const result = await container.exec(['node', './test-containers/full-stack-browser-e2e/browser-flow.mjs'], {
-    env: {
-      ADMIN_EMAIL: `admin-${safeRunId}@example.test`,
-      ADMIN_PASSWORD: 'BrowserE2E-admin-password-1!',
-      APP_BASE_URL: 'http://atemail-web-server:4321',
-      ARCHIVE_BUCKET: archiveBucket,
-      INBOUND_SUBJECT: `Browser E2E inbound ${safeRunId}`,
-      MAILBOX_DISPLAY_NAME: 'Browser E2E Agent',
-      MAILBOX_LOCAL_PART: 'agent',
-      MAILPIT_URL: 'http://mailpit:8025',
-      MINIO_URL: 'http://minio:9000',
-      R2_ACCESS_KEY_ID: minioAccessKey,
-      R2_REGION: 'us-east-1',
-      R2_SECRET_ACCESS_KEY: minioSecretKey,
-      TEST_RUN_DIR: containerRunDir,
-      TEST_RUN_ID: runId,
-      USER_EMAIL: `user-${safeRunId}@example.test`,
-      USER_NAME: 'Browser E2E User',
-      USER_PASSWORD: 'BrowserE2E-user-password-1!',
-      USER_USERNAME: `browser-${safeRunId.slice(0, 16)}`
-    },
-    workingDir: '/work'
-  })
+  const browserLiveLogPath = path.join(logsDir, 'browser-runner.live.log')
+  const containerBrowserLiveLogPath = path.posix.join(containerRunDir, 'logs', 'browser-runner.live.log')
+  await writeFile(browserLiveLogPath, '', { flag: 'a' })
+  const tail = startFileTail(browserLiveLogPath, 'browser-runner')
+  let result
+  try {
+    result = await container.exec(
+      [
+        'bash',
+        '-lc',
+        `set -o pipefail; node ./test-containers/full-stack-browser-e2e/browser-flow.mjs 2>&1 | tee -a ${shellQuote(
+          containerBrowserLiveLogPath
+        )}`
+      ],
+      {
+        env: {
+          ADMIN_EMAIL: `admin-${safeRunId}@example.test`,
+          ADMIN_PASSWORD: 'BrowserE2E-admin-password-1!',
+          APP_BASE_URL: 'http://atemail-web-server:4321',
+          ARCHIVE_BUCKET: archiveBucket,
+          INBOUND_SUBJECT: `Browser E2E inbound ${safeRunId}`,
+          MAILBOX_DISPLAY_NAME: 'Browser E2E Agent',
+          MAILBOX_LOCAL_PART: 'agent',
+          MAILPIT_URL: 'http://mailpit:8025',
+          MINIO_URL: 'http://minio:9000',
+          R2_ACCESS_KEY_ID: minioAccessKey,
+          R2_REGION: 'us-east-1',
+          R2_SECRET_ACCESS_KEY: minioSecretKey,
+          TEST_RUN_DIR: containerRunDir,
+          TEST_RUN_ID: runId,
+          USER_EMAIL: `user-${safeRunId}@example.test`,
+          USER_NAME: 'Browser E2E User',
+          USER_PASSWORD: 'BrowserE2E-user-password-1!',
+          USER_USERNAME: `browser-${safeRunId.slice(0, 16)}`
+        },
+        workingDir: '/work'
+      }
+    )
+  } finally {
+    await stopFileTail(tail)
+  }
 
   await writeFile(path.join(logsDir, 'browser-runner.stdout.log'), result.stdout || '')
   await writeFile(path.join(logsDir, 'browser-runner.stderr.log'), result.stderr || '')
@@ -251,22 +309,7 @@ async function runBrowserScenario(container) {
 
 async function collectDiagnostics() {
   await log('collecting container logs and diagnostics')
-  if (composeEnvironment) {
-    for (const containerName of composeServices) {
-      try {
-        const container = composeEnvironment.getContainer(containerName)
-        await writeContainerLogs(container, path.join(logsDir, `container-${containerName}.log`))
-      } catch (error) {
-        await writeFile(
-          path.join(logsDir, `container-${containerName}.log`),
-          `container log unavailable: ${stringifyError(error)}\n`
-        )
-      }
-    }
-  }
-
   if (fakeCloudflare) {
-    await writeContainerLogs(fakeCloudflare, path.join(logsDir, 'container-fake-cloudflare.log'))
     await fetchDiagnosticJson(
       'http://127.0.0.1',
       fakeCloudflare.getMappedPort(8788),
@@ -275,9 +318,7 @@ async function collectDiagnostics() {
     )
   }
 
-  if (browserContainer) {
-    await writeContainerLogs(browserContainer, path.join(logsDir, 'container-browser-runner.log'))
-  }
+  await writeContainerLogManifest()
 }
 
 async function stopRuntime() {
@@ -287,10 +328,21 @@ async function stopRuntime() {
       .stop()
       .catch((error) => log(`browser container stop failed: ${stringifyError(error)}`))
   }
+  let composeDownSucceeded = false
   if (composeEnvironment) {
-    await composeEnvironment.down({ removeVolumes: true, timeout: 0 }).catch((error) => {
-      log(`compose down failed: ${stringifyError(error)}`)
-    })
+    try {
+      await composeEnvironment.down({ removeVolumes: true, timeout: 0 })
+      composeDownSucceeded = true
+    } catch (error) {
+      await log(`compose down failed: ${stringifyError(error)}`)
+    }
+  }
+  if (composeOverrideFile && !composeDownSucceeded) {
+    await cleanupComposeProject(composeOverrideFile)
+  }
+  if (composeLoggerHandle) {
+    await composeLoggerHandle.close()
+    composeLoggerHandle = null
   }
   if (fakeCloudflare) {
     await fakeCloudflare.stop().catch((error) => log(`fake Cloudflare stop failed: ${stringifyError(error)}`))
@@ -316,52 +368,34 @@ async function writeReports() {
   )
 }
 
-async function submitArtifacts() {
-  if (process.env.TEST_ARTIFACT_SUBMIT_SKIP) {
-    await log('artifact submission skipped by TEST_ARTIFACT_SUBMIT_SKIP')
-    return
-  }
-  await runCommand(
-    containerEngine,
-    [
-      'run',
-      '--rm',
-      '--userns',
-      'keep-id',
-      '--user',
-      `${process.getuid?.() ?? 1000}:${process.getgid?.() ?? 1000}`,
-      '--env-host',
-      '-v',
-      `${suiteRoot}:${artifactSubmitWorkdir}:Z`,
-      '-w',
-      artifactSubmitWorkdir,
-      'system.registry.test/agentteam/test-artifact-ctl:latest',
-      'submit',
-      '--namespace',
-      'agentteam-email/full-stack-browser-e2e',
-      '--suite',
-      'full-stack-browser-e2e',
-      '--run-dir',
-      path.posix.join(artifactSubmitWorkdir, 'tmp', `run-${runId}`),
-      '--event-id',
-      `run-${runId}`
-    ],
-    {
-      allowFailure: true,
-      logName: 'artifact-submit'
-    }
-  )
-}
-
 async function resolveComposeCommand() {
   if (await commandSucceeds(containerEngine, ['compose', 'version'])) {
-    return { command: containerEngine, prefix: ['compose'] }
+    return {
+      command: containerEngine,
+      executable: {
+        executablePath: containerEngine,
+        options: []
+      },
+      prefix: ['compose']
+    }
   }
   const composeExecutable = `${containerEngine}-compose`
   if (await commandSucceeds(composeExecutable, ['--version'])) {
-    return { command: composeExecutable, prefix: [] }
+    return {
+      command: composeExecutable,
+      executable: {
+        executablePath: composeExecutable,
+        standalone: true
+      },
+      prefix: []
+    }
   }
   throw new Error(`missing Compose CLI for CONTAINER_ENGINE=${containerEngine}`)
+}
+
+async function getResolvedComposeCommand() {
+  resolvedComposeCommand ||= await resolveComposeCommand()
+  return resolvedComposeCommand
 }
 
 async function commandSucceeds(command, args) {
@@ -386,15 +420,206 @@ async function fetchDiagnosticJson(origin, port, pathname, filename) {
   }
 }
 
-async function writeContainerLogs(container, targetPath) {
-  const stream = await container.logs({ tail: 20_000 })
-  await new Promise((resolve, reject) => {
-    const writer = createWriteStream(targetPath)
-    stream.on('error', reject)
-    writer.on('error', reject)
-    writer.on('finish', resolve)
-    stream.pipe(writer)
+async function cleanupComposeProject(overrideFile) {
+  const composeCommand = await getResolvedComposeCommand()
+  const composeArgs = [
+    ...composeCommand.prefix,
+    '-f',
+    'compose.yaml',
+    '-f',
+    'compose.dev.yaml',
+    '-f',
+    path.relative(repoRoot, overrideFile),
+    'down',
+    '-v'
+  ]
+  const result = await runCommand(composeCommand.command, composeArgs, {
+    allowFailure: true,
+    env: { ...process.env, ...stackEnv, COMPOSE_PROJECT_NAME: projectName },
+    logName: 'compose-down',
+    mirrorStderr: true
   })
+  if (result.exitCode !== 0) {
+    await log(`compose cleanup exited ${result.exitCode}`)
+  }
+}
+
+async function attachComposeContainerLogs(startedEnvironment) {
+  const entries = composeContainerEntries(startedEnvironment)
+  for (const [containerName, container] of entries) {
+    await attachContainerLogs(container, containerName)
+  }
+}
+
+function composeContainerEntries(startedEnvironment) {
+  if (
+    startedEnvironment &&
+    startedEnvironment.startedGenericContainers &&
+    typeof startedEnvironment.startedGenericContainers === 'object'
+  ) {
+    return Object.entries(startedEnvironment.startedGenericContainers)
+  }
+
+  return composeServices.flatMap((containerName) => {
+    try {
+      return [[containerName, startedEnvironment.getContainer(containerName)]]
+    } catch {
+      return []
+    }
+  })
+}
+
+async function attachContainerLogs(container, containerName) {
+  if (containerLogStreams.some((entry) => entry.containerName === containerName)) {
+    return
+  }
+
+  const targetPath = path.join(containersDir, `${sanitizeIdentifier(containerName)}.log`)
+  const writer = createWriteStream(targetPath, { flags: 'a' })
+  const mirror = createPrefixedLineWriter(`[container:${containerName}]`)
+
+  try {
+    const stream = await container.logs({ since: 0 })
+    const ended = new Promise((resolve) => {
+      stream.on('data', (chunk) => {
+        writer.write(chunk)
+        if (process.env.AT_EMAIL_ADMIN_BROWSER_E2E_MIRROR_CONTAINER_LOGS === '1') {
+          mirror.write(chunk)
+        }
+      })
+      stream.on('error', (error) => {
+        writer.write(`\n[container-log-error] ${stringifyError(error)}\n`)
+        mirror.write(`\n[container-log-error] ${stringifyError(error)}\n`)
+        resolve()
+      })
+      stream.on('end', resolve)
+      stream.on('close', resolve)
+    }).finally(async () => {
+      mirror.flush()
+      await finishWriter(writer)
+    })
+
+    containerLogStreams.push({
+      containerId: safeContainerCall(container, 'getId'),
+      containerName,
+      file: path.relative(runDir, targetPath).split(path.sep).join(path.posix.sep),
+      stream,
+      writer,
+      ended
+    })
+  } catch (error) {
+    await finishWriter(writer)
+    await writeFile(targetPath, `container log stream unavailable: ${stringifyError(error)}\n`, {
+      flag: 'a'
+    })
+    containerLogStreams.push({
+      containerId: safeContainerCall(container, 'getId'),
+      containerName,
+      error: stringifyError(error),
+      file: path.relative(runDir, targetPath).split(path.sep).join(path.posix.sep)
+    })
+  }
+}
+
+async function finalizeContainerLogStreams() {
+  const pending = containerLogStreams.filter((entry) => entry.ended).map((entry) => entry.ended)
+  if (pending.length === 0) {
+    return
+  }
+
+  await Promise.race([
+    Promise.allSettled(pending),
+    delay(5_000).then(() => {
+      for (const entry of containerLogStreams) {
+        entry.stream?.destroy?.()
+        entry.writer?.end?.()
+      }
+    })
+  ])
+}
+
+async function writeContainerLogManifest() {
+  await writeJson(
+    path.join(diagnosticsDir, 'container-logs.json'),
+    containerLogStreams.map((entry) => ({
+      containerId: entry.containerId,
+      containerName: entry.containerName,
+      error: entry.error,
+      file: entry.file
+    }))
+  )
+}
+
+async function writeRunContext() {
+  await writeJson(path.join(diagnosticsDir, 'run-context.json'), {
+    archiveBucket,
+    browserImage,
+    containerEngine,
+    endpoints: {
+      appBaseUrl: 'http://atemail-web-server:4321',
+      fakeCloudflareApiBaseUrl: stackEnv.AT_EMAIL_ADMIN_CF_API_BASE_URL,
+      fakeCloudflareOAuthAuthorizationUrl: stackEnv.AT_EMAIL_ADMIN_CF_OAUTH_AUTHORIZATION_URL,
+      mailpitUrl: 'http://mailpit:8025',
+      minioUrl: 'http://minio:9000'
+    },
+    imageTag,
+    hostPortAllocations,
+    mailControlServiceImage,
+    projectName,
+    runDir: path.relative(suiteRoot, runDir).split(path.sep).join(path.posix.sep),
+    runId,
+    suite: 'full-stack-browser-e2e',
+    webServerImage,
+    wt
+  })
+}
+
+async function writeTopology() {
+  const containers = []
+  if (composeEnvironment) {
+    for (const [containerName, container] of composeContainerEntries(composeEnvironment)) {
+      containers.push(containerTopology(containerName, container))
+    }
+  }
+  if (fakeCloudflare) {
+    containers.push(
+      containerTopology('fake-cloudflare', fakeCloudflare, { hostPort: fakeCloudflare.getMappedPort(8788) })
+    )
+  }
+  if (browserContainer) {
+    containers.push(containerTopology('browser-runner', browserContainer))
+  }
+
+  await writeJson(path.join(diagnosticsDir, 'topology.json'), {
+    containers,
+    endpoints: {
+      appBaseUrl: 'http://atemail-web-server:4321',
+      fakeCloudflareInternalUrl: 'http://fake-cloudflare:8788',
+      mailpitUrl: 'http://mailpit:8025',
+      minioUrl: 'http://minio:9000'
+    },
+    network: network ? { name: network.getName() } : null,
+    projectName,
+    runId
+  })
+}
+
+function containerTopology(containerName, container, extra = {}) {
+  return {
+    containerId: safeContainerCall(container, 'getId'),
+    containerName,
+    host: safeContainerCall(container, 'getHost'),
+    networkNames: safeContainerCall(container, 'getNetworkNames') || [],
+    ...extra
+  }
+}
+
+function safeContainerCall(container, method) {
+  try {
+    return typeof container?.[method] === 'function' ? container[method]() : null
+  } catch {
+    return null
+  }
 }
 
 async function recordResult(result) {
@@ -413,6 +638,20 @@ async function log(message) {
   await writeFile(harnessLogPath, `${line}\n`, { flag: 'a' })
 }
 
+async function withHeartbeatLog(label, action, intervalMs = 30_000) {
+  const started = Date.now()
+  const timer = setInterval(() => {
+    const elapsedSeconds = Math.round((Date.now() - started) / 1000)
+    void log(`${label} heartbeat elapsed=${elapsedSeconds}s`)
+  }, intervalMs)
+  timer.unref?.()
+  try {
+    return await action()
+  } finally {
+    clearInterval(timer)
+  }
+}
+
 async function runCommand(command, args, options = {}) {
   const logName = options.logName || sanitizeIdentifier(command)
   const stdoutFile = options.stdoutFile || path.join(logsDir, `${logName}.stdout.log`)
@@ -426,19 +665,44 @@ async function runCommand(command, args, options = {}) {
     env: options.env || process.env,
     stdio: ['ignore', 'pipe', 'pipe']
   })
+  const stdoutWriter = createWriteStream(stdoutFile, { flags: 'w' })
+  const stderrWriter = createWriteStream(stderrFile, { flags: 'w' })
   const stdoutChunks = []
   const stderrChunks = []
-  child.stdout.on('data', (chunk) => stdoutChunks.push(Buffer.from(chunk)))
-  child.stderr.on('data', (chunk) => stderrChunks.push(Buffer.from(chunk)))
-
-  const exitCode = await new Promise((resolve, reject) => {
-    child.on('error', reject)
-    child.on('close', resolve)
+  const heartbeat = setInterval(() => {
+    void log(`command heartbeat: ${command} ${args[0] || ''}`)
+  }, 30_000)
+  heartbeat.unref?.()
+  child.stdout.on('data', (chunk) => {
+    stdoutChunks.push(Buffer.from(chunk))
+    stdoutWriter.write(chunk)
   })
+  child.stderr.on('data', (chunk) => {
+    stderrChunks.push(Buffer.from(chunk))
+    stderrWriter.write(chunk)
+    if (options.mirrorStderr) {
+      process.stderr.write(chunk)
+    }
+  })
+
+  let exitCode
+  let spawnError
+  try {
+    exitCode = await new Promise((resolve, reject) => {
+      child.on('error', reject)
+      child.on('close', resolve)
+    })
+  } catch (error) {
+    spawnError = error
+  } finally {
+    clearInterval(heartbeat)
+    await Promise.all([finishWriter(stdoutWriter), finishWriter(stderrWriter)])
+  }
+  if (spawnError) {
+    throw spawnError
+  }
   const stdout = Buffer.concat(stdoutChunks).toString('utf8')
   const stderr = Buffer.concat(stderrChunks).toString('utf8')
-  await writeFile(stdoutFile, stdout)
-  await writeFile(stderrFile, stderr)
 
   if (exitCode !== 0 && !options.allowFailure) {
     throw new Error(`${command} ${args.join(' ')} exited ${exitCode}: ${bodySnippet(stderr || stdout)}`)
@@ -448,7 +712,8 @@ async function runCommand(command, args, options = {}) {
   return { exitCode, stderr, stdout }
 }
 
-function createStackEnvironment() {
+function createStackEnvironment(hostPorts) {
+  const hostPort = (key) => hostPorts[key]
   return {
     AT_EMAIL_ADMIN_APP_MONGODB_URI: 'mongodb://mongodb:27017/agentteam_email?replicaSet=rs0',
     AT_EMAIL_ADMIN_BETTER_AUTH_SECRET: 'full-stack-browser-e2e-better-auth-secret',
@@ -464,21 +729,21 @@ function createStackEnvironment() {
     AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN: 'full-stack-browser-e2e-control-token',
     AT_EMAIL_ADMIN_DATABASE_MAX_POOL_SIZE: '4',
     AT_EMAIL_ADMIN_DEV_CONFIG_DIR: path.join(generatedInputsDir, 'compose-config'),
-    AT_EMAIL_ADMIN_DEV_HARAKA_SMTP_PORT: '0',
-    AT_EMAIL_ADMIN_DEV_MAILPIT_HTTP_PORT: '0',
-    AT_EMAIL_ADMIN_DEV_MAILPIT_SMTP_PORT: '0',
-    AT_EMAIL_ADMIN_DEV_MINIO_CONSOLE_PORT: '0',
-    AT_EMAIL_ADMIN_DEV_MINIO_PORT: '0',
-    AT_EMAIL_ADMIN_DEV_MONGO_PORT: '0',
+    AT_EMAIL_ADMIN_DEV_HARAKA_SMTP_PORT: hostPort('AT_EMAIL_ADMIN_DEV_HARAKA_SMTP_PORT'),
+    AT_EMAIL_ADMIN_DEV_MAILPIT_HTTP_PORT: hostPort('AT_EMAIL_ADMIN_DEV_MAILPIT_HTTP_PORT'),
+    AT_EMAIL_ADMIN_DEV_MAILPIT_SMTP_PORT: hostPort('AT_EMAIL_ADMIN_DEV_MAILPIT_SMTP_PORT'),
+    AT_EMAIL_ADMIN_DEV_MINIO_CONSOLE_PORT: hostPort('AT_EMAIL_ADMIN_DEV_MINIO_CONSOLE_PORT'),
+    AT_EMAIL_ADMIN_DEV_MINIO_PORT: hostPort('AT_EMAIL_ADMIN_DEV_MINIO_PORT'),
+    AT_EMAIL_ADMIN_DEV_MONGO_PORT: hostPort('AT_EMAIL_ADMIN_DEV_MONGO_PORT'),
     AT_EMAIL_ADMIN_DEV_NETWORK: `${projectName}-network`,
-    AT_EMAIL_ADMIN_DEV_REDIS_PORT: '0',
-    AT_EMAIL_ADMIN_DEV_RSPAMD_PORT: '0',
-    AT_EMAIL_ADMIN_DEV_WILDDUCK_API_PORT: '0',
-    AT_EMAIL_ADMIN_DEV_WILDDUCK_IMAP_PORT: '0',
-    AT_EMAIL_ADMIN_DEV_ZONEMTA_DSN_PORT: '0',
+    AT_EMAIL_ADMIN_DEV_REDIS_PORT: hostPort('AT_EMAIL_ADMIN_DEV_REDIS_PORT'),
+    AT_EMAIL_ADMIN_DEV_RSPAMD_PORT: hostPort('AT_EMAIL_ADMIN_DEV_RSPAMD_PORT'),
+    AT_EMAIL_ADMIN_DEV_WILDDUCK_API_PORT: hostPort('AT_EMAIL_ADMIN_DEV_WILDDUCK_API_PORT'),
+    AT_EMAIL_ADMIN_DEV_WILDDUCK_IMAP_PORT: hostPort('AT_EMAIL_ADMIN_DEV_WILDDUCK_IMAP_PORT'),
+    AT_EMAIL_ADMIN_DEV_ZONEMTA_DSN_PORT: hostPort('AT_EMAIL_ADMIN_DEV_ZONEMTA_DSN_PORT'),
     AT_EMAIL_ADMIN_ENCRYPT_SECRET_KEY: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
     AT_EMAIL_ADMIN_FEEDBACK_MAILBOX_PASSWORD: 'full-stack-browser-e2e-feedback-password',
-    AT_EMAIL_ADMIN_FRONTEND_PORT: '0',
+    AT_EMAIL_ADMIN_FRONTEND_PORT: hostPort('AT_EMAIL_ADMIN_FRONTEND_PORT'),
     AT_EMAIL_ADMIN_HARAKA_SMTP_ADDRESS: 'haraka:10025',
     AT_EMAIL_ADMIN_MAIL_LOOP_SECRET: 'full-stack-browser-e2e-mail-loop-secret',
     AT_EMAIL_ADMIN_MONGODB_MAX_INCOMING_CONNECTIONS: '256',
@@ -551,6 +816,147 @@ function bodySnippet(value) {
   return String(value || '')
     .replaceAll(/\s+/gu, ' ')
     .slice(0, 800)
+}
+
+async function allocateHostPorts(keys) {
+  const ports = {}
+  const used = new Set()
+  for (const key of keys) {
+    let port
+    do {
+      port = await allocateHostPort()
+    } while (used.has(port))
+    used.add(port)
+    ports[key] = String(port)
+  }
+  return ports
+}
+
+function allocateHostPort() {
+  return new Promise((resolve, reject) => {
+    const server = createServer()
+    server.unref()
+    server.on('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address()
+      const port = typeof address === 'object' && address ? address.port : null
+      server.close((error) => {
+        if (error) {
+          reject(error)
+          return
+        }
+        if (!port) {
+          reject(new Error('failed to allocate host port'))
+          return
+        }
+        resolve(port)
+      })
+    })
+  })
+}
+
+function createComposeLogger(logName) {
+  const targetPath = path.join(logsDir, `${logName}.log`)
+  const writer = createWriteStream(targetPath, { flags: 'a' })
+  let closed = false
+
+  function write(level, message) {
+    if (closed) {
+      return
+    }
+    const text = Buffer.isBuffer(message) ? message.toString('utf8') : String(message)
+    for (const line of text.split(/\r?\n/u)) {
+      if (!line) {
+        continue
+      }
+      const entry = `[${new Date().toISOString()}] [${level}] ${line}`
+      writer.write(`${entry}\n`)
+      if (process.env.AT_EMAIL_ADMIN_BROWSER_E2E_MIRROR_COMPOSE_LOGS !== '0') {
+        process.stdout.write(`[compose:${logName}] ${entry}\n`)
+      }
+    }
+  }
+
+  return {
+    close: async () => {
+      closed = true
+      await finishWriter(writer)
+    },
+    logger: {
+      debug: (message) => write('debug', message),
+      enabled: () => true,
+      error: (message) => write('error', message),
+      info: (message) => write('info', message),
+      trace: (message) => write('trace', message),
+      warn: (message) => write('warn', message)
+    }
+  }
+}
+
+function createPrefixedLineWriter(prefix) {
+  let pending = ''
+  return {
+    flush() {
+      if (pending) {
+        process.stdout.write(`${prefix} ${pending}\n`)
+        pending = ''
+      }
+    },
+    write(chunk) {
+      const text = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk)
+      const lines = `${pending}${text}`.split(/\r?\n/u)
+      pending = lines.pop() || ''
+      for (const line of lines) {
+        process.stdout.write(`${prefix} ${line}\n`)
+      }
+    }
+  }
+}
+
+function startFileTail(filePath, label) {
+  const child = spawn('tail', ['-n', '+1', '-F', filePath], {
+    cwd: repoRoot,
+    stdio: ['ignore', 'pipe', 'pipe']
+  })
+  const writer = createPrefixedLineWriter(`[${label}]`)
+  child.stdout.on('data', (chunk) => writer.write(chunk))
+  child.stderr.on('data', (chunk) => process.stderr.write(`[${label}:tail] ${chunk.toString('utf8')}`))
+  child.on('error', (error) => {
+    process.stderr.write(`[${label}:tail] ${stringifyError(error)}\n`)
+  })
+  return { child, writer }
+}
+
+async function stopFileTail(tail) {
+  if (!tail) {
+    return
+  }
+  tail.child.kill('SIGTERM')
+  await Promise.race([
+    new Promise((resolve) => tail.child.once('close', resolve)),
+    delay(2_000).then(() => tail.child.kill('SIGKILL'))
+  ])
+  tail.writer.flush()
+}
+
+function finishWriter(writer) {
+  return new Promise((resolve) => {
+    if (writer.closed || writer.destroyed || writer.writableEnded) {
+      resolve()
+      return
+    }
+    writer.end(resolve)
+  })
+}
+
+function shellQuote(value) {
+  return `'${String(value).replaceAll("'", "'\\''")}'`
+}
+
+function delay(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
 }
 
 function stringifyError(error) {
