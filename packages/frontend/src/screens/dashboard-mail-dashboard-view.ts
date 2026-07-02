@@ -87,6 +87,10 @@ function toFirstUseDashboardOnboardingPrompt(
         grant.requiredScopes.every((scope) => grant.grantedScopes.includes(scope))
     ) ?? false
   const hasConnection = (status?.connections.length ?? 0) > 0
+  const isDomainSetupPending =
+    status?.connections.some(
+      (connection) => connection.status === 'provisioning' || connection.provisioningStatus === 'pending'
+    ) ?? false
   const isBusy = domainSettingsState.busy === true
 
   if (firstMailboxSetupState) {
@@ -105,7 +109,7 @@ function toFirstUseDashboardOnboardingPrompt(
   if (hasUsableGrant || hasConnection) {
     return {
       ...FIRST_USE_DASHBOARD_DOMAIN_SETUP_PROMPT,
-      state: isBusy ? 'connecting' : 'ready'
+      state: isBusy || isDomainSetupPending ? 'connecting' : 'ready'
     }
   }
 

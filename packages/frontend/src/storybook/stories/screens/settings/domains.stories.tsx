@@ -3,10 +3,16 @@ import {
   DomainsAddDomainSelectZone as DomainsAddDomainSelectZoneStory,
   DomainsDenseDomainList as DomainsDenseDomainListStory,
   DomainsDomainConnected as DomainsDomainConnectedStory,
+  DomainsDomainDisconnected as DomainsDomainDisconnectedStory,
   DomainsDomainLive as DomainsDomainLiveStory,
   DomainsDomainNeedsAttention as DomainsDomainNeedsAttentionStory,
   DomainsDomainProvisioning as DomainsDomainProvisioningStory,
-  DomainsEmptyFirstUse as DomainsEmptyFirstUseStory,
+  DomainsDomainRetryBusy as DomainsDomainRetryBusyStory,
+  DomainsLoadDomains as DomainsLoadDomainsStory,
+  DomainsLoadDomainsBusy as DomainsLoadDomainsBusyStory,
+  DomainsLoadErrorMessage as DomainsLoadErrorMessageStory,
+  DomainsLoading as DomainsLoadingStory,
+  DomainsMissingCloudflareScopes as DomainsMissingCloudflareScopesStory,
   settingsScreenStoryMeta
 } from '../../settings-dialog.definitions'
 import type { Meta, StoryObj } from '@storybook/react'
@@ -20,14 +26,34 @@ export default meta
 
 type Story = StoryObj<typeof meta>
 
-export const DomainsEmptyFirstUse: Story = {
-  ...DomainsEmptyFirstUseStory,
-  name: 'Empty first use'
+export const DomainsLoading: Story = {
+  ...DomainsLoadingStory,
+  name: 'Loading'
+}
+
+export const DomainsLoadErrorMessage: Story = {
+  ...DomainsLoadErrorMessageStory,
+  name: 'Load error message'
 }
 
 export const DomainsAddDomainAuthorizeCloudflare: Story = {
   ...DomainsAddDomainAuthorizeCloudflareStory,
   name: 'Add domain authorize Cloudflare'
+}
+
+export const DomainsMissingCloudflareScopes: Story = {
+  ...DomainsMissingCloudflareScopesStory,
+  name: 'Missing Cloudflare scopes'
+}
+
+export const DomainsLoadDomains: Story = {
+  ...DomainsLoadDomainsStory,
+  name: 'Load domains'
+}
+
+export const DomainsLoadDomainsBusy: Story = {
+  ...DomainsLoadDomainsBusyStory,
+  name: 'Load domains busy'
 }
 
 export const DomainsAddDomainSelectZone: Story = {
@@ -53,6 +79,16 @@ export const DomainsDomainLive: Story = {
 export const DomainsDomainNeedsAttention: Story = {
   ...DomainsDomainNeedsAttentionStory,
   name: 'Domain needs attention'
+}
+
+export const DomainsDomainDisconnected: Story = {
+  ...DomainsDomainDisconnectedStory,
+  name: 'Domain disconnected'
+}
+
+export const DomainsDomainRetryBusy: Story = {
+  ...DomainsDomainRetryBusyStory,
+  name: 'Domain retry busy'
 }
 
 export const DomainsDenseDomainList: Story = {

@@ -115,7 +115,8 @@ import {
 } from '../../lib/email-safety'
 import { cn } from '../../lib/utils'
 import { CloudflareConnectButton, CloudflareLogo } from './cloudflare-brand'
-import { DomainSettingsPanel, SettingsDialog } from './settings-dialog'
+import { OnboardingDomainSettingsPanel } from './onboarding-domain-settings-panel'
+import { SettingsDialog } from './settings-dialog'
 import { WorkspaceMailboxSwitcher } from './workspace-mailbox-switcher'
 import {
   defaultAuthenticatedDashboardView,
@@ -1163,7 +1164,9 @@ export function AuthenticatedSidebar({
 }: AuthenticatedSidebarProps) {
   const { setOpen } = useSidebar()
   const managementNavGroups = getSidebarManagementNavGroups(view)
-  const activeManagementItem = getSidebarManagementNavItems(view).find((item) => item.id === view.activeItemId)
+  const activeManagementItem = getSidebarManagementNavItems(view).find(
+    (item) => item.id === view.activeItemId
+  )
   const hasExplicitlyNoAccounts = view.mailboxMode === 'no-mailbox'
   const workspaceSwitcherWorkspaces = getSidebarWorkspaceSwitcherWorkspaces(view)
   const workspaceSwitcherActiveWorkspaceId =
@@ -1269,9 +1272,7 @@ export function AuthenticatedSidebar({
             <SidebarHeader className='gap-3 border-b p-3'>
               <div className='flex w-full items-center justify-between gap-2'>
                 <div className='flex min-w-0 items-center gap-1.5'>
-                  <div className='text-foreground truncate text-base font-medium'>
-                    {view.paneTitle}
-                  </div>
+                  <div className='text-foreground truncate text-base font-medium'>{view.paneTitle}</div>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
@@ -1667,7 +1668,8 @@ function MailNavButton({
         isActive={isActive}
         className={
           disabled
-            ? 'cursor-not-allowed px-2.5 opacity-50 aria-disabled:pointer-events-auto hover:bg-transparent hover:text-sidebar-foreground active:bg-transparent active:text-sidebar-foreground md:px-2'
+            ? `hover:text-sidebar-foreground active:text-sidebar-foreground cursor-not-allowed px-2.5
+              opacity-50 hover:bg-transparent active:bg-transparent aria-disabled:pointer-events-auto md:px-2`
             : 'px-2.5 md:px-2'
         }
         title={disabled ? tooltip : undefined}
@@ -1829,7 +1831,8 @@ function ManagementNavButton({
       className={cn(
         'px-2.5 md:px-2',
         item.tone === 'accent' &&
-          'bg-transparent font-medium text-primary ring-1 ring-inset ring-primary/65 hover:bg-primary/5 hover:text-primary data-[active=true]:bg-transparent data-[active=true]:text-primary'
+          `text-primary ring-primary/65 hover:bg-primary/5 hover:text-primary data-[active=true]:text-primary
+          bg-transparent font-medium ring-1 ring-inset data-[active=true]:bg-transparent`
       )}
     >
       <Icon />
@@ -1920,6 +1923,10 @@ function DashboardOnboardingPrompt({
   view: NonNullable<AuthenticatedDashboardView['onboardingPrompt']>
 }) {
   const isConnecting = view.state === 'connecting'
+  const onboardingDomainSettingsState =
+    view.mode === 'configureDomain'
+      ? toOnboardingDomainSettingsState(domainSettingsState, isConnecting)
+      : domainSettingsState
 
   if (view.mode === 'createMailbox') {
     return (
@@ -1932,9 +1939,9 @@ function DashboardOnboardingPrompt({
   if (view.mode === 'configureDomain') {
     return (
       <div className='flex min-h-[calc(100dvh-3.5rem)] items-center justify-center p-6'>
-        <DomainSettingsPanel
+        <OnboardingDomainSettingsPanel
           className='w-full max-w-2xl'
-          state={domainSettingsState}
+          state={onboardingDomainSettingsState}
         />
       </div>
     )
@@ -1973,9 +1980,34 @@ function DashboardOnboardingPrompt({
   )
 }
 
+function toOnboardingDomainSettingsState(
+  state: DomainSettingsState | undefined,
+  isConnecting: boolean
+): DomainSettingsState | undefined {
+  if (!state || !isConnecting) {
+    return state
+  }
+
+  const pendingDomain = state.status?.connections.find(
+    (connection) => connection.status === 'provisioning' || connection.provisioningStatus === 'pending'
+  )
+
+  return {
+    ...state,
+    busy: true,
+    draftDomain: state.draftDomain || pendingDomain?.domain || '',
+    mode: 'addDomain',
+    selectedAccountId: state.selectedAccountId || pendingDomain?.cloudflareAccountId || '',
+    selectedDomainPublicId: null,
+    selectedZoneId: state.selectedZoneId || pendingDomain?.cloudflareZoneId || ''
+  }
+}
+
 function FirstMailboxSetupCard({ state }: { state?: FirstMailboxSetupState }) {
   const isCreating = state?.state === 'creating'
-  const address = state?.addressLocalPart ? `${state.addressLocalPart}@${state.domain}` : `@${state?.domain ?? ''}`
+  const address = state?.addressLocalPart
+    ? `${state.addressLocalPart}@${state.domain}`
+    : `@${state?.domain ?? ''}`
 
   return (
     <Card className='mx-auto w-full max-w-md overflow-hidden shadow-none'>
@@ -1989,7 +2021,10 @@ function FirstMailboxSetupCard({ state }: { state?: FirstMailboxSetupState }) {
         }}
       >
         <CardHeader className='flex flex-col items-center px-6 text-center'>
-          <div className='bg-primary/10 text-primary flex size-14 items-center justify-center rounded-full border'>
+          <div
+            className='bg-primary/10 text-primary flex size-14 items-center justify-center rounded-full
+              border'
+          >
             <UserIcon className='size-7' />
           </div>
           <Badge variant='secondary'>Domain ready</Badge>
@@ -2001,7 +2036,9 @@ function FirstMailboxSetupCard({ state }: { state?: FirstMailboxSetupState }) {
         <CardContent className='grid gap-5 px-6'>
           <div className='grid gap-2'>
             <Label htmlFor='first-mailbox-address'>Mailbox address</Label>
-            <div className='grid grid-cols-[minmax(0,1fr)_auto] items-center overflow-hidden rounded-md border'>
+            <div
+              className='grid grid-cols-[minmax(0,1fr)_auto] items-center overflow-hidden rounded-md border'
+            >
               <Input
                 aria-label='Mailbox local part'
                 className='border-0 shadow-none focus-visible:ring-0'

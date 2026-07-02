@@ -54,6 +54,13 @@ const secondaryCloudflareGrant = {
   lastTokenCheckAt: new Date('2026-06-21T16:14:00.000Z')
 } satisfies CloudflareGrantFixture
 
+const missingScopeCloudflareGrant = {
+  ...activeCloudflareGrant,
+  publicId: cloudflareGrantPublicId('2x9pRc5N8vH1mYs4Jd6FgB'),
+  cloudflareEmail: 'limited-admin@example.com',
+  grantedScopes: requiredCloudflareScopes.filter((scope) => scope !== 'r2:write')
+} satisfies CloudflareGrantFixture
+
 const connectedCloudflareAccounts = [
   {
     grantPublicId: activeCloudflareGrant.publicId,
@@ -127,6 +134,17 @@ const degradedCloudflareConnection = {
   updatedAt: new Date('2026-06-21T16:20:00.000Z')
 } satisfies CloudflareConnectionFixture
 
+const disconnectedCloudflareConnection = {
+  ...connectedCloudflareConnection,
+  publicId: cloudflareConnectionPublicId('4Bd0nPqJ3xVb1ZyL8sTaCx'),
+  domain: 'disconnected.agentteam.example',
+  cloudflareZoneName: 'disconnected.agentteam.example',
+  status: 'disconnected',
+  provisioningStatus: 'disconnected',
+  lastErrorMessage: 'Cloudflare access was disconnected before email routing finished.',
+  updatedAt: new Date('2026-06-21T16:28:00.000Z')
+} satisfies CloudflareConnectionFixture
+
 const denseCloudflareConnections = [
   liveCloudflareConnection,
   {
@@ -166,6 +184,41 @@ export const domainSettingsEmptyFirstUseState = {
 } satisfies DomainSettingsState
 
 export const domainSettingsAddDomainAuthorizeCloudflareState = domainSettingsEmptyFirstUseState
+
+export const domainSettingsLoadingState = {
+  mode: 'addDomain',
+  status: null
+} satisfies DomainSettingsState
+
+export const domainSettingsLoadErrorState = {
+  message: 'Cloudflare domain settings could not be loaded. Retry when the service is available.',
+  mode: 'addDomain',
+  status: null
+} satisfies DomainSettingsState
+
+export const domainSettingsMissingCloudflareScopesState = {
+  mode: 'addDomain',
+  status: {
+    connections: [],
+    grants: [missingScopeCloudflareGrant]
+  }
+} satisfies DomainSettingsState
+
+export const domainSettingsLoadDomainsState = {
+  mode: 'addDomain',
+  selectedGrantPublicId: activeCloudflareGrant.publicId,
+  status: {
+    connections: [],
+    grants: [activeCloudflareGrant]
+  },
+  zones: []
+} satisfies DomainSettingsState
+
+export const domainSettingsLoadDomainsBusyState = {
+  ...domainSettingsLoadDomainsState,
+  busy: true,
+  message: 'Loading available Cloudflare domains.'
+} satisfies DomainSettingsState
 
 export const domainSettingsAddDomainSelectZoneState = {
   accounts: connectedCloudflareAccounts,
@@ -220,6 +273,22 @@ export const domainSettingsDomainNeedsAttentionState = {
     connections: [degradedCloudflareConnection],
     grants: [activeCloudflareGrant, secondaryCloudflareGrant]
   }
+} satisfies DomainSettingsState
+
+export const domainSettingsDomainDisconnectedState = {
+  ...domainSettingsAddDomainSelectZoneState,
+  mode: 'domain',
+  selectedDomainPublicId: disconnectedCloudflareConnection.publicId,
+  status: {
+    connections: [disconnectedCloudflareConnection],
+    grants: [activeCloudflareGrant, secondaryCloudflareGrant]
+  }
+} satisfies DomainSettingsState
+
+export const domainSettingsDomainRetryBusyState = {
+  ...domainSettingsDomainNeedsAttentionState,
+  busy: true,
+  message: 'Retrying Cloudflare email setup for agentteam.example.'
 } satisfies DomainSettingsState
 
 export const domainSettingsDenseDomainListState = {

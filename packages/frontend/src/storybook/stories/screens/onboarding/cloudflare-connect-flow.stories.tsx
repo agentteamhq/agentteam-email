@@ -15,7 +15,10 @@ const onboardingHandlers = {
 const meta = {
   title: 'Screens/Onboarding/Integration/Cloudflare Connect Flow',
   component: DashboardMailControllerStoryFrame,
-  args: buildProductOnboardingControllerArgs(productOnboardingScenarios.connectCloudflare, onboardingHandlers),
+  args: buildProductOnboardingControllerArgs(
+    productOnboardingScenarios.connectCloudflare,
+    onboardingHandlers
+  ),
   parameters: {
     layout: 'fullscreen'
   }
@@ -27,7 +30,10 @@ type Story = StoryObj<typeof meta>
 
 export const Step01ConnectCloudflare: Story = {
   name: '01 connect Cloudflare',
-  args: buildProductOnboardingControllerArgs(productOnboardingScenarios.connectCloudflare, onboardingHandlers),
+  args: buildProductOnboardingControllerArgs(
+    productOnboardingScenarios.connectCloudflare,
+    onboardingHandlers
+  ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     const page = within(canvasElement.ownerDocument.body)
@@ -48,7 +54,9 @@ export const Step02SelectDomain: Story = {
     await expect(await canvas.findByRole('button', { name: 'Adopt agentteam.example' })).toBeEnabled()
     await expect(canvas.queryByRole('button', { name: 'Setting up domain' })).not.toBeInTheDocument()
     await expect(canvas.queryByRole('button', { name: 'Continue with Cloudflare' })).not.toBeInTheDocument()
-    await expect(canvas.queryByText('Choose a message from the mailbox to read it here.')).not.toBeInTheDocument()
+    await expect(
+      canvas.queryByText('Choose a message from the mailbox to read it here.')
+    ).not.toBeInTheDocument()
   }
 }
 
@@ -111,14 +119,19 @@ export const AgentsNoMailboxSetupReturn: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
 
-    await expect(await canvas.findByRole('heading', { name: 'Agents' }, { timeout: 15000 })).toBeInTheDocument()
+    await expect(
+      await canvas.findByRole('heading', { name: 'Agents' }, { timeout: 15000 })
+    ).toBeInTheDocument()
     await expect(await canvas.findByText('No agents')).toBeInTheDocument()
   }
 }
 
 export const CloudflareConnectMobile: Story = {
   name: 'Cloudflare connect - mobile',
-  args: buildProductOnboardingControllerArgs(productOnboardingScenarios.connectCloudflare, onboardingHandlers),
+  args: buildProductOnboardingControllerArgs(
+    productOnboardingScenarios.connectCloudflare,
+    onboardingHandlers
+  ),
   globals: {
     viewport: {
       value: 'mobile1',
