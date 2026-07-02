@@ -80,6 +80,8 @@ pnpm dev
 
 The source-development runtime reads configuration from the repo-root `.env`.
 Docker Compose self-hosting uses `.env.compose` and the `stack:*` tasks instead.
+Use `mise exec -- rclone lsf storage:` to inspect the local-dev archive bucket
+configured by the repo-root `.env`.
 
 Run the production-like local stack through the Compose-backed stack tasks:
 
