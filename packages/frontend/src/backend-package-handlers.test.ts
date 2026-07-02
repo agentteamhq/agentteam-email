@@ -1,27 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const backendPackageHandlersTestState = vi.hoisted(() => ({
-  backendRpcHandle: vi.fn(),
-  handleAgentAuthConfigurationRequest: vi.fn(),
-  handleAtEmailMetadataRequest: vi.fn(),
+  backendHttpHandle: vi.fn(),
   handleEmailVerifiedRedirect: vi.fn(),
-  handleOAuthMetadataRequest: vi.fn(),
   handleStripeCheckoutRedirect: vi.fn(),
   handleStripePortalRedirect: vi.fn(),
   handleStripeRedirect: vi.fn()
 }))
 
 vi.mock('@main/backend', () => ({
-  backendRpcApp: {
-    handle: backendPackageHandlersTestState.backendRpcHandle
+  backendHttpApp: {
+    handle: backendPackageHandlersTestState.backendHttpHandle
   },
-  handleAgentAuthConfigurationRequest: backendPackageHandlersTestState.handleAgentAuthConfigurationRequest,
-  handleAtEmailMetadataRequest: backendPackageHandlersTestState.handleAtEmailMetadataRequest,
-  handleOAuthMetadataRequest: backendPackageHandlersTestState.handleOAuthMetadataRequest,
-  isAgentAuthConfigurationRequestPath: (pathname: string) => pathname === '/.well-known/agent-configuration',
-  isAtEmailMetadataRequestPath: (pathname: string) => pathname === '/.well-known/at-email',
-  isOAuthMetadataRequestPath: (pathname: string) =>
-    pathname === '/.well-known/oauth-authorization-server' || pathname === '/.well-known/openid-configuration'
+  isBackendHttpRequestPath: (pathname: string) =>
+    pathname === '/health' ||
+    pathname === '/.well-known/agent-configuration' ||
+    pathname === '/.well-known/at-email.json' ||
+    pathname === '/.well-known/oauth-authorization-server' ||
+    pathname === '/.well-known/openid-configuration' ||
+    pathname === '/.well-known/oauth-protected-resource/api' ||
+    pathname === '/api' ||
+    pathname.startsWith('/api/') ||
+    pathname === '/rpc' ||
+    pathname.startsWith('/rpc/')
 }))
 
 vi.mock('@main/backend/routes/webapp', () => ({
@@ -33,20 +34,17 @@ vi.mock('@main/backend/routes/webapp', () => ({
 
 describe('backend package request handler', () => {
   beforeEach(() => {
-    backendPackageHandlersTestState.backendRpcHandle.mockReset()
-    backendPackageHandlersTestState.handleAgentAuthConfigurationRequest.mockReset()
-    backendPackageHandlersTestState.handleAtEmailMetadataRequest.mockReset()
+    backendPackageHandlersTestState.backendHttpHandle.mockReset()
     backendPackageHandlersTestState.handleEmailVerifiedRedirect.mockReset()
-    backendPackageHandlersTestState.handleOAuthMetadataRequest.mockReset()
     backendPackageHandlersTestState.handleStripeCheckoutRedirect.mockReset()
     backendPackageHandlersTestState.handleStripePortalRedirect.mockReset()
     backendPackageHandlersTestState.handleStripeRedirect.mockReset()
   })
 
-  it('bridges public Agent Auth registration to the backend RPC auth mount with body and headers', async () => {
+  it('delegates /api/auth registration to the backend HTTP boundary without rewriting', async () => {
     expect.hasAssertions()
     const capturedRequests: Request[] = []
-    backendPackageHandlersTestState.backendRpcHandle.mockImplementation(async (request: Request) => {
+    backendPackageHandlersTestState.backendHttpHandle.mockImplementation(async (request: Request) => {
       capturedRequests.push(request)
       return Response.json({
         body: await request.clone().json(),
@@ -73,7 +71,7 @@ describe('backend package request handler', () => {
     await expect(response?.json()).resolves.toStrictEqual({
       body: { mode: 'delegated', name: 'CLI agent' },
       ok: true,
-      path: '/rpc/auth/api/agent/register',
+      path: '/api/auth/agent/register',
       query: '?source=cli',
       requestId: 'request-1'
     })
@@ -82,9 +80,9 @@ describe('backend package request handler', () => {
     expect(capturedRequests[0]?.headers.get('authorization')).toBe('Bearer header.payload.signature')
   })
 
-  it('bridges public Agent Auth capability requests without changing the method or body', async () => {
+  it('delegates /api/auth capability requests without changing the method or body', async () => {
     expect.hasAssertions()
-    backendPackageHandlersTestState.backendRpcHandle.mockImplementation(async (request: Request) =>
+    backendPackageHandlersTestState.backendHttpHandle.mockImplementation(async (request: Request) =>
       Response.json({
         body: await request.clone().json(),
         method: request.method,
@@ -113,20 +111,20 @@ describe('backend package request handler', () => {
         reason: 'read mailbox'
       },
       method: 'POST',
-      path: '/rpc/auth/api/agent/request-capability'
+      path: '/api/auth/agent/request-capability'
     })
   })
 
-  it('bridges raw Agent Auth grant mutation paths to the backend deny route', async () => {
+  it('does not rewrite /api/auth grant mutation paths to RPC deny routes', async () => {
     expect.hasAssertions()
-    backendPackageHandlersTestState.backendRpcHandle.mockImplementation(async (request: Request) => {
+    backendPackageHandlersTestState.backendHttpHandle.mockImplementation(async (request: Request) => {
       const pathname = new URL(request.url).pathname
       return Response.json(
         {
           error: 'Not found',
           path: pathname
         },
-        { status: pathname === '/rpc/auth/api/agent/grant-capability' ? 404 : 500 }
+        { status: pathname === '/api/auth/agent/grant-capability' ? 404 : 500 }
       )
     })
     const { handleBackendPackageRequest } = await import('./backend-package-handlers')
@@ -142,13 +140,13 @@ describe('backend package request handler', () => {
     expect(response?.status).toBe(404)
     await expect(response?.json()).resolves.toStrictEqual({
       error: 'Not found',
-      path: '/rpc/auth/api/agent/grant-capability'
+      path: '/api/auth/agent/grant-capability'
     })
   })
 
-  it('routes canonical Agent Mail ingest requests through the backend RPC app', async () => {
+  it('routes canonical Agent Mail ingest requests through the backend HTTP boundary', async () => {
     expect.hasAssertions()
-    backendPackageHandlersTestState.backendRpcHandle.mockImplementation(async (request: Request) =>
+    backendPackageHandlersTestState.backendHttpHandle.mockImplementation(async (request: Request) =>
       Response.json({
         method: request.method,
         path: new URL(request.url).pathname
@@ -168,12 +166,12 @@ describe('backend package request handler', () => {
       method: 'POST',
       path: '/rpc/agent-mail/ingest/v1/conn_public_test'
     })
-    expect(backendPackageHandlersTestState.backendRpcHandle).toHaveBeenCalledTimes(1)
+    expect(backendPackageHandlersTestState.backendHttpHandle).toHaveBeenCalledTimes(1)
   })
 
   it('routes Cloudflare generic OAuth callbacks through the mounted Better Auth RPC path', async () => {
     expect.hasAssertions()
-    backendPackageHandlersTestState.backendRpcHandle.mockImplementation(async (request: Request) =>
+    backendPackageHandlersTestState.backendHttpHandle.mockImplementation(async (request: Request) =>
       Response.json({
         path: new URL(request.url).pathname,
         query: new URL(request.url).search
@@ -189,24 +187,75 @@ describe('backend package request handler', () => {
       path: '/rpc/auth/api/oauth2/callback/cloudflare',
       query: '?code=code-1&state=state-1'
     })
-    expect(backendPackageHandlersTestState.backendRpcHandle).toHaveBeenCalledTimes(1)
+    expect(backendPackageHandlersTestState.backendHttpHandle).toHaveBeenCalledTimes(1)
   })
 
-  it('does not special-case legacy Cloudflare OAuth callback paths outside the RPC mount', async () => {
+  it('delegates legacy API OAuth callback paths to the backend boundary without rewriting', async () => {
     expect.hasAssertions()
+    backendPackageHandlersTestState.backendHttpHandle.mockImplementation(async (request: Request) =>
+      Response.json(
+        {
+          error: 'Not found',
+          path: new URL(request.url).pathname
+        },
+        { status: 404 }
+      )
+    )
+    const { handleBackendPackageRequest } = await import('./backend-package-handlers')
+
+    const response = await handleBackendPackageRequest(
+      new Request('https://mail.example.com/api/oauth2/callback/cloudflare?code=code-1&state=state-1')
+    )
+
+    expect(response?.status).toBe(404)
+    await expect(response?.json()).resolves.toStrictEqual({
+      error: 'Not found',
+      path: '/api/oauth2/callback/cloudflare'
+    })
+    expect(backendPackageHandlersTestState.backendHttpHandle).toHaveBeenCalledTimes(1)
+  })
+
+  it('routes API mail requests through the backend HTTP boundary', async () => {
+    expect.hasAssertions()
+    backendPackageHandlersTestState.backendHttpHandle.mockImplementation(async (request: Request) =>
+      Response.json({
+        path: new URL(request.url).pathname,
+        query: new URL(request.url).search
+      })
+    )
+    const { handleBackendPackageRequest } = await import('./backend-package-handlers')
+
+    const response = await handleBackendPackageRequest(
+      new Request('https://mail.example.com/api/mail/workspace?limit=20')
+    )
+
+    await expect(response?.json()).resolves.toStrictEqual({
+      path: '/api/mail/workspace',
+      query: '?limit=20'
+    })
+    expect(backendPackageHandlersTestState.backendHttpHandle).toHaveBeenCalledTimes(1)
+  })
+
+  it('routes public metadata through the backend HTTP boundary', async () => {
+    expect.hasAssertions()
+    backendPackageHandlersTestState.backendHttpHandle.mockImplementation(async (request: Request) =>
+      Response.json({
+        path: new URL(request.url).pathname
+      })
+    )
     const { handleBackendPackageRequest } = await import('./backend-package-handlers')
 
     await expect(
       handleBackendPackageRequest(
-        new Request('https://mail.example.com/api/oauth2/callback/cloudflare?code=code-1&state=state-1')
+        new Request('https://mail.example.com/.well-known/agent-configuration')
       )
-    ).resolves.toBeNull()
-    expect(backendPackageHandlersTestState.backendRpcHandle).not.toHaveBeenCalled()
+    ).resolves.toBeDefined()
+    expect(backendPackageHandlersTestState.backendHttpHandle).toHaveBeenCalledTimes(1)
   })
 
-  it('delegates mounted Better Auth error paths through the backend RPC app', async () => {
+  it('delegates mounted Better Auth error paths through the backend HTTP boundary', async () => {
     expect.hasAssertions()
-    backendPackageHandlersTestState.backendRpcHandle.mockImplementation(async (request: Request) =>
+    backendPackageHandlersTestState.backendHttpHandle.mockImplementation(async (request: Request) =>
       Response.json({
         path: new URL(request.url).pathname,
         query: new URL(request.url).search
@@ -222,7 +271,7 @@ describe('backend package request handler', () => {
       path: '/rpc/auth/api/error',
       query: '?error=invalid_request'
     })
-    expect(backendPackageHandlersTestState.backendRpcHandle).toHaveBeenCalledTimes(1)
+    expect(backendPackageHandlersTestState.backendHttpHandle).toHaveBeenCalledTimes(1)
   })
 
   it('leaves the app-owned redirect error route to the frontend router', async () => {
@@ -234,7 +283,7 @@ describe('backend package request handler', () => {
         new Request('https://mail.example.com/redirect/error?provider=cloudflare&error=invalid_request')
       )
     ).resolves.toBeNull()
-    expect(backendPackageHandlersTestState.backendRpcHandle).not.toHaveBeenCalled()
+    expect(backendPackageHandlersTestState.backendHttpHandle).not.toHaveBeenCalled()
   })
 
   it('returns null for non-backend paths', async () => {
@@ -244,6 +293,6 @@ describe('backend package request handler', () => {
     await expect(
       handleBackendPackageRequest(new Request('https://mail.example.com/dashboard/'))
     ).resolves.toBeNull()
-    expect(backendPackageHandlersTestState.backendRpcHandle).not.toHaveBeenCalled()
+    expect(backendPackageHandlersTestState.backendHttpHandle).not.toHaveBeenCalled()
   })
 })

@@ -126,7 +126,7 @@ func TestMainStatusUsesAgentMailRPCWithoutWildDuckConfig(t *testing.T) {
 
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.RequestURI() != "/rpc/mail/workspace" {
+		if r.URL.RequestURI() != "/api/mail/workspace" {
 			t.Fatalf("request URI = %s", r.URL.RequestURI())
 		}
 		header, payload := decodeTestJWT(t, r.Header.Get("Authorization"))
@@ -136,7 +136,7 @@ func TestMainStatusUsesAgentMailRPCWithoutWildDuckConfig(t *testing.T) {
 		if payload["iss"] != "host-1" || payload["sub"] != "agent-1" || payload["aud"] != server.URL {
 			t.Fatalf("jwt payload = %#v", payload)
 		}
-		if payload["htm"] != http.MethodGet || payload["htu"] != server.URL+"/rpc/mail/workspace" {
+		if payload["htm"] != http.MethodGet || payload["htu"] != server.URL+"/api/mail/workspace" {
 			t.Fatalf("jwt payload = %#v", payload)
 		}
 		if r.Header.Get("X-Access-Token") != "" {
@@ -193,7 +193,7 @@ func TestMainInboxUsesAgentMailRPCWithoutWildDuckConfig(t *testing.T) {
 			t.Fatalf("htu = %#v, want %s", payload["htu"], server.URL+r.URL.RequestURI())
 		}
 		switch r.URL.RequestURI() {
-		case "/rpc/mail/workspace":
+		case "/api/mail/workspace":
 			_, _ = w.Write([]byte(`{
 				"accounts":[{"id":"agent@example.com","address":"agent@example.com","name":"Agent","state":"ready"}],
 				"activeAccountId":"agent@example.com",
@@ -203,7 +203,7 @@ func TestMainInboxUsesAgentMailRPCWithoutWildDuckConfig(t *testing.T) {
 				"pagination":{"limit":25,"nextCursor":null,"previousCursor":null,"total":0},
 				"selectedMessage":null
 			}`))
-		case "/rpc/mail/workspace?folderId=inbox-1&limit=20":
+		case "/api/mail/workspace?folderId=inbox-1&limit=20":
 			_, _ = w.Write([]byte(`{
 				"accounts":[{"id":"agent@example.com","address":"agent@example.com","name":"Agent","state":"ready"}],
 				"activeAccountId":"agent@example.com",
@@ -228,7 +228,7 @@ func TestMainInboxUsesAgentMailRPCWithoutWildDuckConfig(t *testing.T) {
 	if !strings.Contains(stdout.String(), "1 message(s) in INBOX") || !strings.Contains(stdout.String(), "Hello") {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
-	if strings.Join(seen, "\n") != "/rpc/mail/workspace\n/rpc/mail/workspace?folderId=inbox-1&limit=20" {
+	if strings.Join(seen, "\n") != "/api/mail/workspace\n/api/mail/workspace?folderId=inbox-1&limit=20" {
 		t.Fatalf("seen = %#v", seen)
 	}
 	if stderr.String() != "" {
@@ -251,7 +251,7 @@ func TestMainSendUsesAgentMailRPCWithoutWildDuckConfig(t *testing.T) {
 			t.Fatalf("htu = %#v, want %s", payload["htu"], server.URL+r.URL.RequestURI())
 		}
 		switch r.URL.RequestURI() {
-		case "/rpc/mail/workspace":
+		case "/api/mail/workspace":
 			_, _ = w.Write([]byte(`{
 				"accounts":[{"id":"agent@example.com","address":"agent@example.com","name":"Agent","state":"ready"}],
 				"activeAccountId":"agent@example.com",
@@ -261,7 +261,7 @@ func TestMainSendUsesAgentMailRPCWithoutWildDuckConfig(t *testing.T) {
 				"pagination":{"limit":25,"nextCursor":null,"previousCursor":null,"total":0},
 				"selectedMessage":null
 			}`))
-		case "/rpc/mail/accounts/" + url.PathEscape("agent@example.com") + "/messages":
+		case "/api/mail/accounts/" + url.PathEscape("agent@example.com") + "/messages":
 			if r.Method != http.MethodPost {
 				t.Fatalf("method = %s", r.Method)
 			}
@@ -299,7 +299,7 @@ func TestMainSendUsesAgentMailRPCWithoutWildDuckConfig(t *testing.T) {
 	if objectValue(payload["message"])["success"] != true {
 		t.Fatalf("payload = %#v", payload)
 	}
-	if strings.Join(seen, "\n") != "/rpc/mail/workspace\n/rpc/mail/accounts/"+url.PathEscape("agent@example.com")+"/messages" {
+	if strings.Join(seen, "\n") != "/api/mail/workspace\n/api/mail/accounts/"+url.PathEscape("agent@example.com")+"/messages" {
 		t.Fatalf("seen = %#v", seen)
 	}
 	if stderr.String() != "" {
@@ -499,12 +499,12 @@ func TestMainAuthLoginStatusAndLogout(t *testing.T) {
 		switch r.URL.RequestURI() {
 		case "/.well-known/at-email.json":
 			w.WriteHeader(http.StatusNotFound)
-		case "/rpc/auth/api/device/code":
+		case "/api/auth/device/code":
 			if r.Method != http.MethodPost {
 				t.Fatalf("method = %s", r.Method)
 			}
 			_, _ = w.Write([]byte(`{"device_code":"device-1","user_code":"ABCD1234","verification_uri":"https://app.example/device","verification_uri_complete":"https://app.example/device?user_code=ABCD1234","expires_in":60,"interval":1}`))
-		case "/rpc/auth/api/device/token":
+		case "/api/auth/device/token":
 			tokenPolls++
 			if tokenPolls == 1 {
 				w.WriteHeader(http.StatusBadRequest)
@@ -512,12 +512,12 @@ func TestMainAuthLoginStatusAndLogout(t *testing.T) {
 				return
 			}
 			_, _ = w.Write([]byte(`{"access_token":"session-token-secret","token_type":"Bearer","expires_in":3600,"scope":"openid profile email"}`))
-		case "/rpc/auth/api/get-session":
+		case "/api/auth/get-session":
 			if r.Header.Get("Authorization") != "Bearer session-token-secret" {
 				t.Fatalf("authorization header = %q", r.Header.Get("Authorization"))
 			}
 			_, _ = w.Write([]byte(`{"session":{"id":"sess-1","expiresAt":"2026-12-19T12:00:00Z","userAgent":"at-email/1.2.3 (linux; amd64)"},"user":{"id":"user-1","email":"agent@example.com","name":"Agent"}}`))
-		case "/rpc/auth/api/revoke-session":
+		case "/api/auth/revoke-session":
 			if r.Header.Get("Authorization") != "Bearer session-token-secret" {
 				t.Fatalf("authorization header = %q", r.Header.Get("Authorization"))
 			}
@@ -609,7 +609,7 @@ func TestMainAuthLogoutLeavesAgentCredentialConfigured(t *testing.T) {
 	var revoked bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.RequestURI() {
-		case "/rpc/auth/api/revoke-session":
+		case "/api/auth/revoke-session":
 			if r.Header.Get("Authorization") != "Bearer personal-session-token" {
 				t.Fatalf("authorization header = %q", r.Header.Get("Authorization"))
 			}
@@ -682,7 +682,7 @@ func TestMainAgentDisconnectLeavesPersonalAuthConfigured(t *testing.T) {
 				"issuer": server.URL,
 				"modes":  []string{"delegated", "autonomous"},
 			})
-		case "/rpc/auth/api/agent/revoke":
+		case "/api/auth/agent/revoke":
 			if r.Method != http.MethodPost {
 				t.Fatalf("agent revoke method = %s", r.Method)
 			}
@@ -695,7 +695,7 @@ func TestMainAgentDisconnectLeavesPersonalAuthConfigured(t *testing.T) {
 			}
 			if payload["aud"] != server.URL ||
 				payload["htm"] != http.MethodPost ||
-				payload["htu"] != server.URL+"/rpc/auth/api/agent/revoke" {
+				payload["htu"] != server.URL+"/api/auth/agent/revoke" {
 				t.Fatalf("agent revoke request binding payload=%#v", payload)
 			}
 			var body map[string]string
@@ -707,7 +707,7 @@ func TestMainAgentDisconnectLeavesPersonalAuthConfigured(t *testing.T) {
 			}
 			revoked = true
 			writeJSON(t, w, map[string]any{"status": "revoked"})
-		case "/rpc/auth/api/revoke-session":
+		case "/api/auth/revoke-session":
 			t.Fatal("agent disconnect should not call personal session revoke")
 		default:
 			t.Fatalf("agent disconnect called unexpected path %s", r.URL.RequestURI())
@@ -779,14 +779,14 @@ func TestMainAuthLoginUsesDiscoveryAndExplicitOpen(t *testing.T) {
 			t.Fatalf("api user-agent = %q", got)
 		}
 		switch r.URL.RequestURI() {
-		case "/rpc/auth/api/device/code":
+		case "/api/auth/device/code":
 			if r.Method != http.MethodPost {
 				t.Fatalf("method = %s", r.Method)
 			}
 			_, _ = w.Write([]byte(`{"device_code":"device-2","user_code":"EFGH5678","verification_uri":"https://api.example/device","verification_uri_complete":"https://api.example/device?user_code=EFGH5678","expires_in":60,"interval":0}`))
-		case "/rpc/auth/api/device/token":
+		case "/api/auth/device/token":
 			_, _ = w.Write([]byte(`{"access_token":"discovered-session-token","token_type":"Bearer","expires_in":3600,"scope":"openid profile email"}`))
-		case "/rpc/auth/api/get-session":
+		case "/api/auth/get-session":
 			if r.Header.Get("Authorization") != "Bearer discovered-session-token" {
 				t.Fatalf("authorization header = %q", r.Header.Get("Authorization"))
 			}
@@ -865,14 +865,14 @@ func TestMainAuthLoginDeviceModePrintsCodeWithoutOpeningBrowser(t *testing.T) {
 		switch r.URL.RequestURI() {
 		case "/.well-known/at-email.json":
 			w.WriteHeader(http.StatusNotFound)
-		case "/rpc/auth/api/device/code":
+		case "/api/auth/device/code":
 			if r.Method != http.MethodPost {
 				t.Fatalf("method = %s", r.Method)
 			}
 			_, _ = w.Write([]byte(`{"device_code":"device-3","user_code":"IJKL9012","verification_uri":"https://app.example/device","verification_uri_complete":"https://app.example/device?user_code=IJKL9012","expires_in":60,"interval":0}`))
-		case "/rpc/auth/api/device/token":
+		case "/api/auth/device/token":
 			_, _ = w.Write([]byte(`{"access_token":"device-session-token","token_type":"Bearer","expires_in":3600,"scope":"openid profile email"}`))
-		case "/rpc/auth/api/get-session":
+		case "/api/auth/get-session":
 			if r.Header.Get("Authorization") != "Bearer device-session-token" {
 				t.Fatalf("authorization header = %q", r.Header.Get("Authorization"))
 			}
@@ -937,14 +937,14 @@ func TestMainAuthLoginJSONPrintsPendingApprovalToStderr(t *testing.T) {
 		switch r.URL.RequestURI() {
 		case "/.well-known/at-email.json":
 			w.WriteHeader(http.StatusNotFound)
-		case "/rpc/auth/api/device/code":
+		case "/api/auth/device/code":
 			if r.Method != http.MethodPost {
 				t.Fatalf("method = %s", r.Method)
 			}
 			_, _ = w.Write([]byte(`{"device_code":"device-json-secret","user_code":"MNOP3456","verification_uri":"https://app.example/device","verification_uri_complete":"https://app.example/device?user_code=MNOP3456","expires_in":60,"interval":0}`))
-		case "/rpc/auth/api/device/token":
+		case "/api/auth/device/token":
 			_, _ = w.Write([]byte(`{"access_token":"json-session-token","token_type":"Bearer","expires_in":3600,"scope":"openid profile email"}`))
-		case "/rpc/auth/api/get-session":
+		case "/api/auth/get-session":
 			if r.Header.Get("Authorization") != "Bearer json-session-token" {
 				t.Fatalf("authorization header = %q", r.Header.Get("Authorization"))
 			}
@@ -1013,14 +1013,14 @@ func TestMainAuthLoginDeviceJSONPrintsDeviceApprovalToStderr(t *testing.T) {
 		switch r.URL.RequestURI() {
 		case "/.well-known/at-email.json":
 			w.WriteHeader(http.StatusNotFound)
-		case "/rpc/auth/api/device/code":
+		case "/api/auth/device/code":
 			if r.Method != http.MethodPost {
 				t.Fatalf("method = %s", r.Method)
 			}
 			_, _ = w.Write([]byte(`{"device_code":"device-json-secret","user_code":"QRST7890","verification_uri":"https://app.example/device","verification_uri_complete":"https://app.example/device?user_code=QRST7890","expires_in":60,"interval":0}`))
-		case "/rpc/auth/api/device/token":
+		case "/api/auth/device/token":
 			_, _ = w.Write([]byte(`{"access_token":"device-json-session-token","token_type":"Bearer","expires_in":3600,"scope":"openid profile email"}`))
-		case "/rpc/auth/api/get-session":
+		case "/api/auth/get-session":
 			if r.Header.Get("Authorization") != "Bearer device-json-session-token" {
 				t.Fatalf("authorization header = %q", r.Header.Get("Authorization"))
 			}
@@ -1075,7 +1075,7 @@ func TestMainAuthLoginErrorDoesNotEchoServerSecretText(t *testing.T) {
 		switch r.URL.RequestURI() {
 		case "/.well-known/at-email.json":
 			w.WriteHeader(http.StatusNotFound)
-		case "/rpc/auth/api/device/code":
+		case "/api/auth/device/code":
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = w.Write([]byte(`{"error":"access_denied","error_description":"server secret session-token-secret should not be printed"}`))
 		default:
@@ -1111,7 +1111,7 @@ func TestMainTextCommandWritesUpdateNotice(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.RequestURI() != "/rpc/mail/workspace" {
+		if r.URL.RequestURI() != "/api/mail/workspace" {
 			t.Fatalf("request URI = %s", r.URL.RequestURI())
 		}
 		_, _ = w.Write([]byte(`{
@@ -1159,7 +1159,7 @@ func TestMainJSONCommandSuppressesUpdateNotice(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.RequestURI() != "/rpc/mail/workspace" {
+		if r.URL.RequestURI() != "/api/mail/workspace" {
 			t.Fatalf("request URI = %s", r.URL.RequestURI())
 		}
 		_, _ = w.Write([]byte(`{
@@ -1392,7 +1392,7 @@ func TestMainStatusJSON(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.RequestURI() != "/rpc/mail/workspace?accountId=agent%40example.com" {
+		if r.URL.RequestURI() != "/api/mail/workspace?accountId=agent%40example.com" {
 			t.Fatalf("request URI = %s", r.URL.RequestURI())
 		}
 		_, _ = w.Write([]byte(`{
@@ -1434,7 +1434,7 @@ func TestMainInboxUnseenEmptyStateUsesUnreadCopy(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.RequestURI() {
-		case "/rpc/mail/workspace":
+		case "/api/mail/workspace":
 			_, _ = w.Write([]byte(`{
 				"accounts":[{"id":"agent@example.com","address":"agent@example.com","name":"Agent","state":"ready"}],
 				"activeAccountId":"agent@example.com",
@@ -1444,7 +1444,7 @@ func TestMainInboxUnseenEmptyStateUsesUnreadCopy(t *testing.T) {
 				"pagination":{"limit":25,"nextCursor":null,"previousCursor":null,"total":0},
 				"selectedMessage":null
 			}`))
-		case "/rpc/mail/workspace?folderId=inbox-1&limit=20&unreadOnly=true":
+		case "/api/mail/workspace?folderId=inbox-1&limit=20&unreadOnly=true":
 			_, _ = w.Write([]byte(`{
 				"accounts":[{"id":"agent@example.com","address":"agent@example.com","name":"Agent","state":"ready"}],
 				"activeAccountId":"agent@example.com",
@@ -1480,7 +1480,7 @@ func TestMainInboxJSONMissingResultsSerializesEmptyArray(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.RequestURI() {
-		case "/rpc/mail/workspace":
+		case "/api/mail/workspace":
 			_, _ = w.Write([]byte(`{
 				"accounts":[{"id":"agent@example.com","address":"agent@example.com","name":"Agent","state":"ready"}],
 				"activeAccountId":"agent@example.com",
@@ -1490,7 +1490,7 @@ func TestMainInboxJSONMissingResultsSerializesEmptyArray(t *testing.T) {
 				"pagination":{"limit":25,"nextCursor":null,"previousCursor":null,"total":0},
 				"selectedMessage":null
 			}`))
-		case "/rpc/mail/workspace?folderId=inbox-1&limit=20":
+		case "/api/mail/workspace?folderId=inbox-1&limit=20":
 			_, _ = w.Write([]byte(`{
 				"accounts":[{"id":"agent@example.com","address":"agent@example.com","name":"Agent","state":"ready"}],
 				"activeAccountId":"agent@example.com",
@@ -1539,7 +1539,7 @@ func TestMainStatusJSONProtocolErrorKeepsStdoutClean(t *testing.T) {
 	if stdout.String() != "" {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
-	wantErr := "error: AgentTeam Email GET /rpc/mail/workspace returned malformed service response: expected JSON object\n"
+	wantErr := "error: AgentTeam Email GET /api/mail/workspace returned malformed service response: expected JSON object\n"
 	if stderr.String() != wantErr {
 		t.Fatalf("stderr = %q, want %q", stderr.String(), wantErr)
 	}
@@ -1550,7 +1550,7 @@ func TestMainSendUsesBodyAndRendersSubmitResponse(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.RequestURI() {
-		case "/rpc/mail/workspace":
+		case "/api/mail/workspace":
 			_, _ = w.Write([]byte(`{
 				"accounts":[{"id":"agent@example.com","address":"agent@example.com","name":"Agent","state":"ready"}],
 				"activeAccountId":"agent@example.com",
@@ -1560,7 +1560,7 @@ func TestMainSendUsesBodyAndRendersSubmitResponse(t *testing.T) {
 				"pagination":{"limit":25,"nextCursor":null,"previousCursor":null,"total":0},
 				"selectedMessage":null
 			}`))
-		case "/rpc/mail/accounts/" + url.PathEscape("agent@example.com") + "/messages":
+		case "/api/mail/accounts/" + url.PathEscape("agent@example.com") + "/messages":
 			var payload map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				t.Fatalf("decode request: %v", err)
@@ -1597,7 +1597,7 @@ func TestMainSendAllowsExplicitEmptySubject(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.RequestURI() {
-		case "/rpc/mail/workspace":
+		case "/api/mail/workspace":
 			_, _ = w.Write([]byte(`{
 				"accounts":[{"id":"agent@example.com","address":"agent@example.com","name":"Agent","state":"ready"}],
 				"activeAccountId":"agent@example.com",
@@ -1607,7 +1607,7 @@ func TestMainSendAllowsExplicitEmptySubject(t *testing.T) {
 				"pagination":{"limit":25,"nextCursor":null,"previousCursor":null,"total":0},
 				"selectedMessage":null
 			}`))
-		case "/rpc/mail/accounts/" + url.PathEscape("agent@example.com") + "/messages":
+		case "/api/mail/accounts/" + url.PathEscape("agent@example.com") + "/messages":
 			var payload map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				t.Fatalf("decode request: %v", err)
@@ -1737,7 +1737,7 @@ func TestMainPaperclipToolStatusPassesRunContextHeaders(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.RequestURI() != "/rpc/mail/workspace?accountId=agent%40example.com" {
+		if r.URL.RequestURI() != "/api/mail/workspace?accountId=agent%40example.com" {
 			t.Fatalf("request URI = %s", r.URL.RequestURI())
 		}
 		for key, want := range map[string]string{
@@ -1876,7 +1876,7 @@ func TestMainPaperclipToolProvisionUsesMailAdminRPC(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.RequestURI() != "/rpc/mail/admin/accounts" {
+		if r.URL.RequestURI() != "/api/mail/admin/accounts" {
 			t.Fatalf("request URI = %s", r.URL.RequestURI())
 		}
 		if r.Method != http.MethodPost {
@@ -1886,7 +1886,7 @@ func TestMainPaperclipToolProvisionUsesMailAdminRPC(t *testing.T) {
 		if payload["iss"] != "host-1" || payload["sub"] != "agent-1" || payload["aud"] != "http://"+r.Host {
 			t.Fatalf("jwt payload = %#v", payload)
 		}
-		if payload["htm"] != http.MethodPost || payload["htu"] != "http://"+r.Host+"/rpc/mail/admin/accounts" {
+		if payload["htm"] != http.MethodPost || payload["htu"] != "http://"+r.Host+"/api/mail/admin/accounts" {
 			t.Fatalf("jwt payload = %#v", payload)
 		}
 		for key, want := range map[string]string{

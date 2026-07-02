@@ -102,6 +102,9 @@ func resolveAgentEndpointURL(baseURL string, name string, endpoint string) (stri
 	if parsed.Path == "" {
 		return "", newProtocolError("AgentTeam Email Agent Auth discovery endpoint " + name + " is missing a path")
 	}
+	if parsed.Path == "/rpc" || strings.HasPrefix(parsed.Path, "/rpc/") {
+		return "", newProtocolError("AgentTeam Email Agent Auth discovery endpoint " + name + " must use the API auth boundary")
+	}
 	parsed.Fragment = ""
 	return parsed.String(), nil
 }
@@ -149,7 +152,7 @@ func (c agentAuthClient) startTrial(ctx context.Context, hostPublicKey map[strin
 	if strings.TrimSpace(admissionToken) != "" {
 		body["admission_token"] = strings.TrimSpace(admissionToken)
 	}
-	return c.requestAppJSON(ctx, http.MethodPost, "/rpc/agent-access/trials", body)
+	return c.requestAppJSON(ctx, http.MethodPost, "/api/agent-access/trials", body)
 }
 
 type agentRegistrationOptions struct {

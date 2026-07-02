@@ -413,7 +413,7 @@ func (c appAuthClient) requestJSON(ctx context.Context, method string, path stri
 		reader = bytes.NewReader(data)
 	}
 
-	request, err := http.NewRequestWithContext(ctx, method, c.baseURL+"/rpc/auth/api"+path, reader)
+	request, err := http.NewRequestWithContext(ctx, method, c.baseURL+"/api/auth"+path, reader)
 	if err != nil {
 		return nil, newServiceTransportError("AgentTeam Email", "preparing "+method+" request")
 	}

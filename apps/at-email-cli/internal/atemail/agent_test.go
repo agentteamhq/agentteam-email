@@ -125,7 +125,7 @@ func TestSignAgentAuthJWTProducesVerifiableJOSEToken(t *testing.T) {
 		"agent-1",
 		"https://mail.example.com",
 		http.MethodGet,
-		"https://mail.example.com/rpc/mail/workspace",
+		"https://mail.example.com/api/mail/workspace",
 	)
 	if err != nil {
 		t.Fatalf("claims failed: %v", err)
@@ -168,7 +168,7 @@ func TestSignAgentAuthJWTProducesVerifiableJOSEToken(t *testing.T) {
 	if verified["iss"] != "host-1" || verified["sub"] != "agent-1" || verified["aud"] != "https://mail.example.com" {
 		t.Fatalf("verified jwt claims = %#v", verified)
 	}
-	if verified["htm"] != http.MethodGet || verified["htu"] != "https://mail.example.com/rpc/mail/workspace" {
+	if verified["htm"] != http.MethodGet || verified["htu"] != "https://mail.example.com/api/mail/workspace" {
 		t.Fatalf("verified jwt request binding = %#v", verified)
 	}
 }
@@ -223,7 +223,7 @@ func TestMainAgentEnrollStatusAndDisconnect(t *testing.T) {
 				"issuer": server.URL,
 				"modes":  []string{"delegated", "autonomous"},
 			})
-		case "/rpc/auth/api/host/enroll":
+		case "/api/auth/host/enroll":
 			if request.Method != http.MethodPost {
 				t.Fatalf("host enroll method = %s", request.Method)
 			}
@@ -244,7 +244,7 @@ func TestMainAgentEnrollStatusAndDisconnect(t *testing.T) {
 				"name":                 "Test Agent",
 				"status":               "active",
 			})
-		case "/rpc/auth/api/agent/register":
+		case "/api/auth/agent/register":
 			if request.Method != http.MethodPost {
 				t.Fatalf("agent register method = %s", request.Method)
 			}
@@ -252,7 +252,7 @@ func TestMainAgentEnrollStatusAndDisconnect(t *testing.T) {
 			if header["typ"] != "host+jwt" || payload["iss"] != "host-1" {
 				t.Fatalf("host jwt header=%#v payload=%#v", header, payload)
 			}
-			if payload["aud"] != server.URL || payload["htm"] != http.MethodPost || payload["htu"] != server.URL+"/rpc/auth/api/agent/register" {
+			if payload["aud"] != server.URL || payload["htm"] != http.MethodPost || payload["htu"] != server.URL+"/api/auth/agent/register" {
 				t.Fatalf("host jwt request binding payload=%#v", payload)
 			}
 			agentPublicKey := objectValue(payload["agent_public_key"])
@@ -276,7 +276,7 @@ func TestMainAgentEnrollStatusAndDisconnect(t *testing.T) {
 				"name":     "Test Agent",
 				"status":   "active",
 			})
-		case "/rpc/mail/workspace":
+		case "/api/mail/workspace":
 			if request.Method != http.MethodGet {
 				t.Fatalf("mail workspace method = %s", request.Method)
 			}
@@ -284,7 +284,7 @@ func TestMainAgentEnrollStatusAndDisconnect(t *testing.T) {
 			if header["typ"] != "agent+jwt" || payload["iss"] != "host-1" || payload["sub"] != "agent-1" {
 				t.Fatalf("mail workspace jwt header=%#v payload=%#v", header, payload)
 			}
-			if payload["aud"] != server.URL || payload["htm"] != http.MethodGet || payload["htu"] != server.URL+"/rpc/mail/workspace" {
+			if payload["aud"] != server.URL || payload["htm"] != http.MethodGet || payload["htu"] != server.URL+"/api/mail/workspace" {
 				t.Fatalf("mail workspace jwt request binding payload=%#v", payload)
 			}
 			if request.Header.Get("X-Access-Token") != "" {
@@ -306,7 +306,7 @@ func TestMainAgentEnrollStatusAndDisconnect(t *testing.T) {
 				},
 				"selectedMessage": nil,
 			})
-		case "/rpc/auth/api/agent/status":
+		case "/api/auth/agent/status":
 			if request.Method != http.MethodGet {
 				t.Fatalf("agent status method = %s", request.Method)
 			}
@@ -314,7 +314,7 @@ func TestMainAgentEnrollStatusAndDisconnect(t *testing.T) {
 			if header["typ"] != "agent+jwt" || payload["iss"] != "host-1" || payload["sub"] != "agent-1" {
 				t.Fatalf("agent status jwt header=%#v payload=%#v", header, payload)
 			}
-			if payload["aud"] != server.URL || payload["htm"] != http.MethodGet || payload["htu"] != server.URL+"/rpc/auth/api/agent/status" {
+			if payload["aud"] != server.URL || payload["htm"] != http.MethodGet || payload["htu"] != server.URL+"/api/auth/agent/status" {
 				t.Fatalf("agent status jwt request binding payload=%#v", payload)
 			}
 			writeJSON(t, writer, map[string]any{
@@ -335,7 +335,7 @@ func TestMainAgentEnrollStatusAndDisconnect(t *testing.T) {
 				"name":       "Test Agent",
 				"status":     "active",
 			})
-		case "/rpc/auth/api/agent/revoke":
+		case "/api/auth/agent/revoke":
 			if request.Method != http.MethodPost {
 				t.Fatalf("agent revoke method = %s", request.Method)
 			}
@@ -343,7 +343,7 @@ func TestMainAgentEnrollStatusAndDisconnect(t *testing.T) {
 			if header["typ"] != "agent+jwt" || payload["sub"] != "agent-1" {
 				t.Fatalf("agent revoke jwt header=%#v payload=%#v", header, payload)
 			}
-			if payload["htu"] != server.URL+"/rpc/auth/api/agent/revoke" {
+			if payload["htu"] != server.URL+"/api/auth/agent/revoke" {
 				t.Fatalf("agent revoke htu = %#v", payload["htu"])
 			}
 			var body map[string]any
@@ -461,11 +461,11 @@ func TestMainAgentEnrollStatusAndDisconnect(t *testing.T) {
 	}
 
 	for _, path := range []string{
-		"/rpc/auth/api/host/enroll",
-		"/rpc/auth/api/agent/register",
-		"/rpc/mail/workspace",
-		"/rpc/auth/api/agent/status",
-		"/rpc/auth/api/agent/revoke",
+		"/api/auth/host/enroll",
+		"/api/auth/agent/register",
+		"/api/mail/workspace",
+		"/api/auth/agent/status",
+		"/api/auth/agent/revoke",
 	} {
 		if seen[path] != 1 {
 			t.Fatalf("%s seen %d times", path, seen[path])
@@ -489,7 +489,7 @@ func TestMainAgentEnrollRequiresDelegatedProviderMode(t *testing.T) {
 				"issuer": request.Host,
 				"modes":  []string{"autonomous"},
 			})
-		case "/rpc/auth/api/host/enroll":
+		case "/api/auth/host/enroll":
 			sawHostEnroll = true
 			t.Fatalf("host enroll should not be called when delegated mode is unavailable")
 		default:
@@ -554,7 +554,7 @@ func TestMainAgentEnrollWaitsForPendingRegistrationApproval(t *testing.T) {
 				"issuer": server.URL,
 				"modes":  []string{"delegated", "autonomous"},
 			})
-		case "/rpc/auth/api/host/enroll":
+		case "/api/auth/host/enroll":
 			if request.Method != http.MethodPost {
 				t.Fatalf("host enroll method = %s", request.Method)
 			}
@@ -564,7 +564,7 @@ func TestMainAgentEnrollWaitsForPendingRegistrationApproval(t *testing.T) {
 				"name":                 "Pending Agent",
 				"status":               "active",
 			})
-		case "/rpc/auth/api/agent/register":
+		case "/api/auth/agent/register":
 			if request.Method != http.MethodPost {
 				t.Fatalf("agent register method = %s", request.Method)
 			}
@@ -590,7 +590,7 @@ func TestMainAgentEnrollWaitsForPendingRegistrationApproval(t *testing.T) {
 				"name":    "Pending Agent",
 				"status":  "pending",
 			})
-		case "/rpc/auth/api/agent/status":
+		case "/api/auth/agent/status":
 			statusPolls++
 			if request.URL.Query().Get("agent_id") != "agent-1" {
 				t.Fatalf("agent status query = %s", request.URL.RawQuery)
@@ -684,10 +684,10 @@ func TestMainAgentTrialCreatesAutonomousCredentialThroughWebserver(t *testing.T)
 			writeJSON(t, writer, map[string]any{
 				"modes": []string{"delegated", "autonomous"},
 				"endpoints": map[string]string{
-					"revoke": server.URL + "/api/auth/agent/revoke",
+					"revoke": server.URL + "/api/auth/agent/revoke/discovered",
 				},
 			})
-		case "/api/auth/agent/revoke":
+		case "/api/auth/agent/revoke/discovered":
 			if request.Method != http.MethodPost {
 				t.Fatalf("agent revoke method = %s", request.Method)
 			}
@@ -695,16 +695,16 @@ func TestMainAgentTrialCreatesAutonomousCredentialThroughWebserver(t *testing.T)
 			if header["typ"] != "agent+jwt" || payload["iss"] != "old-host" || payload["sub"] != "old-agent" {
 				t.Fatalf("old agent revoke jwt header=%#v payload=%#v", header, payload)
 			}
-			if payload["htu"] != server.URL+"/api/auth/agent/revoke" {
+			if payload["htu"] != server.URL+"/api/auth/agent/revoke/discovered" {
 				t.Fatalf("old agent revoke htu = %#v", payload["htu"])
 			}
 			writeJSON(t, writer, map[string]any{
 				"agent_id": "old-agent",
 				"status":   "revoked",
 			})
-		case "/rpc/auth/api/agent/revoke":
+		case "/api/auth/agent/revoke":
 			t.Fatalf("agent trial --force used fallback revoke endpoint instead of discovered endpoint")
-		case "/rpc/agent-access/trials":
+		case "/api/agent-access/trials":
 			if request.Method != http.MethodPost {
 				t.Fatalf("trial method = %s", request.Method)
 			}
@@ -824,9 +824,9 @@ func TestMainAgentTrialCreatesAutonomousCredentialThroughWebserver(t *testing.T)
 		t.Fatalf("personal auth credential should not be created, stat err=%v", err)
 	}
 	for _, path := range []string{
-		"/api/auth/agent/revoke",
+		"/api/auth/agent/revoke/discovered",
 		"/.well-known/agent-configuration",
-		"/rpc/agent-access/trials",
+		"/api/agent-access/trials",
 	} {
 		want := 1
 		if path == "/.well-known/agent-configuration" {
@@ -855,7 +855,7 @@ func TestMainAgentTrialUsesFreshHostKeyWhenStoredHostExists(t *testing.T) {
 			writeJSON(t, writer, map[string]any{
 				"modes": []string{"delegated", "autonomous"},
 			})
-		case "/rpc/agent-access/trials":
+		case "/api/agent-access/trials":
 			var body map[string]any
 			if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
 				t.Fatalf("trial body decode failed: %v", err)
@@ -979,7 +979,7 @@ func TestMainAgentConnectForceValidatesCapabilityInputBeforeRevokingExistingAgen
 				"issuer": server.URL,
 				"modes":  []string{"delegated"},
 			})
-		case "/rpc/auth/api/agent/revoke", "/api/auth/agent/revoke":
+		case "/api/auth/agent/revoke":
 			sawRevoke = true
 			t.Fatalf("agent connect --force should not revoke before required capability input is valid")
 		default:
@@ -1226,7 +1226,7 @@ func TestMainAgentConnectJSONPrintsPendingApprovalToStderr(t *testing.T) {
 				"issuer": server.URL,
 				"modes":  []string{"delegated"},
 			})
-		case "/rpc/auth/api/agent/register":
+		case "/api/auth/agent/register":
 			if request.Method != http.MethodPost {
 				t.Fatalf("agent register method = %s", request.Method)
 			}
@@ -1252,7 +1252,7 @@ func TestMainAgentConnectJSONPrintsPendingApprovalToStderr(t *testing.T) {
 				"name":    "JSON Agent",
 				"status":  "pending",
 			})
-		case "/rpc/auth/api/agent/status":
+		case "/api/auth/agent/status":
 			statusPolls++
 			if request.URL.Query().Get("agent_id") != "agent-1" {
 				t.Fatalf("agent status query = %s", request.URL.RawQuery)
@@ -1332,7 +1332,7 @@ func TestMainAgentConnectRejectsCrossOriginDiscoveredEndpoint(t *testing.T) {
 					"register": "https://evil.example.test/api/auth/agent/register",
 				},
 			})
-		case "/rpc/auth/api/agent/register", "/api/auth/agent/register":
+		case "/api/auth/agent/register":
 			sawRegister = true
 			t.Fatalf("agent register should not be called for cross-origin discovery endpoint")
 		default:
@@ -1383,10 +1383,10 @@ func TestMainAgentConnectReusesStoredHostCredential(t *testing.T) {
 				"issuer": server.URL,
 				"modes":  []string{"delegated", "autonomous"},
 			})
-		case "/rpc/auth/api/host/create":
+		case "/api/auth/host/create":
 			sawHostCreate = true
 			t.Fatalf("host create should not be called when a matching host credential exists")
-		case "/rpc/auth/api/agent/register":
+		case "/api/auth/agent/register":
 			header, payload := decodeTestJWT(t, request.Header.Get("Authorization"))
 			if header["typ"] != "host+jwt" || payload["iss"] != "host-existing" {
 				t.Fatalf("host jwt header=%#v payload=%#v", header, payload)
@@ -1454,7 +1454,7 @@ func TestMainAgentConnectRequiresDelegatedProviderMode(t *testing.T) {
 				"issuer": request.Host,
 				"modes":  []string{"autonomous"},
 			})
-		case "/rpc/auth/api/host/create":
+		case "/api/auth/host/create":
 			sawHostCreate = true
 			t.Fatalf("host create should not be called when delegated mode is unavailable")
 		default:

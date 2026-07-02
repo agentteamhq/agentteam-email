@@ -166,7 +166,7 @@ func agentAuthAudience(baseURL string) string {
 }
 
 func agentAuthRequestURL(baseURL string, path string) string {
-	return strings.TrimRight(baseURL, "/") + "/rpc/auth/api" + path
+	return strings.TrimRight(baseURL, "/") + "/api/auth" + path
 }
 
 func requireAgentKeyLabel(key agentKeyJWK, label string) error {

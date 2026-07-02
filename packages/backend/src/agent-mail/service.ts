@@ -102,6 +102,8 @@ const AGENT_AUTH_JWT_CLOCK_TOLERANCE_SECONDS = 30
 const TRIAL_DAILY_SEND_WINDOW_MS = 24 * 60 * 60 * 1000
 const PAPERCLIP_CONTEXT_VALUE_PATTERN = /^[A-Za-z0-9._:-]{1,256}$/u
 const AT_EMAIL_ADMIN_PAPERCLIP_OPERATIONS = new Set<string>(AgentMailPaperclipOperationValues)
+const AGENT_MAIL_AUTH_SURFACE_HEADER = 'x-agentteam-mail-auth-surface'
+const AGENT_MAIL_BROWSER_RPC_AUTH_SURFACE = 'browser-rpc'
 
 export async function submitAgentMailOutboundFromWeb({
   headers,
@@ -285,6 +287,9 @@ export async function requireAgentMailOrganizationContext(
   headers: Headers
 ): Promise<AgentMailOrganizationContext> {
   const { auth, db } = await globals()
+  const browserRpcOnly = isBrowserRpcMailAuthSurface(headers)
+
+  if (!browserRpcOnly) {
   const resourceBoundAgentSession = await resolveResourceBoundAgentSession({ db, headers })
   if (resourceBoundAgentSession) {
     return resourceBoundAgentSession
@@ -324,6 +329,7 @@ export async function requireAgentMailOrganizationContext(
         null
     })
   }
+  }
 
   const session = await auth.api.getSession({ headers })
   if (!session?.user) {
@@ -331,6 +337,10 @@ export async function requireAgentMailOrganizationContext(
   }
 
   return buildAgentMailOrganizationContextForUserSession({ db, headers, session })
+}
+
+function isBrowserRpcMailAuthSurface(headers: Headers): boolean {
+  return headers.get(AGENT_MAIL_AUTH_SURFACE_HEADER) === AGENT_MAIL_BROWSER_RPC_AUTH_SURFACE
 }
 
 async function resolveResourceBoundAgentSession({
