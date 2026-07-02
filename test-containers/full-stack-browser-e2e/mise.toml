@@ -1,0 +1,4 @@
+[tasks.test]
+description = "Run the recorded full-stack browser E2E harness"
+dir = "{{config_root}}"
+run = "pnpm --filter @main/full-stack-browser-e2e test"

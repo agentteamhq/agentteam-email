@@ -222,6 +222,14 @@ run = [
   { task = "//test-containers/full-stack-e2e:test" },
 ]
 
+[tasks."test:e2e:browser-recorded"]
+description = "Run the recorded full-stack browser E2E harness"
+run = [
+  { task = "//apps/mail-control-service:image:build" },
+  { task = "//apps/web-server:image:build" },
+  { task = "//test-containers/full-stack-browser-e2e:test" },
+]
+
 [tasks."test:e2e"]
 description = "Run all end-to-end test-container flows"
 run = [
