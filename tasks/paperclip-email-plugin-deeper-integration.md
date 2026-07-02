@@ -9,16 +9,17 @@ This file keeps only remaining integration work.
 
 ## Remaining Connection Lifecycle
 
-- Decide the first production connection mode: OAuth, API key, external
-  service-managed connection, or a phased combination.
+- Use AgentTeam Email OAuth as the default Paperclip connection mode.
+- Keep Paperclip-side API key authentication as an explicit advanced self-hosted
+  or preview fallback when a user-provisioned Better Auth API key can be stored
+  through approved company-scoped secret references.
 - Replace the current safe OAuth handoff with the intended connection lifecycle
   once that boundary is approved.
 - Add real connect, test connection, and disconnect actions.
 - Show connected AgentTeam Email account or organization metadata without
   exposing tokens, API keys, bearer headers, mailbox passwords, or resolved
   secret values.
-- Keep API key setup limited to advanced self-hosting when Paperclip
-  company-scoped secret references are available and approved.
+- Do not make API key setup the default Paperclip connection path.
 
 ## Remaining Status And UI Work
 

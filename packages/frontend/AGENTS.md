@@ -18,8 +18,8 @@ their owning CLI or generated workflow with explicit current-task approval.
 
 Before changing settings routes, settings sections, settings Storybook catalogs,
 or account/provider/integration/domain settings state, agents must read
-[../../ARCHITECTURE.md](../../ARCHITECTURE.md) and preserve its account and
-integration vocabulary.
+[../../ARCHITECTURE.md](../../ARCHITECTURE.md) and preserve its account,
+integration, credential, and settings ownership vocabulary.
 
 Linked accounts are Better Auth sign-in/account-linking identities and belong
 to Better Auth account or security settings. Product connected accounts must
@@ -34,6 +34,18 @@ authorization server and resource server.
 
 Domains consume connected-account authority for domain provisioning and status;
 domain state must not be treated as the connected-account inventory.
+
+Settings owns account, security, linked account, organization, connected
+account, integration, domain, API key, and device login credential surfaces.
+
+Agent Access is not a general settings credential surface. Agent hosts, agent
+identities, enrollment and bootstrap commands, approval requests, capability
+grants, mailbox constraints, grant expiry, last-used state, and revocation
+belong in the mail administration Agent Access surface, not in Settings.
+
+API keys and device login credentials represent the owning user's access level.
+Agent Auth credentials are separately permissioned by Agent Access grants and
+must not be presented as user-level settings credentials.
 
 ## Storybook
 

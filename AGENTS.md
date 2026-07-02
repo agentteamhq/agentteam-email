@@ -18,6 +18,10 @@ surfaces, authentication terms, integration terms, account/domain ownership, or
 settings semantics, agents must read [ARCHITECTURE.md](ARCHITECTURE.md) and
 preserve the vocabulary and ownership model defined there.
 
+When [ARCHITECTURE.md](ARCHITECTURE.md) points to a package or directory
+`AGENTS.md` as the owning rule surface, agents must read that file before
+changing behavior in that scope.
+
 ## Fixes And Failures
 
 When fixing a bug, test failure, CI failure, or broken workflow, agents must

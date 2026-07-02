@@ -63,15 +63,16 @@ boundary vocabulary.
 - Browser/internal OAuth/OIDC, Better Auth, and Agent Auth endpoints use
   `/rpc/auth/api/*`. API-client OAuth, device login, and Agent Auth protocol
   flows use `/api/auth/*`. API-key management screens may call browser-session
-  RPC routes, but API-key credentials themselves must authorize only `/api/*`
-  product API routes.
+  RPC routes, but API-key and device login credentials themselves must
+  authorize only `/api/*` product API routes.
 
 ## RPC Credential Requirements
 
 - `/rpc/health` must be public and must not derive or return caller identity.
 - `/rpc/whoami` may use an optional Better Auth browser session to describe the
-  current browser user/session. It must not treat API keys, OAuth bearer tokens,
-  Agent Auth JWTs, or internal service tokens as user identity.
+  current browser user/session. It must not treat API keys, device login
+  credentials, OAuth bearer tokens, Agent Auth JWTs, or internal service tokens
+  as user identity.
 - `/rpc/admin/setup/first-admin` must be public only until the first admin
   exists. After an admin exists, it must not create users, mutate setup state, or
   require any setup credential.
@@ -82,8 +83,9 @@ boundary vocabulary.
 - `/rpc/cloudflare/*`, `/rpc/agent-access/*`, `/rpc/mail/*`, and other product
   RPC routes must require a Better Auth browser session and derive the active
   organization from that session before applying CASL permissions. They must not
-  accept API keys, OAuth bearer tokens, Agent Auth JWTs, Paperclip run-context
-  headers, or caller-supplied organization headers as credentials.
+  accept API keys, device login credentials, OAuth bearer tokens, Agent Auth
+  JWTs, Paperclip run-context headers, or caller-supplied organization headers
+  as credentials.
 - `/rpc/mail/admin/*` is organization mail administration, not global admin. It
   must use the browser-session active organization and Agent Mail CASL
   permissions for mailbox, agent, grant, forwarding group, and account
@@ -102,8 +104,8 @@ boundary vocabulary.
   with the deployment-owned secret, and validate notification organization,
   domain, connection, and archive scope before enqueueing ingest.
 - `/rpc/internal/*` routes must require explicit internal service credentials.
-  They must not accept browser sessions, API keys, OAuth bearer tokens, Agent
-  Auth JWTs, or unsigned service hints.
+  They must not accept browser sessions, API keys, device login credentials,
+  OAuth bearer tokens, Agent Auth JWTs, or unsigned service hints.
 - `/rpc/auth/api/*` routes are owned by Better Auth and Agent Auth endpoint
   behavior. Do not reuse that path family for product RPC credentials or
   product RPC handlers.
@@ -125,12 +127,13 @@ boundary vocabulary.
   webhook verifier, or explicit internal service-token helper before protected
   service logic runs.
 - Browser RPC route handlers must pass browser-only headers to downstream
-  services. Browser RPC routes must not forward API keys, OAuth bearer tokens,
-  Agent Auth JWTs, Paperclip run-context headers, or caller-supplied
-  organization override headers into authorization helpers.
-- Public API, agent CLI, OAuth bearer, API-key, and Agent Auth credential
-  consumers must use the `/api/*` boundary for product API operations and
-  `/api/auth/*` for API-client auth protocol operations. They must not use
+  services. Browser RPC routes must not forward API keys, device login
+  credentials, OAuth bearer tokens, Agent Auth JWTs, Paperclip run-context
+  headers, or caller-supplied organization override headers into authorization
+  helpers.
+- Public API, agent CLI, OAuth bearer, API-key, device login, and Agent Auth
+  credential consumers must use the `/api/*` boundary for product API operations
+  and `/api/auth/*` for API-client auth protocol operations. They must not use
   `/rpc/*`.
 - Protected RPC routes must authenticate the caller, derive the authoritative
   user, organization, and principal context on the server, and authorize the
