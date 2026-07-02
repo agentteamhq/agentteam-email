@@ -2,6 +2,13 @@
 
 These rules apply to `packages/backend`.
 
+Before changing backend behavior for existing product concepts, route surfaces,
+credentials, account/provider/integration/domain state, or browser-consumed
+settings DTOs, read [../../ARCHITECTURE.md](../../ARCHITECTURE.md) and preserve
+the architecture vocabulary. In particular, linked accounts, connected
+accounts, integrations, and domains are distinct concepts with separate
+ownership and authorization boundaries.
+
 ## Public Origin And URLs
 
 - Server code must not hard-code product-owned absolute origins or

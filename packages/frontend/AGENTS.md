@@ -14,6 +14,27 @@ Agents must not manually edit registry-owned UI files:
 Change app behavior outside those paths. Registry files may change only through
 their owning CLI or generated workflow with explicit current-task approval.
 
+## Settings Concepts
+
+Before changing settings routes, settings sections, settings Storybook catalogs,
+or account/provider/integration/domain settings state, agents must read
+[../../ARCHITECTURE.md](../../ARCHITECTURE.md) and preserve its account and
+integration vocabulary.
+
+Linked accounts are Better Auth sign-in/account-linking identities and belong
+to Better Auth account or security settings. Product connected accounts must
+not be used for sign-in account linking.
+
+Connected accounts are upstream provider OAuth grants where AgentTeam Email is
+the OAuth client. They are provider-generic; Cloudflare is the current connected
+account provider.
+
+Integrations are downstream OAuth clients where AgentTeam Email is the OAuth
+authorization server and resource server.
+
+Domains consume connected-account authority for domain provisioning and status;
+domain state must not be treated as the connected-account inventory.
+
 ## Storybook
 
 Storybook stories must render canonical product components only.
@@ -40,6 +61,18 @@ through the same route, page, or controller owner used by the app.
 `Screens/*` stories may mock data at loader, RPC, API, or service boundaries,
 but must not handcraft state that is derived by an owning route, page,
 controller, or shell model.
+
+Production-reachable frontend state must have one production owner.
+
+Storybook and tests may supply that owner with fixture data. Production app
+paths must supply that owner only with production runtime data.
+
+Production app paths must not import Storybook or test fixtures, hardcode
+fixture-derived state, or derive the same state outside its production owner.
+
+Storybook and test coverage must not count as production implementation.
+Production implementation requires the production app path to derive the state
+and pass it through its production owner.
 
 Direct prop-driven stories for product components are component state stories or
 mock stories unless the rendered component is itself the production owner for
