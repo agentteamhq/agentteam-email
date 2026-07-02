@@ -160,6 +160,7 @@ import type {
 import type {
   AgentAccessSettingsState,
   DomainSettingsState,
+  IntegrationSettingsState,
   SettingsDialogContentState
 } from './settings-dialog'
 import type { SettingsSectionId } from './settings-dialog-sections'
@@ -169,6 +170,7 @@ export interface AuthenticatedShellProps {
   agentAccessState?: AgentAccessSettingsState
   composeView?: AuthenticatedComposeView
   domainSettingsState?: DomainSettingsState
+  integrationsState?: IntegrationSettingsState
   mailActionView?: AuthenticatedMailActionView
   onComposeAttachmentAdd?: (files: ReadonlyArray<File>) => void
   onComposeAttachmentRemove?: (attachmentId: string) => void
@@ -216,6 +218,7 @@ export function AuthenticatedShell({
   agentAccessState,
   composeView,
   domainSettingsState,
+  integrationsState,
   mailActionView,
   onComposeAttachmentRemove,
   onComposeAttachmentAdd,
@@ -303,6 +306,7 @@ export function AuthenticatedShell({
         agentAccessState={agentAccessState}
         contentState={settingsContentState}
         domainSettingsState={domainSettingsState}
+        integrationsState={integrationsState}
         onActiveSectionChange={onSettingsSectionChange}
         onOpenChange={onSettingsOpenChange}
         open={settingsOpen}

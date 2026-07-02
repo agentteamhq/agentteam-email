@@ -14,7 +14,6 @@ const storyReviewerActor = {
 } as const
 
 const noAgentAccessAllowedActions = {
-  connectPaperclip: false,
   denyApproval: false,
   reviewApproval: false,
   revokeAgent: false,
@@ -22,7 +21,6 @@ const noAgentAccessAllowedActions = {
 } satisfies AgentAccessView['allowedActions']
 
 const manageAgentAccessAllowedActions = {
-  connectPaperclip: true,
   denyApproval: true,
   reviewApproval: true,
   revokeAgent: true,
@@ -49,7 +47,6 @@ export const agentAccessEmptyState = {
     grants: [],
     hosts: [],
     organizationId: 'org-story',
-    paperclipConnections: [],
     state: 'empty'
   }
 } satisfies AgentAccessSettingsState
@@ -147,33 +144,7 @@ export const agentAccessActiveState = {
       }
     ],
     organizationId: 'org-story',
-    paperclipConnections: [],
     state: 'ready'
-  }
-} satisfies AgentAccessSettingsState
-
-export const agentAccessPaperclipConnectedState = {
-  ...agentAccessActiveState,
-  view: {
-    ...agentAccessActiveState.view,
-    paperclipConnections: [
-      {
-        clientId: 'paperclip-client-story',
-        companyId: 'paperclip-company-1',
-        name: 'Paperclip Email',
-        pluginId: 'agentteam.paperclip-email-plugin',
-        scope: 'organization',
-        status: 'active'
-      },
-      {
-        clientId: 'paperclip-client-disabled',
-        companyId: 'paperclip-company-disabled',
-        name: 'Paperclip Email (disabled)',
-        pluginId: 'agentteam.paperclip-email-plugin',
-        scope: 'organization',
-        status: 'disabled'
-      }
-    ]
   }
 } satisfies AgentAccessSettingsState
 
@@ -431,7 +402,6 @@ export const agentAccessRevokedExpiredState = {
       }
     ],
     organizationId: 'org-story',
-    paperclipConnections: [],
     state: 'ready'
   }
 } satisfies AgentAccessSettingsState
@@ -532,7 +502,6 @@ export const agentAccessClaimedState = {
       }
     ],
     organizationId: 'org-story',
-    paperclipConnections: [],
     state: 'ready'
   }
 } satisfies AgentAccessSettingsState

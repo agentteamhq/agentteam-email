@@ -1,7 +1,9 @@
 import {
   IntegrationsEmpty as IntegrationsEmptyStory,
   IntegrationsPaperclipConnected as IntegrationsPaperclipConnectedStory,
-  IntegrationsPaperclipHandoff as IntegrationsPaperclipHandoffStory,
+  IntegrationsPaperclipReconnectRequired as IntegrationsPaperclipReconnectRequiredStory,
+  IntegrationsPaperclipUnavailable as IntegrationsPaperclipUnavailableStory,
+  IntegrationsUnavailable as IntegrationsUnavailableStory,
   settingsScreenStoryMeta
 } from '../../settings-dialog.definitions'
 import type { Meta, StoryObj } from '@storybook/react'
@@ -20,12 +22,22 @@ export const IntegrationsEmpty: Story = {
   name: 'Empty'
 }
 
-export const IntegrationsPaperclipHandoff: Story = {
-  ...IntegrationsPaperclipHandoffStory,
-  name: 'Paperclip handoff'
-}
-
 export const IntegrationsPaperclipConnected: Story = {
   ...IntegrationsPaperclipConnectedStory,
   name: 'Paperclip connected'
+}
+
+export const IntegrationsPaperclipReconnectRequired: Story = {
+  ...IntegrationsPaperclipReconnectRequiredStory,
+  name: 'Paperclip reconnect required'
+}
+
+export const IntegrationsPaperclipUnavailable: Story = {
+  ...IntegrationsPaperclipUnavailableStory,
+  name: 'Paperclip unavailable'
+}
+
+export const IntegrationsUnavailable: Story = {
+  ...IntegrationsUnavailableStory,
+  name: 'Unavailable'
 }

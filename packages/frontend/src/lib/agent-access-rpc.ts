@@ -6,7 +6,6 @@ import type {
 import type {
   AgentAccessApprovalPreview,
   AgentAccessMutationResult,
-  AgentAccessPaperclipConnectResult,
   AgentAccessView,
   AgentMailTrialClaimDecisionResult,
   AgentMailTrialClaimTargetOrganization,
@@ -76,14 +75,6 @@ export async function revokeAgentAccessCapability(input: {
     grantId: input.grantId
   })
   return readAgentAccessRpcResult<AgentAccessMutationResult>(result)
-}
-
-export async function connectPaperclipAgentAccess(input: {
-  companyId: string
-  pluginId: 'agentteam.paperclip-email-plugin'
-}): Promise<AgentAccessPaperclipConnectResult> {
-  const result = await rpc['agent-access'].paperclip.connect.post(input)
-  return readAgentAccessRpcResult<AgentAccessPaperclipConnectResult>(result)
 }
 
 export async function fetchAgentMailTrialClaim(token: string): Promise<AgentMailTrialClaimView> {

@@ -155,7 +155,6 @@ describe('DashboardMailController Cloudflare OAuth routing', () => {
     expect(cloudflareOAuthCompletionPath('/dashboard')).toBe('/dashboard/')
     expect(cloudflareOAuthCompletionPath('/dashboard/?settings=domains')).toBe('/dashboard/')
     expect(cloudflareOAuthCompletionPath('/dashboard/?settings=connectedAccounts')).toBe('/dashboard/')
-    expect(cloudflareOAuthCompletionPath('/dashboard/?source=paperclip')).toBe('/dashboard/')
     expect(cloudflareOAuthCompletionPath('/settings/connected-accounts/')).toBe(
       '/settings/connected-accounts/'
     )
@@ -188,15 +187,6 @@ describe('DashboardMailController Cloudflare OAuth routing', () => {
       expect(props.defaultSettingsSection).toBeUndefined()
     }
   )
-
-  it('does not preserve Paperclip handoff state on dashboard route search', () => {
-    expect.hasAssertions()
-    const props = renderControllerForDashboardUrl('/dashboard/?source=paperclip')
-
-    expect(props.settingsOpen).toBeUndefined()
-    expect(props.settingsSection).toBeUndefined()
-    expect(props.agentAccessState?.connectionHandoff).toBeNull()
-  })
 
   it('loads Cloudflare zones with the account grantPublicId for each usable account', async () => {
     expect.hasAssertions()

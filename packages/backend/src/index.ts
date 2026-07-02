@@ -29,8 +29,6 @@ export type {
   AgentAccessGrant,
   AgentAccessHost,
   AgentAccessMutationResult,
-  AgentAccessPaperclipConnectResult,
-  AgentAccessPaperclipConnection,
   AgentAccessUserActor,
   AgentAccessView
 } from './agent-access/service'
@@ -97,6 +95,13 @@ export type {
   AdminDashboardStatusCount,
   AdminDashboardSummary
 } from './admin/dashboard-service'
+export type {
+  IntegrationsAllowedActions,
+  IntegrationsView,
+  PaperclipIntegration,
+  PaperclipIntegrationStatus,
+  RevokePaperclipIntegrationResult
+} from './integrations/service'
 export type { AgentMailSendSubmitResult } from './agent-mail/control-client'
 export type {
   AgentMailComposeInput,

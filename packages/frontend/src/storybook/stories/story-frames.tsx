@@ -8,6 +8,7 @@ import {
   resolveSettingsRouteSegment
 } from '../../partials/authenticated/settings-dialog-sections'
 import { DashboardMailController } from '../../screens/dashboard-mail-client-controller'
+import { integrationsEmptyView } from '../integrations-fixtures'
 import type { SettingsRouteSearch } from '../../lib/dashboard-search'
 import type { AgentAccessSettingsState } from '../../partials/authenticated/settings-dialog'
 
@@ -43,6 +44,10 @@ export function DashboardMailControllerStoryFrame({
 
     return async () => agentAccessView
   }, [agentAccessView, props.agentAccessViewLoader])
+  const integrationsViewLoader = React.useMemo(
+    () => props.integrationsViewLoader ?? (async () => integrationsEmptyView),
+    [props.integrationsViewLoader]
+  )
 
   React.useEffect(
     () => () => {
@@ -56,6 +61,7 @@ export function DashboardMailControllerStoryFrame({
       <DashboardMailController
         {...props}
         agentAccessViewLoader={agentAccessViewLoader}
+        integrationsViewLoader={integrationsViewLoader}
         routeSearch={routeSearch}
       />
     </QueryClientProvider>

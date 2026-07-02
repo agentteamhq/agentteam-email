@@ -5,7 +5,7 @@ export const PAPERCLIP_EMAIL_PLUGIN_ID = 'agentteam.paperclip-email-plugin' as c
 export const PaperclipOAuthClientMetadataSchema = z.looseObject({
   agentteamEmail: z
     .object({
-      companyId: z.string().min(1).max(256),
+      companyId: z.string().min(1).max(256).optional(),
       integration: z.literal('paperclip'),
       pluginId: z.literal(PAPERCLIP_EMAIL_PLUGIN_ID)
     })
@@ -13,7 +13,7 @@ export const PaperclipOAuthClientMetadataSchema = z.looseObject({
 })
 
 export interface PaperclipOAuthClientMetadata {
-  companyId: string
+  companyId?: string
   pluginId: typeof PAPERCLIP_EMAIL_PLUGIN_ID
 }
 
@@ -22,10 +22,15 @@ export function readPaperclipOAuthClientMetadata(value: unknown): PaperclipOAuth
   if (!parsed.success) {
     return null
   }
-  return {
-    companyId: parsed.data.agentteamEmail.companyId,
-    pluginId: parsed.data.agentteamEmail.pluginId
-  }
+  const companyId = parsed.data.agentteamEmail.companyId
+  return companyId
+    ? {
+        companyId,
+        pluginId: parsed.data.agentteamEmail.pluginId
+      }
+    : {
+        pluginId: parsed.data.agentteamEmail.pluginId
+      }
 }
 
 function normalizedRecord(value: unknown): Record<string, unknown> | null {

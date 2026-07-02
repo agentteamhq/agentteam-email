@@ -4,9 +4,7 @@ import { agentMailCapabilityCatalog } from '@main/db'
 import type {
   AgentAccessApprovalPreview,
   AgentAccessError,
-  AgentAccessPaperclipConnectResult,
   AgentAccessView,
-  connectPaperclipAgentAccessForWeb,
   decideAgentAccessApprovalForWeb,
   getAgentAccessApprovalForWeb,
   getAgentAccessViewForWeb,
@@ -23,10 +21,6 @@ import type {
 } from '../agent-access/trial-service'
 
 type AgentAccessMutationMock = (input: { headers: Headers; input: unknown }) => Promise<unknown>
-type AgentAccessPaperclipConnectMock = (input: {
-  headers: Headers
-  input: unknown
-}) => Promise<AgentAccessPaperclipConnectResult>
 type GetAgentAccessApprovalForWebMock = (input: {
   headers: Headers
   input: unknown
@@ -43,7 +37,6 @@ type DecideAgentMailTrialClaimForWebMock = (input: {
 }) => Promise<unknown>
 
 const agentAccessRpcTestState = vi.hoisted(() => ({
-  connectPaperclipAgentAccessForWeb: vi.fn<AgentAccessPaperclipConnectMock>(),
   decideAgentMailTrialClaimForWeb: vi.fn<DecideAgentMailTrialClaimForWebMock>(),
   decideAgentAccessApprovalForWeb: vi.fn<AgentAccessMutationMock>(),
   getAgentMailTrialClaimForWeb: vi.fn<GetAgentMailTrialClaimForWebMock>(),
@@ -57,7 +50,6 @@ const agentAccessRpcTestState = vi.hoisted(() => ({
 }))
 
 const noAgentAccessAllowedActions = {
-  connectPaperclip: false,
   denyApproval: false,
   reviewApproval: false,
   revokeAgent: false,
@@ -72,13 +64,10 @@ const emptyAgentAccessView = {
   grants: [],
   hosts: [],
   organizationId: 'org-1',
-  paperclipConnections: [],
   state: 'empty'
 } satisfies AgentAccessView
 
 vi.mock(import('../agent-access/service'), () => ({
-  connectPaperclipAgentAccessForWeb:
-    agentAccessRpcTestState.connectPaperclipAgentAccessForWeb as unknown as typeof connectPaperclipAgentAccessForWeb,
   decideAgentAccessApprovalForWeb:
     agentAccessRpcTestState.decideAgentAccessApprovalForWeb as unknown as typeof decideAgentAccessApprovalForWeb,
   getAgentAccessApprovalForWeb:
@@ -114,7 +103,6 @@ vi.mock(import('../agent-access/trial-service'), () => ({
 describe('agent Access RPC routes', () => {
   beforeEach(() => {
     vi.resetModules()
-    agentAccessRpcTestState.connectPaperclipAgentAccessForWeb.mockReset()
     agentAccessRpcTestState.decideAgentMailTrialClaimForWeb.mockReset()
     agentAccessRpcTestState.decideAgentAccessApprovalForWeb.mockReset()
     agentAccessRpcTestState.getAgentMailTrialClaimForWeb.mockReset()
@@ -469,107 +457,6 @@ describe('agent Access RPC routes', () => {
     await expect(response.json()).resolves.toStrictEqual({
       error: 'Agent access includes grants outside the active organization'
     })
-  })
-
-  it('connects a Paperclip OAuth principal through the webserver Agent Access boundary', async () => {
-    expect.hasAssertions()
-
-    agentAccessRpcTestState.connectPaperclipAgentAccessForWeb.mockResolvedValue({
-      connection: {
-        clientId: 'paperclip-client-1',
-        companyId: 'paperclip-company-1',
-        name: 'Paperclip Email (paperclip-company-1)',
-        pluginId: 'agentteam.paperclip-email-plugin',
-        scope: 'organization',
-        status: 'active'
-      },
-      status: 'created',
-      success: true,
-      view: emptyAgentAccessView
-    })
-
-    const { default: agentAccess } = await import('./agent-access')
-    const response = await agentAccess.handle(
-      new Request('https://mail.example.com/agent-access/paperclip/connect', {
-        body: JSON.stringify({
-          companyId: 'paperclip-company-1',
-          pluginId: 'agentteam.paperclip-email-plugin'
-        }),
-        headers: {
-          'content-type': 'application/json',
-          cookie: 'session=abc'
-        },
-        method: 'POST'
-      })
-    )
-
-    await expect(response.json()).resolves.toStrictEqual({
-      connection: {
-        clientId: 'paperclip-client-1',
-        companyId: 'paperclip-company-1',
-        name: 'Paperclip Email (paperclip-company-1)',
-        pluginId: 'agentteam.paperclip-email-plugin',
-        scope: 'organization',
-        status: 'active'
-      },
-      status: 'created',
-      success: true,
-      view: emptyAgentAccessView
-    })
-    expect(response.status).toBe(200)
-    expect(agentAccessRpcTestState.connectPaperclipAgentAccessForWeb).toHaveBeenCalledWith({
-      headers: expect.any(Headers),
-      input: {
-        companyId: 'paperclip-company-1',
-        pluginId: 'agentteam.paperclip-email-plugin'
-      }
-    })
-    expect(
-      agentAccessRpcTestState.connectPaperclipAgentAccessForWeb.mock.calls[0][0].headers.get('cookie')
-    ).toBe('session=abc')
-  })
-
-  it('rejects Paperclip connect requests with unknown plugin ids before the service boundary', async () => {
-    expect.hasAssertions()
-
-    const { default: agentAccess } = await import('./agent-access')
-    const response = await agentAccess.handle(
-      new Request('https://mail.example.com/agent-access/paperclip/connect', {
-        body: JSON.stringify({
-          companyId: 'paperclip-company-1',
-          pluginId: 'other-plugin'
-        }),
-        headers: {
-          'content-type': 'application/json'
-        },
-        method: 'POST'
-      })
-    )
-
-    expect(response.status).toBe(422)
-    expect(agentAccessRpcTestState.connectPaperclipAgentAccessForWeb).not.toHaveBeenCalled()
-  })
-
-  it('rejects Paperclip connect requests with unknown fields before the service boundary', async () => {
-    expect.hasAssertions()
-
-    const { default: agentAccess } = await import('./agent-access')
-    const response = await agentAccess.handle(
-      new Request('https://mail.example.com/agent-access/paperclip/connect', {
-        body: JSON.stringify({
-          companyId: 'paperclip-company-1',
-          pluginId: 'agentteam.paperclip-email-plugin',
-          rawClientSecret: 'must-not-cross-rpc-boundary'
-        }),
-        headers: {
-          'content-type': 'application/json'
-        },
-        method: 'POST'
-      })
-    )
-
-    expect(response.status).toBe(422)
-    expect(agentAccessRpcTestState.connectPaperclipAgentAccessForWeb).not.toHaveBeenCalled()
   })
 
   it('routes autonomous trial requests through the webserver Agent Access boundary', async () => {

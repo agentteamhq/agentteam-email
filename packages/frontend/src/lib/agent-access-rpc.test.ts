@@ -12,7 +12,6 @@ const agentAccessRpcTestState = vi.hoisted(() => {
     claimDecisionPost: vi.fn(),
     claimGet: vi.fn(),
     claimRoute,
-    paperclipConnectPost: vi.fn(),
     revokeAgentPost: vi.fn(),
     viewGet: vi.fn()
   }
@@ -27,9 +26,6 @@ vi.mock('./rpc-api-client', () => ({
         lookup: { post: agentAccessRpcTestState.approvalLookupPost }
       },
       get: agentAccessRpcTestState.viewGet,
-      paperclip: {
-        connect: { post: agentAccessRpcTestState.paperclipConnectPost }
-      },
       trials: {
         claim: agentAccessRpcTestState.claimRoute
       }
@@ -46,7 +42,6 @@ describe('agent access RPC adapter', () => {
     agentAccessRpcTestState.claimDecisionPost.mockReset()
     agentAccessRpcTestState.claimGet.mockReset()
     agentAccessRpcTestState.claimRoute.mockReset()
-    agentAccessRpcTestState.paperclipConnectPost.mockReset()
     agentAccessRpcTestState.revokeAgentPost.mockReset()
     agentAccessRpcTestState.viewGet.mockReset()
 
@@ -66,7 +61,6 @@ describe('agent access RPC adapter', () => {
     expect.hasAssertions()
     const view = {
       allowedActions: {
-        connectPaperclip: true,
         denyApproval: false,
         reviewApproval: false,
         revokeAgent: true,
@@ -83,27 +77,6 @@ describe('agent access RPC adapter', () => {
 
     await expect(fetchAgentAccessView()).resolves.toBe(view)
     expect(agentAccessRpcTestState.viewGet).toHaveBeenCalledWith()
-  })
-
-  it('posts Paperclip connection context without client-side permission inference', async () => {
-    expect.hasAssertions()
-    agentAccessRpcTestState.paperclipConnectPost.mockResolvedValue({
-      data: { status: 'created', success: true },
-      error: null,
-      status: 200
-    })
-    const { connectPaperclipAgentAccess } = await import('./agent-access-rpc')
-
-    await expect(
-      connectPaperclipAgentAccess({
-        companyId: 'paperclip-company-1',
-        pluginId: 'agentteam.paperclip-email-plugin'
-      })
-    ).resolves.toStrictEqual({ status: 'created', success: true })
-    expect(agentAccessRpcTestState.paperclipConnectPost).toHaveBeenCalledWith({
-      companyId: 'paperclip-company-1',
-      pluginId: 'agentteam.paperclip-email-plugin'
-    })
   })
 
   it('surfaces structured WebAuthn authorization errors', async () => {

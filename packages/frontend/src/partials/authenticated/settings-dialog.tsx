@@ -79,12 +79,13 @@ import type {
   AgentAccessApproval,
   AgentAccessGrant,
   AgentAccessHost,
-  AgentAccessPaperclipConnection,
   AgentAccessView,
   AgentMailAdminAgentEnrollment,
   CloudflareAccountSummary,
   CloudflareStatusResult,
-  CloudflareZoneSummary
+  CloudflareZoneSummary,
+  IntegrationsView,
+  PaperclipIntegration
 } from '@main/backend'
 
 export type SettingsDialogContentState = 'ready' | 'loading' | 'empty'
@@ -172,12 +173,10 @@ export interface AgentAccessSettingsState {
   canRefresh?: boolean
   canRevokeAgent?: boolean
   canRevokeCapabilityGrant?: boolean
-  connectionHandoff?: AgentAccessConnectionHandoff | null
   createdAgentEnrollment?: AgentMailAdminAgentEnrollment | null
   message?: string | null
   onCopyEnrollmentCommand?: (command: string) => void
   onApproveApproval?: (approvalId: string) => void
-  onConnectPaperclip?: (handoff: AgentAccessConnectionHandoff) => void
   onDenyApproval?: (approvalId: string) => void
   onRefresh?: () => void
   onRevokeAgent?: (agentId: string) => void
@@ -186,10 +185,15 @@ export interface AgentAccessSettingsState {
   view: AgentAccessView | null
 }
 
-export interface AgentAccessConnectionHandoff {
-  companyId: string | null
-  pluginId: string | null
-  source: 'paperclip'
+export interface IntegrationSettingsState {
+  busy?: boolean
+  canRefresh?: boolean
+  canRevokePaperclip?: boolean
+  message?: string | null
+  onRefresh?: () => void
+  onRevokePaperclip?: (clientId: PaperclipIntegration['clientId']) => void
+  readOnly?: boolean
+  view: IntegrationsView | null
 }
 
 const settingsNavigation = [
@@ -226,6 +230,7 @@ interface SettingsDialogProps {
   defaultActiveSection?: SettingsSectionId
   defaultOpen?: boolean
   domainSettingsState?: DomainSettingsState
+  integrationsState?: IntegrationSettingsState
   onActiveSectionChange?: (section: SettingsSectionId) => void
   onOpenChange?: (open: boolean) => void
   open?: boolean
@@ -239,6 +244,7 @@ export function SettingsDialog({
   defaultActiveSection = 'account',
   defaultOpen = true,
   domainSettingsState,
+  integrationsState,
   onActiveSectionChange,
   onOpenChange,
   open: openProp,
@@ -253,6 +259,7 @@ export function SettingsDialog({
   const setActiveSection = onActiveSectionChange ?? setUncontrolledActiveSection
   const domainSettings = domainSettingsControllerFromState(domainSettingsState)
   const agentAccess = agentAccessControllerFromState(agentAccessState)
+  const integrations = integrationsControllerFromState(integrationsState)
   const activeName =
     activeSection === 'domains'
       ? domainSettings.mode === 'addDomain'
@@ -446,6 +453,7 @@ export function SettingsDialog({
                 agentAccess={agentAccess}
                 contentState={contentState}
                 domainSettings={domainSettings}
+                integrations={integrations}
                 section={activeSection}
               />
             </div>
@@ -460,11 +468,13 @@ function SettingsPanelContent({
   agentAccess,
   contentState,
   domainSettings,
+  integrations,
   section
 }: {
   agentAccess: AgentAccessController
   contentState: SettingsDialogContentState
   domainSettings: DomainSettingsController
+  integrations: IntegrationsController
   section: SettingsSectionId
 }) {
   if (contentState === 'loading') {
@@ -550,7 +560,7 @@ function SettingsPanelContent({
   }
 
   if (section === 'integrations') {
-    return <IntegrationsContent agentAccess={agentAccess} />
+    return <IntegrationsContent integrations={integrations} />
   }
 
   if (section === 'domains') {
@@ -593,12 +603,10 @@ interface AgentAccessController {
   canRefresh: boolean
   canRevokeAgent: boolean
   canRevokeCapabilityGrant: boolean
-  connectionHandoff: AgentAccessConnectionHandoff | null
   createdAgentEnrollment: AgentMailAdminAgentEnrollment | null
   message: string | null
   onCopyEnrollmentCommand: (command: string) => void
   onApproveApproval: (approvalId: string) => void
-  onConnectPaperclip?: (handoff: AgentAccessConnectionHandoff) => void
   onDenyApproval: (approvalId: string) => void
   onRefresh: () => void
   onRevokeAgent: (agentId: string) => void
@@ -619,12 +627,10 @@ function agentAccessControllerFromState(state: AgentAccessSettingsState | undefi
     canRefresh: state?.canRefresh ?? hasRefresh,
     canRevokeAgent: state?.canRevokeAgent ?? Boolean(state?.onRevokeAgent),
     canRevokeCapabilityGrant: state?.canRevokeCapabilityGrant ?? Boolean(state?.onRevokeCapabilityGrant),
-    connectionHandoff: state?.connectionHandoff ?? null,
     createdAgentEnrollment: state?.createdAgentEnrollment ?? null,
     message: state?.message ?? null,
     onCopyEnrollmentCommand: state?.onCopyEnrollmentCommand ?? ignoreAgentAccessAction,
     onApproveApproval: state?.onApproveApproval ?? ignoreAgentAccessAction,
-    onConnectPaperclip: state?.onConnectPaperclip,
     onDenyApproval: state?.onDenyApproval ?? ignoreAgentAccessAction,
     onRefresh: state?.onRefresh ?? ignoreAgentAccessAction,
     onRevokeAgent: state?.onRevokeAgent ?? ignoreAgentAccessAction,
@@ -635,6 +641,45 @@ function agentAccessControllerFromState(state: AgentAccessSettingsState | undefi
 }
 
 function ignoreAgentAccessAction() {}
+
+interface IntegrationsController {
+  busy: boolean
+  canRefresh: boolean
+  canRevokePaperclip: boolean
+  message: string | null
+  onRefresh: () => void
+  onRevokePaperclip: (clientId: PaperclipIntegration['clientId']) => void
+  readOnly: boolean
+  view: IntegrationsView | null
+}
+
+function integrationsControllerFromState(
+  state: IntegrationSettingsState | undefined
+): IntegrationsController {
+  const readOnly = state ? (state.readOnly ?? false) : true
+
+  return {
+    busy: state?.busy ?? false,
+    canRefresh: state?.canRefresh ?? Boolean(state?.onRefresh),
+    canRevokePaperclip: state?.canRevokePaperclip ?? Boolean(state?.onRevokePaperclip),
+    message: state?.message ?? null,
+    onRefresh: guardedSettingsAction(state?.onRefresh, readOnly),
+    onRevokePaperclip: guardedSettingsAction(state?.onRevokePaperclip, readOnly),
+    readOnly,
+    view: state?.view ?? null
+  }
+}
+
+function guardedSettingsAction<TArgs extends unknown[]>(
+  handler: ((...args: TArgs) => void) | undefined,
+  readOnly: boolean
+) {
+  return (...args: TArgs) => {
+    if (!readOnly) {
+      handler?.(...args)
+    }
+  }
+}
 
 function AgentAccessPanel({ access }: { access: AgentAccessController }) {
   const view = access.view
@@ -813,90 +858,124 @@ function AgentAccessPanel({ access }: { access: AgentAccessController }) {
 }
 
 function IntegrationPaperclipConnectionsSection({
-  connections
+  busy,
+  canRevoke,
+  connections,
+  onRevoke,
+  readOnly
 }: {
-  connections: ReadonlyArray<AgentAccessPaperclipConnection>
+  busy: boolean
+  canRevoke: boolean
+  connections: ReadonlyArray<PaperclipIntegration>
+  onRevoke: (clientId: PaperclipIntegration['clientId']) => void
+  readOnly: boolean
 }) {
   return (
     <IntegrationsSection title='Plugin authorizations'>
       {connections.map((connection) => (
         <IntegrationPaperclipConnectionRow
+          busy={busy}
+          canRevoke={canRevoke}
           connection={connection}
           key={connection.clientId}
+          onRevoke={onRevoke}
+          readOnly={readOnly}
         />
       ))}
     </IntegrationsSection>
   )
 }
 
-function IntegrationPaperclipConnectionRow({ connection }: { connection: AgentAccessPaperclipConnection }) {
-  return (
-    <div className='grid gap-2 border-b p-3 text-sm last:border-b-0'>
-      <div className='flex items-start justify-between gap-3'>
-        <div className='min-w-0'>
-          <p className='truncate font-medium'>{connection.name}</p>
-          <p className='text-muted-foreground truncate'>Paperclip plugin authorization for mailbox access</p>
-        </div>
-        <Badge variant={connection.status === 'active' ? 'secondary' : 'outline'}>
-          {formatStatusLabel(connection.status)}
-        </Badge>
-      </div>
-      <p className='text-muted-foreground text-xs'>Paperclip · {formatStatusLabel(connection.scope)} scope</p>
-    </div>
-  )
-}
-
-function IntegrationPaperclipHandoffCard({
+function IntegrationPaperclipConnectionRow({
   busy,
-  handoff,
-  onConnect,
+  canRevoke,
+  connection,
+  onRevoke,
   readOnly
 }: {
   busy: boolean
-  handoff: AgentAccessConnectionHandoff
-  onConnect?: (handoff: AgentAccessConnectionHandoff) => void
+  canRevoke: boolean
+  connection: PaperclipIntegration
+  onRevoke: (clientId: PaperclipIntegration['clientId']) => void
   readOnly: boolean
 }) {
-  const supportedPlugin = handoff.pluginId === 'agentteam.paperclip-email-plugin'
-  const canConnect = Boolean(onConnect && handoff.companyId && supportedPlugin) && !readOnly
+  const removeOnly = connection.status !== 'connected'
+  const actionLabel = removeOnly ? 'Remove authorization' : 'Revoke access'
 
   return (
-    <div className='border-border bg-muted/20 grid gap-2 rounded-lg border p-3 text-sm'>
-      <div className='flex items-start justify-between gap-3'>
-        <div className='min-w-0'>
-          <p className='font-medium'>Paperclip authorization requested</p>
-          <p className='text-muted-foreground'>
-            Register the Paperclip plugin before assigning mailbox access in Mail Admin.
-          </p>
+    <div className='grid gap-2 border-b px-4 py-3 text-sm last:border-b-0'>
+      <div className='grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3'>
+        <div className='grid min-w-0 gap-1'>
+          <p className='truncate font-medium'>{connection.name}</p>
+          <p className='text-muted-foreground'>{formatPaperclipIntegrationHelper(connection)}</p>
         </div>
-        <Badge variant='outline'>OAuth</Badge>
-      </div>
-      <div className='flex flex-wrap items-center justify-between gap-2'>
-        <p className='text-muted-foreground'>
-          Mailbox permissions still come from backend-owned AgentTeam Email grants.
-        </p>
-        <Button
-          disabled={busy || !canConnect}
-          onClick={() => onConnect?.(handoff)}
-          size='sm'
-          variant='outline'
+        <Badge
+          className='justify-self-end whitespace-nowrap'
+          variant={connection.status === 'connected' ? 'secondary' : 'outline'}
         >
-          {busy ? 'Registering' : 'Register plugin'}
-        </Button>
+          {formatPaperclipIntegrationStatus(connection)}
+        </Badge>
       </div>
-      <div className='text-muted-foreground grid gap-1 sm:grid-cols-2'>
-        <p className='truncate'>Context: {handoff.companyId ? 'Ready' : 'Missing company'}</p>
-        <p className='truncate'>Plugin: {paperclipPluginContextLabel(handoff.pluginId)}</p>
+      <div className='flex flex-wrap gap-2'>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button
+              disabled={busy || readOnly || !canRevoke}
+              size='sm'
+              variant='outline'
+            >
+              <TrashIcon data-icon='inline-start' />
+              {actionLabel}
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {removeOnly ? 'Remove Paperclip authorization?' : 'Revoke Paperclip access?'}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {removeOnly
+                  ? 'This removes the saved authorization entry for this organization.'
+                  : 'Paperclip will stop using AgentTeam Email for this organization until OAuth authorization is completed again from Paperclip.'}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={busy}
+                onClick={() => {
+                  onRevoke(connection.clientId)
+                }}
+                variant='destructive'
+              >
+                {actionLabel}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   )
 }
 
-function paperclipPluginContextLabel(pluginId: string | null) {
-  if (!pluginId) {
-    return 'Pending'
+function formatPaperclipIntegrationStatus(connection: PaperclipIntegration): string {
+  if (connection.status === 'connected') {
+    return 'Connected'
   }
-  return pluginId === 'agentteam.paperclip-email-plugin' ? 'AgentTeam Email plugin' : 'Unsupported plugin'
+  if (connection.status === 'needs_reauthorization') {
+    return 'Disconnected'
+  }
+  return 'Unavailable'
+}
+
+function formatPaperclipIntegrationHelper(connection: PaperclipIntegration): string {
+  if (connection.status === 'connected') {
+    return 'Connected to this organization.'
+  }
+  if (connection.status === 'needs_reauthorization') {
+    return 'Start a new authorization from Paperclip.'
+  }
+  return 'This OAuth client is unavailable. Remove this authorization entry.'
 }
 
 function AgentAccessEnrollmentCard({
@@ -1371,40 +1450,19 @@ function ConnectedAccountsContent({ settings }: { settings: DomainSettingsContro
   )
 }
 
-export function IntegrationsPanel({ agentAccessState }: { agentAccessState?: AgentAccessSettingsState }) {
-  return <IntegrationsContent agentAccess={agentAccessControllerFromState(agentAccessState)} />
+export function IntegrationsPanel({
+  integrationsState
+}: {
+  integrationsState?: IntegrationSettingsState
+}) {
+  return <IntegrationsContent integrations={integrationsControllerFromState(integrationsState)} />
 }
 
-function IntegrationsContent({ agentAccess }: { agentAccess: AgentAccessController }) {
-  const paperclipConnections = agentAccess.view?.paperclipConnections ?? []
-  const hasPaperclipAuthorization = Boolean(agentAccess.connectionHandoff) || paperclipConnections.length > 0
+function IntegrationsContent({ integrations }: { integrations: IntegrationsController }) {
+  const paperclipAuthorizations = integrations.view?.paperclip.connections ?? []
 
-  if (!agentAccess.view && !agentAccess.message && !hasPaperclipAuthorization) {
+  if (!integrations.view && !integrations.message) {
     return <IntegrationsLoadingContent />
-  }
-
-  if (!hasPaperclipAuthorization) {
-    return (
-      <div className='grid max-w-3xl gap-4'>
-        <div className='min-w-0'>
-          <p className='font-medium'>Integrations</p>
-          <p className='text-muted-foreground text-sm'>
-            Plugin authorizations for AgentTeam Email will appear here.
-          </p>
-        </div>
-        {agentAccess.message ? (
-          <div className='grid gap-1 rounded-lg border p-3 text-sm'>
-            <p className='font-medium'>Integrations unavailable</p>
-            <p className='text-muted-foreground'>{agentAccess.message}</p>
-          </div>
-        ) : (
-          <SettingsEmptyContent
-            description='Plugin authorizations such as Paperclip will appear here.'
-            title='No integrations'
-          />
-        )}
-      </div>
-    )
   }
 
   return (
@@ -1412,20 +1470,33 @@ function IntegrationsContent({ agentAccess }: { agentAccess: AgentAccessControll
       <div className='min-w-0'>
         <p className='font-medium'>Integrations</p>
         <p className='text-muted-foreground text-sm'>
-          Manage plugin authorizations used by AgentTeam Email.
+          Review application integrations that use AgentTeam Email OAuth.
         </p>
       </div>
-      {agentAccess.connectionHandoff ? (
-        <IntegrationPaperclipHandoffCard
-          busy={agentAccess.busy}
-          handoff={agentAccess.connectionHandoff}
-          onConnect={agentAccess.onConnectPaperclip}
-          readOnly={agentAccess.readOnly}
+      {integrations.message ? (
+        <div className='grid gap-1 rounded-lg border p-3 text-sm'>
+          <p className='font-medium'>Integrations unavailable</p>
+          <p className='text-muted-foreground'>{integrations.message}</p>
+        </div>
+      ) : null}
+      {paperclipAuthorizations.length > 0 ? (
+        <IntegrationPaperclipConnectionsSection
+          busy={integrations.busy}
+          canRevoke={integrations.canRevokePaperclip}
+          connections={paperclipAuthorizations}
+          onRevoke={integrations.onRevokePaperclip}
+          readOnly={integrations.readOnly}
         />
-      ) : null}
-      {paperclipConnections.length > 0 ? (
-        <IntegrationPaperclipConnectionsSection connections={paperclipConnections} />
-      ) : null}
+      ) : (
+        <SettingsEmptyContent
+          description={
+            integrations.view?.paperclip.available === false
+              ? 'No integration clients are configured for this deployment.'
+              : 'Authorized integrations will appear here after approval is completed.'
+          }
+          title='No integrations'
+        />
+      )}
     </section>
   )
 }

@@ -14,6 +14,7 @@ import adminSetup from './admin-setup'
 import agentAccess from './agent-access'
 import cloudflare from './cloudflare'
 import e2eTestSupport from './e2e-test-support'
+import integrations from './integrations'
 import mail from './mail'
 import whoami from './whoami'
 
@@ -62,6 +63,7 @@ export const backendRpcApp = new Elysia({ name: 'rpc', prefix: '/rpc', normalize
   .use(adminSetup)
   .use(agentAccess)
   .use(cloudflare)
+  .use(integrations)
   .use(mail)
   .use(whoami)
 

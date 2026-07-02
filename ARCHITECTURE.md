@@ -36,6 +36,24 @@ and performs the internal call server-side. Public clients must not receive
 WildDuck admin credentials, WildDuck mailbox tokens, or raw internal service
 URLs.
 
+## Paperclip OAuth Integration
+
+Paperclip connects to AgentTeam Email as an OAuth client of the AgentTeam Email
+web server. AgentTeam Email is the OAuth authorization server, token issuer,
+resource server, consent owner, and revocation owner for this integration.
+
+The Paperclip plugin initiates authorization against AgentTeam Email. AgentTeam
+Email owns connection state, token behavior, requested scopes, mailbox grant
+enforcement, and audit events at the web-server boundary.
+
+AgentTeam Email settings expose Paperclip authorization status and revoke
+user/org consent. Paperclip OAuth client registration is provisioning, not an
+end-user settings action.
+
+Paperclip context identifies the calling plugin, company, agent, project, run,
+and operation. That context does not define mailbox policy by itself. Mailbox,
+domain, and agent access remain AgentTeam Email authorization state.
+
 The mail control service exposes an internal service API for the web server
 and trusted internal controllers only. That API is secured by deployment
 topology: it must stay on the internal Compose or cluster network and must not

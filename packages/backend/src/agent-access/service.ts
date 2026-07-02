@@ -19,11 +19,7 @@ import { z } from 'zod'
 import { globals } from '../globals'
 import { agentMailSubject, buildAgentMailAbility } from '../agent-mail/permission-policy'
 import { AGENT_AUTH_CAPABILITIES } from '../auth/agent-auth-config'
-import { AGENTTEAM_MAIL_API_OAUTH_SCOPE } from '../auth/oauth-provider-config'
-import { PUBLIC_VARS } from '../vars.public'
-import { PAPERCLIP_EMAIL_PLUGIN_ID, readPaperclipOAuthClientMetadata } from './paperclip'
 import type { AgentMailPrincipal } from '../agent-mail/permission-policy'
-import type { PaperclipOAuthClientMetadata } from './paperclip'
 import type {
   AgentAuthAgentStatus,
   AgentAuthApprovalMethod,
@@ -42,7 +38,6 @@ import type {
   AgentMailSystemGrantDocument,
   ApprovalRequestDocument,
   ApprovalRequestId,
-  OAuthClientDocument,
   OrganizationId,
   UserId
 } from '@main/db'
@@ -150,7 +145,6 @@ export interface AgentAccessApproval {
 }
 
 export interface AgentAccessAllowedActions {
-  connectPaperclip: boolean
   denyApproval: boolean
   reviewApproval: boolean
   revokeAgent: boolean
@@ -165,7 +159,6 @@ export interface AgentAccessView {
   grants: ReadonlyArray<AgentAccessGrant>
   hosts: ReadonlyArray<AgentAccessHost>
   organizationId: string
-  paperclipConnections: ReadonlyArray<AgentAccessPaperclipConnection>
   state: 'empty' | 'ready'
 }
 
@@ -177,22 +170,6 @@ export interface AgentAccessApprovalPreview {
 
 export interface AgentAccessMutationResult {
   status: string | null
-  success: true
-  view: AgentAccessView
-}
-
-export interface AgentAccessPaperclipConnection {
-  clientId: string
-  companyId: string
-  name: string
-  pluginId: 'agentteam.paperclip-email-plugin'
-  scope: 'organization'
-  status: 'active' | 'disabled'
-}
-
-export interface AgentAccessPaperclipConnectResult {
-  connection: AgentAccessPaperclipConnection
-  status: 'created' | 'existing'
   success: true
   view: AgentAccessView
 }
@@ -250,31 +227,10 @@ export const AgentAccessCapabilityRevokeInput = z
   })
 export type AgentAccessCapabilityRevokeInput = Readonly<z.infer<typeof AgentAccessCapabilityRevokeInput>>
 
-export const AgentAccessPaperclipConnectInput = z
-  .object({
-    companyId: z.string().trim().min(1).max(256),
-    pluginId: z.literal(PAPERCLIP_EMAIL_PLUGIN_ID)
-  })
-  .strict()
-export type AgentAccessPaperclipConnectInput = Readonly<z.infer<typeof AgentAccessPaperclipConnectInput>>
-
-type AgentAccessPaperclipOAuthClientRecord = Pick<
-  OAuthClientDocument,
-  'clientId' | 'disabled' | 'metadata' | 'name' | 'referenceId' | 'softwareId'
->
 interface AgentAccessAgentMailGrants {
   mailboxGrants: AgentMailMailboxGrantDocument[]
   systemGrants: AgentMailSystemGrantDocument[]
 }
-
-const AGENT_ACCESS_PAPERCLIP_OAUTH_CLIENT_PROJECTION = {
-  clientId: 1,
-  disabled: 1,
-  metadata: 1,
-  name: 1,
-  referenceId: 1,
-  softwareId: 1
-} as const satisfies Record<keyof AgentAccessPaperclipOAuthClientRecord, 1>
 
 export async function getAgentAccessViewForWeb({ headers }: { headers: Headers }): Promise<AgentAccessView> {
   const { db } = await globals()
@@ -350,10 +306,6 @@ export async function getAgentAccessViewForWeb({ headers }: { headers: Headers }
     visibleAgents,
     visibleApprovals
   })
-  const paperclipConnections = allowedActions.connectPaperclip
-    ? await listPaperclipOAuthConnections({ context, db })
-    : []
-
   return {
     agents: visibleAgents
       .map((agent) =>
@@ -377,11 +329,7 @@ export async function getAgentAccessViewForWeb({ headers }: { headers: Headers }
       .map((host) => toHostView(host, context.organizationId, visibleAgents))
       .sort((left, right) => left.name.localeCompare(right.name)),
     organizationId: String(context.organizationId),
-    paperclipConnections,
-    state:
-      visibleAgents.length + visibleHosts.length + visibleApprovals.length + paperclipConnections.length === 0
-        ? 'empty'
-        : 'ready'
+    state: visibleAgents.length + visibleHosts.length + visibleApprovals.length === 0 ? 'empty' : 'ready'
   }
 }
 
@@ -896,87 +844,6 @@ export async function revokeAgentAccessCapabilitiesForWeb({
   }
 }
 
-export async function connectPaperclipAgentAccessForWeb({
-  headers,
-  input
-}: {
-  headers: Headers
-  input: unknown
-}): Promise<AgentAccessPaperclipConnectResult> {
-  const { auth, db } = await globals()
-  const context = await requireAgentAccessUserContext(headers)
-  const parsedInput = parseInput(AgentAccessPaperclipConnectInput, input)
-  requireAgentAccessOAuthConnectionManageAbility(context, parsedInput.pluginId)
-  const existingClient = await findPaperclipOAuthClient({ context, db, input: parsedInput })
-
-  if (existingClient) {
-    return {
-      connection: toPaperclipConnection(existingClient, parsedInput),
-      status: 'existing',
-      success: true,
-      view: await getAgentAccessViewForWeb({ headers })
-    }
-  }
-
-  const created = await readAgentAccessAuthResult(
-    await auth.api.adminCreateOAuthClient({
-      body: {
-        client_name: paperclipOAuthClientName(parsedInput.companyId),
-        grant_types: ['authorization_code', 'refresh_token'],
-        metadata: {
-          agentteamEmail: {
-            companyId: parsedInput.companyId,
-            integration: 'paperclip',
-            pluginId: parsedInput.pluginId
-          }
-        },
-        redirect_uris: [new URL('/settings/agent-access/', PUBLIC_VARS.PUBLIC_HOSTNAME).toString()],
-        require_pkce: true,
-        response_types: ['code'],
-        scope: AGENTTEAM_MAIL_API_OAUTH_SCOPE,
-        software_id: parsedInput.pluginId,
-        token_endpoint_auth_method: 'client_secret_basic',
-        type: 'web'
-      },
-      headers
-    }),
-    'Paperclip OAuth client could not be created'
-  )
-  const clientId = readString(created.client_id)
-  if (!clientId) {
-    throw new AgentAccessError('Paperclip OAuth client could not be created', 502)
-  }
-
-  const createdClient =
-    (await db.models.oauthClient.findOne({ clientId }).exec()) ??
-    ({
-      clientId,
-      disabled: false,
-      name: paperclipOAuthClientName(parsedInput.companyId),
-      referenceId: context.organizationId
-    } as OAuthClientDocument)
-
-  await db.models.auditLog.create({
-    action: 'agent_access.paperclip_oauth_client.created',
-    metadata: {
-      clientId,
-      companyId: parsedInput.companyId,
-      organizationId: String(context.organizationId),
-      pluginId: parsedInput.pluginId
-    },
-    severity: 'medium',
-    status: 'success',
-    userId: context.userId
-  })
-
-  return {
-    connection: toPaperclipConnection(createdClient, parsedInput),
-    status: 'created',
-    success: true,
-    view: await getAgentAccessViewForWeb({ headers })
-  }
-}
-
 async function requireAgentAccessUserContext(headers: Headers) {
   const { auth, db } = await globals()
   const session = await auth.api.getSession({ headers })
@@ -1107,28 +974,6 @@ function canAgentAccessManage(context: Awaited<ReturnType<typeof requireAgentAcc
   return context.ability.can('manage', agentMailSubject('Agent', { organizationId: context.organizationId }))
 }
 
-function canAgentAccessOAuthConnectionManage(
-  context: Awaited<ReturnType<typeof requireAgentAccessUserContext>>,
-  pluginId?: string | null
-) {
-  return context.ability.can(
-    'manage',
-    agentMailSubject('OAuthConnection', {
-      organizationId: context.organizationId,
-      pluginId: pluginId ?? null
-    })
-  )
-}
-
-function requireAgentAccessOAuthConnectionManageAbility(
-  context: Awaited<ReturnType<typeof requireAgentAccessUserContext>>,
-  pluginId?: string | null
-) {
-  if (!canAgentAccessOAuthConnectionManage(context, pluginId)) {
-    throw new AgentAccessError('OAuth connection management is not authorized', 403)
-  }
-}
-
 function canAgentAccessGrantManage(
   context: Awaited<ReturnType<typeof requireAgentAccessUserContext>>,
   grant: AgentCapabilityGrantDocument
@@ -1164,7 +1009,6 @@ function agentAccessAllowedActions({
   visibleApprovals: ReadonlyArray<ApprovalRequestDocument>
 }): AgentAccessAllowedActions {
   const canManage = canAgentAccessManage(context)
-  const canManageOAuthConnection = canAgentAccessOAuthConnectionManage(context, PAPERCLIP_EMAIL_PLUGIN_ID)
   const activeOrPendingGrants = scopedGrants.filter(
     (grant) => grant.status === 'active' || grant.status === 'pending'
   )
@@ -1187,7 +1031,6 @@ function agentAccessAllowedActions({
     )
 
   return {
-    connectPaperclip: canManageOAuthConnection,
     denyApproval: canManageVisibleApproval,
     reviewApproval: canManageVisibleApproval,
     revokeAgent: canRevokeAgent,
@@ -2439,81 +2282,6 @@ function agentAccessGrantConstraints(value: unknown) {
 
 function normalizedAgentAccessMailbox(value: string | null | undefined) {
   return value?.trim().toLowerCase() ?? ''
-}
-
-async function findPaperclipOAuthClient({
-  context,
-  db,
-  input
-}: {
-  context: Awaited<ReturnType<typeof requireAgentAccessUserContext>>
-  db: Database
-  input: AgentAccessPaperclipConnectInput
-}): Promise<OAuthClientDocument | null> {
-  const candidates = await db.models.oauthClient
-    .find({
-      referenceId: context.organizationId,
-      softwareId: input.pluginId
-    })
-    .exec()
-
-  return (
-    candidates.find((candidate) => {
-      const metadata = readPaperclipOAuthClientMetadata(candidate.metadata)
-      return metadata?.companyId === input.companyId && metadata.pluginId === input.pluginId
-    }) ?? null
-  )
-}
-
-async function listPaperclipOAuthConnections({
-  context,
-  db
-}: {
-  context: Awaited<ReturnType<typeof requireAgentAccessUserContext>>
-  db: Database
-}): Promise<AgentAccessPaperclipConnection[]> {
-  const candidates = await db.models.oauthClient
-    .find(
-      {
-        referenceId: context.organizationId,
-        softwareId: PAPERCLIP_EMAIL_PLUGIN_ID
-      },
-      AGENT_ACCESS_PAPERCLIP_OAUTH_CLIENT_PROJECTION
-    )
-    .exec()
-
-  return candidates
-    .flatMap((candidate) => {
-      const metadata = readPaperclipOAuthClientMetadata(candidate.metadata)
-      if (!metadata || metadata.pluginId !== PAPERCLIP_EMAIL_PLUGIN_ID) {
-        return []
-      }
-      return [toPaperclipConnection(candidate, metadata)]
-    })
-    .sort((left, right) => left.name.localeCompare(right.name))
-}
-
-function toPaperclipConnection(
-  client: Pick<OAuthClientDocument, 'clientId' | 'disabled' | 'name' | 'referenceId'>,
-  input: PaperclipOAuthClientMetadata
-): AgentAccessPaperclipConnection {
-  return {
-    clientId: client.clientId,
-    companyId: input.companyId,
-    name: client.name?.trim() || paperclipOAuthClientName(input.companyId),
-    pluginId: input.pluginId,
-    scope: 'organization',
-    status: client.disabled ? 'disabled' : 'active'
-  }
-}
-
-function paperclipOAuthClientName(companyId: string): string {
-  const shortenedCompanyId = companyId.length > 64 ? `${companyId.slice(0, 61)}...` : companyId
-  return `Paperclip Email (${shortenedCompanyId})`
-}
-
-function readString(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() ? value : null
 }
 
 function normalizedRecord(value: unknown): Record<string, unknown> | null {

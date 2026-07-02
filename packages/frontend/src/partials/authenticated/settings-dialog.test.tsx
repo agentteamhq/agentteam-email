@@ -1,7 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { agentMailCapabilityCatalog } from '@main/backend'
-
 import { ConnectedAccountsPanel, IntegrationsPanel, SettingsDomainsPanel } from './settings-dialog'
 import type { DomainSettingsState, DomainSettingsStatus } from './settings-dialog'
 
@@ -38,30 +36,24 @@ describe('settings Cloudflare account and domain separation', () => {
   it('does not expose Cloudflare connected accounts on the integrations surface', () => {
     const markup = renderToStaticMarkup(
       <IntegrationsPanel
-        agentAccessState={{
+        integrationsState={{
           readOnly: true,
           view: {
-            agents: [],
             allowedActions: {
-              connectPaperclip: false,
-              denyApproval: false,
-              reviewApproval: false,
-              revokeAgent: false,
-              revokeCapabilityGrant: false
+              revokePaperclip: false
             },
-            approvals: [],
-            capabilityCatalog: agentMailCapabilityCatalog,
-            grants: [],
-            hosts: [],
             organizationId: 'org-test',
-            paperclipConnections: [],
+            paperclip: {
+              available: true,
+              connections: []
+            },
             state: 'empty'
           }
         }}
       />
     )
 
-    expect(markup).toContain('No integrations')
+    expect(markup).toContain('No active integrations')
     expect(markup).not.toContain('Connect Cloudflare')
     expect(markup).not.toContain('Cloudflare accounts')
     expect(markup).not.toContain('Disconnect account')

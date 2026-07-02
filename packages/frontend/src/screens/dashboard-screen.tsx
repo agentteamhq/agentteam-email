@@ -32,6 +32,7 @@ import type { SettingsRouteState } from '@main/backend/routes/webapp'
 import type {
   AgentAccessSettingsState,
   DomainSettingsState,
+  IntegrationSettingsState,
   SettingsDialogContentState
 } from '../partials/authenticated/settings-dialog'
 import type { SettingsSectionId } from '../partials/authenticated/settings-dialog-sections'
@@ -47,6 +48,7 @@ export interface DashboardScreenProps {
   defaultSettingsSection?: SettingsSectionId
   emailPreviewsById?: Readonly<Record<string, AuthenticatedEmailPreview>>
   firstMailboxSetupState?: FirstMailboxSetupState
+  integrationsState?: IntegrationSettingsState
   mailboxAdminView?: MailboxAdminView
   mailActionView?: AuthenticatedMailActionView
   onComposeAttachmentAdd?: (files: ReadonlyArray<File>) => void
@@ -109,6 +111,7 @@ export function DashboardScreen({
   defaultSettingsSection,
   emailPreviewsById,
   firstMailboxSetupState,
+  integrationsState,
   mailboxAdminView,
   mailActionView,
   onComposeAttachmentRemove,
@@ -341,6 +344,7 @@ export function DashboardScreen({
         onSidebarItemSelect={handleMailboxFolderSelect}
         onSidebarUnreadOnlyChange={handleMailboxUnreadOnlyChange}
         domainSettingsState={domainSettingsState}
+        integrationsState={integrationsState}
         settingsContentState={settingsContentState}
         settingsOpen={settingsOpen}
         settingsSection={settingsSection}

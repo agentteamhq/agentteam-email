@@ -14,11 +14,7 @@ export interface DashboardSearch {
   unreadOnly?: boolean
 }
 
-export interface SettingsRouteSearch extends DashboardSearch {
-  integrationSource?: 'paperclip'
-  paperclipCompanyId?: string
-  paperclipPluginId?: string
-}
+export type SettingsRouteSearch = DashboardSearch
 
 export function validateDashboardSearch(search: Record<string, unknown>): DashboardSearch {
   return {
@@ -27,20 +23,8 @@ export function validateDashboardSearch(search: Record<string, unknown>): Dashbo
 }
 
 export function validateSettingsSearch(search: Record<string, unknown>): SettingsRouteSearch {
-  const paperclipSource =
-    search.source === 'paperclip' ||
-    search.integrationSource === 'paperclip' ||
-    search.agentAccessSource === 'paperclip'
-  const paperclipCompanyId =
-    readSearchString(search.paperclip_company_id) ?? readSearchString(search.paperclipCompanyId)
-  const paperclipPluginId =
-    readSearchString(search.paperclip_plugin_id) ?? readSearchString(search.paperclipPluginId)
-
   return {
-    ...validateDashboardBaseSearch(search),
-    integrationSource: paperclipSource ? 'paperclip' : undefined,
-    paperclipCompanyId,
-    paperclipPluginId
+    ...validateDashboardBaseSearch(search)
   }
 }
 
@@ -66,8 +50,4 @@ function validateDashboardBaseSearch(search: Record<string, unknown>): Dashboard
     messageId: typeof search.messageId === 'string' && search.messageId.trim() ? search.messageId : undefined,
     unreadOnly: search.unreadOnly === true || search.unreadOnly === 'true' ? true : undefined
   }
-}
-
-function readSearchString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }

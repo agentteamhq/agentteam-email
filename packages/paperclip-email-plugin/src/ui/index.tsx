@@ -73,7 +73,9 @@ function isHttpsUrl(value: string): boolean {
 function compactConfig(input: AgentTeamEmailPluginConfig): AgentTeamEmailPluginConfig {
   return {
     serviceBaseUrl: input.serviceBaseUrl.trim() || DEFAULT_SERVICE_BASE_URL,
-    apiKeySecretRef: input.apiKeySecretRef?.trim() || undefined
+    apiKeySecretRef: input.apiKeySecretRef?.trim() || undefined,
+    oauthClientId: input.oauthClientId?.trim() || undefined,
+    oauthRedirectUri: input.oauthRedirectUri?.trim() || undefined
   }
 }
 
@@ -327,15 +329,22 @@ export function SettingsPage(props: PluginSettingsPageProps) {
   const [connecting, setConnecting] = useState(false)
 
   const serviceUrlValid = useMemo(() => isHttpsUrl(config.serviceBaseUrl), [config.serviceBaseUrl])
+  const oauthRedirectUriValid = useMemo(
+    () => !config.oauthRedirectUri || isHttpsUrl(config.oauthRedirectUri),
+    [config.oauthRedirectUri]
+  )
   const statusCopy = connectionCopy(connection.data)
 
   async function handleConnect() {
     setConnecting(true)
     setMessage(null)
     try {
+      const nextConfig = compactConfig(config)
       const result = (await startOAuthConnect({
         companyId: props.context.companyId ?? undefined,
-        serviceBaseUrl: compactConfig(config).serviceBaseUrl
+        oauthClientId: nextConfig.oauthClientId,
+        oauthRedirectUri: nextConfig.oauthRedirectUri,
+        serviceBaseUrl: nextConfig.serviceBaseUrl
       })) as OAuthConnectResult
       setMessage({
         connectUrl: result.connectUrl,
@@ -571,13 +580,56 @@ export function SettingsPage(props: PluginSettingsPageProps) {
                 </span>
               </label>
 
+              <label style={styles.fieldBlock}>
+                <span style={styles.fieldLabel}>OAuth client ID</span>
+                <input
+                  type='text'
+                  value={config.oauthClientId ?? ''}
+                  onChange={(event) => {
+                    setConfig({
+                      ...config,
+                      oauthClientId: event.target.value
+                    })
+                  }}
+                  placeholder='paperclip-email'
+                  style={styles.input}
+                />
+                <span style={styles.helperText}>
+                  Provision this client in AgentTeam Email before users connect from Paperclip.
+                </span>
+              </label>
+
+              <label style={styles.fieldBlock}>
+                <span style={styles.fieldLabel}>OAuth redirect URI</span>
+                <input
+                  type='url'
+                  value={config.oauthRedirectUri ?? ''}
+                  onChange={(event) => {
+                    setConfig({
+                      ...config,
+                      oauthRedirectUri: event.target.value
+                    })
+                  }}
+                  placeholder='https://paperclip.example/oauth/callback'
+                  style={{
+                    ...styles.input,
+                    borderColor: oauthRedirectUriValid ? uiColors.input : uiColors.destructive
+                  }}
+                />
+                <span style={oauthRedirectUriValid ? styles.helperText : styles.errorText}>
+                  {oauthRedirectUriValid
+                    ? 'Must match a redirect URI registered on the AgentTeam Email OAuth client.'
+                    : 'Enter a valid HTTPS URL.'}
+                </span>
+              </label>
+
               <div style={styles.actionsRow}>
                 <button
                   type='submit'
-                  disabled={saving || !serviceUrlValid}
+                  disabled={saving || !serviceUrlValid || !oauthRedirectUriValid}
                   className='at-email-secondary-button'
                   style={
-                    saving || !serviceUrlValid
+                    saving || !serviceUrlValid || !oauthRedirectUriValid
                       ? {
                           ...styles.secondaryButton,
                           cursor: 'not-allowed',

@@ -44,9 +44,6 @@ function SettingsSectionRouteScreen() {
     notFound({ throw: true })
     return null
   }
-  const activeSettingsSection: SettingsSectionId =
-    search.integrationSource === 'paperclip' ? 'integrations' : settingsSection
-
   return (
     <DashboardMailController
       onSettingsOpenChange={(open) => {
@@ -61,7 +58,7 @@ function SettingsSectionRouteScreen() {
       routeState={routeState}
       routeSearch={search}
       settingsOpen
-      settingsSection={activeSettingsSection}
+      settingsSection={settingsSection}
     />
   )
 }

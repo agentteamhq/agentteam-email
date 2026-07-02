@@ -23,11 +23,17 @@ import {
   agentAccessDeniedExpiredApprovalState,
   agentAccessDenseState,
   agentAccessEmptyState,
-  agentAccessPaperclipConnectedState,
   agentAccessPendingApprovalState,
   agentAccessRevokedExpiredState
 } from '../agent-access-fixtures'
 import { storyAuthClient, storyAuthClientEmptySecurity } from '../auth-client-fixtures'
+import {
+  integrationsEmptyView,
+  integrationsPaperclipConnectedView,
+  integrationsPaperclipReconnectRequiredView,
+  integrationsPaperclipUnavailableView,
+  integrationsUnavailableView
+} from '../integrations-fixtures'
 import { mailWorkspaceEmptyView } from '../mail-workspace-fixtures'
 import { authenticatedSettingsRouteState, storyPublicEnv } from '../screen-fixtures'
 import { getSettingsSectionHref } from '../../partials/authenticated/settings-dialog-sections'
@@ -36,11 +42,17 @@ import type { SettingsRouteSearch } from '../../lib/dashboard-search'
 import type { DomainSettingsState } from '../../partials/authenticated/settings-dialog'
 import type { SettingsSectionId } from '../../partials/authenticated/settings-dialog-sections'
 import type { DashboardMailControllerStoryFrameProps } from './story-frames'
-import type { AgentAccessView, AgentMailAdminNavigation, AgentMailWebWorkspace } from '@main/backend'
+import type {
+  AgentAccessView,
+  AgentMailAdminNavigation,
+  AgentMailWebWorkspace,
+  IntegrationsView
+} from '@main/backend'
 import type { Meta, StoryObj } from '@storybook/react'
 
 type SettingsStoryArgs = DashboardMailControllerStoryFrameProps
 type AgentAccessViewLoader = NonNullable<SettingsStoryArgs['agentAccessViewLoader']>
+type IntegrationsViewLoader = NonNullable<SettingsStoryArgs['integrationsViewLoader']>
 type MailWorkspaceLoader = NonNullable<SettingsStoryArgs['mailWorkspaceLoader']>
 type MailboxAdminNavigationLoader = NonNullable<SettingsStoryArgs['mailboxAdminNavigationLoader']>
 
@@ -50,6 +62,9 @@ interface SettingsScreenScenario {
   agentAccessView?: AgentAccessView
   authClient?: SettingsStoryArgs['authClient']
   domainSettingsState?: DomainSettingsState
+  integrationsError?: Error
+  integrationsPending?: boolean
+  integrationsView?: IntegrationsView
   routeSearch?: SettingsRouteSearch
   settingsSection: SettingsSectionId
   workspace?: AgentMailWebWorkspace
@@ -63,14 +78,6 @@ const defaultAgentAccessView = requiredAgentAccessView(agentAccessEmptyState)
 const activeAgentAccessView = requiredAgentAccessView(agentAccessActiveState)
 const actionableAgentAccessView = requiredAgentAccessView(agentAccessActionableState)
 
-const agentAccessPaperclipHandoffView = {
-  ...activeAgentAccessView,
-  allowedActions: {
-    ...activeAgentAccessView.allowedActions,
-    connectPaperclip: true
-  }
-} satisfies AgentAccessView
-
 const agentAccessReviewOnlyView = {
   ...actionableAgentAccessView,
   agents: actionableAgentAccessView.agents.map((agent) => ({
@@ -79,7 +86,6 @@ const agentAccessReviewOnlyView = {
   })),
   allowedActions: {
     ...actionableAgentAccessView.allowedActions,
-    connectPaperclip: false,
     denyApproval: false,
     revokeAgent: false,
     revokeCapabilityGrant: false,
@@ -138,6 +144,28 @@ function createStoryAgentAccessViewLoader({
   }
 }
 
+function createStoryIntegrationsViewLoader({
+  error,
+  pending,
+  view = integrationsEmptyView
+}: {
+  error?: Error
+  pending?: boolean
+  view?: IntegrationsView
+}): IntegrationsViewLoader {
+  return async () => {
+    if (pending) {
+      await new Promise(() => {})
+    }
+
+    if (error) {
+      throw error
+    }
+
+    return view
+  }
+}
+
 function createStoryMailWorkspaceLoader(
   workspace: AgentMailWebWorkspace = mailWorkspaceEmptyView
 ): MailWorkspaceLoader {
@@ -156,6 +184,9 @@ function buildSettingsScreenArgs({
   agentAccessView,
   authClient = storyAuthClient,
   domainSettingsState = domainSettingsEmptyFirstUseState,
+  integrationsError,
+  integrationsPending,
+  integrationsView,
   routeSearch,
   settingsSection,
   workspace
@@ -168,6 +199,11 @@ function buildSettingsScreenArgs({
     }),
     authClient,
     domainSettingsState,
+    integrationsViewLoader: createStoryIntegrationsViewLoader({
+      error: integrationsError,
+      pending: integrationsPending,
+      view: integrationsView
+    }),
     mailWorkspaceLoader: createStoryMailWorkspaceLoader(workspace),
     mailboxAdminNavigationLoader: createStoryMailboxAdminNavigationLoader(),
     publicEnv: storyPublicEnv,
@@ -351,44 +387,51 @@ export const AgentAccessActive: Story = {
   })
 }
 
-export const IntegrationsPaperclipHandoff: Story = {
-  args: buildSettingsScreenArgs({
-    agentAccessView: agentAccessPaperclipHandoffView,
-    routeSearch: {
-      integrationSource: 'paperclip',
-      paperclipCompanyId: 'paperclip-company-1',
-      paperclipPluginId: 'agentteam.paperclip-email-plugin'
-    },
-    settingsSection: 'integrations'
-  }),
-  play: async ({ canvasElement }) => {
-    const canvas = storyBody(canvasElement)
-
-    await canvas.findByText('Paperclip authorization requested')
-    await canvas.findByText('Context: Ready')
-    await canvas.findByText('Plugin: AgentTeam Email plugin')
-    await expect(canvas.queryByText('Company: paperclip-company-1')).toBeNull()
-    await expect(canvas.queryByText('Plugin: agentteam.paperclip-email-plugin')).toBeNull()
-    await expect(await canvas.findByRole('button', { name: /^register plugin$/i })).toBeEnabled()
-  }
-}
-
 export const IntegrationsPaperclipConnected: Story = {
   args: buildSettingsScreenArgs({
-    agentAccessView: requiredAgentAccessView(agentAccessPaperclipConnectedState),
+    agentAccessView: defaultAgentAccessView,
+    integrationsView: integrationsPaperclipConnectedView,
     settingsSection: 'integrations'
   }),
   play: async ({ canvasElement }) => {
     const canvas = storyBody(canvasElement)
 
     await expect(await canvas.findByText('Plugin authorizations')).toBeInTheDocument()
-    await expect(await canvas.findByText('Paperclip Email')).toBeInTheDocument()
-    await expect(
-      (await canvas.findAllByText(/Paperclip plugin authorization for mailbox access/iu)).length
-    ).toBeGreaterThan(0)
+    await expect((await canvas.findAllByText('Paperclip plugin')).length).toBeGreaterThan(0)
+    await expect(await canvas.findByText('Connected to this organization.')).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /^revoke access$/i })).toBeEnabled()
     await expect(canvas.queryByText('paperclip-company-1')).not.toBeInTheDocument()
-    await expect(canvas.queryByText('Paperclip authorization requested')).not.toBeInTheDocument()
-    await expect(canvas.queryByRole('button', { name: /^register plugin$/i })).not.toBeInTheDocument()
+  }
+}
+
+export const IntegrationsPaperclipReconnectRequired: Story = {
+  args: buildSettingsScreenArgs({
+    agentAccessView: defaultAgentAccessView,
+    integrationsView: integrationsPaperclipReconnectRequiredView,
+    settingsSection: 'integrations'
+  }),
+  play: async ({ canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+
+    await expect(await canvas.findByText('Disconnected')).toBeInTheDocument()
+    await expect(await canvas.findByText('Start a new authorization from Paperclip.')).toBeInTheDocument()
+    await expect(canvas.queryByRole('button', { name: /^reconnect from paperclip$/i })).not.toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /^remove authorization$/i })).toBeEnabled()
+  }
+}
+
+export const IntegrationsPaperclipUnavailable: Story = {
+  args: buildSettingsScreenArgs({
+    agentAccessView: defaultAgentAccessView,
+    integrationsView: integrationsPaperclipUnavailableView,
+    settingsSection: 'integrations'
+  }),
+  play: async ({ canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+
+    await expect(await canvas.findByText('Unavailable')).toBeInTheDocument()
+    await expect(await canvas.findByText('This OAuth client is unavailable. Remove this authorization entry.')).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /^remove authorization$/i })).toBeEnabled()
   }
 }
 
@@ -496,6 +539,7 @@ export const AgentAccessDense: Story = {
 export const IntegrationsEmpty: Story = {
   args: buildSettingsScreenArgs({
     agentAccessView: defaultAgentAccessView,
+    integrationsView: integrationsEmptyView,
     settingsSection: 'integrations'
   }),
   play: async ({ args, canvasElement }) => {
@@ -506,6 +550,22 @@ export const IntegrationsEmpty: Story = {
     await expect(await canvas.findByText('No integrations')).toBeInTheDocument()
     await expect(canvas.queryByRole('button', { name: 'Connect Cloudflare' })).not.toBeInTheDocument()
     await expect(canvas.queryByText('Cloudflare accounts')).not.toBeInTheDocument()
+  }
+}
+
+export const IntegrationsUnavailable: Story = {
+  args: buildSettingsScreenArgs({
+    agentAccessView: defaultAgentAccessView,
+    integrationsView: integrationsUnavailableView,
+    settingsSection: 'integrations'
+  }),
+  play: async ({ canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+
+    await expect(await canvas.findByText('No integrations')).toBeInTheDocument()
+    await expect(
+      await canvas.findByText('No integration clients are configured for this deployment.')
+    ).toBeInTheDocument()
   }
 }
 

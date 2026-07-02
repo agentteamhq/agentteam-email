@@ -26,6 +26,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as RedirectErrorRouteImport } from './routes/redirect/error'
+import { Route as OauthConsentRouteImport } from './routes/oauth/consent'
 import { Route as DeviceCapabilitiesRouteImport } from './routes/device/capabilities'
 import { Route as DeviceApproveRouteImport } from './routes/device/approve'
 import { Route as AdminSetupRouteImport } from './routes/admin/setup'
@@ -120,6 +121,11 @@ const RedirectErrorRoute = RedirectErrorRouteImport.update({
   path: '/redirect/error',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OauthConsentRoute = OauthConsentRouteImport.update({
+  id: '/oauth/consent',
+  path: '/oauth/consent',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DeviceCapabilitiesRoute = DeviceCapabilitiesRouteImport.update({
   id: '/capabilities',
   path: '/capabilities',
@@ -189,6 +195,7 @@ export interface FileRoutesByFullPath {
   '/admin/setup': typeof AdminSetupRoute
   '/device/approve': typeof DeviceApproveRoute
   '/device/capabilities': typeof DeviceCapabilitiesRoute
+  '/oauth/consent': typeof OauthConsentRoute
   '/redirect/error': typeof RedirectErrorRoute
   '/admin/': typeof AdminIndexRoute
   '/organization/$section': typeof AuthenticatedOrganizationSectionRoute
@@ -215,6 +222,7 @@ export interface FileRoutesByTo {
   '/admin/setup': typeof AdminSetupRoute
   '/device/approve': typeof DeviceApproveRoute
   '/device/capabilities': typeof DeviceCapabilitiesRoute
+  '/oauth/consent': typeof OauthConsentRoute
   '/redirect/error': typeof RedirectErrorRoute
   '/admin': typeof AdminIndexRoute
   '/organization/$section': typeof AuthenticatedOrganizationSectionRoute
@@ -244,6 +252,7 @@ export interface FileRoutesById {
   '/admin/setup': typeof AdminSetupRoute
   '/device/approve': typeof DeviceApproveRoute
   '/device/capabilities': typeof DeviceCapabilitiesRoute
+  '/oauth/consent': typeof OauthConsentRoute
   '/redirect/error': typeof RedirectErrorRoute
   '/admin/': typeof AdminIndexRoute
   '/_authenticated/organization/$section': typeof AuthenticatedOrganizationSectionRoute
@@ -273,6 +282,7 @@ export interface FileRouteTypes {
     | '/admin/setup'
     | '/device/approve'
     | '/device/capabilities'
+    | '/oauth/consent'
     | '/redirect/error'
     | '/admin/'
     | '/organization/$section'
@@ -299,6 +309,7 @@ export interface FileRouteTypes {
     | '/admin/setup'
     | '/device/approve'
     | '/device/capabilities'
+    | '/oauth/consent'
     | '/redirect/error'
     | '/admin'
     | '/organization/$section'
@@ -327,6 +338,7 @@ export interface FileRouteTypes {
     | '/admin/setup'
     | '/device/approve'
     | '/device/capabilities'
+    | '/oauth/consent'
     | '/redirect/error'
     | '/admin/'
     | '/_authenticated/organization/$section'
@@ -350,6 +362,7 @@ export interface RootRouteChildren {
   SignoutRoute: typeof SignoutRoute
   SignupRoute: typeof SignupRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
+  OauthConsentRoute: typeof OauthConsentRoute
   RedirectErrorRoute: typeof RedirectErrorRoute
   AgentClaimTokenRoute: typeof AgentClaimTokenRoute
 }
@@ -473,6 +486,13 @@ declare module '@tanstack/react-router' {
       path: '/redirect/error'
       fullPath: '/redirect/error'
       preLoaderRoute: typeof RedirectErrorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/oauth/consent': {
+      id: '/oauth/consent'
+      path: '/oauth/consent'
+      fullPath: '/oauth/consent'
+      preLoaderRoute: typeof OauthConsentRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/device/capabilities': {
@@ -614,6 +634,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignoutRoute: SignoutRoute,
   SignupRoute: SignupRoute,
   VerifyEmailRoute: VerifyEmailRoute,
+  OauthConsentRoute: OauthConsentRoute,
   RedirectErrorRoute: RedirectErrorRoute,
   AgentClaimTokenRoute: AgentClaimTokenRoute,
 }

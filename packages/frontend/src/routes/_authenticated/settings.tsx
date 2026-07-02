@@ -28,7 +28,6 @@ function SettingsRouteScreen() {
   const routeState = Route.useLoaderData()
   const search = Route.useSearch()
   const router = useRouter()
-  const settingsSection: SettingsSectionId = search.integrationSource === 'paperclip' ? 'integrations' : 'account'
 
   return (
     <DashboardMailController
@@ -44,7 +43,7 @@ function SettingsRouteScreen() {
       routeState={routeState}
       routeSearch={search}
       settingsOpen
-      settingsSection={settingsSection}
+      settingsSection='account'
     />
   )
 }
