@@ -50,17 +50,29 @@ These rules apply to `packages/backend`.
 - `/api/*` routes may share backend service helpers with app RPC, but external
   callers must address `/api/*` and the route must enforce an API-owned
   credential, principal, and response contract.
-- Do not expose `/api/*` as a redirect, alias, bridge, or compatibility path to
-  `/rpc/*`. `/api/auth/*` must not mount, redirect, proxy, rewrite, or dispatch
-  to Better Auth or `/rpc/auth/api/*`. API handlers must not call
+- Do not expose `/api/*` product routes as redirects, aliases, bridges, or
+  compatibility paths to `/rpc/*`. API product handlers must not call
   `backendRpcApp.handle`, construct `/rpc/*` requests, or rewrite API request
   paths into RPC paths.
+- `/rpc/auth/api/*` is the canonical Better Auth and Agent Auth protocol mount
+  for browser and internal controlled consumers.
+- `/api/auth/*` is the API-client Better Auth and Agent Auth protocol mount. It
+  may mount the Better Auth handler directly as a full auth protocol mount; it
+  is not an `/api/*` product route and must not host product API behavior.
+- `/api/auth/*` is reserved for API-client auth protocol consumers: the
+  at-email CLI, API integrations, external agent runtimes, and external API
+  clients. Browser frontend auth, browser app sessions, Worker ingest, mail
+  control service traffic, and other internal controlled consumers must not
+  point at `/api/auth/*`.
+- OAuth/OIDC follows the consumer boundary: browser/internal OAuth and OIDC
+  flows must use `/rpc/auth/api/*`; API-client OAuth, device login, and Agent
+  Auth flows must use `/api/auth/*`.
 - `/rpc/*` is internal app, control, and auth endpoint traffic, not an external
   product API.
-- CLI clients and external API consumers must not call `/rpc/*` for product API
-  operations. If a CLI or external API workflow needs behavior currently
-  implemented by an RPC handler, add or fix the `/api/*` route instead of
-  pointing the client at RPC.
+- CLI clients and external API consumers must not call `/rpc/*`. If a CLI or
+  external API workflow needs behavior currently implemented by an RPC handler,
+  add or fix the `/api/*` route or `/api/auth/*` auth protocol mount instead
+  of pointing the client at RPC.
 - Before changing RPC routes, read [src/rpc/AGENTS.md](src/rpc/AGENTS.md). That
   file owns RPC-specific consumers, public unauthenticated exceptions,
   principal classes, and RPC response-boundary rules.

@@ -2123,7 +2123,7 @@ describe('Agent Mail WildDuck webmail service', () => {
 
   it('resolves exact resource-bound Agent Auth JWTs before mailbox CASL checks', async () => {
     expect.hasAssertions()
-    const requestUrl = 'https://mail.example.com/rpc/mail/accounts/support%40example.test/messages'
+    const requestUrl = 'https://mail.example.com/api/mail/accounts/support%40example.test/messages'
     const payload = {
       aud: 'https://mail.example.com',
       exp: Math.floor(Date.now() / 1000) + 60,
@@ -2490,7 +2490,7 @@ describe('Agent Mail WildDuck webmail service', () => {
       {
         name: 'wrong URL',
         payload: {
-          htu: 'https://mail.example.com/rpc/mail/accounts/support%40example.test/messages?different=true',
+          htu: 'https://mail.example.com/api/mail/accounts/support%40example.test/messages?different=true',
           jti: 'wrong-url-jti'
         }
       },
@@ -4821,7 +4821,7 @@ function configureResourceBoundAgentJWT({
   mailboxGrants = [],
   payload = {},
   requestMethod = 'POST',
-  requestUrl = 'https://mail.example.com/rpc/mail/accounts/support%40example.test/messages',
+  requestUrl = 'https://mail.example.com/api/mail/accounts/support%40example.test/messages',
   token = 'resource-bound-agent-jwt',
   verifyRejects = false
 }: {

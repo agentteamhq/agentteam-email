@@ -111,6 +111,8 @@ export type {
   AgentMailWorkspaceInput
 } from './agent-mail/webmail-service'
 export { handleOAuthMetadataRequest, isOAuthMetadataRequestPath } from './auth/oauth-metadata'
+export { backendHttpApp, isBackendHttpRequestPath, type BackendHttpAppType } from './http'
+export { backendApiApp, type BackendApiAppType } from './api'
 export { backendRpcApp, type BackendRpcAppType } from './rpc/'
 export * from './cloudflare/service'
 export * from './payments/is-delayed-data'

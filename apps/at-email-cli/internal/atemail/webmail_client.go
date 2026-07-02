@@ -403,7 +403,7 @@ func hasQueryParam(query []queryParam, key string) bool {
 
 func webMailPath(elements ...string) (string, error) {
 	escaped := make([]string, 0, len(elements)+2)
-	escaped = append(escaped, "rpc", "mail")
+	escaped = append(escaped, "api", "mail")
 	for _, element := range elements {
 		escaped = append(escaped, url.PathEscape(element))
 	}

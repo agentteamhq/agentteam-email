@@ -1,11 +1,6 @@
 import {
-  backendRpcApp,
-  handleAgentAuthConfigurationRequest,
-  handleAtEmailMetadataRequest,
-  handleOAuthMetadataRequest,
-  isAgentAuthConfigurationRequestPath,
-  isAtEmailMetadataRequestPath,
-  isOAuthMetadataRequestPath
+  backendHttpApp,
+  isBackendHttpRequestPath
 } from '@main/backend'
 import {
   handleEmailVerifiedRedirect,
@@ -13,10 +8,6 @@ import {
   handleStripePortalRedirect,
   handleStripeRedirect
 } from '@main/backend/routes/webapp'
-
-function isRoutePath(pathname: string, basePath: string): boolean {
-  return pathname === basePath || pathname.startsWith(`${basePath}/`)
-}
 
 export async function handleBackendPackageRequest(request: Request): Promise<Response | null> {
   const url = new URL(request.url)
@@ -27,37 +18,11 @@ export async function handleBackendPackageRequest(request: Request): Promise<Res
     return frontendActionResponse
   }
 
-  if (isOAuthMetadataRequestPath(url.pathname)) {
-    return handleOAuthMetadataRequest(request)
-  }
-
-  if (isAgentAuthConfigurationRequestPath(url.pathname)) {
-    return handleAgentAuthConfigurationRequest(request)
-  }
-
-  if (isAtEmailMetadataRequestPath(url.pathname)) {
-    return handleAtEmailMetadataRequest(request)
-  }
-
-  if (isRoutePath(url.pathname, '/api/auth')) {
-    return handlePublicAuthBridgeRequest(request, url)
-  }
-
-  if (isRoutePath(url.pathname, '/rpc')) {
-    return backendRpcApp.handle(request)
-  }
-
-  if (url.pathname === '/health') {
-    return handleHealthRequest(request)
+  if (isBackendHttpRequestPath(url.pathname)) {
+    return backendHttpApp.handle(request)
   }
 
   return null
-}
-
-function handlePublicAuthBridgeRequest(request: Request, url: URL): Promise<Response> {
-  const bridgedUrl = new URL(request.url)
-  bridgedUrl.pathname = `/rpc/auth/api${url.pathname.slice('/api/auth'.length)}`
-  return backendRpcApp.handle(new Request(bridgedUrl, request))
 }
 
 async function handleFrontendActionRequest(request: Request, url: URL): Promise<Response | null> {
@@ -86,28 +51,4 @@ async function handleFrontendActionRequest(request: Request, url: URL): Promise<
   }
 
   return null
-}
-
-async function handleHealthRequest(request: Request): Promise<Response> {
-  const healthUrl = new URL('/rpc/health', request.url)
-  const response = await backendRpcApp.handle(
-    new Request(healthUrl, {
-      headers: request.headers,
-      method: 'GET'
-    })
-  )
-
-  if (!response.ok) {
-    return response
-  }
-
-  const healthStatus = (await response.json()) as { message?: string }
-  const body = `<!doctype html><html lang="en"><head><meta charset="UTF-8"><title>Health Check</title></head><body><h1>${healthStatus.message ?? 'Backend is healthy'}</h1></body></html>`
-
-  return new Response(body, {
-    headers: {
-      'content-type': 'text/html; charset=utf-8'
-    },
-    status: response.status
-  })
 }

@@ -273,6 +273,97 @@ describe('mail RPC routes', () => {
     expect(call.headers.get('x-agentteam-request-url')).toBe(requestUrl)
   })
 
+  it('strips API credentials from mailbox requests through the parent RPC mount', async () => {
+    expect.hasAssertions()
+    mailRpcTestState.getAgentMailWorkspaceForWeb.mockResolvedValue({
+      accounts: [],
+      activeAccountId: null,
+      activeFolderId: null,
+      folders: [],
+      messages: [],
+      pagination: {
+        limit: 25,
+        nextCursor: null,
+        previousCursor: null,
+        total: null
+      },
+      selectedMessage: null
+    })
+
+    const { backendRpcApp } = await import('./index')
+    const response = await backendRpcApp.handle(
+      new Request('https://mail.example.com/rpc/mail/workspace', {
+        headers: {
+          authorization: 'Bearer agent-jwt',
+          'x-agentteam-organization-id': 'org-from-caller',
+          'x-agentteam-paperclip-operation': 'read',
+          'x-api-key': '_secret_api_key'
+        }
+      })
+    )
+
+    expect(response.status).toBe(200)
+    const call = mailRpcTestState.getAgentMailWorkspaceForWeb.mock.calls[0]?.[0] as
+      | { headers: Headers }
+      | undefined
+    expect(call).toBeDefined()
+    if (!call) {
+      throw new Error('Expected workspace service to be called.')
+    }
+    expect(call.headers.get('authorization')).toBeNull()
+    expect(call.headers.get('x-api-key')).toBeNull()
+    expect(call.headers.get('x-agentteam-organization-id')).toBeNull()
+    expect(call.headers.get('x-agentteam-paperclip-operation')).toBeNull()
+    expect(call.headers.get('x-agentteam-request-method')).toBeNull()
+    expect(call.headers.get('x-agentteam-request-url')).toBeNull()
+    expect(call.headers.get('x-agentteam-mail-auth-surface')).toBe('browser-rpc')
+    expect(call.headers.get('x-agentteam-mail-route-prefix')).toBe('/rpc/mail')
+  })
+
+  it('preserves API credential binding for mailbox requests through the API mount', async () => {
+    expect.hasAssertions()
+    mailRpcTestState.getAgentMailWorkspaceForWeb.mockResolvedValue({
+      accounts: [],
+      activeAccountId: null,
+      activeFolderId: null,
+      folders: [],
+      messages: [],
+      pagination: {
+        limit: 25,
+        nextCursor: null,
+        previousCursor: null,
+        total: null
+      },
+      selectedMessage: null
+    })
+
+    const { backendApiApp } = await import('../api')
+    const requestUrl = 'https://mail.example.com/api/mail/workspace'
+    const response = await backendApiApp.handle(
+      new Request(requestUrl, {
+        headers: {
+          authorization: 'Bearer agent-jwt',
+          'x-api-key': '_secret_api_key'
+        }
+      })
+    )
+
+    expect(response.status).toBe(200)
+    const call = mailRpcTestState.getAgentMailWorkspaceForWeb.mock.calls[0]?.[0] as
+      | { headers: Headers }
+      | undefined
+    expect(call).toBeDefined()
+    if (!call) {
+      throw new Error('Expected workspace service to be called.')
+    }
+    expect(call.headers.get('authorization')).toBe('Bearer agent-jwt')
+    expect(call.headers.get('x-api-key')).toBe('_secret_api_key')
+    expect(call.headers.get('x-agentteam-request-method')).toBe('GET')
+    expect(call.headers.get('x-agentteam-request-url')).toBe(requestUrl)
+    expect(call.headers.get('x-agentteam-mail-auth-surface')).toBeNull()
+    expect(call.headers.get('x-agentteam-mail-route-prefix')).toBe('/api/mail')
+  })
+
   it('passes request-bound headers to the webmail account list route', async () => {
     expect.hasAssertions()
     mailRpcTestState.getAgentMailAccountsForWeb.mockResolvedValue({ accounts: [] })

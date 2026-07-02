@@ -439,10 +439,11 @@ const mailOutboundResponseSchema = t.Object({
   status: t.String()
 })
 
-const mail = new Elysia({
-  name: 'mail',
-  prefix: '/mail'
-})
+export function createMailHttpRoutes() {
+  return new Elysia({
+    name: 'mail',
+    prefix: '/mail'
+  })
   .get(
     '/admin',
     async ({ query, request, set }) => {
@@ -1237,6 +1238,8 @@ const mail = new Elysia({
     }
   )
 
+}
+
 type MailResponseSet = {
   headers: Record<string, number | string>
   status?: number | string
@@ -1284,9 +1287,39 @@ function setMailAuthChallenge(error: unknown, set: MailResponseSet) {
 
 function mailAuthHeaders(request: Request) {
   const headers = new Headers(request.headers)
+  const pathname = new URL(request.url).pathname
+
+  headers.delete('x-agentteam-mail-auth-surface')
+  headers.delete('x-agentteam-mail-route-prefix')
+  if (pathname === '/rpc/mail' || pathname.startsWith('/rpc/mail/')) {
+    stripRpcMailCredentialHeaders(headers)
+    headers.set('x-agentteam-mail-auth-surface', 'browser-rpc')
+    headers.set('x-agentteam-mail-route-prefix', '/rpc/mail')
+    return headers
+  }
+
+  headers.set('x-agentteam-mail-route-prefix', '/api/mail')
   headers.set('x-agentteam-request-method', request.method)
   headers.set('x-agentteam-request-url', request.url)
   return headers
 }
 
-export default mail
+function stripRpcMailCredentialHeaders(headers: Headers) {
+  for (const name of [
+    'authorization',
+    'x-api-key',
+    'x-agentteam-organization-id',
+    'x-agentteam-paperclip-agent-id',
+    'x-agentteam-paperclip-company-id',
+    'x-agentteam-paperclip-operation',
+    'x-agentteam-paperclip-plugin-id',
+    'x-agentteam-paperclip-project-id',
+    'x-agentteam-paperclip-run-id',
+    'x-agentteam-request-method',
+    'x-agentteam-request-url'
+  ]) {
+    headers.delete(name)
+  }
+}
+
+export default createMailHttpRoutes()

@@ -7,9 +7,9 @@ This directory owns internal app and control RPC under `/rpc/*`.
 - `/rpc/*` is not an external product API. Do not add CLI, integration,
   customer automation, or public API client workflows to RPC.
 - The only allowed RPC surfaces are first-party browser UI routes, mail control
-  service routes, signed Worker ingest webhooks, Better Auth/Agent Auth
-  endpoints under `/rpc/auth/api/*`, and the public unauthenticated routes
-  listed below.
+  service routes, signed Worker ingest webhooks, browser/internal Better
+  Auth/Agent Auth endpoints under `/rpc/auth/api/*`, and the public
+  unauthenticated routes listed below.
 - Public unauthenticated RPC exceptions are limited to `/rpc/health`,
   `/rpc/whoami`, and `/rpc/admin/setup/first-admin`. First-admin setup must stop
   accepting setup once an admin exists and must not require or introduce a setup
@@ -17,10 +17,14 @@ This directory owns internal app and control RPC under `/rpc/*`.
 - The web server may expose `/health` as the same health check as
   `/rpc/health`. Do not add other unauthenticated health, status, diagnostics,
   debug, or setup routes.
-- `/rpc/auth/api/*` is the Better Auth and Agent Auth endpoint family. Some
-  endpoints in that family are unauthenticated because the auth protocol
-  requires them, but they are not app product RPC exceptions. Do not add product
-  RPC behavior under `/rpc/auth/api/*`.
+- `/rpc/auth/api/*` is the browser/internal Better Auth and Agent Auth endpoint
+  family. Some endpoints in that family are unauthenticated because the auth
+  protocol requires them, but they are not app product RPC exceptions. Do not
+  add product RPC behavior under `/rpc/auth/api/*`, and do not use this path
+  family for CLI or external API clients.
+- `/api/auth/*` is the API-client Better Auth and Agent Auth protocol mount.
+  It may mount the Better Auth handler directly as a full auth protocol mount.
+  It is not an app RPC route and must not host product API behavior.
 - The Worker ingest route is public-addressable because Cloudflare Workers must
   reach the web server, but it is not a public unauthenticated API. It must use
   the `signed_worker_webhook` principal class.
@@ -29,18 +33,16 @@ This directory owns internal app and control RPC under `/rpc/*`.
   service must not use browser-session product RPC routes or `/api/*`
   credentials.
 - External API clients, agent runtimes, and the at-email CLI must address
-  `/api/*` for product API operations. If a needed operation exists only as
-  RPC, add or fix the `/api/*` route instead of calling RPC from the external
-  client.
-- `/api/*` routes must not be implemented as redirects, aliases, bridges, or
-  compatibility paths to `/rpc/*`.
-- `/api/auth/*` must not mount Better Auth, redirect to Better Auth, proxy to
-  Better Auth, rewrite to Better Auth, or internally dispatch to
-  `/rpc/auth/api/*`. Better Auth and Agent Auth endpoints are accepted only at
-  `/rpc/auth/api/*`.
-- Any browser, CLI, OAuth client, or Agent Auth client that needs a Better Auth
-  or Agent Auth URL must be given a `/rpc/auth/api/*` URL directly. Do not hand
-  out `/api/auth/*` URLs as aliases for those endpoints.
+  `/api/*` for product API operations and `/api/auth/*` for API-client auth
+  protocol operations. They must not call `/rpc/*`.
+- `/api/*` product routes must not be implemented as redirects, aliases,
+  bridges, or compatibility paths to `/rpc/*`.
+- `/api/auth/*` is reserved for API-client auth protocol consumers: the
+  at-email CLI, API integrations, external agent runtimes, and external API
+  clients. Browser frontend auth, browser app sessions, Worker ingest, mail
+  control service traffic, and other internal controlled consumers must not use
+  `/api/auth/*`. Those consumers must use their own RPC, Worker, or internal
+  service boundary.
 - `/rpc/*` routes must be registered through the backend RPC boundary before
   dispatch. Route modules must not add Elysia routes or mount subapps that
   bypass the RPC boundary entrypoint.
@@ -53,9 +55,10 @@ This directory owns internal app and control RPC under `/rpc/*`.
 - Frontend controllers must call `/rpc/*` for web-app product workflows.
 - Browser settings and durable app-owned CRUD/read/reporting routes may use app
   RPC routes with strict authorization and public return types.
-- OAuth/OIDC, Better Auth, and Agent Auth endpoints may use only
-  `/rpc/auth/api/*`. API-key management screens may call browser-session RPC
-  routes, but API-key credentials themselves must authorize only `/api/*`
+- Browser/internal OAuth/OIDC, Better Auth, and Agent Auth endpoints use
+  `/rpc/auth/api/*`. API-client OAuth, device login, and Agent Auth protocol
+  flows use `/api/auth/*`. API-key management screens may call browser-session
+  RPC routes, but API-key credentials themselves must authorize only `/api/*`
   product API routes.
 
 ## RPC Credential Requirements
@@ -121,9 +124,9 @@ This directory owns internal app and control RPC under `/rpc/*`.
   Agent Auth JWTs, Paperclip run-context headers, or caller-supplied
   organization override headers into authorization helpers.
 - Public API, agent CLI, OAuth bearer, API-key, and Agent Auth credential
-  consumers must use the `/api/*` boundary for product API operations. They may
-  use `/rpc/auth/api/*` only for Better Auth or Agent Auth endpoints, not for
-  browser app RPC routes.
+  consumers must use the `/api/*` boundary for product API operations and
+  `/api/auth/*` for API-client auth protocol operations. They must not use
+  `/rpc/*`.
 - Protected RPC routes must authenticate the caller, derive the authoritative
   user, organization, and principal context on the server, and authorize the
   exact action through the owning permission contract.

@@ -470,13 +470,9 @@ export function createGlobalAuth(db: Database): GlobalAuth {
     appName: STRINGS.BRAND_NAME,
     baseURL: PUBLIC_VARS.PUBLIC_HOSTNAME,
 
-    // Better Auth sees /api/* as its logical base path. The first-party web app
-    // still mounts that handler at /rpc/auth/api/* for same-origin UI auth
-    // compatibility, while public OAuth/OIDC clients use the explicit
-    // /api/auth/* bridge. Keep this logical basePath distinct from both mounts.
-    // Manual redirect URLs use BETTER_AUTH_ROUTE and compareAuthUrls verifies
-    // they still match the Better Auth-generated path after stripping each
-    // mount prefix.
+    // Better Auth sees /api/* as its logical base path internally. The backend
+    // mounts that handler at /rpc/auth/api/* for browser/internal auth protocol
+    // traffic and at /api/auth/* for API-client auth protocol traffic.
     basePath: BETTER_AUTH_BASE_PATH,
     onAPIError: {
       errorURL: AUTH_REDIRECT_ERROR_ROUTE
