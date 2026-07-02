@@ -2,33 +2,84 @@ export type SettingsSectionId =
   | 'account'
   | 'security'
   | 'agentAccess'
+  | 'connected-accounts'
   | 'organizations'
   | 'organizationSettings'
   | 'organizationPeople'
   | 'domains'
 
-const settingsRouteSegments = {
+type SettingsRouteSectionId = Extract<
+  SettingsSectionId,
+  'account' | 'security' | 'agentAccess' | 'connected-accounts' | 'organizations' | 'domains'
+>
+
+type OrganizationRouteSectionId = Extract<
+  SettingsSectionId,
+  'organizationSettings' | 'organizationPeople'
+>
+
+type SettingsRouteSegmentResolution =
+  | {
+      section: SettingsRouteSectionId
+      type: 'section'
+    }
+  | {
+      type: 'notFound'
+    }
+
+type OrganizationRouteSegmentResolution =
+  | {
+      section: OrganizationRouteSectionId
+      type: 'section'
+    }
+  | {
+      type: 'notFound'
+    }
+
+export const settingsRouteSegments = {
   account: 'account',
   security: 'security',
   agentAccess: 'agent-access',
+  'connected-accounts': 'connected-accounts',
   organizations: 'organizations',
   domains: 'domains'
-} as const
+} satisfies Record<SettingsRouteSectionId, string>
+
+const organizationRouteSegments = {
+  organizationSettings: 'settings',
+  organizationPeople: 'people'
+} satisfies Record<OrganizationRouteSectionId, string>
 
 const settingsSectionHrefs = {
   account: '/settings/account/',
   security: '/settings/security/',
   agentAccess: '/settings/agent-access/',
+  'connected-accounts': '/settings/connected-accounts/',
   organizations: '/settings/organizations/',
   organizationSettings: '/organization/settings/',
   organizationPeople: '/organization/people/',
   domains: '/settings/domains/'
 } satisfies Record<SettingsSectionId, string>
 
+const settingsRouteSectionsBySegment = new Map<string, SettingsRouteSectionId>(
+  Object.entries(settingsRouteSegments).map(([section, segment]) => [
+    segment,
+    section as SettingsRouteSectionId
+  ])
+)
+
+const organizationRouteSectionsBySegment = new Map<string, OrganizationRouteSectionId>(
+  Object.entries(organizationRouteSegments).map(([section, segment]) => [
+    segment,
+    section as OrganizationRouteSectionId
+  ])
+)
+
 const settingsSectionIds = new Set<SettingsSectionId>([
   'account',
   'security',
   'agentAccess',
+  'connected-accounts',
   'organizations',
   'organizationSettings',
   'organizationPeople',
@@ -43,26 +94,46 @@ export function getSettingsSectionHref(section: SettingsSectionId) {
   return settingsSectionHrefs[section]
 }
 
-export function getSettingsSectionFromSegment(segment: string | undefined): SettingsSectionId {
+export function resolveSettingsRouteSegment(
+  segment: string | undefined
+): SettingsRouteSegmentResolution {
   if (!segment) {
-    return 'account'
+    return { section: 'account', type: 'section' }
   }
 
-  if (
-    segment === settingsRouteSegments.domains ||
-    segment === 'connected-accounts' ||
-    segment === 'connectedAccounts'
-  ) {
-    return 'domains'
+  const section = settingsRouteSectionsBySegment.get(segment)
+  if (section) {
+    return { section, type: 'section' }
   }
 
-  if (segment === 'developer' || segment === 'cli-access' || segment === 'cliAccess') {
-    return 'security'
+  return { type: 'notFound' }
+}
+
+export function resolveOrganizationRouteSegment(
+  segment: string | undefined
+): OrganizationRouteSegmentResolution {
+  if (!segment) {
+    return { type: 'notFound' }
   }
 
-  if (segment === settingsRouteSegments.agentAccess || segment === 'agentAccess') {
-    return 'agentAccess'
+  const section = organizationRouteSectionsBySegment.get(segment)
+  if (section) {
+    return { section, type: 'section' }
   }
 
-  return isSettingsSectionId(segment) ? segment : 'account'
+  return { type: 'notFound' }
+}
+
+export function getSettingsSectionFromSegment(segment: string | undefined): SettingsSectionId | null {
+  const resolution = resolveSettingsRouteSegment(segment)
+
+  return resolution.type === 'section' ? resolution.section : null
+}
+
+export function getOrganizationSettingsSectionFromSegment(
+  segment: string | undefined
+): OrganizationRouteSectionId | null {
+  const resolution = resolveOrganizationRouteSegment(segment)
+
+  return resolution.type === 'section' ? resolution.section : null
 }

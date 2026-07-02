@@ -72,6 +72,20 @@ const cloudflareOAuthIntentResponseSchema = t.Object({
   status: t.String(),
   updatedAt: optionalDateLikeSchema
 })
+const cloudflareAccountResponseSchema = t.Object({
+  grantPublicId: t.String(),
+  id: t.String(),
+  name: t.String(),
+  type: t.Union([t.Literal('standard'), t.Literal('enterprise')])
+})
+const cloudflareZoneResponseSchema = t.Object({
+  accountId: t.String(),
+  accountName: t.Nullable(t.String()),
+  grantPublicId: t.String(),
+  id: t.String(),
+  name: t.String(),
+  status: t.Nullable(t.String())
+})
 const cloudflareStatusResponseSchema = t.Object({
   connections: t.Array(cloudflareConnectionResponseSchema),
   grants: t.Array(cloudflareOAuthGrantResponseSchema)
@@ -155,12 +169,7 @@ const cloudflare = new Elysia({
       response: {
         200: typedResponseSchema<{ accounts: CloudflareAccountSummary[] }>(
           t.Object({
-            accounts: t.Array(
-              t.Object({
-                id: t.String(),
-                name: t.String()
-              })
-            )
+            accounts: t.Array(cloudflareAccountResponseSchema)
           })
         ),
         ...cloudflareErrorResponseSchemas
@@ -173,6 +182,7 @@ const cloudflare = new Elysia({
       try {
         const zones = await listConnectedCloudflareZones({
           cloudflareAccountId: query.accountId,
+          grantPublicId: query.grantPublicId,
           headers: request.headers
         })
         return { zones }
@@ -182,18 +192,13 @@ const cloudflare = new Elysia({
     },
     {
       query: t.Object({
-        accountId: t.Optional(t.String({ minLength: 1 }))
+        accountId: t.Optional(t.String({ minLength: 1 })),
+        grantPublicId: t.Optional(t.String({ minLength: 1 }))
       }),
       response: {
         200: typedResponseSchema<{ zones: CloudflareZoneSummary[] }>(
           t.Object({
-            zones: t.Array(
-              t.Object({
-                id: t.String(),
-                name: t.String(),
-                status: t.String()
-              })
-            )
+            zones: t.Array(cloudflareZoneResponseSchema)
           })
         ),
         ...cloudflareErrorResponseSchemas
@@ -211,7 +216,8 @@ const cloudflare = new Elysia({
             cloudflareAccountName: body.cloudflareAccountName,
             cloudflareZoneId: body.cloudflareZoneId,
             cloudflareZoneName: body.cloudflareZoneName,
-            domain: body.domain
+            domain: body.domain,
+            grantPublicId: body.grantPublicId
           }
         })
         return { connection }
@@ -225,7 +231,8 @@ const cloudflare = new Elysia({
         cloudflareAccountName: t.Optional(t.Nullable(t.String())),
         cloudflareZoneId: t.String({ minLength: 1 }),
         cloudflareZoneName: t.Optional(t.Nullable(t.String())),
-        domain: t.String({ minLength: 1 })
+        domain: t.String({ minLength: 1 }),
+        grantPublicId: t.String({ minLength: 1 })
       }),
       response: {
         200: typedResponseSchema<{ connection: CloudflareStatusResult['connections'][number] }>(
@@ -290,7 +297,7 @@ const cloudflare = new Elysia({
     },
     {
       body: t.Object({
-        grantPublicId: t.Optional(t.String({ minLength: 1 }))
+        grantPublicId: t.String({ minLength: 1 })
       }),
       response: {
         200: typedResponseSchema<CloudflareStatusResult>(cloudflareStatusResponseSchema),

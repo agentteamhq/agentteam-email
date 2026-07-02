@@ -1,16 +1,34 @@
 import { describe, expect, it } from 'vitest'
 
-import { getSettingsSectionFromSegment } from './settings-dialog-sections'
+import {
+  getOrganizationSettingsSectionFromSegment,
+  getSettingsSectionFromSegment,
+  resolveOrganizationRouteSegment,
+  resolveSettingsRouteSegment
+} from './settings-dialog-sections'
 
 describe('settings section routing', () => {
-  it('maps legacy personal CLI settings destinations to Security', () => {
-    expect(getSettingsSectionFromSegment('cli-access')).toBe('security')
-    expect(getSettingsSectionFromSegment('cliAccess')).toBe('security')
-    expect(getSettingsSectionFromSegment('developer')).toBe('security')
+  it('does not retain stale personal settings aliases', () => {
+    expect(resolveSettingsRouteSegment('cli-access')).toStrictEqual({ type: 'notFound' })
+    expect(resolveSettingsRouteSegment('developer')).toStrictEqual({ type: 'notFound' })
   })
 
-  it('keeps Agent Access separate from Better Auth sessions', () => {
+  it('maps canonical kebab-case settings segments to separate sections', () => {
+    expect(getSettingsSectionFromSegment('connected-accounts')).toBe('connected-accounts')
+    expect(getSettingsSectionFromSegment('domains')).toBe('domains')
     expect(getSettingsSectionFromSegment('agent-access')).toBe('agentAccess')
-    expect(getSettingsSectionFromSegment('agentAccess')).toBe('agentAccess')
+  })
+
+  it('does not silently accept camelCase route segments', () => {
+    expect(resolveSettingsRouteSegment('connectedAccounts')).toStrictEqual({ type: 'notFound' })
+    expect(resolveSettingsRouteSegment('agentAccess')).toStrictEqual({ type: 'notFound' })
+    expect(resolveSettingsRouteSegment('cliAccess')).toStrictEqual({ type: 'notFound' })
+  })
+
+  it('maps canonical organization settings route segments to their settings sections', () => {
+    expect(getOrganizationSettingsSectionFromSegment('settings')).toBe('organizationSettings')
+    expect(getOrganizationSettingsSectionFromSegment('people')).toBe('organizationPeople')
+    expect(resolveOrganizationRouteSegment('nope')).toStrictEqual({ type: 'notFound' })
+    expect(resolveOrganizationRouteSegment('organizationSettings')).toStrictEqual({ type: 'notFound' })
   })
 })

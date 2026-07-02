@@ -1,13 +1,33 @@
-export function cloudflareOAuthCompletionPath(pathname: string): string {
-  const normalizedPathname = pathname.endsWith('/') ? pathname : `${pathname}/`
+const cloudflareOAuthCompletionPaths = new Set([
+  '/settings/',
+  '/settings/account/',
+  '/settings/security/',
+  '/settings/agent-access/',
+  '/settings/connected-accounts/',
+  '/settings/organizations/',
+  '/settings/domains/',
+  '/organization/settings/',
+  '/organization/people/'
+])
 
-  if (
-    normalizedPathname === '/settings/' ||
-    normalizedPathname.startsWith('/settings/') ||
-    normalizedPathname.startsWith('/organization/')
-  ) {
+export function cloudflareOAuthCompletionPath(pathname: string): string {
+  const normalizedPathname = normalizeCloudflareOAuthCompletionPathname(pathname)
+
+  if (cloudflareOAuthCompletionPaths.has(normalizedPathname)) {
     return normalizedPathname
   }
 
   return '/dashboard/'
+}
+
+function normalizeCloudflareOAuthCompletionPathname(pathname: string): string {
+  let parsedPathname: string
+
+  try {
+    parsedPathname = new URL(pathname, 'https://example.invalid').pathname
+  } catch {
+    return '/dashboard/'
+  }
+
+  return parsedPathname.endsWith('/') ? parsedPathname : `${parsedPathname}/`
 }

@@ -123,7 +123,6 @@ export function buildProductOnboardingControllerArgs(
   return {
     agentAccessViewLoader: createProductOnboardingAgentAccessViewLoader(),
     authClient: storyAuthClient,
-    defaultSettingsSection: 'domains',
     domainSettingsState,
     firstMailboxSetupState: scenario.firstMailboxSetupState,
     mailWorkspaceLoader: createProductOnboardingMailWorkspaceLoader(scenario.workspace),

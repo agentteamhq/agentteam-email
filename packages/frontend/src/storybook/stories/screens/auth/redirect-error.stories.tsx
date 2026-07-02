@@ -5,6 +5,7 @@ import { EnvProvider } from 'src/partials/webapp/env-provider'
 import { RedirectErrorPage } from 'src/partials/webapp/redirect-error-page'
 import { storyPublicEnv } from 'src/storybook/screen-fixtures'
 import type { Meta, StoryObj } from '@storybook/react'
+import type { CloudflareOAuthReturnTarget } from '@main/backend'
 
 const storyOccurredAt = new Date('2026-06-30T12:00:00.000Z')
 const storyPublicHostname = storyPublicEnv.PUBLIC_HOSTNAME
@@ -17,13 +18,35 @@ function createStoryState(pathAndSearch: string) {
   })
 }
 
+function createCloudflareStoryState({
+  error = 'invalid_request',
+  errorDescription = 'The request is missing the required redirect uri',
+  returnTarget
+}: {
+  error?: string
+  errorDescription?: string
+  returnTarget: CloudflareOAuthReturnTarget
+}) {
+  return createStoryState(
+    `/redirect/error?${new URLSearchParams({
+      callbackUri: new URL('/rpc/auth/api/oauth2/callback/cloudflare', storyPublicHostname).toString(),
+      cloudflareIntentId: 'intent_public_story',
+      error,
+      error_description: errorDescription,
+      flow: 'connected-account',
+      provider: 'cloudflare',
+      returnTarget
+    }).toString()}`
+  )
+}
+
 const meta = {
   title: 'Screens/Auth/Redirect Error',
   component: RedirectErrorPage,
   args: {
-    state: createStoryState(
-      '/redirect/error?provider=cloudflare&flow=connected-account&error=invalid_request&error_description=The+request+is+missing+the+required+redirect+uri&cloudflareIntentId=intent_public_story&callbackUri=http%3A%2F%2Flocalhost%3A6007%2Frpc%2Fauth%2Fapi%2Foauth2%2Fcallback%2Fcloudflare'
-    )
+    state: createCloudflareStoryState({
+      returnTarget: 'settings-connected-accounts'
+    })
   },
   decorators: [
     (Story) => (
@@ -42,7 +65,7 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 export const CloudflareConnectionFailed: Story = {
-  name: 'Cloudflare connection failed',
+  name: 'Cloudflare connected account failed',
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
 
@@ -50,7 +73,45 @@ export const CloudflareConnectionFailed: Story = {
     await expect(await canvas.findByText('invalid_request')).toBeInTheDocument()
     await expect(await canvas.findByRole('link', { name: /try again/i })).toHaveAttribute(
       'href',
-      '/dashboard/?settings=connectedAccounts'
+      '/settings/connected-accounts/'
+    )
+  }
+}
+
+export const CloudflareDashboardOnboardingFailed: Story = {
+  name: 'Cloudflare dashboard onboarding failed',
+  args: {
+    state: createCloudflareStoryState({
+      errorDescription: 'Cloudflare could not finish the onboarding authorization',
+      returnTarget: 'dashboard-onboarding'
+    })
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+
+    await expect(await canvas.findByText('Cloudflare connection failed')).toBeInTheDocument()
+    await expect(await canvas.findByRole('link', { name: /try again/i })).toHaveAttribute(
+      'href',
+      '/dashboard/'
+    )
+  }
+}
+
+export const CloudflareDomainSetupFailed: Story = {
+  name: 'Cloudflare domain setup failed',
+  args: {
+    state: createCloudflareStoryState({
+      errorDescription: 'Cloudflare could not finish the domain setup authorization',
+      returnTarget: 'settings-domains'
+    })
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+
+    await expect(await canvas.findByText('Cloudflare connection failed')).toBeInTheDocument()
+    await expect(await canvas.findByRole('link', { name: /try again/i })).toHaveAttribute(
+      'href',
+      '/settings/domains/'
     )
   }
 }
@@ -72,7 +133,7 @@ export const RedactedQueryValues: Story = {
   name: 'Redacted query values',
   args: {
     state: createStoryState(
-      '/redirect/error?provider=cloudflare&flow=connected-account&error=invalid_request&error_description=authorization%3DBearer%20provider-secret%20client_secret%3Dsecret-value&code=cloudflare-code&state=cloudflare-state&access_token=cloudflare-access-token'
+      '/redirect/error?provider=cloudflare&flow=connected-account&returnTarget=settings-connected-accounts&error=invalid_request&error_description=authorization%3DBearer%20provider-secret%20client_secret%3Dsecret-value&code=cloudflare-code&state=cloudflare-state&access_token=cloudflare-access-token'
     )
   },
   play: async ({ canvasElement }) => {

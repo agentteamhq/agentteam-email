@@ -1,3 +1,4 @@
+import { publicIdFromUUIDv7 } from '@main/db'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Database } from '../db/db'
@@ -235,6 +236,10 @@ describe('Cloudflare OAuth start service', () => {
       returnTarget: 'dashboard-onboarding'
     },
     {
+      callbackPath: '/settings/connected-accounts/',
+      returnTarget: 'settings-connected-accounts'
+    },
+    {
       callbackPath: '/settings/domains/',
       returnTarget: 'settings-domains'
     }
@@ -282,12 +287,67 @@ describe('Cloudflare OAuth start service', () => {
       expect(errorUrl.searchParams.get('provider')).toBe('cloudflare')
       expect(errorUrl.searchParams.get('flow')).toBe('connected-account')
       expect(errorUrl.searchParams.get('cloudflareIntentId')).toBe(result.intent.publicId)
+      expect(errorUrl.searchParams.get('returnTarget')).toBe(returnTarget)
       expect(errorUrl.searchParams.get('callbackUri')).toBe(
         'https://mail.example.test/rpc/auth/api/oauth2/callback/cloudflare'
       )
       expect(errorUrl.toString()).not.toContain('/rpc/auth/api/error')
     }
   )
+})
+
+describe('Cloudflare OAuth finalize service', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.stubEnv('DATABASE_URL', 'mongodb://localhost:27017/app')
+    vi.stubEnv('ENCRYPT_SECRET_KEY', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
+    vi.stubEnv('PUBLIC_HOSTNAME', 'https://mail.example.test')
+    cloudflareServiceTestState.globals.mockReset()
+    cloudflareServiceTestState.requireAgentMailOrganizationContext.mockReset()
+  })
+
+  it('keeps the same Cloudflare provider user separate across app users in the same organization', async () => {
+    expect.hasAssertions()
+    const { globals, grants, mocks } = cloudflareOAuthFinalizeGlobals()
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    cloudflareServiceTestState.requireAgentMailOrganizationContext.mockResolvedValue({
+      ability: { cannot: vi.fn(() => false) },
+      organizationId: TEST_ORGANIZATION_ID
+    })
+    const { finalizeCloudflareOAuth } = await import('./service')
+
+    await expect(
+      finalizeCloudflareOAuth({
+        headers: new Headers(),
+        intentPublicId: TEST_INTENT_PUBLIC_ID
+      })
+    ).resolves.toMatchObject({
+      grant: {
+        cloudflareUserId: 'cloudflare-user-shared',
+        publicId: TEST_CURRENT_USER_GRANT_PUBLIC_ID,
+        status: 'active'
+      }
+    })
+
+    expect(grants).toHaveLength(2)
+    expect(grants.find((grant) => grant._id === TEST_OTHER_USER_GRANT_ID)).toMatchObject({
+      cloudflareUserId: 'cloudflare-user-shared',
+      userId: TEST_OTHER_USER_ID
+    })
+    expect(grants.find((grant) => grant._id === TEST_CURRENT_USER_GRANT_ID)).toMatchObject({
+      cloudflareUserId: 'cloudflare-user-shared',
+      userId: TEST_USER_ID
+    })
+    expect(mocks.grantFindOneAndUpdate).toHaveBeenCalledWith(
+      {
+        cloudflareUserId: 'cloudflare-user-shared',
+        organizationId: TEST_ORGANIZATION_ID,
+        userId: TEST_USER_ID
+      },
+      expect.any(Object),
+      { returnDocument: 'after', upsert: true }
+    )
+  })
 })
 
 describe('Cloudflare domain authorization', () => {
@@ -391,7 +451,8 @@ describe('Cloudflare domain authorization', () => {
         input: {
           cloudflareAccountId: 'cf-account-1',
           cloudflareZoneId: 'cf-zone-1',
-          domain: 'example.test'
+          domain: 'example.test',
+          grantPublicId: TEST_OLDER_GRANT_PUBLIC_ID
         }
       })
     ).rejects.toMatchObject({
@@ -404,6 +465,324 @@ describe('Cloudflare domain authorization', () => {
     expect(cloudflareServiceTestState.createAgentMailWorkerCredentials).not.toHaveBeenCalled()
     expect(cloudflareServiceTestState.applyCloudflareProvisioning).not.toHaveBeenCalled()
     expect(cloudflareServiceTestState.syncAgentMailRuntimeProjection).not.toHaveBeenCalled()
+  })
+
+  it('lists Cloudflare accounts from every active grant with the owning grant public id', async () => {
+    expect.hasAssertions()
+    const { globals, mocks } = cloudflareGrantSelectionGlobals()
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    cloudflareServiceTestState.requireAgentMailOrganizationContext.mockResolvedValue({
+      ability: { cannot: vi.fn(() => false) },
+      organizationId: TEST_ORGANIZATION_ID
+    })
+    cloudflareServiceTestState.listCloudflareAccounts.mockImplementation(async (accessToken: string) => {
+      if (accessToken === 'token-for-cloudflare-user-old') {
+        return [{ id: 'cf-account-old', name: 'Older Account', type: 'standard' }]
+      }
+      if (accessToken === 'token-for-cloudflare-user-new') {
+        return [{ id: 'cf-account-new', name: 'Newer Account', type: 'enterprise' }]
+      }
+      return []
+    })
+    const { listConnectedCloudflareAccounts } = await import('./service')
+
+    await expect(listConnectedCloudflareAccounts(new Headers())).resolves.toStrictEqual([
+      {
+        grantPublicId: TEST_OLDER_GRANT_PUBLIC_ID,
+        id: 'cf-account-old',
+        name: 'Older Account',
+        type: 'standard'
+      },
+      {
+        grantPublicId: TEST_NEWER_GRANT_PUBLIC_ID,
+        id: 'cf-account-new',
+        name: 'Newer Account',
+        type: 'enterprise'
+      }
+    ])
+
+    expect(mocks.grantFind).toHaveBeenCalledWith({
+      organizationId: TEST_ORGANIZATION_ID,
+      status: 'active',
+      userId: TEST_USER_ID
+    })
+    expect(mocks.grantFindOne).not.toHaveBeenCalled()
+    expect(cloudflareServiceTestState.listCloudflareAccounts).toHaveBeenCalledWith(
+      'token-for-cloudflare-user-old'
+    )
+    expect(cloudflareServiceTestState.listCloudflareAccounts).toHaveBeenCalledWith(
+      'token-for-cloudflare-user-new'
+    )
+  })
+
+  it('lists Cloudflare zones from the selected non-newest grant public id', async () => {
+    expect.hasAssertions()
+    const { globals, mocks } = cloudflareGrantSelectionGlobals()
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    cloudflareServiceTestState.requireAgentMailOrganizationContext.mockResolvedValue({
+      ability: { cannot: vi.fn(() => false) },
+      organizationId: TEST_ORGANIZATION_ID
+    })
+    cloudflareServiceTestState.listCloudflareZones.mockResolvedValue([
+      {
+        accountId: 'cf-account-old',
+        accountName: 'Older Account',
+        id: 'cf-zone-old',
+        name: 'old.example.test',
+        status: 'active'
+      }
+    ])
+    const { listConnectedCloudflareZones } = await import('./service')
+
+    await expect(
+      listConnectedCloudflareZones({
+        cloudflareAccountId: 'cf-account-old',
+        grantPublicId: TEST_OLDER_GRANT_PUBLIC_ID,
+        headers: new Headers()
+      })
+    ).resolves.toStrictEqual([
+      {
+        accountId: 'cf-account-old',
+        accountName: 'Older Account',
+        grantPublicId: TEST_OLDER_GRANT_PUBLIC_ID,
+        id: 'cf-zone-old',
+        name: 'old.example.test',
+        status: 'active'
+      }
+    ])
+
+    expect(mocks.grantFindOne).toHaveBeenCalledWith({
+      _id: TEST_OLDER_GRANT_ID,
+      organizationId: TEST_ORGANIZATION_ID,
+      status: 'active',
+      userId: TEST_USER_ID
+    })
+    expect(mocks.grantFind).not.toHaveBeenCalled()
+    expect(cloudflareServiceTestState.listCloudflareZones).toHaveBeenCalledWith({
+      accessToken: 'token-for-cloudflare-user-old',
+      cloudflareAccountId: 'cf-account-old'
+    })
+  })
+
+  it('keeps compatibility zone listing on all active grants when no grant public id is supplied', async () => {
+    expect.hasAssertions()
+    const { globals, mocks } = cloudflareGrantSelectionGlobals()
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    cloudflareServiceTestState.requireAgentMailOrganizationContext.mockResolvedValue({
+      ability: { cannot: vi.fn(() => false) },
+      organizationId: TEST_ORGANIZATION_ID
+    })
+    cloudflareServiceTestState.listCloudflareZones.mockImplementation(
+      async ({ accessToken }: { accessToken: string }) => {
+        if (accessToken === 'token-for-cloudflare-user-old') {
+          return [
+            {
+              accountId: 'cf-account-old',
+              accountName: 'Older Account',
+              id: 'cf-zone-old',
+              name: 'old.example.test',
+              status: 'active'
+            }
+          ]
+        }
+        if (accessToken === 'token-for-cloudflare-user-new') {
+          return [
+            {
+              accountId: 'cf-account-new',
+              accountName: 'Newer Account',
+              id: 'cf-zone-new',
+              name: 'new.example.test',
+              status: 'active'
+            }
+          ]
+        }
+        return []
+      }
+    )
+    const { listConnectedCloudflareZones } = await import('./service')
+
+    await expect(listConnectedCloudflareZones({ headers: new Headers() })).resolves.toStrictEqual([
+      {
+        accountId: 'cf-account-old',
+        accountName: 'Older Account',
+        grantPublicId: TEST_OLDER_GRANT_PUBLIC_ID,
+        id: 'cf-zone-old',
+        name: 'old.example.test',
+        status: 'active'
+      },
+      {
+        accountId: 'cf-account-new',
+        accountName: 'Newer Account',
+        grantPublicId: TEST_NEWER_GRANT_PUBLIC_ID,
+        id: 'cf-zone-new',
+        name: 'new.example.test',
+        status: 'active'
+      }
+    ])
+
+    expect(mocks.grantFind).toHaveBeenCalledWith({
+      organizationId: TEST_ORGANIZATION_ID,
+      status: 'active',
+      userId: TEST_USER_ID
+    })
+    expect(mocks.grantFindOne).not.toHaveBeenCalled()
+  })
+
+  it('connects a domain to the exact active grant selected by grant public id', async () => {
+    expect.hasAssertions()
+    const { globals, mocks } = cloudflareGrantSelectionGlobals()
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    cloudflareServiceTestState.requireAgentMailOrganizationContext.mockResolvedValue({
+      ability: { cannot: vi.fn(() => false) },
+      organizationId: TEST_ORGANIZATION_ID
+    })
+    const { connectCloudflareDomain } = await import('./service')
+
+    await expect(
+      connectCloudflareDomain({
+        headers: new Headers(),
+        input: {
+          cloudflareAccountId: 'cf-account-old',
+          cloudflareAccountName: 'Older Account',
+          cloudflareZoneId: 'cf-zone-old',
+          cloudflareZoneName: 'old.example.test',
+          domain: 'Example.COM',
+          grantPublicId: TEST_OLDER_GRANT_PUBLIC_ID
+        }
+      })
+    ).resolves.toMatchObject({
+      cloudflareAccountId: 'cf-account-old',
+      cloudflareZoneId: 'cf-zone-old',
+      domain: 'example.com',
+      status: 'connected'
+    })
+
+    expect(mocks.grantFindOne).toHaveBeenCalledWith({
+      _id: TEST_OLDER_GRANT_ID,
+      organizationId: TEST_ORGANIZATION_ID,
+      status: 'active',
+      userId: TEST_USER_ID
+    })
+    expect(mocks.grantFind).not.toHaveBeenCalled()
+    expect(mocks.connectionFindOneAndUpdate).toHaveBeenCalledWith(
+      {
+        cloudflareAccountId: 'cf-account-old',
+        cloudflareZoneId: 'cf-zone-old',
+        domain: 'example.com',
+        organizationId: TEST_ORGANIZATION_ID
+      },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          grantId: TEST_OLDER_GRANT_ID,
+          status: 'connected'
+        })
+      }),
+      { returnDocument: 'after', upsert: true }
+    )
+  })
+})
+
+describe('Cloudflare disconnect service', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.stubEnv('DATABASE_URL', 'mongodb://localhost:27017/app')
+    vi.stubEnv('ENCRYPT_SECRET_KEY', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
+    vi.stubEnv('PUBLIC_HOSTNAME', 'https://mail.example.test')
+    cloudflareServiceTestState.globals.mockReset()
+    cloudflareServiceTestState.requireAgentMailOrganizationContext.mockReset()
+    cloudflareServiceTestState.syncAgentMailRuntimeProjection.mockReset()
+  })
+
+  it('disconnects only the exact active grant selected by public id', async () => {
+    expect.hasAssertions()
+    const headers = new Headers()
+    const { globals, mocks } = cloudflareDisconnectGlobals()
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    cloudflareServiceTestState.requireAgentMailOrganizationContext.mockResolvedValue({
+      ability: { cannot: vi.fn(() => false) },
+      organizationId: TEST_ORGANIZATION_ID
+    })
+    const { disconnectCloudflare } = await import('./service')
+
+    await expect(
+      disconnectCloudflare({
+        grantPublicId: TEST_OLDER_GRANT_PUBLIC_ID,
+        headers
+      })
+    ).resolves.toMatchObject({
+      grants: expect.arrayContaining([
+        expect.objectContaining({
+          cloudflareUserId: 'cloudflare-user-old',
+          status: 'revoked'
+        }),
+        expect.objectContaining({
+          cloudflareUserId: 'cloudflare-user-new',
+          status: 'active'
+        })
+      ])
+    })
+
+    expect(mocks.grantFindOne).toHaveBeenCalledWith({
+      _id: TEST_OLDER_GRANT_ID,
+      organizationId: TEST_ORGANIZATION_ID,
+      status: 'active',
+      userId: TEST_USER_ID
+    })
+    expect(mocks.grantUpdateOne).toHaveBeenCalledWith(
+      { _id: TEST_OLDER_GRANT_ID },
+      {
+        $set: {
+          lastErrorCode: null,
+          lastErrorMessage: null,
+          status: 'revoked'
+        }
+      }
+    )
+    expect(mocks.connectionUpdateMany).toHaveBeenCalledWith(
+      { grantId: TEST_OLDER_GRANT_ID, organizationId: TEST_ORGANIZATION_ID },
+      {
+        $set: {
+          encryptedWorkerHmacSecret: null,
+          hmacSecretReference: null,
+          status: 'disconnected'
+        }
+      }
+    )
+    expect(mocks.authUnlinkAccount).toHaveBeenCalledWith({
+      body: {
+        accountId: 'cloudflare-user-old',
+        providerId: 'cloudflare'
+      },
+      headers
+    })
+    expect(cloudflareServiceTestState.syncAgentMailRuntimeProjection).toHaveBeenCalledWith(
+      expect.any(Object),
+      { reason: 'cloudflare-disconnect' }
+    )
+  })
+
+  it('rejects omitted grant public ids after authz without selecting the newest active grant', async () => {
+    expect.hasAssertions()
+    const { globals, mocks } = cloudflareDisconnectGlobals()
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    cloudflareServiceTestState.requireAgentMailOrganizationContext.mockResolvedValue({
+      ability: { cannot: vi.fn(() => false) },
+      organizationId: TEST_ORGANIZATION_ID
+    })
+    const { disconnectCloudflare } = await import('./service')
+
+    await expect(
+      disconnectCloudflare({
+        grantPublicId: undefined as unknown as string,
+        headers: new Headers()
+      })
+    ).rejects.toThrow('Cloudflare grant public id is required')
+
+    expect(mocks.authGetSession).toHaveBeenCalled()
+    expect(cloudflareServiceTestState.requireAgentMailOrganizationContext).toHaveBeenCalled()
+    expect(mocks.grantFindOne).not.toHaveBeenCalled()
+    expect(mocks.grantUpdateOne).not.toHaveBeenCalled()
+    expect(mocks.authUnlinkAccount).not.toHaveBeenCalled()
   })
 })
 
@@ -656,6 +1035,16 @@ describe('Cloudflare control raw sending', () => {
 
 const TEST_ORGANIZATION_ID = '01960000-0000-7000-8000-000000000010'
 const TEST_USER_ID = '01960000-0000-7000-8000-000000000011'
+const TEST_OTHER_USER_ID = '01960000-0000-7000-8000-000000000012'
+const TEST_INTENT_ID = '01960000-0000-7000-8000-000000000013'
+const TEST_INTENT_PUBLIC_ID = publicIdFromUUIDv7(TEST_INTENT_ID)
+const TEST_OLDER_GRANT_ID = '01960000-0000-7000-8000-000000000021'
+const TEST_NEWER_GRANT_ID = '01960000-0000-7000-8000-000000000022'
+const TEST_OTHER_USER_GRANT_ID = '01960000-0000-7000-8000-000000000023'
+const TEST_CURRENT_USER_GRANT_ID = '01960000-0000-7000-8000-000000000024'
+const TEST_OLDER_GRANT_PUBLIC_ID = publicIdFromUUIDv7(TEST_OLDER_GRANT_ID)
+const TEST_NEWER_GRANT_PUBLIC_ID = publicIdFromUUIDv7(TEST_NEWER_GRANT_ID)
+const TEST_CURRENT_USER_GRANT_PUBLIC_ID = publicIdFromUUIDv7(TEST_CURRENT_USER_GRANT_ID)
 
 function cloudflareOAuthStartGlobals() {
   const mocks = {
@@ -722,6 +1111,120 @@ function cloudflareOAuthStartGlobals() {
         }
       }
     },
+    mocks
+  }
+}
+
+function cloudflareOAuthFinalizeGlobals() {
+  const now = new Date('2026-06-23T10:00:00.000Z')
+  const grants = [
+    {
+      _id: TEST_OTHER_USER_GRANT_ID,
+      betterAuthAccountId: '01960000-0000-7000-8000-000000000043',
+      cloudflareEmail: null,
+      cloudflareUserId: 'cloudflare-user-shared',
+      createdAt: now,
+      grantedScopes: ['zone:read'],
+      lastErrorCode: null,
+      lastErrorMessage: null,
+      lastRefreshAt: null,
+      lastTokenCheckAt: null,
+      organizationId: TEST_ORGANIZATION_ID,
+      requiredScopes: ['zone:read'],
+      status: 'active',
+      updatedAt: now,
+      userId: TEST_OTHER_USER_ID
+    }
+  ]
+  const mocks = {
+    accountFindOne: vi.fn(() =>
+      sortedQuery({
+        _id: '01960000-0000-7000-8000-000000000044',
+        accountId: 'cloudflare-user-shared',
+        providerId: 'cloudflare',
+        scope: 'zone:read',
+        userId: TEST_USER_ID
+      })
+    ),
+    authGetSession: vi.fn(() =>
+      Promise.resolve({
+        session: {
+          activeOrganizationId: TEST_ORGANIZATION_ID,
+          id: 'session-1'
+        },
+        user: {
+          id: TEST_USER_ID
+        }
+      })
+    ),
+    grantFindOneAndUpdate: vi.fn(
+      (
+        query: Record<string, unknown>,
+        update: { $set: Record<string, unknown>; $setOnInsert: Record<string, unknown> }
+      ) => {
+        const existingGrant = grants.find((grant) => recordMatchesQuery(grant, query))
+
+        if (existingGrant) {
+          Object.assign(existingGrant, update.$set, { updatedAt: now })
+          return execQuery(existingGrant)
+        }
+
+        const insertedGrant = {
+          _id: TEST_CURRENT_USER_GRANT_ID,
+          createdAt: now,
+          lastRefreshAt: null,
+          lastTokenCheckAt: null,
+          updatedAt: now,
+          ...update.$setOnInsert,
+          ...update.$set
+        }
+        grants.push(insertedGrant as (typeof grants)[number])
+        return execQuery(insertedGrant)
+      }
+    ),
+    intentFindOne: vi.fn(() =>
+      execQuery({
+        _id: TEST_INTENT_ID,
+        callbackPath: '/settings/connected-accounts/',
+        expiresAt: new Date(Date.now() + 60_000),
+        organizationId: TEST_ORGANIZATION_ID,
+        status: 'pending',
+        userId: TEST_USER_ID
+      })
+    ),
+    intentUpdateOne: vi.fn(() => execQuery({ modifiedCount: 1 })),
+    memberFindOne: vi.fn(() => execQuery({ role: 'member' })),
+    organizationFindById: vi.fn(() => execQuery({ _id: TEST_ORGANIZATION_ID }))
+  }
+  return {
+    globals: {
+      auth: {
+        api: {
+          getSession: mocks.authGetSession
+        }
+      },
+      db: {
+        models: {
+          account: {
+            findOne: mocks.accountFindOne
+          },
+          cloudflareOAuthConnectionIntent: {
+            findOne: mocks.intentFindOne,
+            updateOne: mocks.intentUpdateOne
+          },
+          cloudflareOAuthGrant: {
+            findOneAndUpdate: mocks.grantFindOneAndUpdate
+          },
+          member: {
+            findOne: mocks.memberFindOne
+          },
+          organization: {
+            findById: mocks.organizationFindById
+          }
+        }
+      }
+    },
+    grants,
     mocks
   }
 }
@@ -863,6 +1366,217 @@ function cloudflareAuthorizationGlobals() {
   }
 }
 
+function cloudflareDisconnectGlobals() {
+  const grants = [cloudflareSelectionGrant('older'), cloudflareSelectionGrant('newer')]
+  const connections = [cloudflareSelectionConnection()]
+  const mocks = {
+    authGetSession: vi.fn(() =>
+      Promise.resolve({
+        session: {
+          activeOrganizationId: TEST_ORGANIZATION_ID,
+          id: 'session-1'
+        },
+        user: {
+          id: TEST_USER_ID
+        }
+      })
+    ),
+    authUnlinkAccount: vi.fn(() => Promise.resolve({})),
+    connectionFind: vi.fn((query: Record<string, unknown>) => {
+      if ('grantId' in query) {
+        return execSortableQuery(connections.filter((connection) => recordMatchesQuery(connection, query)))
+      }
+      return sortedQuery(connections)
+    }),
+    connectionUpdateMany: vi.fn((query: Record<string, unknown>, update: { $set: Record<string, unknown> }) => {
+      for (const connection of connections) {
+        if (recordMatchesQuery(connection, query)) {
+          Object.assign(connection, update.$set)
+        }
+      }
+      return execQuery({ modifiedCount: connections.length })
+    }),
+    deploymentUpdateMany: vi.fn(() => execQuery({ modifiedCount: 1 })),
+    domainUpdateMany: vi.fn(() => execQuery({ modifiedCount: 1 })),
+    grantFind: vi.fn(() => sortedQuery(grants)),
+    grantFindOne: vi.fn((query: Record<string, unknown>) => {
+      if ('_id' in query) {
+        return execSortableQuery(grants.find((grant) => recordMatchesQuery(grant, query)) ?? null)
+      }
+      return execSortableQuery(cloudflareSelectionGrant('newer'))
+    }),
+    grantUpdateOne: vi.fn((query: Record<string, unknown>, update: { $set: Record<string, unknown> }) => {
+      const grant = grants.find((candidate) => recordMatchesQuery(candidate, query))
+      if (grant) {
+        Object.assign(grant, update.$set)
+      }
+      return execQuery({ modifiedCount: grant ? 1 : 0 })
+    }),
+    memberFindOne: vi.fn(() => execQuery({ role: 'member' })),
+    organizationFindById: vi.fn(() => execQuery({ _id: TEST_ORGANIZATION_ID }))
+  }
+  return {
+    globals: {
+      auth: {
+        api: {
+          getSession: mocks.authGetSession,
+          unlinkAccount: mocks.authUnlinkAccount
+        }
+      },
+      db: {
+        models: {
+          agentMailDomain: {
+            updateMany: mocks.domainUpdateMany
+          },
+          agentMailWorkerDeployment: {
+            updateMany: mocks.deploymentUpdateMany
+          },
+          cloudflareConnection: {
+            find: mocks.connectionFind,
+            updateMany: mocks.connectionUpdateMany
+          },
+          cloudflareOAuthGrant: {
+            find: mocks.grantFind,
+            findOne: mocks.grantFindOne,
+            updateOne: mocks.grantUpdateOne
+          },
+          member: {
+            findOne: mocks.memberFindOne
+          },
+          organization: {
+            findById: mocks.organizationFindById
+          }
+        }
+      }
+    },
+    mocks
+  }
+}
+
+function cloudflareGrantSelectionGlobals() {
+  const grants = [cloudflareSelectionGrant('older'), cloudflareSelectionGrant('newer')]
+  const connection = cloudflareSelectionConnection()
+  const mocks = {
+    authGetAccessToken: vi.fn(
+      ({ body }: { body: { accountId: string; providerId: string; userId?: string } }) =>
+        Promise.resolve({
+          accessToken: `token-for-${body.accountId}`
+        })
+    ),
+    authGetSession: vi.fn(() =>
+      Promise.resolve({
+        session: {
+          activeOrganizationId: TEST_ORGANIZATION_ID,
+          id: 'session-1'
+        },
+        user: {
+          id: TEST_USER_ID
+        }
+      })
+    ),
+    connectionFindByIdAndUpdate: vi.fn(() => execQuery(connection)),
+    connectionFindOneAndUpdate: vi.fn(() => execQuery(connection)),
+    domainFindOneAndUpdate: vi.fn(() =>
+      execQuery({
+        _id: '01960000-0000-7000-8000-000000000032',
+        cloudflareConnectionId: connection._id,
+        domain: connection.domain,
+        organizationId: TEST_ORGANIZATION_ID,
+        status: 'connected'
+      })
+    ),
+    grantFind: vi.fn(() => sortedQuery(grants)),
+    grantFindOne: vi.fn((query: Record<string, unknown>) =>
+      execQuery(
+        grants.find(
+          (grant) =>
+            grant._id === query._id &&
+            grant.organizationId === query.organizationId &&
+            grant.status === query.status &&
+            grant.userId === query.userId
+        ) ?? null
+      )
+    ),
+    grantUpdateOne: vi.fn(() => execQuery({ modifiedCount: 1 })),
+    memberFindOne: vi.fn(() => execQuery({ role: 'member' })),
+    organizationFindById: vi.fn(() => execQuery({ _id: TEST_ORGANIZATION_ID }))
+  }
+  return {
+    globals: {
+      auth: {
+        api: {
+          getAccessToken: mocks.authGetAccessToken,
+          getSession: mocks.authGetSession
+        }
+      },
+      db: {
+        models: {
+          agentMailDomain: {
+            findOneAndUpdate: mocks.domainFindOneAndUpdate
+          },
+          cloudflareConnection: {
+            findByIdAndUpdate: mocks.connectionFindByIdAndUpdate,
+            findOneAndUpdate: mocks.connectionFindOneAndUpdate
+          },
+          cloudflareOAuthGrant: {
+            find: mocks.grantFind,
+            findOne: mocks.grantFindOne,
+            updateOne: mocks.grantUpdateOne
+          },
+          member: {
+            findOne: mocks.memberFindOne
+          },
+          organization: {
+            findById: mocks.organizationFindById
+          }
+        }
+      }
+    },
+    mocks
+  }
+}
+
+function cloudflareSelectionGrant(kind: 'older' | 'newer') {
+  const isOlder = kind === 'older'
+  return {
+    _id: isOlder ? TEST_OLDER_GRANT_ID : TEST_NEWER_GRANT_ID,
+    betterAuthAccountId: isOlder
+      ? '01960000-0000-7000-8000-000000000041'
+      : '01960000-0000-7000-8000-000000000042',
+    cloudflareUserId: isOlder ? 'cloudflare-user-old' : 'cloudflare-user-new',
+    grantedScopes: ['zone:read'],
+    organizationId: TEST_ORGANIZATION_ID,
+    requiredScopes: ['zone:read'],
+    status: 'active',
+    updatedAt: isOlder
+      ? new Date('2026-06-23T10:00:00.000Z')
+      : new Date('2026-06-24T10:00:00.000Z'),
+    userId: TEST_USER_ID
+  }
+}
+
+function cloudflareSelectionConnection() {
+  return {
+    _id: '01960000-0000-7000-8000-000000000031',
+    cloudflareAccountId: 'cf-account-old',
+    cloudflareAccountName: 'Older Account',
+    cloudflareZoneId: 'cf-zone-old',
+    cloudflareZoneName: 'old.example.test',
+    createdAt: new Date('2026-06-23T10:00:00.000Z'),
+    domain: 'example.com',
+    grantId: TEST_OLDER_GRANT_ID,
+    lastErrorCode: null,
+    lastErrorMessage: null,
+    lastProvisionedAt: null,
+    organizationId: TEST_ORGANIZATION_ID,
+    provisioningStatus: 'not_started',
+    status: 'connected',
+    updatedAt: new Date('2026-06-23T10:00:00.000Z'),
+    userId: TEST_USER_ID,
+    workerScriptName: null
+  }
+}
+
 function refreshDb({
   connection,
   deployments,
@@ -934,10 +1648,21 @@ function sortedQuery(value: unknown) {
   }
 }
 
+function execSortableQuery(value: unknown) {
+  return {
+    exec: vi.fn(() => Promise.resolve(value)),
+    sort: vi.fn(() => execQuery(value))
+  }
+}
+
 function execQuery(value: unknown) {
   return {
     exec: vi.fn(() => Promise.resolve(value))
   }
+}
+
+function recordMatchesQuery(record: Record<string, unknown>, query: Record<string, unknown>): boolean {
+  return Object.entries(query).every(([key, value]) => record[key] === value)
 }
 
 function workerDeployment() {

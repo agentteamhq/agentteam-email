@@ -10,6 +10,7 @@ describe('dashboard route search', () => {
       'cliAccess',
       'agent-access',
       'agentAccess',
+      'connected-accounts',
       'domains',
       'connectedAccounts',
       'security'

@@ -75,6 +75,7 @@ import type {
   AgentMailWebThreadMessage,
   AgentMailWebWorkspace,
   CloudflareAccountSummary,
+  CloudflareConnectionInput,
   CloudflareOAuthReturnTarget,
   CloudflareStatusResult,
   CloudflareZoneSummary
@@ -202,6 +203,8 @@ interface CloudflareOAuthCallbackState {
   intentPublicId: string
   oauthError?: string
 }
+
+type CloudflareGrantPublicId = CloudflareStatusResult['grants'][number]['publicId']
 
 interface DomainSettingsControllerResult {
   dashboardOnboardingStartOAuth?: () => void
@@ -393,6 +396,9 @@ function useDomainSettingsController({
   const [runtimeMailStatusMessage, setRuntimeMailStatusMessage] = React.useState<string | null>(null)
   const [runtimeAccounts, setRuntimeAccounts] = React.useState<CloudflareAccountSummary[]>([])
   const [runtimeZones, setRuntimeZones] = React.useState<CloudflareZoneSummary[]>([])
+  const [runtimeSelectedGrantPublicId, setRuntimeSelectedGrantPublicId] = React.useState<
+    CloudflareAccountSummary['grantPublicId'] | ''
+  >('')
   const [runtimeSelectedAccountId, setRuntimeSelectedAccountId] = React.useState('')
   const [runtimeSelectedZoneId, setRuntimeSelectedZoneId] = React.useState('')
   const [runtimeSelectedDomainPublicId, setRuntimeSelectedDomainPublicId] =
@@ -403,21 +409,42 @@ function useDomainSettingsController({
   const [runtimeBusy, setRuntimeBusy] = React.useState(false)
   const handledCloudflareIntentIdsRef = React.useRef(new Set<string>())
 
-  const selectedAccount = runtimeAccounts.find((account) => account.id === runtimeSelectedAccountId) ?? null
-  const selectedZone = runtimeZones.find((zone) => zone.id === runtimeSelectedZoneId) ?? null
+  const selectedAccount =
+    runtimeAccounts.find(
+      (account) =>
+        account.id === runtimeSelectedAccountId &&
+        (!runtimeSelectedGrantPublicId || account.grantPublicId === runtimeSelectedGrantPublicId)
+    ) ?? null
+  const selectedZone =
+    runtimeZones.find(
+      (zone) =>
+        zone.id === runtimeSelectedZoneId &&
+        (!runtimeSelectedGrantPublicId || zone.grantPublicId === runtimeSelectedGrantPublicId)
+    ) ?? null
 
   const loadCloudflareDomainsForStatus = React.useCallback(
     async (statusForEligibility: CloudflareStatusResult | null) => {
       const accounts = await fetchCloudflareAccounts()
+      const usableGrantPublicIds = usableCloudflareGrantPublicIds(statusForEligibility)
+      const eligibleAccounts =
+        usableGrantPublicIds.size > 0
+          ? accounts.filter((account) => usableGrantPublicIds.has(account.grantPublicId))
+          : accounts
       const zoneResults = await Promise.allSettled(
-        accounts.map((account) => fetchCloudflareZones(account.id))
+        eligibleAccounts.map((account) =>
+          fetchCloudflareZones({
+            accountId: account.id,
+            grantPublicId: account.grantPublicId
+          })
+        )
       )
       const zones = zoneResults.flatMap((result) => (result.status === 'fulfilled' ? [...result.value] : []))
       const firstZone = firstEligibleCloudflareZone(zones, statusForEligibility)
 
-      setRuntimeAccounts([...accounts])
+      setRuntimeAccounts([...eligibleAccounts])
       setRuntimeZones(zones)
-      setRuntimeSelectedAccountId(firstZone?.accountId ?? accounts[0]?.id ?? '')
+      setRuntimeSelectedGrantPublicId(firstZone?.grantPublicId ?? eligibleAccounts[0]?.grantPublicId ?? '')
+      setRuntimeSelectedAccountId(firstZone?.accountId ?? eligibleAccounts[0]?.id ?? '')
       setRuntimeSelectedZoneId(firstZone?.id ?? '')
       setRuntimeDraftDomain(firstZone?.name ?? '')
 
@@ -483,7 +510,7 @@ function useDomainSettingsController({
       runtimeBusy ||
       runtimeAccounts.length > 0 ||
       runtimeZones.length > 0 ||
-      !(runtimeStatus?.grants.some((grant) => grant.status === 'active') ?? false)
+      usableCloudflareGrantPublicIds(runtimeStatus).size === 0
     ) {
       return
     }
@@ -592,7 +619,11 @@ function useDomainSettingsController({
     startOAuth('dashboard-onboarding').catch(handleUnexpectedCloudflareActionError)
   }, [handleUnexpectedCloudflareActionError, startOAuth])
 
-  const startSettingsOAuth = React.useCallback(() => {
+  const startSettingsConnectedAccountsOAuth = React.useCallback(() => {
+    startOAuth('settings-connected-accounts').catch(handleUnexpectedCloudflareActionError)
+  }, [handleUnexpectedCloudflareActionError, startOAuth])
+
+  const startSettingsDomainsOAuth = React.useCallback(() => {
     startOAuth('settings-domains').catch(handleUnexpectedCloudflareActionError)
   }, [handleUnexpectedCloudflareActionError, startOAuth])
 
@@ -613,16 +644,20 @@ function useDomainSettingsController({
   }, [isInjectedState, loadCloudflareDomainsForStatus, readOnly, runtimeStatus])
 
   const loadZones = React.useCallback(async () => {
-    if (isInjectedState || readOnly || !runtimeSelectedAccountId) {
+    if (isInjectedState || readOnly || !runtimeSelectedAccountId || !runtimeSelectedGrantPublicId) {
       return
     }
 
     setRuntimeBusy(true)
     setRuntimeMessage(null)
     try {
-      const zones = await fetchCloudflareZones(runtimeSelectedAccountId)
+      const zones = await fetchCloudflareZones({
+        accountId: runtimeSelectedAccountId,
+        grantPublicId: runtimeSelectedGrantPublicId
+      })
       const firstZone = firstEligibleCloudflareZone(zones, runtimeStatus)
       setRuntimeZones([...zones])
+      setRuntimeSelectedGrantPublicId(firstZone?.grantPublicId ?? runtimeSelectedGrantPublicId)
       setRuntimeSelectedZoneId(firstZone?.id ?? '')
       setRuntimeDraftDomain(firstZone?.name ?? '')
     } catch (error) {
@@ -630,7 +665,7 @@ function useDomainSettingsController({
     } finally {
       setRuntimeBusy(false)
     }
-  }, [isInjectedState, readOnly, runtimeSelectedAccountId, runtimeStatus])
+  }, [isInjectedState, readOnly, runtimeSelectedAccountId, runtimeSelectedGrantPublicId, runtimeStatus])
 
   const connectDomain = React.useCallback(async () => {
     if (isInjectedState || readOnly) {
@@ -646,11 +681,11 @@ function useDomainSettingsController({
     setRuntimeMessage(null)
     try {
       const nextStatus = await connectCloudflareDomain({
-        cloudflareAccountId: selectedAccount.id,
-        cloudflareAccountName: selectedAccount.name,
-        cloudflareZoneId: selectedZone.id,
-        cloudflareZoneName: selectedZone.name,
-        domain: runtimeDraftDomain
+        ...cloudflareConnectionInputForSelectedDomain({
+          account: selectedAccount,
+          domain: runtimeDraftDomain,
+          zone: selectedZone
+        })
       })
       setRuntimeStatus(nextStatus)
       setRuntimeSelectedDomainPublicId(
@@ -712,11 +747,11 @@ function useDomainSettingsController({
     setRuntimeMessage(null)
     try {
       const connectedStatus = await connectCloudflareDomain({
-        cloudflareAccountId: selectedAccount.id,
-        cloudflareAccountName: selectedAccount.name,
-        cloudflareZoneId: selectedZone.id,
-        cloudflareZoneName: selectedZone.name,
-        domain: runtimeDraftDomain
+        ...cloudflareConnectionInputForSelectedDomain({
+          account: selectedAccount,
+          domain: runtimeDraftDomain,
+          zone: selectedZone
+        })
       })
       const connectionPublicId = findCloudflareConnectionPublicId(
         connectedStatus,
@@ -748,7 +783,7 @@ function useDomainSettingsController({
   }, [isInjectedState, readOnly, refreshMailStatus, runtimeDraftDomain, selectedAccount, selectedZone])
 
   const disconnectCloudflare = React.useCallback(
-    async (grantPublicId?: string) => {
+    async (grantPublicId: CloudflareGrantPublicId) => {
       if (isInjectedState || readOnly) {
         return
       }
@@ -820,6 +855,8 @@ function useDomainSettingsController({
         if (readOnly) {
           return
         }
+        const nextAccount = runtimeAccounts.find((account) => account.id === accountId) ?? null
+        setRuntimeSelectedGrantPublicId(nextAccount?.grantPublicId ?? '')
         setRuntimeSelectedAccountId(accountId)
         setRuntimeSelectedZoneId('')
         setRuntimeZones([])
@@ -837,21 +874,30 @@ function useDomainSettingsController({
         if (readOnly) {
           return
         }
-        const nextZone = runtimeZones.find((zone) => zone.id === zoneId) ?? null
-        setRuntimeSelectedZoneId(zoneId)
+        const zoneSelection = parseCloudflareZoneSelectionValue(zoneId)
+        const nextZone =
+          runtimeZones.find(
+            (zone) =>
+              zone.id === zoneSelection.zoneId &&
+              (!zoneSelection.grantPublicId || zone.grantPublicId === zoneSelection.grantPublicId)
+          ) ?? null
+        setRuntimeSelectedGrantPublicId(nextZone?.grantPublicId ?? '')
+        setRuntimeSelectedZoneId(nextZone?.id ?? zoneSelection.zoneId)
         setRuntimeSelectedAccountId(nextZone?.accountId ?? '')
         setRuntimeDraftDomain(nextZone?.name ?? '')
       },
       onSetupDomain: () => {
         setupDomain().catch(handleUnexpectedCloudflareActionError)
       },
-      onStartOAuth: startSettingsOAuth,
+      onStartConnectedAccountOAuth: startSettingsConnectedAccountsOAuth,
+      onStartOAuth: startSettingsDomainsOAuth,
       onRefreshMailStatus: () => {
         refreshMailStatus().catch((error: unknown) => {
           setRuntimeMailStatusMessage(errorMessage(error, 'Failed to load mail runtime status.'))
         })
       },
       readOnly,
+      selectedGrantPublicId: runtimeSelectedGrantPublicId || undefined,
       selectedAccountId: runtimeSelectedAccountId,
       selectedDomainPublicId:
         runtimeSelectedDomainPublicId ?? runtimeStatus?.connections[0]?.publicId ?? null,
@@ -880,11 +926,62 @@ function selectCloudflareConnectionPublicId(
   )
 }
 
+export function cloudflareConnectionInputForSelectedDomain({
+  account,
+  domain,
+  zone
+}: {
+  account: CloudflareAccountSummary
+  domain: string
+  zone: CloudflareZoneSummary
+}): CloudflareConnectionInput {
+  return {
+    cloudflareAccountId: account.id,
+    cloudflareAccountName: account.name,
+    cloudflareZoneId: zone.id,
+    cloudflareZoneName: zone.name,
+    domain,
+    grantPublicId: zone.grantPublicId
+  }
+}
+
 function firstEligibleCloudflareZone(
   zones: readonly CloudflareZoneSummary[],
   status: CloudflareStatusResult | null
 ) {
   return zones.find((zone) => !isCloudflareZoneConnected(zone, status)) ?? null
+}
+
+function usableCloudflareGrantPublicIds(
+  status: CloudflareStatusResult | null
+): Set<CloudflareAccountSummary['grantPublicId']> {
+  return new Set(
+    status?.grants
+      .filter(
+        (grant) =>
+          grant.status === 'active' &&
+          grant.requiredScopes.every((scope) => grant.grantedScopes.includes(scope))
+      )
+      .map((grant) => grant.publicId) ?? []
+  )
+}
+
+function parseCloudflareZoneSelectionValue(value: string): {
+  grantPublicId: string | null
+  zoneId: string
+} {
+  const separatorIndex = value.indexOf('|')
+  if (separatorIndex <= 0) {
+    return {
+      grantPublicId: null,
+      zoneId: value
+    }
+  }
+
+  return {
+    grantPublicId: value.slice(0, separatorIndex),
+    zoneId: value.slice(separatorIndex + 1)
+  }
 }
 
 function isCloudflareZoneConnected(zone: CloudflareZoneSummary, status: CloudflareStatusResult | null) {

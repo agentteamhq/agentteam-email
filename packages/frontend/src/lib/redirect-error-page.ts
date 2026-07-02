@@ -1,4 +1,5 @@
 import { SITE_STRINGS } from '../strings'
+import type { CloudflareOAuthReturnTarget } from '@main/backend'
 
 export const REDIRECT_ERROR_ROUTE_PATH = '/redirect/error'
 
@@ -22,6 +23,12 @@ const SENSITIVE_PARAM_NAMES = new Set([
   'state',
   'token'
 ])
+
+const CLOUDFLARE_RETRY_HREF_BY_RETURN_TARGET = {
+  'dashboard-onboarding': '/dashboard/',
+  'settings-connected-accounts': '/settings/connected-accounts/',
+  'settings-domains': '/settings/domains/'
+} satisfies Record<CloudflareOAuthReturnTarget, string>
 
 export interface RedirectErrorViewState {
   callbackUri: string
@@ -84,11 +91,44 @@ export function createRedirectErrorViewState({
     providerLabel,
     providerMessage,
     redactedQueryKeys: redactedPageUri.redactedQueryKeys,
-    retryHref: isCloudflare && isConnectedAccount ? '/settings/domains/' : '/',
+    retryHref: readRetryHref(pageUrl, { isCloudflare, isConnectedAccount }),
     supportEmailHref: createSupportEmailHref(supportReference),
     supportReference,
     title: isCloudflare ? 'Cloudflare connection failed' : 'Connection redirect failed'
   }
+}
+
+function readRetryHref(
+  pageUrl: URL,
+  {
+    isCloudflare,
+    isConnectedAccount
+  }: {
+    isCloudflare: boolean
+    isConnectedAccount: boolean
+  }
+): string {
+  if (!isCloudflare) {
+    return '/'
+  }
+
+  const returnTarget = readCloudflareOAuthReturnTarget(pageUrl.searchParams.get('returnTarget'))
+
+  if (returnTarget) {
+    return CLOUDFLARE_RETRY_HREF_BY_RETURN_TARGET[returnTarget]
+  }
+
+  return isConnectedAccount ? '/settings/connected-accounts/' : '/'
+}
+
+function readCloudflareOAuthReturnTarget(value: string | null): CloudflareOAuthReturnTarget | null {
+  if (!value) {
+    return null
+  }
+
+  return Object.prototype.hasOwnProperty.call(CLOUDFLARE_RETRY_HREF_BY_RETURN_TARGET, value)
+    ? (value as CloudflareOAuthReturnTarget)
+    : null
 }
 
 function readSearchToken(value: string | null): string | null {

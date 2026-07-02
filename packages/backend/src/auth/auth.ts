@@ -68,6 +68,7 @@ export const BETTER_AUTH_SESSION_EXPIRES_IN = 60 * 60 * 24 * 180 // 180 days
 
 const DEFAULT_ORGANIZATION_SLUG_MAX_ATTEMPTS = 16
 const AT_EMAIL_CLI_DEVICE_CLIENT_ID = 'at-email-cli'
+export const AGENTTEAM_OAUTH_PROVIDER_POST_LOGIN_PAGE = '/settings/agent-access/'
 
 const atEmailCliDeviceAuthorizationOptions = {
   schema: {},
@@ -390,7 +391,7 @@ export function createGlobalAuth(db: Database): GlobalAuth {
         return activeOrganizationId ?? undefined
       },
       postLogin: {
-        page: '/settings/developer/',
+        page: AGENTTEAM_OAUTH_PROVIDER_POST_LOGIN_PAGE,
         consentReferenceId: ({ session }) => {
           const activeOrganizationId = (session as { activeOrganizationId?: string | null })
             .activeOrganizationId

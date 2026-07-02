@@ -3,6 +3,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
 
 import { validateDashboardSearch, validateSettingsSearch } from '../../lib/dashboard-search'
+import {
+  resolveOrganizationRouteSegment,
+  resolveSettingsRouteSegment
+} from '../../partials/authenticated/settings-dialog-sections'
 import { DashboardMailController } from '../../screens/dashboard-mail-client-controller'
 import type { SettingsRouteSearch } from '../../lib/dashboard-search'
 import type { AgentAccessSettingsState } from '../../partials/authenticated/settings-dialog'
@@ -76,7 +80,7 @@ function useStoryDashboardSearch(initialRouteSearch: SettingsRouteSearch | undef
   })
 
   React.useEffect(() => {
-    if (isSettingsPath(storyPath)) {
+    if (isCanonicalSettingsRoutePath(storyPath)) {
       router
         .navigate({
           href: storyPath,
@@ -133,11 +137,30 @@ function storyDashboardSearchFromRouterSearch(
 }
 
 function validateStorySearch(pathname: string, search: Record<string, unknown>): SettingsRouteSearch {
-  return isSettingsPath(pathname) ? validateSettingsSearch(search) : validateDashboardSearch(search)
+  return isCanonicalSettingsRoutePath(pathname)
+    ? validateSettingsSearch(search)
+    : validateDashboardSearch(search)
 }
 
-function isSettingsPath(pathname: string) {
-  return pathname === '/settings' || pathname === '/settings/' || pathname.startsWith('/settings/')
+function isCanonicalSettingsRoutePath(pathname: string) {
+  const normalizedPathname = pathname.endsWith('/') ? pathname : `${pathname}/`
+  if (normalizedPathname === '/settings/') {
+    return true
+  }
+
+  const settingsSectionMatch = /^\/settings\/([^/]+)\/$/u.exec(normalizedPathname)
+
+  return settingsSectionMatch
+    ? resolveSettingsRouteSegment(settingsSectionMatch[1]).type === 'section'
+    : isCanonicalOrganizationSettingsRoutePath(normalizedPathname)
+}
+
+function isCanonicalOrganizationSettingsRoutePath(pathname: string) {
+  const organizationSectionMatch = /^\/organization\/([^/]+)\/$/u.exec(pathname)
+
+  return organizationSectionMatch
+    ? resolveOrganizationRouteSegment(organizationSectionMatch[1]).type === 'section'
+    : false
 }
 
 function hasDashboardSearchValue(search: SettingsRouteSearch) {

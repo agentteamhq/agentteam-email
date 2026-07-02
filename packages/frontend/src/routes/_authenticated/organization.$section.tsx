@@ -1,15 +1,28 @@
-import { createFileRoute, useRouter } from '@tanstack/react-router'
+import { createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 
-import { readAuthenticatedRouteState } from '../../lib/authenticated-app-route'
+import {
+  readAuthenticatedRouteState,
+  type AuthenticatedRouteContext
+} from '../../lib/authenticated-app-route'
 import { validateDashboardSearch } from '../../lib/dashboard-search'
-import { getSettingsSectionHref } from '../../partials/authenticated/settings-dialog-sections'
+import {
+  getOrganizationSettingsSectionFromSegment,
+  getSettingsSectionHref
+} from '../../partials/authenticated/settings-dialog-sections'
 import { DashboardMailController } from '../../screens/dashboard-mail-client-controller'
 import { SITE_STRINGS, formatSiteTitle } from '../../strings'
 import type { SettingsSectionId } from '../../partials/authenticated/settings-dialog-sections'
 
+export interface OrganizationSettingsRouteLoaderInput {
+  context: AuthenticatedRouteContext
+  params: {
+    section?: string
+  }
+}
+
 export const Route = createFileRoute('/_authenticated/organization/$section')({
   validateSearch: validateDashboardSearch,
-  loader: ({ context }) => readAuthenticatedRouteState(context),
+  loader: loadOrganizationSettingsRouteState,
   head: () => ({
     meta: [
       {
@@ -24,12 +37,21 @@ export const Route = createFileRoute('/_authenticated/organization/$section')({
   component: OrganizationSettingsRouteScreen
 })
 
+export function loadOrganizationSettingsRouteState({
+  context,
+  params
+}: OrganizationSettingsRouteLoaderInput) {
+  requireOrganizationSettingsSection(params.section)
+
+  return readAuthenticatedRouteState(context)
+}
+
 function OrganizationSettingsRouteScreen() {
   const routeState = Route.useLoaderData()
   const { section } = Route.useParams()
   const search = Route.useSearch()
   const router = useRouter()
-  const settingsSection = section === 'people' ? 'organizationPeople' : 'organizationSettings'
+  const settingsSection = requireOrganizationSettingsSection(section)
 
   return (
     <DashboardMailController
@@ -48,4 +70,18 @@ function OrganizationSettingsRouteScreen() {
       settingsSection={settingsSection}
     />
   )
+}
+
+function requireOrganizationSettingsSection(section: string | undefined) {
+  const settingsSection = getOrganizationSettingsSectionFromSegment(section)
+  if (!settingsSection) {
+    throwOrganizationSettingsNotFound()
+  }
+
+  return settingsSection
+}
+
+function throwOrganizationSettingsNotFound(): never {
+  notFound({ throw: true })
+  throw new Error('TanStack Router did not throw not-found for /organization/$section.')
 }

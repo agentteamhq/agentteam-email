@@ -46,10 +46,25 @@ const activeCloudflareGrant = {
   lastErrorMessage: null
 } satisfies CloudflareGrantFixture
 
+const secondaryCloudflareGrant = {
+  ...activeCloudflareGrant,
+  publicId: cloudflareGrantPublicId('7n2bQa9K4rT0wCx6Pd3LmS'),
+  cloudflareUserId: 'cloudflare-user-a381',
+  cloudflareEmail: 'ops@example.com',
+  lastTokenCheckAt: new Date('2026-06-21T16:14:00.000Z')
+} satisfies CloudflareGrantFixture
+
 const connectedCloudflareAccounts = [
   {
+    grantPublicId: activeCloudflareGrant.publicId,
     id: '3d6f2b2d8e2a49a2bb6f2fb97e4c9d17',
     name: 'AgentTeam Production',
+    type: 'standard'
+  },
+  {
+    grantPublicId: secondaryCloudflareGrant.publicId,
+    id: '8a1c19e53f8543a79a91c8cdb6b0e7f2',
+    name: 'AgentTeam Operations',
     type: 'standard'
   }
 ] satisfies DomainSettingsState['accounts']
@@ -58,8 +73,17 @@ const connectedCloudflareZones = [
   {
     accountId: '3d6f2b2d8e2a49a2bb6f2fb97e4c9d17',
     accountName: 'AgentTeam Production',
+    grantPublicId: activeCloudflareGrant.publicId,
     id: '0f8b5f1816a946f28d263671a8f5e4aa',
     name: 'agentteam.example',
+    status: 'active'
+  },
+  {
+    accountId: '8a1c19e53f8543a79a91c8cdb6b0e7f2',
+    accountName: 'AgentTeam Operations',
+    grantPublicId: secondaryCloudflareGrant.publicId,
+    id: '7db727db0bb348e9a2db284a1f7a6cf4',
+    name: 'ops.agentteam.example',
     status: 'active'
   }
 ] satisfies DomainSettingsState['zones']
@@ -206,10 +230,11 @@ export const domainSettingsAddDomainSelectZoneState = {
   draftDomain: 'agentteam.example',
   mode: 'addDomain',
   selectedAccountId: connectedCloudflareAccounts[0]?.id,
+  selectedGrantPublicId: activeCloudflareGrant.publicId,
   selectedZoneId: connectedCloudflareZones[0]?.id,
   status: {
     connections: [],
-    grants: [activeCloudflareGrant]
+    grants: [activeCloudflareGrant, secondaryCloudflareGrant]
   },
   zones: connectedCloudflareZones
 } satisfies DomainSettingsState
@@ -220,7 +245,7 @@ export const domainSettingsDomainConnectedState = {
   selectedDomainPublicId: connectedCloudflareConnection.publicId,
   status: {
     connections: [connectedCloudflareConnection],
-    grants: [activeCloudflareGrant]
+    grants: [activeCloudflareGrant, secondaryCloudflareGrant]
   }
 } satisfies DomainSettingsState
 
@@ -236,7 +261,7 @@ export const domainSettingsDomainProvisioningState = {
   selectedDomainPublicId: pendingCloudflareConnection.publicId,
   status: {
     connections: [pendingCloudflareConnection],
-    grants: [activeCloudflareGrant]
+    grants: [activeCloudflareGrant, secondaryCloudflareGrant]
   }
 } satisfies DomainSettingsState
 
@@ -247,7 +272,7 @@ export const domainSettingsDomainLiveState = {
   selectedDomainPublicId: liveCloudflareConnection.publicId,
   status: {
     connections: [liveCloudflareConnection],
-    grants: [activeCloudflareGrant]
+    grants: [activeCloudflareGrant, secondaryCloudflareGrant]
   }
 } satisfies DomainSettingsState
 
@@ -263,7 +288,7 @@ export const domainSettingsDomainNeedsAttentionState = {
   selectedDomainPublicId: degradedCloudflareConnection.publicId,
   status: {
     connections: [degradedCloudflareConnection],
-    grants: [activeCloudflareGrant]
+    grants: [activeCloudflareGrant, secondaryCloudflareGrant]
   }
 } satisfies DomainSettingsState
 
@@ -281,7 +306,7 @@ export const domainSettingsDenseDomainListState = {
   selectedDomainPublicId: denseCloudflareConnections[0]?.publicId,
   status: {
     connections: denseCloudflareConnections,
-    grants: [activeCloudflareGrant]
+    grants: [activeCloudflareGrant, secondaryCloudflareGrant]
   }
 } satisfies DomainSettingsState
 

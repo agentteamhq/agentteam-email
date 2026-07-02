@@ -1,6 +1,25 @@
 import { describe, expect, it } from 'vitest'
+import type { CloudflareOAuthReturnTarget } from '@main/backend'
 
 import { createRedirectErrorViewState } from './redirect-error-page'
+
+const cloudflareReturnTargetRetryCases = [
+  {
+    retryHref: '/dashboard/',
+    returnTarget: 'dashboard-onboarding'
+  },
+  {
+    retryHref: '/settings/connected-accounts/',
+    returnTarget: 'settings-connected-accounts'
+  },
+  {
+    retryHref: '/settings/domains/',
+    returnTarget: 'settings-domains'
+  }
+] as const satisfies readonly {
+  retryHref: string
+  returnTarget: CloudflareOAuthReturnTarget
+}[]
 
 describe('redirect error page state', () => {
   it('builds Cloudflare connection context and redacts sensitive redirect fields', () => {
@@ -29,7 +48,7 @@ describe('redirect error page state', () => {
     expect(state.errorCode).toBe('invalid_request')
     expect(state.providerMessage).toBe('The request is missing the required redirect uri')
     expect(state.callbackUri).toBe('https://mail.example.test/rpc/auth/api/oauth2/callback/cloudflare')
-    expect(state.retryHref).toBe('/settings/domains/')
+    expect(state.retryHref).toBe('/settings/connected-accounts/')
     expect(state.redactedQueryKeys).toStrictEqual(['access_token', 'code', 'state'])
     expect(state.pageUri).toContain('code=%5Bredacted%5D')
     expect(state.pageUri).toContain('state=%5Bredacted%5D')
@@ -42,12 +61,51 @@ describe('redirect error page state', () => {
     )
   })
 
+  it.each(cloudflareReturnTargetRetryCases)(
+    'uses $returnTarget as the Cloudflare OAuth retry target',
+    ({ retryHref, returnTarget }) => {
+      expect.hasAssertions()
+      const state = createRedirectErrorViewState({
+        occurredAt: new Date('2026-06-30T12:00:00.000Z'),
+        publicHostname: 'https://mail.example.test',
+        url:
+          'https://mail.example.test/redirect/error?' +
+          new URLSearchParams({
+            error: 'invalid_request',
+            flow: 'connected-account',
+            provider: 'cloudflare',
+            returnTarget
+          }).toString()
+      })
+
+      expect(state.retryHref).toBe(retryHref)
+    }
+  )
+
+  it('falls back to connected-account settings for invalid Cloudflare OAuth return targets', () => {
+    expect.hasAssertions()
+    const state = createRedirectErrorViewState({
+      occurredAt: new Date('2026-06-30T12:00:00.000Z'),
+      publicHostname: 'https://mail.example.test',
+      url:
+        'https://mail.example.test/redirect/error?' +
+        new URLSearchParams({
+          error: 'invalid_request',
+          flow: 'connected-account',
+          provider: 'cloudflare',
+          returnTarget: 'https://attacker.example.test/settings'
+        }).toString()
+    })
+
+    expect(state.retryHref).toBe('/settings/connected-accounts/')
+  })
+
   it('falls back to generic redirect context when provider metadata is absent', () => {
     expect.hasAssertions()
     const state = createRedirectErrorViewState({
       occurredAt: new Date('2026-06-30T12:00:00.000Z'),
       publicHostname: 'https://mail.example.test',
-      url: 'https://mail.example.test/redirect/error?error=server_error'
+      url: 'https://mail.example.test/redirect/error?error=server_error&returnTarget=settings-domains'
     })
 
     expect(state.title).toBe('Connection redirect failed')

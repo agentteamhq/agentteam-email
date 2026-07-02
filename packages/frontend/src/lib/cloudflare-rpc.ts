@@ -8,6 +8,10 @@ import type {
   FinalizeCloudflareOAuthResult
 } from '@main/backend'
 
+type FetchCloudflareZonesInput = Pick<CloudflareAccountSummary, 'grantPublicId'> & {
+  accountId?: CloudflareAccountSummary['id']
+}
+
 export class CloudflareRPCError extends Error {
   constructor(
     message: string,
@@ -42,8 +46,11 @@ export async function fetchCloudflareAccounts(): Promise<readonly CloudflareAcco
   return readCloudflareRpcResult<{ accounts: CloudflareAccountSummary[] }>(result).accounts
 }
 
-export async function fetchCloudflareZones(accountId?: string): Promise<readonly CloudflareZoneSummary[]> {
-  const result = await rpc.cloudflare.zones.get({ query: { accountId } })
+export async function fetchCloudflareZones({
+  accountId,
+  grantPublicId
+}: FetchCloudflareZonesInput): Promise<readonly CloudflareZoneSummary[]> {
+  const result = await rpc.cloudflare.zones.get({ query: { accountId, grantPublicId } })
   return readCloudflareRpcResult<{ zones: CloudflareZoneSummary[] }>(result).zones
 }
 
@@ -63,9 +70,7 @@ export async function provisionCloudflareConnection(
   return fetchCloudflareStatus()
 }
 
-export async function disconnectCloudflareConnection(
-  grantPublicId?: string
-): Promise<CloudflareStatusResult> {
+export async function disconnectCloudflareConnection(grantPublicId: string): Promise<CloudflareStatusResult> {
   const result = await rpc.cloudflare.disconnect.post({ grantPublicId })
   return readCloudflareRpcResult<CloudflareStatusResult>(result)
 }

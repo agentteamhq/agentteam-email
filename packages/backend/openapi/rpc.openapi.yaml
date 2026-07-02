@@ -6579,6 +6579,7 @@ paths:
                   type: string
                   enum:
                     - dashboard-onboarding
+                    - settings-connected-accounts
                     - settings-domains
           application/x-www-form-urlencoded:
             schema:
@@ -6590,6 +6591,7 @@ paths:
                   type: string
                   enum:
                     - dashboard-onboarding
+                    - settings-connected-accounts
                     - settings-domains
           multipart/form-data:
             schema:
@@ -6601,6 +6603,7 @@ paths:
                   type: string
                   enum:
                     - dashboard-onboarding
+                    - settings-connected-accounts
                     - settings-domains
       responses:
         "200":
@@ -6790,13 +6793,22 @@ paths:
                     items:
                       type: object
                       required:
+                        - grantPublicId
                         - id
                         - name
+                        - type
                       properties:
+                        grantPublicId:
+                          type: string
                         id:
                           type: string
                         name:
                           type: string
+                        type:
+                          type: string
+                          enum:
+                            - standard
+                            - enterprise
         "401":
           description: Response for status 401
           content:
@@ -6829,6 +6841,12 @@ paths:
           schema:
             minLength: 1
             type: string
+        - name: grantPublicId
+          in: query
+          required: false
+          schema:
+            minLength: 1
+            type: string
       responses:
         "200":
           description: Response for status 200
@@ -6844,16 +6862,31 @@ paths:
                     items:
                       type: object
                       required:
+                        - accountId
+                        - accountName
+                        - grantPublicId
                         - id
                         - name
                         - status
                       properties:
+                        accountId:
+                          type: string
+                        accountName:
+                          nullable: true
+                          anyOf:
+                            - type: string
+                            - type: "null"
+                        grantPublicId:
+                          type: string
                         id:
                           type: string
                         name:
                           type: string
                         status:
-                          type: string
+                          nullable: true
+                          anyOf:
+                            - type: string
+                            - type: "null"
         "401":
           description: Response for status 401
           content:
@@ -6889,6 +6922,7 @@ paths:
                 - cloudflareAccountId
                 - cloudflareZoneId
                 - domain
+                - grantPublicId
               properties:
                 cloudflareAccountId:
                   minLength: 1
@@ -6907,6 +6941,9 @@ paths:
                     - type: string
                     - type: "null"
                 domain:
+                  minLength: 1
+                  type: string
+                grantPublicId:
                   minLength: 1
                   type: string
           application/x-www-form-urlencoded:
@@ -6916,6 +6953,7 @@ paths:
                 - cloudflareAccountId
                 - cloudflareZoneId
                 - domain
+                - grantPublicId
               properties:
                 cloudflareAccountId:
                   minLength: 1
@@ -6934,6 +6972,9 @@ paths:
                     - type: string
                     - type: "null"
                 domain:
+                  minLength: 1
+                  type: string
+                grantPublicId:
                   minLength: 1
                   type: string
           multipart/form-data:
@@ -6943,6 +6984,7 @@ paths:
                 - cloudflareAccountId
                 - cloudflareZoneId
                 - domain
+                - grantPublicId
               properties:
                 cloudflareAccountId:
                   minLength: 1
@@ -6961,6 +7003,9 @@ paths:
                     - type: string
                     - type: "null"
                 domain:
+                  minLength: 1
+                  type: string
+                grantPublicId:
                   minLength: 1
                   type: string
       responses:
@@ -7278,6 +7323,8 @@ paths:
           application/json:
             schema:
               type: object
+              required:
+                - grantPublicId
               properties:
                 grantPublicId:
                   minLength: 1
@@ -7285,6 +7332,8 @@ paths:
           application/x-www-form-urlencoded:
             schema:
               type: object
+              required:
+                - grantPublicId
               properties:
                 grantPublicId:
                   minLength: 1
@@ -7292,6 +7341,8 @@ paths:
           multipart/form-data:
             schema:
               type: object
+              required:
+                - grantPublicId
               properties:
                 grantPublicId:
                   minLength: 1

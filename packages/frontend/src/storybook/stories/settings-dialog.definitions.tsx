@@ -1,4 +1,4 @@
-import { expect, fn, userEvent, within } from 'storybook/test'
+import { expect, fn, within } from 'storybook/test'
 
 import {
   domainSettingsAddDomainAuthorizeCloudflareState,
@@ -89,11 +89,6 @@ const agentAccessReviewOnlyView = {
     canRevoke: false
   }))
 } satisfies AgentAccessView
-
-const domainSettingsDisconnectActionState = {
-  ...domainSettingsDomainLiveState,
-  onDisconnectCloudflare: fn()
-} satisfies DomainSettingsState
 
 export const settingsScreenStoryMeta = {
   component: DashboardMailControllerStoryFrame,
@@ -378,6 +373,40 @@ export const AgentAccessDense: Story = {
   })
 }
 
+export const ConnectedAccountsEmpty: Story = {
+  args: buildSettingsScreenArgs({
+    domainSettingsState: domainSettingsEmptyFirstUseState,
+    settingsSection: 'connected-accounts'
+  }),
+  play: async ({ args, canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+
+    await expect(args.storyPath).toBe('/settings/connected-accounts/')
+    await expect(await canvas.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument()
+    await expect(await canvas.findByText('Connect a Cloudflare account')).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: 'Connect Cloudflare account' })).toBeEnabled()
+  }
+}
+
+export const ConnectedAccountsCloudflare: Story = {
+  args: buildSettingsScreenArgs({
+    domainSettingsState: domainSettingsAddDomainSelectZoneState,
+    settingsSection: 'connected-accounts'
+  }),
+  play: async ({ args, canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+
+    await expect(args.storyPath).toBe('/settings/connected-accounts/')
+    await expect(await canvas.findByText('Connected accounts', { selector: 'p' })).toBeInTheDocument()
+    await expect(await canvas.findByText('admin@example.com')).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: 'Connect another account' })).toBeEnabled()
+    await expect((await canvas.findAllByRole('button', { name: /^disconnect account$/i })).length).toBeGreaterThan(
+      0
+    )
+    await expect(canvas.queryByRole('button', { name: /^disconnect cloudflare$/i })).not.toBeInTheDocument()
+  }
+}
+
 export const Organizations: Story = {
   args: buildSettingsScreenArgs({
     settingsSection: 'organizations'
@@ -442,22 +471,13 @@ export const DomainsDomainLive: Story = {
   args: buildSettingsScreenArgs({
     domainSettingsState: domainSettingsDomainLiveState,
     settingsSection: 'domains'
-  })
-}
-
-export const DomainsDisconnectAction: Story = {
-  args: buildSettingsScreenArgs({
-    domainSettingsState: domainSettingsDisconnectActionState,
-    settingsSection: 'domains'
   }),
-  play: async ({ args, canvasElement }) => {
+  play: async ({ canvasElement }) => {
     const canvas = storyBody(canvasElement)
-    const activeGrantPublicId = args.domainSettingsState?.status?.grants.find(
-      (grant) => grant.status === 'active'
-    )?.publicId
 
-    await userEvent.click(await canvas.findByRole('button', { name: /^disconnect cloudflare$/i }))
-    await expect(args.domainSettingsState?.onDisconnectCloudflare).toHaveBeenCalledWith(activeGrantPublicId)
+    await expect((await canvas.findAllByText('agentteam.example')).length).toBeGreaterThan(0)
+    await expect(canvas.queryByRole('button', { name: /^disconnect cloudflare$/i })).not.toBeInTheDocument()
+    await expect(canvas.queryByRole('button', { name: /^disconnect account$/i })).not.toBeInTheDocument()
   }
 }
 
