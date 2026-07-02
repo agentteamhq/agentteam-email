@@ -28,19 +28,45 @@ These rules apply to `packages/backend`.
 
 ## Backend Security Contracts
 
+- The deployable web server must expose one backend Elysia route boundary for
+  backend package HTTP traffic. That boundary must own both `/api/*` and
+  `/rpc/*` dispatch.
+- Do not expose separate backend Elysia mounts, apps, or public route
+  collections for `/api/*` and `/rpc/*` at the web-server boundary. Internal
+  Elysia groups, subapps, or handlers may separate API and RPC logic only inside
+  the single exposed backend boundary.
 - Backend HTTP entrypoints must route through a backend-owned boundary before
   dispatching to RPC, API, Better Auth, metadata, worker, or internal service
   handlers.
-- Backend-exposed routes must declare their public surface, accepted consumer
-  class, accepted credential class, context resolver, and response boundary in
-  the owning route boundary registry before protected logic runs.
-- `/rpc/*` consumers are limited to the first-party browser UI, the mail
-  control service, Worker ingest webhooks, Better Auth/Agent Auth protocol
-  mounts, and explicitly documented public exceptions.
-- `/api/*` consumers are external agents, CLI clients, or API clients using API
-  keys, OAuth access tokens, or Agent Auth credentials. API credentials must not
-  authorize browser RPC routes.
-- Backend service functions used by protected RPC routes must accept an
+- Backend-exposed routes must declare their URL surface, accepted consumer
+  class, accepted credential class, context resolver, and response boundary
+  before protected logic runs.
+- `/api/*` is the external product API surface. Its consumers are external
+  agents, CLI clients, integrations, or API clients using API keys, OAuth access
+  tokens, or Agent Auth credentials.
+- Protected `/api/*` product routes must authenticate with an API-owned
+  credential class: Agent Auth request-bound JWT, OAuth bearer access token, or
+  API key. Browser sessions must not authorize external product API routes.
+- `/api/*` routes may share backend service helpers with app RPC, but external
+  callers must address `/api/*` and the route must enforce an API-owned
+  credential, principal, and response contract.
+- Do not expose `/api/*` as a redirect, alias, bridge, or compatibility path to
+  `/rpc/*`. `/api/auth/*` must not mount, redirect, proxy, rewrite, or dispatch
+  to Better Auth or `/rpc/auth/api/*`. API handlers must not call
+  `backendRpcApp.handle`, construct `/rpc/*` requests, or rewrite API request
+  paths into RPC paths.
+- `/rpc/*` is internal app, control, and auth endpoint traffic, not an external
+  product API.
+- CLI clients and external API consumers must not call `/rpc/*` for product API
+  operations. If a CLI or external API workflow needs behavior currently
+  implemented by an RPC handler, add or fix the `/api/*` route instead of
+  pointing the client at RPC.
+- Before changing RPC routes, read [src/rpc/AGENTS.md](src/rpc/AGENTS.md). That
+  file owns RPC-specific consumers, public unauthenticated exceptions,
+  principal classes, and RPC response-boundary rules.
+- API keys, OAuth access tokens, and Agent Auth credentials must not authorize
+  browser RPC product routes.
+- Backend service functions used by protected routes must accept an
   authenticated context or derive one through the owning auth helper before
   reading protected records, external service state, or operational status.
 - Organization-scoped service functions must include `organizationId` in
@@ -56,6 +82,5 @@ These rules apply to `packages/backend`.
   snapshots, deployment identifiers, or credential lifecycle metadata.
 - Security-boundary tests must prove unauthenticated rejection,
   wrong-organization rejection, insufficient-authority rejection, and
-  non-disclosure of operational diagnostics for every backend service used by
-  RPC routes that return status, setup, admin, provider, runtime, or diagnostic
-  data.
+  non-disclosure of operational diagnostics for protected backend routes that
+  return status, setup, admin, provider, runtime, or diagnostic data.
