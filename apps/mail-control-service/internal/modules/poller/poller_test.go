@@ -30,6 +30,17 @@ func TestValidateConfigRequiresExactlyTwoRetries(t *testing.T) {
 	}
 }
 
+func TestSanitizeLogTextRedactsMailboxAndArchiveKeys(t *testing.T) {
+	got := sanitizeLogText("failed for Agent.One+tag@example.com at orgs/org_123/domains/example.com/mail/inbound/2026/07/01/raw.eml\nwith details")
+
+	if strings.Contains(got, "Agent.One") || strings.Contains(got, "orgs/org_123") {
+		t.Fatalf("sanitized log text retained sensitive value: %q", got)
+	}
+	if !strings.Contains(got, "[email]") || !strings.Contains(got, "[archive_key]") {
+		t.Fatalf("sanitized log text did not include redaction markers: %q", got)
+	}
+}
+
 func TestDecodeManifestAcceptsCloudflareEdgeEvidence(t *testing.T) {
 	ingestID := mustUUIDv7(t)
 	receivedAt := time.Date(2026, 6, 17, 20, 0, 0, 0, time.UTC)

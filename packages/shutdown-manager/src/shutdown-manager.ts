@@ -18,6 +18,20 @@ type ReportHeader = {
   platform?: NodeJS.Platform
 }
 
+const SAFE_ERROR_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_.:-]{0,79}$/
+
+function errorType(error: unknown): string {
+  if (error instanceof Error) {
+    return SAFE_ERROR_NAME_PATTERN.test(error.name) ? error.name : 'Error'
+  }
+
+  if (error === null) {
+    return 'null'
+  }
+
+  return typeof error
+}
+
 export class ShutdownManager {
   static readonly gracefulTimeoutSeconds = 30
   private tasks = new Set<ShutdownTask>()
@@ -44,12 +58,20 @@ export class ShutdownManager {
   }
 
   uncaughtExceptionHandler = (err: unknown) => {
-    this.log('Uncaught exception:', err)
+    this.log('shutdown signal received', {
+      source: 'uncaughtException',
+      status: 'error',
+      errorType: errorType(err)
+    })
     this.initiate('uncaughtException')
   }
 
   unhandledRejectionHandler = (reason: unknown) => {
-    this.log('Unhandled rejection:', reason)
+    this.log('shutdown signal received', {
+      source: 'unhandledRejection',
+      status: 'error',
+      errorType: errorType(reason)
+    })
     this.initiate('unhandledRejection')
   }
 
@@ -58,7 +80,7 @@ export class ShutdownManager {
   }
 
   gracefulShutdown = () => {
-    this.log('Starting graceful shutdown request...')
+    this.log('shutdown requested', { source: 'gracefulShutdown', status: 'starting' })
     this.initiate('gracefulShutdown')
   }
 
@@ -75,28 +97,58 @@ export class ShutdownManager {
     }
 
     this.shutdownTimer = setTimeout(() => {
-      this.log('Shutdown watchdog timeout reached, forcing exit with code 0')
+      this.log('shutdown watchdog timeout reached', {
+        source: 'watchdog',
+        status: 'timeout',
+        timeoutSeconds: ShutdownManager.gracefulTimeoutSeconds
+      })
       process.exit(0)
     }, ShutdownManager.gracefulTimeoutSeconds * 1000)
   }
 
-  private shutdown = async () => {
+  private shutdown = async (source: string) => {
+    const startedAt = Date.now()
     const promises = this.tasks.values().map((task) =>
       // eslint-disable-next-line no-restricted-syntax
       (async () => {
-        this.log(`Running task: ${task.name}`)
+        const taskStartedAt = Date.now()
+        this.log('shutdown task started', {
+          source,
+          task: task.name,
+          status: 'running'
+        })
         try {
           await task.fn()
-          this.log(`Completed task: ${task.name}`)
+          this.log('shutdown task completed', {
+            source,
+            task: task.name,
+            status: 'completed',
+            durationMs: Date.now() - taskStartedAt
+          })
           return { ok: true, task }
         } catch (error) {
-          this.log(`Failed task: ${task.name}`, error)
+          this.log('shutdown task failed', {
+            source,
+            task: task.name,
+            status: 'failed',
+            durationMs: Date.now() - taskStartedAt,
+            errorType: errorType(error)
+          })
           return { ok: false, task, err: error }
         }
       })()
     )
 
     const results = await Promise.allSettled(promises)
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        this.log('shutdown task settled unexpectedly', {
+          source,
+          status: 'failed',
+          errorType: errorType(result.reason)
+        })
+      }
+    }
     if (results) {
       this.tasks.clear()
     }
@@ -105,6 +157,13 @@ export class ShutdownManager {
       clearTimeout(this.shutdownTimer)
       this.shutdownTimer = null
     }
+
+    this.log('shutdown completed', {
+      source,
+      status: 'completed',
+      taskCount: results.length,
+      durationMs: Date.now() - startedAt
+    })
   }
 
   private initiate = (source: string) => {
@@ -114,15 +173,21 @@ export class ShutdownManager {
     this.shuttingDown = true
     this.removeProcessListeners()
     this.startShutdownTimer()
-    this.log(`Received ${source}, shutting down...`)
+    this.log('shutdown initiated', { source, status: 'starting', taskCount: this.tasks.size })
 
-    this.shutdown()
+    this.shutdown(source)
       .then(() => {})
-      .catch(() => {})
+      .catch((error: unknown) => {
+        this.log('shutdown failed unexpectedly', {
+          source,
+          status: 'failed',
+          errorType: errorType(error)
+        })
+      })
   }
 
   private logEnvironmentDetails = () => {
-    this.log('ShutdownManager initialized')
+    this.log('shutdown manager initialized', { status: 'initialized' })
 
     const reportHeader = this.getReportHeader()
     const libc = this.detectLibc(reportHeader)
@@ -134,8 +199,7 @@ export class ShutdownManager {
       arch: reportHeader?.arch ?? process.arch,
       machine: reportHeader?.osMachine,
       pid: process.pid,
-      ppid: process.ppid,
-      execPath: process.execPath
+      ppid: process.ppid
     })
 
     this.log('OS details:', {

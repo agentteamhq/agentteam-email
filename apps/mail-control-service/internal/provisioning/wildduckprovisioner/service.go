@@ -7,8 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
+	"regexp"
+	"strings"
 	"time"
 
 	"mail-control-service/internal/control/controlstate"
@@ -16,6 +19,8 @@ import (
 )
 
 var errNotFound = errors.New("wildduck resource not found")
+
+var logEmailPattern = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
 
 type Config struct {
 	APIBaseURL      string
@@ -105,6 +110,7 @@ func (s *Service) EnsureFeedback(ctx context.Context, records []controlstate.Dom
 	}
 	userID, _, err := s.ensurePrimaryMailbox(ctx, records)
 	if err != nil {
+		log.Printf("agent-mail-wildduck-provisioner event=wildduck_feedback_address_failed operation=ensure_primary_mailbox domains=%d error=%q", len(records), sanitizeLogError(err))
 		return Result{}, err
 	}
 	for _, record := range records {
@@ -116,6 +122,7 @@ func (s *Service) EnsureFeedback(ctx context.Context, records []controlstate.Dom
 		}
 		changed, err := s.ensureAddress(ctx, userID, record.FeedbackAddress)
 		if err != nil {
+			log.Printf("agent-mail-wildduck-provisioner event=wildduck_feedback_address_failed operation=ensure_address domain=%s wildduck_user_id=%s error=%q", record.Domain, userID, sanitizeLogError(err))
 			item.Error = err.Error()
 			item.Action = "failed"
 			result.OK = false
@@ -144,6 +151,7 @@ func (s *Service) Status(ctx context.Context, records []controlstate.DomainRecor
 	if !result.Config.Configured {
 		result.OK = false
 		result.Issues = append(result.Issues, "wildduck_api_not_configured")
+		log.Printf("agent-mail-wildduck-provisioner event=wildduck_feedback_status_degraded operation=status issue=wildduck_api_not_configured")
 		return result
 	}
 	for _, record := range records {
@@ -164,9 +172,11 @@ func (s *Service) Status(ctx context.Context, records []controlstate.DomainRecor
 			case errors.Is(err, errNotFound):
 				status.OK = false
 				status.Issues = append(status.Issues, "feedback_address_not_found")
+				log.Printf("agent-mail-wildduck-provisioner event=wildduck_feedback_status_degraded operation=resolve_address domain=%s issue=feedback_address_not_found", record.Domain)
 			default:
 				status.OK = false
 				status.Issues = append(status.Issues, "feedback_address_lookup_failed: "+err.Error())
+				log.Printf("agent-mail-wildduck-provisioner event=wildduck_feedback_status_degraded operation=resolve_address domain=%s issue=feedback_address_lookup_failed error=%q", record.Domain, sanitizeLogError(err))
 			}
 		}
 		if !status.OK {
@@ -176,6 +186,18 @@ func (s *Service) Status(ctx context.Context, records []controlstate.DomainRecor
 		result.Domains = append(result.Domains, status)
 	}
 	return result
+}
+
+func sanitizeLogError(err error) string {
+	if err == nil {
+		return ""
+	}
+	message := strings.TrimSpace(strings.Join(strings.Fields(err.Error()), " "))
+	message = logEmailPattern.ReplaceAllString(message, "[email]")
+	if len(message) > 240 {
+		return message[:240]
+	}
+	return message
 }
 
 func (s *Service) ensurePrimaryMailbox(ctx context.Context, records []controlstate.DomainRecord) (string, bool, error) {
@@ -278,7 +300,7 @@ func (s *Service) resolveUser(ctx context.Context, username string) (string, err
 		return "", err
 	}
 	if result.ID == "" {
-		return "", fmt.Errorf("WildDuck resolve user %q returned empty id", username)
+		return "", fmt.Errorf("WildDuck resolve user returned empty id")
 	}
 	return result.ID, nil
 }
@@ -291,7 +313,7 @@ func (s *Service) resolveAddress(ctx context.Context, address string) (string, e
 		return "", err
 	}
 	if result.User == "" {
-		return "", fmt.Errorf("WildDuck resolve address %q returned empty user id", address)
+		return "", fmt.Errorf("WildDuck resolve address returned empty user id")
 	}
 	return result.User, nil
 }
@@ -316,7 +338,7 @@ func (s *Service) createUser(ctx context.Context, cfg userConfig) (string, error
 		return "", err
 	}
 	if result.ID == "" {
-		return "", fmt.Errorf("WildDuck create user %q returned empty id", cfg.Address)
+		return "", fmt.Errorf("WildDuck create user returned empty id")
 	}
 	return result.ID, nil
 }

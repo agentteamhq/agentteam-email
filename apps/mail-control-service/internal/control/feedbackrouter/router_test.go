@@ -41,6 +41,17 @@ body
 	}
 }
 
+func TestSanitizeFeedbackLogErrorRedactsMailbox(t *testing.T) {
+	got := sanitizeFeedbackLogError(errors.New("resolve failed for Agent.One+tag@example.com\nwith details"))
+
+	if strings.Contains(got, "Agent.One") || strings.Contains(got, "\n") {
+		t.Fatalf("sanitized feedback error retained sensitive or multiline value: %q", got)
+	}
+	if !strings.Contains(got, "[email]") {
+		t.Fatalf("sanitized feedback error did not include email redaction marker: %q", got)
+	}
+}
+
 func TestExtractOriginalSenderIgnoresFeedbackMailbox(t *testing.T) {
 	raw := strings.ReplaceAll(`From: bounces@example.com
 To: bounces@example.com

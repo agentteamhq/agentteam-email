@@ -48,6 +48,11 @@ const (
 	deliveryForwarded = "forwarded"
 )
 
+var (
+	logArchiveKeyPattern = regexp.MustCompile(`orgs/[A-Za-z0-9_.:-]+/domains/[A-Za-z0-9.-]+/mail/(?:inbound|outbound)/[^\s"']+`)
+	logEmailPattern      = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
+)
+
 type Config struct {
 	SweepInterval  string   `yaml:"sweep_interval"`
 	RetryDelay     string   `yaml:"retry_delay"`
@@ -392,17 +397,20 @@ func (p *Poller) Status(ctx context.Context) Status {
 	if err != nil {
 		status.OK = false
 		status.Issues = append(status.Issues, "queue_status_failed: "+err.Error())
+		log.Printf("agent-mail-reconciler event=status_degraded dependency=state_store operation=queue_status state_database=%s error=%q", p.cfg.StateMongoDatabase, sanitizeLogError(err))
 	} else {
 		status.Queue = queue
 		if queue.Blocked > 0 {
 			status.OK = false
 			status.Issues = append(status.Issues, "blocked_inbound_work_items")
+			log.Printf("agent-mail-reconciler event=status_degraded dependency=state_store operation=queue_status state_database=%s blocked=%d", p.cfg.StateMongoDatabase, queue.Blocked)
 		}
 	}
 	lastSweepAt, err := p.lastSweepAt(ctx)
 	if err != nil {
 		status.OK = false
 		status.Issues = append(status.Issues, "sweep_cursor_status_failed: "+err.Error())
+		log.Printf("agent-mail-reconciler event=status_degraded dependency=state_store operation=last_sweep_at state_database=%s error=%q", p.cfg.StateMongoDatabase, sanitizeLogError(err))
 	} else {
 		status.LastSweepAt = lastSweepAt
 	}
@@ -423,6 +431,7 @@ func (p *Poller) Run(ctx context.Context) error {
 		p.logServiceFailure("sweep", err)
 	}
 	if err := p.processDue(ctx); err != nil {
+		p.logServiceFailure("process_due_failed", err)
 		return err
 	}
 	var retryTimer *time.Timer
@@ -448,6 +457,7 @@ func (p *Poller) Run(ctx context.Context) error {
 		return nil
 	}
 	if err := resetRetryTimer(); err != nil {
+		p.logServiceFailure("retry_timer_failed", err)
 		return err
 	}
 
@@ -457,9 +467,11 @@ func (p *Poller) Run(ctx context.Context) error {
 			return ctx.Err()
 		case <-p.wakeCh:
 			if err := p.processDue(ctx); err != nil {
+				p.logServiceFailure("process_due_failed", err)
 				return err
 			}
 			if err := resetRetryTimer(); err != nil {
+				p.logServiceFailure("retry_timer_failed", err)
 				return err
 			}
 		case <-retryCh:
@@ -467,9 +479,11 @@ func (p *Poller) Run(ctx context.Context) error {
 			// six-hour sweep is only recovery; transient SMTP/R2/WildDuck
 			// failures must retry at retry_delay without another external wake.
 			if err := p.processDue(ctx); err != nil {
+				p.logServiceFailure("process_due_failed", err)
 				return err
 			}
 			if err := resetRetryTimer(); err != nil {
+				p.logServiceFailure("retry_timer_failed", err)
 				return err
 			}
 		case <-sweepTicker.C:
@@ -477,9 +491,11 @@ func (p *Poller) Run(ctx context.Context) error {
 				p.logServiceFailure("sweep", err)
 			}
 			if err := p.processDue(ctx); err != nil {
+				p.logServiceFailure("process_due_failed", err)
 				return err
 			}
 			if err := resetRetryTimer(); err != nil {
+				p.logServiceFailure("retry_timer_failed", err)
 				return err
 			}
 		}
@@ -500,6 +516,7 @@ func (p *Poller) processDue(ctx context.Context) error {
 	for {
 		leased, ok, err := p.leaseNext(ctx, time.Now().UTC())
 		if err != nil {
+			log.Printf("agent-mail-reconciler event=queue_lease_failed operation=lease_next state_database=%s error=%q", p.cfg.StateMongoDatabase, sanitizeLogError(err))
 			return err
 		}
 		if !ok {
@@ -637,7 +654,7 @@ func (p *Poller) discoverEdgeKey(ctx context.Context, edgeKey string, domain Dom
 	switch schema {
 	case r2archive.InboundEdgeSchema:
 	case r2archive.InboundLocalRouteEdgeSchema:
-		log.Printf("agent-mail-reconciler event=local_route_edge_skipped edge_key=%s", edgeKey)
+		log.Printf("agent-mail-reconciler event=local_route_edge_skipped domain=%s has_edge_key=%t", domain.Name, edgeKey != "")
 		return nil
 	default:
 		return fmt.Errorf("edge json schema %q is not supported for poller discovery", schema)
@@ -798,7 +815,7 @@ func (p *Poller) writeReceipt(ctx context.Context, item workItem, manifest Manif
 	if err := p.markDelivered(ctx, item); err != nil {
 		return err
 	}
-	log.Printf("agent-mail-reconciler event=delivered ingest_id=%s domain=%s result_key=%s attempt=%d delivery_source=%s wildduck_user_id=%s wildduck_mailbox_id=%s wildduck_message_id=%s", manifest.IngestID, item.RecipientDomain, item.ResultKey, attempt, source, delivery.UserID, delivery.MailboxID, delivery.MessageID)
+	log.Printf("agent-mail-reconciler event=delivered ingest_id=%s domain=%s has_result_key=%t attempt=%d delivery_source=%s wildduck_user_id=%s wildduck_mailbox_id=%s wildduck_message_id=%s", manifest.IngestID, item.RecipientDomain, item.ResultKey != "", attempt, source, delivery.UserID, delivery.MailboxID, delivery.MessageID)
 	return nil
 }
 
@@ -882,7 +899,7 @@ func (p *Poller) writeDSNSubmittedReceipt(ctx context.Context, item workItem, ma
 	if err := p.markCompleted(ctx, item); err != nil {
 		return retryable(failureTransient, err)
 	}
-	log.Printf("agent-mail-reconciler event=delivery_failed_dsn_submitted ingest_id=%s domain=%s result_key=%s dsn_id=%s dsn_raw_key=%s dsn_envelope_to=%s attempt=%d status=%s diagnostic=%q", manifest.IngestID, item.RecipientDomain, item.ResultKey, state.ID, state.RawKey, recipient, attempt, failure.status, failure.diagnosticCode)
+	log.Printf("agent-mail-reconciler event=delivery_failed_dsn_submitted ingest_id=%s domain=%s has_result_key=%t dsn_id=%s has_dsn_raw_key=%t dsn_recipient_domain=%s attempt=%d status=%s has_diagnostic=%t", manifest.IngestID, item.RecipientDomain, item.ResultKey != "", state.ID, state.RawKey != "", logMailboxDomain(recipient), attempt, failure.status, failure.diagnosticCode != "")
 	return nil
 }
 
@@ -907,7 +924,7 @@ func (p *Poller) writeDSNSuppressedReceipt(ctx context.Context, item workItem, m
 	if err := p.markCompleted(ctx, item); err != nil {
 		return retryable(failureTransient, err)
 	}
-	log.Printf("agent-mail-reconciler event=delivery_failed_dsn_suppressed ingest_id=%s domain=%s result_key=%s attempt=%d status=%s reason=%q", manifest.IngestID, item.RecipientDomain, item.ResultKey, attempt, failure.status, detail)
+	log.Printf("agent-mail-reconciler event=delivery_failed_dsn_suppressed ingest_id=%s domain=%s has_result_key=%t attempt=%d status=%s reason=%q", manifest.IngestID, item.RecipientDomain, item.ResultKey != "", attempt, failure.status, sanitizeLogText(detail))
 	return nil
 }
 
@@ -1308,7 +1325,7 @@ func (p *Poller) recordProcessingFailure(ctx context.Context, item workItem, att
 		nextAttempt := time.Now().UTC().Add(p.cfg.RetryDelay)
 		err := p.state.RecordProcessingFailure(ctx, item, attempt, failure, p.cfg.MaxRetries, p.cfg.RetryDelay)
 		if err != nil {
-			log.Printf("agent-mail-reconciler event=state_update_failed ingest_id=%s domain=%s operation=retry_wait attempt=%d failure_class=%s error=%q", item.IngestID, item.RecipientDomain, attempt, failure.class, err)
+			log.Printf("agent-mail-reconciler event=state_update_failed ingest_id=%s domain=%s operation=retry_wait attempt=%d failure_class=%s error=%q", item.IngestID, item.RecipientDomain, attempt, failure.class, sanitizeLogError(err))
 			return
 		}
 		p.logFailure("retry_wait", item, attempt, failure.class, failure.err, nextAttempt.Format(time.RFC3339))
@@ -1316,7 +1333,7 @@ func (p *Poller) recordProcessingFailure(ctx context.Context, item workItem, att
 	}
 	err := p.state.RecordProcessingFailure(ctx, item, attempt, failure, p.cfg.MaxRetries, p.cfg.RetryDelay)
 	if err != nil {
-		log.Printf("agent-mail-reconciler event=state_update_failed ingest_id=%s domain=%s operation=blocked attempt=%d failure_class=%s error=%q", item.IngestID, item.RecipientDomain, attempt, failure.class, err)
+		log.Printf("agent-mail-reconciler event=state_update_failed ingest_id=%s domain=%s operation=blocked attempt=%d failure_class=%s error=%q", item.IngestID, item.RecipientDomain, attempt, failure.class, sanitizeLogError(err))
 		return
 	}
 	p.logFailure("blocked", item, attempt, failure.class, failure.err, "")
@@ -1343,11 +1360,36 @@ func (p *Poller) recordDiscoveryDiagnostic(ctx context.Context, objectKey string
 }
 
 func (p *Poller) logFailure(event string, item workItem, attempt int, class string, err error, nextAttempt string) {
-	log.Printf("agent-mail-reconciler event=%s ingest_id=%s domain=%s bundle_prefix=%s edge_key=%s raw_key=%s result_key=%s attempt=%d failure_class=%s next_attempt_at=%s error=%q", event, item.IngestID, item.RecipientDomain, item.BundlePrefix, item.EdgeKey, item.RawKey, item.ResultKey, attempt, class, nextAttempt, err)
+	log.Printf("agent-mail-reconciler event=%s ingest_id=%s domain=%s has_bundle_prefix=%t has_edge_key=%t has_raw_key=%t has_result_key=%t attempt=%d failure_class=%s next_attempt_at=%s error=%q", event, item.IngestID, item.RecipientDomain, item.BundlePrefix != "", item.EdgeKey != "", item.RawKey != "", item.ResultKey != "", attempt, class, nextAttempt, sanitizeLogError(err))
 }
 
 func (p *Poller) logServiceFailure(event string, err error) {
-	log.Printf("agent-mail-reconciler event=%s failure_class=%s error=%q", event, failureTransient, err)
+	log.Printf("agent-mail-reconciler event=%s failure_class=%s error=%q", event, failureTransient, sanitizeLogError(err))
+}
+
+func sanitizeLogError(err error) string {
+	if err == nil {
+		return ""
+	}
+	return sanitizeLogText(err.Error())
+}
+
+func logMailboxDomain(address string) string {
+	domain, err := structured.DomainFromMailbox(address)
+	if err != nil {
+		return ""
+	}
+	return domain
+}
+
+func sanitizeLogText(value string) string {
+	message := strings.TrimSpace(strings.Join(strings.Fields(value), " "))
+	message = logArchiveKeyPattern.ReplaceAllString(message, "[archive_key]")
+	message = logEmailPattern.ReplaceAllString(message, "[email]")
+	if len(message) > 240 {
+		return message[:240]
+	}
+	return message
 }
 
 func classifyProcessingError(err error) classifiedError {

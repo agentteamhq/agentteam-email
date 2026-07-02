@@ -1,9 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 
-import { useSyncExternalStore } from 'react'
 import { WarningCircleIcon as AlertCircle } from '@phosphor-icons/react'
-import { useLocation } from '@tanstack/react-router'
 
 import { Link } from '../../components/link'
 import { Button } from '../../components/ui/button'
@@ -17,53 +14,29 @@ import {
 } from '../../components/ui/card'
 import { LOCAL_STORAGE_STORE_KEY } from '../../store/use-store'
 
-const emptySubscribe = () => () => {}
-
-const getSnapshotUserAgent = () => globalThis.window?.navigator?.userAgent ?? 'unknown'
-
-const getServerSnapshot = () => 'unknown'
-
-const useUserAgent = () => useSyncExternalStore(emptySubscribe, getSnapshotUserAgent, getServerSnapshot)
+interface ErrorBoundaryInfo {
+  componentStack?: string | null
+}
 
 interface ErrorPageProps {
   title?: string
   description?: string
   message?: string
-  error?: any
-  resetErrorBoundary?: (...args: any[]) => void
-  info?: any
-  reset?: any
+  error?: unknown
+  resetErrorBoundary?: (...args: unknown[]) => void
+  info?: ErrorBoundaryInfo | null
+  reset?: () => void
 }
-
-// error: any;
-// resetErrorBoundary: (...args: any[]) => void;
-
-// {
-//   error: Error;
-//   info?: {
-//       componentStack: string;
-//   };
-//   reset: () => void;
-// }
 
 export function ErrorPage({
   title = 'Something went wrong',
   description = 'An error occurred',
-  message = "We're having trouble processing your request right now. Please try refreshing the page or contact our support team if the problem persists.",
-  error,
-  info
+  message = "We're having trouble processing your request right now. Please try refreshing the page or contact our support team if the problem persists."
 }: ErrorPageProps) {
   const handleRefresh = () => {
     globalThis.localStorage.removeItem(LOCAL_STORAGE_STORE_KEY)
     globalThis.window.location.reload()
   }
-
-  const userAgent = useUserAgent()
-  const currentURL = useLocation({ select: (location) => location.href })
-
-  // Log the error details to ensure they are captured in production.
-  // eslint-disable-next-line no-console
-  console.error('ErrorPage caught an error:', error, info)
 
   return (
     <div className='flex h-screen w-full items-center justify-center'>
@@ -77,16 +50,6 @@ export function ErrorPage({
         </CardHeader>
         <CardContent>
           <p className='text-muted-foreground'>{message}</p>
-          <div className='mt-4 text-left'>
-            <h3 className='font-bold'>Error Details</h3>
-            <pre className='overflow-auto bg-gray-100 p-2 text-xs text-gray-800'>
-              {`Message: ${error?.message ?? 'No error message.'}
-Stack: ${error?.stack ?? 'No stack available.'}
-Component Stack: ${info?.componentStack ?? 'No component stack.'}
-User Agent: ${userAgent}
-Current URL: ${currentURL}`}
-            </pre>
-          </div>
         </CardContent>
         <CardFooter className='flex flex-col gap-2 sm:flex-row sm:justify-center'>
           <Button
