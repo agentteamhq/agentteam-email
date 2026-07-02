@@ -17,7 +17,7 @@ ownership and authorization boundaries.
   expectations for user-visible commands, or developer-facing copy. Use
   `PUBLIC_HOSTNAME`, a request-derived origin, or an explicitly injected
   public hostname according to
-  [Environment Lifecycle Requirements](../../ARCHITECTURE.md#environment-lifecycle-requirements).
+  [Configuration](../../ARCHITECTURE.md#configuration).
 - Do not add hard-coded fallback app origins to shared server runtime code or
   user-visible tests. If code cannot derive the correct public origin from
   configuration or the current request, stop and fix the public hostname
@@ -49,11 +49,22 @@ ownership and authorization boundaries.
   class, accepted credential class, context resolver, and response boundary
   before protected logic runs.
 - `/api/*` is the external product API surface. Its consumers are external
-  agents, CLI clients, integrations, or API clients using API keys, OAuth access
-  tokens, or Agent Auth credentials.
+  agents, CLI clients, integrations, or API clients using API keys, device login
+  credentials, OAuth integration access tokens, or Agent Auth credentials.
 - Protected `/api/*` product routes must authenticate with an API-owned
-  credential class: Agent Auth request-bound JWT, OAuth bearer access token, or
-  API key. Browser sessions must not authorize external product API routes.
+  credential class: API key, device login credential, OAuth integration access
+  token, or Agent Auth request-bound JWT. Browser sessions must not authorize
+  external product API routes.
+- API keys and device login credentials resolve to the owning user's access
+  level. They are not Agent Auth credentials and must not be modeled as Agent
+  Access capability grants.
+- Agent Auth credentials resolve to an agent principal and persisted Agent
+  Access grants, capabilities, mailbox constraints, expiry, and revocation
+  state. They must not inherit the approving user's full access level.
+- OAuth integration access tokens must enforce that integration's accepted
+  authorization model, including user, organization, client, grant, scope,
+  mailbox-policy, consent, and revocation state only when those are part of
+  that integration.
 - `/api/*` routes may share backend service helpers with app RPC, but external
   callers must address `/api/*` and the route must enforce an API-owned
   credential, principal, and response contract.
@@ -83,8 +94,8 @@ ownership and authorization boundaries.
 - Before changing RPC routes, read [src/rpc/AGENTS.md](src/rpc/AGENTS.md). That
   file owns RPC-specific consumers, public unauthenticated exceptions,
   principal classes, and RPC response-boundary rules.
-- API keys, OAuth access tokens, and Agent Auth credentials must not authorize
-  browser RPC product routes.
+- API keys, device login credentials, OAuth integration access tokens, and Agent
+  Auth credentials must not authorize browser RPC product routes.
 - Backend service functions used by protected routes must accept an
   authenticated context or derive one through the owning auth helper before
   reading protected records, external service state, or operational status.

@@ -45,8 +45,6 @@ Add or refresh E2E coverage for:
   capability behavior.
 - Separation between personal `at-email auth login` credentials and local agent
   credentials.
-- Normal mailbox commands proving they call web-server RPC routes and do not
-  fall back to direct WildDuck environment credentials.
 
 ### Security And Audit Hardening
 
@@ -66,8 +64,9 @@ Add or refresh E2E coverage for:
 - Map Paperclip company, agent, project, run, plugin, and operation context to
   persisted AgentTeam Email authorization state before every mailbox operation.
 - Prove Paperclip context alone never authorizes mailbox access.
-- Keep API key configuration limited to the documented advanced self-hosted or
-  preview path.
+- Keep OAuth as the default Paperclip connection path. Paperclip-side API key
+  authentication may use a user-provisioned Better Auth API key only as an
+  explicit advanced self-hosted or preview fallback.
 
 ## Acceptance Checks
 

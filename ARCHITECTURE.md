@@ -10,6 +10,20 @@ Service-specific contracts live close to their owning code:
 - `apps/mail-control-service/PROVENANCE.md` defines message provenance and
   security evidence surfaces.
 
+## Rule Surfaces
+
+This file defines repository-level architecture. Agent rules that enforce this
+architecture live in the closest owning `AGENTS.md` file.
+
+- Security-sensitive authentication, authorization, credential, token, OAuth,
+  session, cookie, API key, and route changes must follow `SECURITY.md`.
+- Backend route, credential, and web-server Elysia boundary changes must follow
+  `packages/backend/AGENTS.md`.
+- RPC route, principal class, public exception, credential, and response
+  boundary changes must follow `packages/backend/src/rpc/AGENTS.md`.
+- Frontend settings, Storybook, and browser UI ownership changes must follow
+  `packages/frontend/AGENTS.md`.
+
 ## Public Boundary
 
 AgentTeam Email has one public application boundary: the web server from
@@ -36,30 +50,83 @@ and performs the internal call server-side. Public clients must not receive
 WildDuck admin credentials, WildDuck mailbox tokens, or raw internal service
 URLs.
 
-## Account And Integration Vocabulary
+## Credential And Product Terms
 
-Linked accounts, connected accounts, integrations, and domains are distinct
-product concepts.
+These terms are canonical across backend, frontend, CLI, and documentation.
 
-Linked accounts are Better Auth account-linking identities used for sign-in,
-such as social or OIDC providers attached to a user account. They belong to the
-Better Auth account or security settings surface. Linked accounts do not grant
-AgentTeam Email authority to provision or control external provider resources.
+| Term | Kind | Access Level | Surface |
+| --- | --- | --- | --- |
+| Browser session | Better Auth web session | User + active org | `/rpc/*` |
+| API key | Better Auth API key | Owning user | Settings, `/api/*` |
+| Device login | Better Auth device auth | Signed-in user | `at-email auth login`, `/api/*` |
+| Agent Auth | Better Auth Agent Auth JWT | Agent grants | Mail admin Agent Access, `/api/*` |
+| Linked account | Sign-in account link | Account identity | Account/security settings |
+| Connected account | Upstream OAuth grant | Provider resources | Settings connected accounts |
+| Integration | Downstream OAuth client | Integration-specific | Settings integrations, `/api/*` |
+| Internal service credential | Service credential | Service principal | Internal RPC/service boundary |
+| Signed Worker webhook | Worker signature | Worker deployment | Worker ingest |
+| Domain | Email domain state | Uses connected account | Settings domains |
 
-Connected accounts are upstream provider connections where AgentTeam Email is
-the OAuth client and stores a user-authorized external provider grant. Connected
-accounts authorize AgentTeam Email to read or mutate provider resources needed
-by the product, such as Cloudflare accounts and zones for domain provisioning.
-Cloudflare is the current connected-account provider, but the concept is
-provider-generic.
+Definitions:
 
-Integrations are downstream OAuth clients where AgentTeam Email is the OAuth
-authorization server and resource server. Integrations receive authorization to
-call AgentTeam Email according to the scopes, grants, mailbox policy, and
-revocation state owned at the web-server boundary.
+- `Browser session`: Better Auth browser session for first-party web UI. It is
+  not an API, Agent Auth, or service credential.
+- `API key`: Better Auth API key for API automation, shell use, or
+  environment-based API clients. It acts with the owning user's access level and
+  is not an Agent Access capability grant.
+- `Device login`: Better Auth device authorization used by `at-email auth
+  login`. It creates a personal CLI credential. It is not `at-email agent
+  connect`, Agent Auth, or Agent Access.
+- `Agent Auth`: Better Auth Agent Auth for agent runtimes. Resource access uses
+  request-bound `agent+jwt` and `host+jwt` JWTs and authorizes through Agent
+  Access grants, capabilities, constraints, expiry, and revocation. It does not
+  inherit the approving user's full access level.
+- `Linked account`: Better Auth account-linking identity for sign-in. It is not
+  a connected account or provider-resource grant.
+- `Connected account`: upstream provider OAuth grant where AgentTeam Email is
+  the OAuth client. It is provider-generic; Cloudflare is the current provider.
+  It is not a sign-in identity, integration, or public API credential.
+- `Integration`: downstream OAuth client where AgentTeam Email is the OAuth
+  authorization server and resource server. Authorization is
+  integration-specific.
+- `OAuth integration access token`: `/api/*` bearer credential issued to an
+  integration according to that integration's authorization model.
+- `Internal service credential`: credential for an internal service principal.
+- `Signed Worker webhook`: Cloudflare Worker ingest credential.
+- `Domain`: product state for an email domain. It is not connected-account
+  inventory.
 
-Domains consume connected-account authority for provider setup, status, retries,
-and remediation. Domain state is not the connected-account inventory itself.
+Agent Auth provisioning flows:
+
+- Agent-initiated: `at-email agent connect` creates local host and agent keys,
+  requests delegated Agent Auth access, and gives the user a browser approval
+  URL.
+- UI-initiated: the web UI creates an enrollment or bootstrap command or URL for
+  the intended agent to consume.
+- Autonomous trial flows, when enabled, also produce Agent Auth credentials.
+
+The `/api/*` product API accepts API-owned credentials only: API keys, device
+login credentials, Agent Auth credentials, and OAuth integration access tokens.
+The `/api/auth/*` mount is the API-client Better Auth and Agent Auth protocol
+mount.
+
+The `/rpc/*` product surface accepts browser and internal controlled credentials
+only. The `/rpc/auth/api/*` mount is the browser/internal Better Auth and Agent
+Auth protocol mount. API keys, device login credentials, Agent Auth credentials,
+and OAuth integration access tokens must not authorize browser product RPC
+routes.
+
+## Settings Ownership
+
+Settings owns user, organization, system, and account configuration for the
+first-party browser UI. Settings includes account and security settings, linked
+accounts, organization settings, connected accounts, integrations, domains,
+API keys, and device login credentials.
+
+Agent Access is not a general settings credential surface. Agent hosts, agent
+identities, enrollment and bootstrap commands, approval requests, capability
+grants, mailbox constraints, grant expiry, last-used state, and revocation
+belong in the mail administration Agent Access surface.
 
 ## Paperclip OAuth Integration
 
