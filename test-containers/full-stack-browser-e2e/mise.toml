@@ -2,3 +2,8 @@
 description = "Run the recorded full-stack browser E2E harness"
 dir = "{{config_root}}"
 run = "pnpm --filter @main/full-stack-browser-e2e test"
+
+[tasks."test:with-images"]
+description = "Build required images and run the recorded full-stack browser E2E harness"
+dir = "{{config_root}}"
+run = "bash ./scripts/run-with-artifacts.sh --build-images"
