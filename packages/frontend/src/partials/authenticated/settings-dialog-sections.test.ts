@@ -15,8 +15,20 @@ describe('settings section routing', () => {
 
   it('maps canonical kebab-case settings segments to separate sections', () => {
     expect(getSettingsSectionFromSegment('connected-accounts')).toBe('connected-accounts')
+    expect(getSettingsSectionFromSegment('integrations')).toBe('integrations')
     expect(getSettingsSectionFromSegment('domains')).toBe('domains')
     expect(getSettingsSectionFromSegment('agent-access')).toBe('agentAccess')
+  })
+
+  it('does not conflate connected accounts with integrations', () => {
+    expect(resolveSettingsRouteSegment('connected-accounts')).toStrictEqual({
+      section: 'connected-accounts',
+      type: 'section'
+    })
+    expect(resolveSettingsRouteSegment('integrations')).toStrictEqual({
+      section: 'integrations',
+      type: 'section'
+    })
   })
 
   it('does not silently accept camelCase route segments', () => {

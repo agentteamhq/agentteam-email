@@ -3,6 +3,7 @@ export type SettingsSectionId =
   | 'security'
   | 'agentAccess'
   | 'connected-accounts'
+  | 'integrations'
   | 'organizations'
   | 'organizationSettings'
   | 'organizationPeople'
@@ -10,7 +11,7 @@ export type SettingsSectionId =
 
 type SettingsRouteSectionId = Extract<
   SettingsSectionId,
-  'account' | 'security' | 'agentAccess' | 'connected-accounts' | 'organizations' | 'domains'
+  'account' | 'security' | 'agentAccess' | 'connected-accounts' | 'integrations' | 'organizations' | 'domains'
 >
 
 type OrganizationRouteSectionId = Extract<
@@ -41,6 +42,7 @@ export const settingsRouteSegments = {
   security: 'security',
   agentAccess: 'agent-access',
   'connected-accounts': 'connected-accounts',
+  integrations: 'integrations',
   organizations: 'organizations',
   domains: 'domains'
 } satisfies Record<SettingsRouteSectionId, string>
@@ -55,6 +57,7 @@ const settingsSectionHrefs = {
   security: '/settings/security/',
   agentAccess: '/settings/agent-access/',
   'connected-accounts': '/settings/connected-accounts/',
+  integrations: '/settings/integrations/',
   organizations: '/settings/organizations/',
   organizationSettings: '/organization/settings/',
   organizationPeople: '/organization/people/',
@@ -80,6 +83,7 @@ const settingsSectionIds = new Set<SettingsSectionId>([
   'security',
   'agentAccess',
   'connected-accounts',
+  'integrations',
   'organizations',
   'organizationSettings',
   'organizationPeople',

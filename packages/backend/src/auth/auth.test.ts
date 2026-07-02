@@ -125,12 +125,12 @@ describe('Better Auth organization API-key configuration', () => {
     expect(AUTH_REDIRECT_ERROR_ROUTE).toBe('https://mail.example.com/redirect/error')
   })
 
-  it('routes OAuth provider post-login client management to canonical Agent access settings', async () => {
+  it('routes OAuth provider post-login flow to the consent page', async () => {
     expect.hasAssertions()
 
     const { AGENTTEAM_OAUTH_PROVIDER_POST_LOGIN_PAGE } = await import('./auth')
 
-    expect(AGENTTEAM_OAUTH_PROVIDER_POST_LOGIN_PAGE).toBe('/settings/agent-access/')
+    expect(AGENTTEAM_OAUTH_PROVIDER_POST_LOGIN_PAGE).toBe('/oauth/consent/')
     expect(AGENTTEAM_OAUTH_PROVIDER_POST_LOGIN_PAGE).not.toBe('/settings/developer/')
   })
 

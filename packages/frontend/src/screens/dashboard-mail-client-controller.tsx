@@ -4,7 +4,6 @@ import { useRouter, useRouterState } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
 import {
-  connectPaperclipAgentAccess,
   decideAgentAccessApproval,
   fetchAgentAccessView,
   revokeAgentAccessAgent,
@@ -20,6 +19,10 @@ import {
   provisionCloudflareConnection,
   startCloudflareOAuth
 } from '../lib/cloudflare-rpc'
+import {
+  fetchIntegrationsView,
+  revokePaperclipIntegration
+} from '../lib/integrations-rpc'
 import {
   createMailboxAdminAccount,
   createMailboxAdminAgentEnrollment,
@@ -106,12 +109,13 @@ import type {
   MailboxAdminView
 } from '../partials/authenticated/mailbox-admin-models'
 import type {
-  AgentAccessConnectionHandoff,
   AgentAccessSettingsState,
-  DomainSettingsState
+  DomainSettingsState,
+  IntegrationSettingsState
 } from '../partials/authenticated/settings-dialog'
 
 const AGENT_ACCESS_QUERY_KEY = ['agent-access', 'view'] as const
+const INTEGRATIONS_QUERY_KEY = ['integrations', 'view'] as const
 const MAIL_QUERY_LIMIT = 25
 const MAILBOX_ADMIN_PAGE_SIZE = 25
 function mailboxAdminPrincipalKey(principal: Pick<MailboxAdminExternalPrincipal, 'id' | 'kind'>) {
@@ -143,6 +147,7 @@ function mailWorkspaceQueryOptions(
 }
 
 type AgentAccessViewLoader = typeof fetchAgentAccessView
+type IntegrationsViewLoader = typeof fetchIntegrationsView
 type MailWorkspaceLoader = typeof fetchMailWorkspace
 type MailboxAdminNavigationLoader = typeof fetchMailboxAdminNavigation
 type MailboxAdminViewLoader = typeof fetchMailboxAdminView
@@ -180,6 +185,13 @@ function agentAccessQueryOptions(agentAccessViewLoader: AgentAccessViewLoader) {
   })
 }
 
+function integrationsQueryOptions(integrationsViewLoader: IntegrationsViewLoader) {
+  return queryOptions({
+    queryFn: integrationsViewLoader,
+    queryKey: INTEGRATIONS_QUERY_KEY
+  })
+}
+
 function runAsync(promise: Promise<unknown>) {
   promise.catch(ignoreAsyncError)
 }
@@ -189,7 +201,6 @@ function ignoreAsyncError() {}
 function canEditAgentAccess(view: AgentAccessView | null | undefined) {
   const allowedActions = view?.allowedActions
   return Boolean(
-    allowedActions?.connectPaperclip ||
     allowedActions?.denyApproval ||
     allowedActions?.reviewApproval ||
     allowedActions?.revokeAgent ||
@@ -223,13 +234,11 @@ interface FirstMailboxErrorState {
 function useAgentAccessController({
   agentAccessViewLoader,
   createdAgentEnrollment,
-  onCopyEnrollmentCommand,
-  paperclipConnectionHandoff
+  onCopyEnrollmentCommand
 }: {
   agentAccessViewLoader: AgentAccessViewLoader
   createdAgentEnrollment: MailboxAdminAgentEnrollment | null
   onCopyEnrollmentCommand: (command: string) => void
-  paperclipConnectionHandoff: AgentAccessConnectionHandoff | null
 }): AgentAccessSettingsState {
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -275,7 +284,6 @@ function useAgentAccessController({
       canRefresh: true,
       canRevokeAgent: Boolean(agentAccessAllowedActions?.revokeAgent),
       canRevokeCapabilityGrant: Boolean(agentAccessAllowedActions?.revokeCapabilityGrant),
-      connectionHandoff: paperclipConnectionHandoff,
       createdAgentEnrollment,
       message:
         message ??
@@ -312,29 +320,6 @@ function useAgentAccessController({
           }
         : undefined,
       onCopyEnrollmentCommand,
-      onConnectPaperclip:
-        paperclipConnectionHandoff?.companyId &&
-        paperclipConnectionHandoff.pluginId === 'agentteam.paperclip-email-plugin' &&
-        agentAccessAllowedActions?.connectPaperclip
-          ? (handoff: AgentAccessConnectionHandoff) => {
-              const companyId = handoff.companyId
-              const pluginId = handoff.pluginId
-              if (!companyId || pluginId !== 'agentteam.paperclip-email-plugin') {
-                setMessage('Paperclip connection context is incomplete.')
-                return
-              }
-              runAsync(
-                runMutation(
-                  () =>
-                    connectPaperclipAgentAccess({
-                      companyId,
-                      pluginId
-                    }),
-                  'Paperclip principal registered'
-                )
-              )
-            }
-          : undefined,
       onRefresh: () => {
         setMessage(null)
         runAsync(refetchAgentAccess().then(() => undefined))
@@ -363,7 +348,6 @@ function useAgentAccessController({
       view: agentAccessView ?? null
     }),
     [
-      agentAccessAllowedActions?.connectPaperclip,
       agentAccessAllowedActions?.denyApproval,
       agentAccessAllowedActions?.reviewApproval,
       agentAccessAllowedActions?.revokeAgent,
@@ -376,10 +360,77 @@ function useAgentAccessController({
       message,
       mutationBusy,
       onCopyEnrollmentCommand,
-      paperclipConnectionHandoff,
       refetchAgentAccess,
       router,
       runMutation
+    ]
+  )
+}
+
+function useIntegrationsController({
+  integrationsViewLoader
+}: {
+  integrationsViewLoader: IntegrationsViewLoader
+}): IntegrationSettingsState {
+  const queryClient = useQueryClient()
+  const {
+    data: integrationsView,
+    error: integrationsError,
+    isError: isIntegrationsError,
+    isFetching: isIntegrationsFetching,
+    refetch: refetchIntegrations
+  } = useQuery(integrationsQueryOptions(integrationsViewLoader))
+  const [message, setMessage] = React.useState<string | null>(null)
+  const { isPending: isRevokingPaperclip, mutateAsync: revokePaperclip } = useMutation({
+    mutationFn: revokePaperclipIntegration,
+    onSuccess: (result) => {
+      queryClient.setQueryData(INTEGRATIONS_QUERY_KEY, result.view)
+      setMessage('Paperclip authorization removed')
+    }
+  })
+  const canRevokePaperclip = Boolean(integrationsView?.allowedActions.revokePaperclip)
+
+  return React.useMemo(
+    () => ({
+      busy: isIntegrationsFetching || isRevokingPaperclip,
+      canRefresh: true,
+      canRevokePaperclip,
+      message:
+        message ??
+        (integrationsError instanceof Error
+          ? integrationsError.message
+          : isIntegrationsError
+            ? 'Integrations could not be loaded'
+            : null),
+      onRefresh: () => {
+        setMessage(null)
+        runAsync(refetchIntegrations().then(() => undefined))
+      },
+      onRevokePaperclip: canRevokePaperclip
+        ? (clientId: string) => {
+            setMessage(null)
+            runAsync(
+              revokePaperclip(clientId).catch((error: unknown) => {
+                setMessage(
+                  error instanceof Error ? error.message : 'Paperclip authorization could not be revoked'
+                )
+              })
+            )
+          }
+        : undefined,
+      readOnly: !canRevokePaperclip,
+      view: integrationsView ?? null
+    }),
+    [
+      canRevokePaperclip,
+      integrationsError,
+      integrationsView,
+      isIntegrationsError,
+      isIntegrationsFetching,
+      isRevokingPaperclip,
+      message,
+      refetchIntegrations,
+      revokePaperclip
     ]
   )
 }
@@ -601,7 +652,7 @@ function useDomainSettingsController({
     startOAuth('dashboard-onboarding').catch(handleUnexpectedCloudflareActionError)
   }, [handleUnexpectedCloudflareActionError, startOAuth])
 
-  const startSettingsConnectedAccountsOAuth = React.useCallback(() => {
+  const startSettingsConnectedAccountOAuth = React.useCallback(() => {
     startOAuth('settings-connected-accounts').catch(handleUnexpectedCloudflareActionError)
   }, [handleUnexpectedCloudflareActionError, startOAuth])
 
@@ -824,7 +875,7 @@ function useDomainSettingsController({
       onSetupDomain: () => {
         setupDomain().catch(handleUnexpectedCloudflareActionError)
       },
-      onStartConnectedAccountOAuth: startSettingsConnectedAccountsOAuth,
+      onStartConnectedAccountOAuth: startSettingsConnectedAccountOAuth,
       onStartOAuth: startSettingsDomainsOAuth,
       readOnly,
       selectedGrantPublicId: runtimeSelectedGrantPublicId || undefined,
@@ -964,20 +1015,6 @@ function cleanSearchValue(value: string | undefined) {
   return value === undefined || value === '' ? undefined : value
 }
 
-function paperclipConnectionHandoffFromSearch(
-  routeSearch: SettingsRouteSearch | undefined
-): AgentAccessConnectionHandoff | null {
-  if (routeSearch?.agentAccessSource !== 'paperclip') {
-    return null
-  }
-
-  return {
-    companyId: routeSearch.paperclipCompanyId ?? null,
-    pluginId: routeSearch.paperclipPluginId ?? null,
-    source: 'paperclip'
-  }
-}
-
 interface ComposeState {
   bcc: string
   body: string
@@ -1012,6 +1049,7 @@ interface DashboardMailControllerProps extends Pick<
   | 'settingsSection'
 > {
   agentAccessViewLoader?: AgentAccessViewLoader
+  integrationsViewLoader?: IntegrationsViewLoader
   mailWorkspaceLoader?: MailWorkspaceLoader
   mailboxAdminViewLoader?: MailboxAdminViewLoader
   mailboxAdminNavigationLoader?: MailboxAdminNavigationLoader
@@ -1020,6 +1058,7 @@ interface DashboardMailControllerProps extends Pick<
 
 export function DashboardMailController({
   agentAccessViewLoader = fetchAgentAccessView,
+  integrationsViewLoader = fetchIntegrationsView,
   firstMailboxSetupState: providedFirstMailboxSetupState,
   domainSettingsState: providedDomainSettingsState,
   mailWorkspaceLoader = fetchMailWorkspace,
@@ -1105,8 +1144,10 @@ export function DashboardMailController({
   const agentAccessState = useAgentAccessController({
     agentAccessViewLoader,
     createdAgentEnrollment,
-    onCopyEnrollmentCommand: handleCopyAgentEnrollmentCommand,
-    paperclipConnectionHandoff: paperclipConnectionHandoffFromSearch(routeSearch)
+    onCopyEnrollmentCommand: handleCopyAgentEnrollmentCommand
+  })
+  const integrationsState = useIntegrationsController({
+    integrationsViewLoader
   })
   const { dashboardOnboardingStartOAuth, settingsState: domainSettingsState } = useDomainSettingsController({
     cloudflareOAuthCallback: routeSearch?.cloudflareIntentId
@@ -2193,6 +2234,7 @@ export function DashboardMailController({
       composeView={composeView}
       dashboardView={dashboardView}
       domainSettingsState={domainSettingsState}
+      integrationsState={integrationsState}
       emailPreviewsById={emailPreviewsById}
       firstMailboxSetupState={firstMailboxSetupState}
       mailboxAdminView={mailboxAdminView}

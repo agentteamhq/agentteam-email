@@ -5,16 +5,21 @@ Paperclip plugin and the service-owned connection boundary.
 
 ## Current Scaffold Boundary
 
-- Paperclip instance configuration stores only non-secret values and a future
-  `apiKeySecretRef` pointer.
+- Paperclip instance configuration stores only non-secret values:
+  `serviceBaseUrl`, `oauthClientId`, `oauthRedirectUri`, and optional
+  `apiKeySecretRef`.
 - The worker does not resolve Paperclip secrets.
 - The worker does not send outbound HTTP requests.
-- The custom settings page exposes a branded AgentTeam Email connect handoff,
-  redacted connection status, and advanced self-hosting fields.
+- The custom settings page exposes a branded AgentTeam Email OAuth start
+  action, redacted connection status, and advanced provisioning fields.
 - The dashboard widget exposes only redacted connection status.
-- The AgentTeam Email app accepts the Paperclip handoff in Agent Access and can
-  register a backend-owned OAuth grant principal for that Paperclip company and
-  plugin id without returning client secrets to the browser or plugin.
+- Paperclip connects to AgentTeam Email as an OAuth client. AgentTeam Email owns
+  authorization, consent, token behavior, revocation, mailbox grant
+  enforcement, and audit events at the web-server boundary.
+- The plugin starts authorization with authorization code + PKCE against the
+  AgentTeam Email OAuth authorize endpoint. AgentTeam Email settings show
+  Paperclip authorization status and revoke user/org consent; settings do not
+  register Paperclip clients.
 - Runtime email tool execution uses `at-email paperclip-tool` with local Agent
   Auth credentials; Paperclip run context is request context only and does not
   define mailbox policy.
@@ -23,9 +28,8 @@ Paperclip plugin and the service-owned connection boundary.
 
 - Use a Paperclip `secret-ref` field for the AgentTeam Email service API key
   only for self-hosted or preview setups that cannot use OAuth.
-- Add service-owned OAuth callback handling, consent reference, token storage,
-  and persisted account metadata only if a Paperclip-native OAuth runtime lane
-  replaces the current CLI Agent Auth execution lane.
+- Add Paperclip-side OAuth callback handling and token storage for the runtime
+  lane after AgentTeam Email issues the authorization code.
 - Add `secrets.read-ref` only when the worker actually resolves the API key at
   the execution boundary.
 - Add `http.outbound` only when the worker starts calling the upstream service.
@@ -40,14 +44,19 @@ Paperclip plugin and the service-owned connection boundary.
 ## Planned Configuration Shape
 
 - `serviceBaseUrl`: default public AgentTeam Email API origin.
+- `oauthClientId`: pre-provisioned AgentTeam Email OAuth client ID for this
+  Paperclip plugin.
+- `oauthRedirectUri`: Paperclip callback URI registered on the AgentTeam Email
+  OAuth client.
 - `apiKeySecretRef`: optional Paperclip secret reference for the service API key
   in self-hosted or preview setups.
 
 ## Planned Provisioning Interfaces
 
-- Custom Paperclip settings page with visible AgentTeam Email connect handoff.
-- Advanced self-hosting disclosure for `serviceBaseUrl` and
-  `apiKeySecretRef`.
+- Custom Paperclip settings page with visible AgentTeam Email OAuth start
+  action.
+- Advanced provisioning disclosure for `serviceBaseUrl`, `oauthClientId`,
+  `oauthRedirectUri`, and `apiKeySecretRef`.
 - Dashboard status widget for connected/not-connected state and last synthetic
   check.
 - Future operator action to test upstream connectivity without disclosing the

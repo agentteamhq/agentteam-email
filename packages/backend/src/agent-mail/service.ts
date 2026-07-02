@@ -846,9 +846,15 @@ async function resolveOAuthAgentMailOrganizationContext({
     throw new AgentMailAccessError('Organization access is required', 403)
   }
   const paperclipContext = parseAgentMailPaperclipContext(headers)
-  requirePaperclipOAuthClientConnection({ client, organizationId: boundOrganizationId, paperclipContext })
-
   const userId = stringClaim(claims.sub)
+  await requirePaperclipOAuthClientConnection({
+    client,
+    db,
+    organizationId: boundOrganizationId,
+    paperclipContext,
+    userId: userId ? (userId as UserId) : null
+  })
+
   return buildGrantBackedAgentMailOrganizationContext({
     boundOrganizationId,
     db,
@@ -909,14 +915,18 @@ async function buildGrantBackedAgentMailOrganizationContext({
   }
 }
 
-function requirePaperclipOAuthClientConnection({
+async function requirePaperclipOAuthClientConnection({
   client,
+  db,
   organizationId,
-  paperclipContext
+  paperclipContext,
+  userId
 }: {
-  client: Pick<OAuthClientDocument, 'metadata' | 'referenceId' | 'softwareId'>
+  client: Pick<OAuthClientDocument, 'clientId' | 'metadata' | 'referenceId' | 'softwareId'>
+  db: Awaited<ReturnType<typeof globals>>['db']
   organizationId: OrganizationId
   paperclipContext: AgentMailPaperclipContext | null
+  userId: UserId | null
 }) {
   const metadata = readPaperclipOAuthClientMetadata(client.metadata)
   const isPaperclipClient = metadata !== null || client.softwareId === PAPERCLIP_EMAIL_PLUGIN_ID
@@ -926,12 +936,23 @@ function requirePaperclipOAuthClientConnection({
 
   if (
     !paperclipContext ||
-    !metadata ||
-    metadata.companyId !== paperclipContext.companyId ||
-    metadata.pluginId !== paperclipContext.pluginId ||
+    !isPaperclipClient ||
+    (metadata && metadata.pluginId !== paperclipContext.pluginId) ||
     client.softwareId !== paperclipContext.pluginId ||
-    String(client.referenceId) !== String(organizationId)
+    (client.referenceId && String(client.referenceId) !== String(organizationId)) ||
+    !userId
   ) {
+    throw new AgentMailAccessError('Paperclip OAuth connection is not authorized', 403)
+  }
+
+  const consent = await db.models.oauthConsent
+    .findOne({
+      clientId: client.clientId,
+      referenceId: organizationId,
+      userId
+    })
+    .exec()
+  if (!consent) {
     throw new AgentMailAccessError('Paperclip OAuth connection is not authorized', 403)
   }
 }

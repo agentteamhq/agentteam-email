@@ -7,6 +7,7 @@ import {
   LockIcon,
   PlugsConnectedIcon,
   PlusCircleIcon,
+  PuzzlePieceIcon,
   SuitcaseSimpleIcon,
   TrashIcon,
   UserCircleIcon,
@@ -78,12 +79,13 @@ import type {
   AgentAccessApproval,
   AgentAccessGrant,
   AgentAccessHost,
-  AgentAccessPaperclipConnection,
   AgentAccessView,
   AgentMailAdminAgentEnrollment,
   CloudflareAccountSummary,
   CloudflareStatusResult,
-  CloudflareZoneSummary
+  CloudflareZoneSummary,
+  IntegrationsView,
+  PaperclipIntegration
 } from '@main/backend'
 
 export type SettingsDialogContentState = 'ready' | 'loading' | 'empty'
@@ -91,13 +93,14 @@ export type SettingsDialogContentState = 'ready' | 'loading' | 'empty'
 type CloudflareGrantView = Pick<
   CloudflareStatusResult['grants'][number],
   | 'cloudflareEmail'
-  | 'isUsable'
   | 'lastErrorMessage'
-  | 'missingRequiredScopeCount'
   | 'publicId'
-  | 'requiresReconnect'
   | 'status'
->
+> & {
+  isUsable: boolean
+  missingRequiredScopeCount: number
+  requiresReconnect: boolean
+}
 
 type CloudflareConnectionView = Pick<
   CloudflareStatusResult['connections'][number],
@@ -116,6 +119,19 @@ type CloudflareConnectionView = Pick<
 >
 
 type AgentAccessCapabilityRequest = AgentAccessApproval['capabilityRequests'][number]
+
+type MailRuntimeStatusSummary = {
+  modules: Record<
+    string,
+    {
+      ok?: boolean
+      queue?: {
+        pending?: number
+        retryWait?: number
+      }
+    }
+  >
+}
 
 export interface DomainSettingsStatus {
   connections: readonly CloudflareConnectionView[]
@@ -157,12 +173,10 @@ export interface AgentAccessSettingsState {
   canRefresh?: boolean
   canRevokeAgent?: boolean
   canRevokeCapabilityGrant?: boolean
-  connectionHandoff?: AgentAccessConnectionHandoff | null
   createdAgentEnrollment?: AgentMailAdminAgentEnrollment | null
   message?: string | null
   onCopyEnrollmentCommand?: (command: string) => void
   onApproveApproval?: (approvalId: string) => void
-  onConnectPaperclip?: (handoff: AgentAccessConnectionHandoff) => void
   onDenyApproval?: (approvalId: string) => void
   onRefresh?: () => void
   onRevokeAgent?: (agentId: string) => void
@@ -171,17 +185,23 @@ export interface AgentAccessSettingsState {
   view: AgentAccessView | null
 }
 
-export interface AgentAccessConnectionHandoff {
-  companyId: string | null
-  pluginId: string | null
-  source: 'paperclip'
+export interface IntegrationSettingsState {
+  busy?: boolean
+  canRefresh?: boolean
+  canRevokePaperclip?: boolean
+  message?: string | null
+  onRefresh?: () => void
+  onRevokePaperclip?: (clientId: PaperclipIntegration['clientId']) => void
+  readOnly?: boolean
+  view: IntegrationsView | null
 }
 
 const settingsNavigation = [
   { id: 'account', name: 'Account', icon: UserCircleIcon },
   { id: 'security', name: 'Security', icon: LockIcon },
-  { id: 'agentAccess', name: 'Agent access', icon: UserIcon },
   { id: 'connected-accounts', name: 'Connected accounts', icon: PlugsConnectedIcon },
+  { id: 'integrations', name: 'Integrations', icon: PuzzlePieceIcon },
+  { id: 'agentAccess', name: 'Agent access', icon: UserIcon },
   { id: 'organizations', name: 'Organizations', icon: SuitcaseSimpleIcon },
   { id: 'organizationSettings', name: 'Organization settings', icon: IdentificationCardIcon },
   { id: 'organizationPeople', name: 'Organization people', icon: UsersIcon }
@@ -196,6 +216,7 @@ const settingsNames = {
   security: 'Security',
   agentAccess: 'Agent access',
   'connected-accounts': 'Connected accounts',
+  integrations: 'Integrations',
   organizations: 'Organizations',
   organizationSettings: 'Organization settings',
   organizationPeople: 'Organization people',
@@ -209,6 +230,7 @@ interface SettingsDialogProps {
   defaultActiveSection?: SettingsSectionId
   defaultOpen?: boolean
   domainSettingsState?: DomainSettingsState
+  integrationsState?: IntegrationSettingsState
   onActiveSectionChange?: (section: SettingsSectionId) => void
   onOpenChange?: (open: boolean) => void
   open?: boolean
@@ -222,6 +244,7 @@ export function SettingsDialog({
   defaultActiveSection = 'account',
   defaultOpen = true,
   domainSettingsState,
+  integrationsState,
   onActiveSectionChange,
   onOpenChange,
   open: openProp,
@@ -236,6 +259,7 @@ export function SettingsDialog({
   const setActiveSection = onActiveSectionChange ?? setUncontrolledActiveSection
   const domainSettings = domainSettingsControllerFromState(domainSettingsState)
   const agentAccess = agentAccessControllerFromState(agentAccessState)
+  const integrations = integrationsControllerFromState(integrationsState)
   const activeName =
     activeSection === 'domains'
       ? domainSettings.mode === 'addDomain'
@@ -255,7 +279,7 @@ export function SettingsDialog({
       >
         <DialogTitle className='sr-only'>Settings</DialogTitle>
         <DialogDescription className='sr-only'>
-          Manage account, security, connected account, organization, and domain settings.
+          Manage account, security, connected account, integration, organization, and domain settings.
         </DialogDescription>
         <SidebarProvider className='h-full min-h-0 min-w-0 items-start overflow-hidden'>
           <Sidebar
@@ -429,6 +453,7 @@ export function SettingsDialog({
                 agentAccess={agentAccess}
                 contentState={contentState}
                 domainSettings={domainSettings}
+                integrations={integrations}
                 section={activeSection}
               />
             </div>
@@ -443,11 +468,13 @@ function SettingsPanelContent({
   agentAccess,
   contentState,
   domainSettings,
+  integrations,
   section
 }: {
   agentAccess: AgentAccessController
   contentState: SettingsDialogContentState
   domainSettings: DomainSettingsController
+  integrations: IntegrationsController
   section: SettingsSectionId
 }) {
   if (contentState === 'loading') {
@@ -460,6 +487,8 @@ function SettingsPanelContent({
         description={
           section === 'connected-accounts'
             ? 'Connected provider accounts will appear here.'
+            : section === 'integrations'
+              ? 'Plugin authorizations will appear here.'
             : section === 'domains'
               ? 'Domains connected to AgentTeam Email will appear here.'
               : 'This settings section has no records to show yet.'
@@ -467,6 +496,8 @@ function SettingsPanelContent({
         title={
           section === 'connected-accounts'
             ? 'No connected accounts'
+            : section === 'integrations'
+              ? 'No integrations'
             : section === 'domains'
               ? 'No domains'
               : 'Nothing to show'
@@ -528,6 +559,10 @@ function SettingsPanelContent({
     return <ConnectedAccountsContent settings={domainSettings} />
   }
 
+  if (section === 'integrations') {
+    return <IntegrationsContent integrations={integrations} />
+  }
+
   if (section === 'domains') {
     return <SettingsDomainsContent settings={domainSettings} />
   }
@@ -568,12 +603,10 @@ interface AgentAccessController {
   canRefresh: boolean
   canRevokeAgent: boolean
   canRevokeCapabilityGrant: boolean
-  connectionHandoff: AgentAccessConnectionHandoff | null
   createdAgentEnrollment: AgentMailAdminAgentEnrollment | null
   message: string | null
   onCopyEnrollmentCommand: (command: string) => void
   onApproveApproval: (approvalId: string) => void
-  onConnectPaperclip?: (handoff: AgentAccessConnectionHandoff) => void
   onDenyApproval: (approvalId: string) => void
   onRefresh: () => void
   onRevokeAgent: (agentId: string) => void
@@ -594,12 +627,10 @@ function agentAccessControllerFromState(state: AgentAccessSettingsState | undefi
     canRefresh: state?.canRefresh ?? hasRefresh,
     canRevokeAgent: state?.canRevokeAgent ?? Boolean(state?.onRevokeAgent),
     canRevokeCapabilityGrant: state?.canRevokeCapabilityGrant ?? Boolean(state?.onRevokeCapabilityGrant),
-    connectionHandoff: state?.connectionHandoff ?? null,
     createdAgentEnrollment: state?.createdAgentEnrollment ?? null,
     message: state?.message ?? null,
     onCopyEnrollmentCommand: state?.onCopyEnrollmentCommand ?? ignoreAgentAccessAction,
     onApproveApproval: state?.onApproveApproval ?? ignoreAgentAccessAction,
-    onConnectPaperclip: state?.onConnectPaperclip,
     onDenyApproval: state?.onDenyApproval ?? ignoreAgentAccessAction,
     onRefresh: state?.onRefresh ?? ignoreAgentAccessAction,
     onRevokeAgent: state?.onRevokeAgent ?? ignoreAgentAccessAction,
@@ -611,23 +642,55 @@ function agentAccessControllerFromState(state: AgentAccessSettingsState | undefi
 
 function ignoreAgentAccessAction() {}
 
+interface IntegrationsController {
+  busy: boolean
+  canRefresh: boolean
+  canRevokePaperclip: boolean
+  message: string | null
+  onRefresh: () => void
+  onRevokePaperclip: (clientId: PaperclipIntegration['clientId']) => void
+  readOnly: boolean
+  view: IntegrationsView | null
+}
+
+function integrationsControllerFromState(
+  state: IntegrationSettingsState | undefined
+): IntegrationsController {
+  const readOnly = state ? (state.readOnly ?? false) : true
+
+  return {
+    busy: state?.busy ?? false,
+    canRefresh: state?.canRefresh ?? Boolean(state?.onRefresh),
+    canRevokePaperclip: state?.canRevokePaperclip ?? Boolean(state?.onRevokePaperclip),
+    message: state?.message ?? null,
+    onRefresh: guardedSettingsAction(state?.onRefresh, readOnly),
+    onRevokePaperclip: guardedSettingsAction(state?.onRevokePaperclip, readOnly),
+    readOnly,
+    view: state?.view ?? null
+  }
+}
+
+function guardedSettingsAction<TArgs extends unknown[]>(
+  handler: ((...args: TArgs) => void) | undefined,
+  readOnly: boolean
+) {
+  return (...args: TArgs) => {
+    if (!readOnly) {
+      handler?.(...args)
+    }
+  }
+}
+
 function AgentAccessPanel({ access }: { access: AgentAccessController }) {
   const view = access.view
   const enrollment = access.createdAgentEnrollment
-  const paperclipConnections = view?.paperclipConnections ?? []
-  const handoff = access.connectionHandoff ? (
-    <AgentAccessConnectionHandoffCard
-      busy={access.busy}
-      handoff={access.connectionHandoff}
-      onConnect={access.onConnectPaperclip}
-      readOnly={access.readOnly}
-    />
-  ) : null
+  const hasAgentAccessContent = Boolean(
+    view && (view.agents.length > 0 || view.approvals.length > 0 || view.grants.length > 0 || view.hosts.length > 0)
+  )
 
   if (!view && !access.message) {
     return (
       <div className='grid max-w-3xl gap-3'>
-        {handoff}
         <AgentAccessLoadingContent />
       </div>
     )
@@ -636,7 +699,6 @@ function AgentAccessPanel({ access }: { access: AgentAccessController }) {
   if (!view && access.message) {
     return (
       <div className='grid max-w-3xl gap-3'>
-        {handoff}
         <div className='flex items-start justify-between gap-3'>
           <div className='min-w-0'>
             <p className='font-medium'>Agent access unavailable</p>
@@ -661,10 +723,9 @@ function AgentAccessPanel({ access }: { access: AgentAccessController }) {
     )
   }
 
-  if (!view || view.state === 'empty') {
+  if (!view || !hasAgentAccessContent) {
     return (
       <div className='grid max-w-3xl gap-3'>
-        {handoff}
         <div className='flex items-start justify-between gap-3'>
           <div className='min-w-0'>
             <p className='font-medium'>Agent access</p>
@@ -685,9 +746,6 @@ function AgentAccessPanel({ access }: { access: AgentAccessController }) {
           description='No agent hosts or organization-scoped grants are available for this workspace.'
           title='No agent access'
         />
-        {paperclipConnections.length > 0 ? (
-          <AgentAccessPaperclipConnectionsSection connections={paperclipConnections} />
-        ) : null}
         {enrollment ? (
           <AgentAccessEnrollmentCard
             busy={access.busy}
@@ -707,7 +765,6 @@ function AgentAccessPanel({ access }: { access: AgentAccessController }) {
 
   return (
     <section className='grid max-w-3xl gap-4'>
-      {handoff}
       <div className='flex items-start justify-between gap-3'>
         <div className='min-w-0'>
           <p className='font-medium'>Agent access</p>
@@ -734,10 +791,6 @@ function AgentAccessPanel({ access }: { access: AgentAccessController }) {
           enrollment={enrollment}
           onCopyCommand={access.onCopyEnrollmentCommand}
         />
-      ) : null}
-
-      {paperclipConnections.length > 0 ? (
-        <AgentAccessPaperclipConnectionsSection connections={paperclipConnections} />
       ) : null}
 
       {view.approvals.length > 0 ? (
@@ -804,101 +857,125 @@ function AgentAccessPanel({ access }: { access: AgentAccessController }) {
   )
 }
 
-function AgentAccessPaperclipConnectionsSection({
-  connections
-}: {
-  connections: ReadonlyArray<AgentAccessPaperclipConnection>
-}) {
-  return (
-    <AgentAccessSection title='Connected integrations'>
-      {connections.map((connection) => (
-        <AgentAccessPaperclipConnectionRow
-          connection={connection}
-          key={connection.clientId}
-        />
-      ))}
-    </AgentAccessSection>
-  )
-}
-
-function AgentAccessPaperclipConnectionRow({ connection }: { connection: AgentAccessPaperclipConnection }) {
-  return (
-    <div className='grid gap-2 border-b p-3 text-sm last:border-b-0'>
-      <div className='flex items-start justify-between gap-3'>
-        <div className='min-w-0'>
-          <p className='truncate font-medium'>{connection.name}</p>
-          <p className='text-muted-foreground truncate'>
-            Paperclip OAuth principal · {formatReferenceId(connection.clientId)}
-          </p>
-        </div>
-        <Badge variant={connection.status === 'active' ? 'secondary' : 'outline'}>
-          {formatStatusLabel(connection.status)}
-        </Badge>
-      </div>
-      <div className='text-muted-foreground grid gap-1 sm:grid-cols-3'>
-        <span>Company context {paperclipCompanyContextLabel(connection.companyId)}</span>
-        <span>{paperclipPluginContextLabel(connection.pluginId)}</span>
-        <span>{formatStatusLabel(connection.scope)} scope</span>
-      </div>
-    </div>
-  )
-}
-
-function AgentAccessConnectionHandoffCard({
+function IntegrationPaperclipConnectionsSection({
   busy,
-  handoff,
-  onConnect,
+  canRevoke,
+  connections,
+  onRevoke,
   readOnly
 }: {
   busy: boolean
-  handoff: AgentAccessConnectionHandoff
-  onConnect?: (handoff: AgentAccessConnectionHandoff) => void
+  canRevoke: boolean
+  connections: ReadonlyArray<PaperclipIntegration>
+  onRevoke: (clientId: PaperclipIntegration['clientId']) => void
   readOnly: boolean
 }) {
-  const supportedPlugin = handoff.pluginId === 'agentteam.paperclip-email-plugin'
-  const canConnect = Boolean(onConnect && handoff.companyId && supportedPlugin) && !readOnly
+  return (
+    <IntegrationsSection title='Plugin authorizations'>
+      {connections.map((connection) => (
+        <IntegrationPaperclipConnectionRow
+          busy={busy}
+          canRevoke={canRevoke}
+          connection={connection}
+          key={connection.clientId}
+          onRevoke={onRevoke}
+          readOnly={readOnly}
+        />
+      ))}
+    </IntegrationsSection>
+  )
+}
+
+function IntegrationPaperclipConnectionRow({
+  busy,
+  canRevoke,
+  connection,
+  onRevoke,
+  readOnly
+}: {
+  busy: boolean
+  canRevoke: boolean
+  connection: PaperclipIntegration
+  onRevoke: (clientId: PaperclipIntegration['clientId']) => void
+  readOnly: boolean
+}) {
+  const removeOnly = connection.status !== 'connected'
+  const actionLabel = removeOnly ? 'Remove authorization' : 'Revoke access'
 
   return (
-    <div className='border-border bg-muted/20 grid gap-2 rounded-lg border p-3 text-sm'>
-      <div className='flex items-start justify-between gap-3'>
-        <div className='min-w-0'>
-          <p className='font-medium'>Paperclip connection requested</p>
-          <p className='text-muted-foreground'>
-            AgentTeam Email authorizes mail access from backend grants, not Paperclip context.
-          </p>
+    <div className='grid gap-2 border-b px-4 py-3 text-sm last:border-b-0'>
+      <div className='grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3'>
+        <div className='grid min-w-0 gap-1'>
+          <p className='truncate font-medium'>{connection.name}</p>
+          <p className='text-muted-foreground'>{formatPaperclipIntegrationHelper(connection)}</p>
         </div>
-        <Badge variant='outline'>OAuth</Badge>
-      </div>
-      <div className='flex flex-wrap items-center justify-between gap-2'>
-        <p className='text-muted-foreground'>
-          Register a backend-owned OAuth principal before granting mailbox access.
-        </p>
-        <Button
-          disabled={busy || !canConnect}
-          onClick={() => onConnect?.(handoff)}
-          size='sm'
-          variant='outline'
+        <Badge
+          className='justify-self-end whitespace-nowrap'
+          variant={connection.status === 'connected' ? 'secondary' : 'outline'}
         >
-          {busy ? 'Registering' : 'Register principal'}
-        </Button>
+          {formatPaperclipIntegrationStatus(connection)}
+        </Badge>
       </div>
-      <div className='text-muted-foreground grid gap-1 sm:grid-cols-2'>
-        <p className='truncate'>Company context: {paperclipCompanyContextLabel(handoff.companyId)}</p>
-        <p className='truncate'>Plugin: {paperclipPluginContextLabel(handoff.pluginId)}</p>
+      <div className='flex flex-wrap gap-2'>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button
+              disabled={busy || readOnly || !canRevoke}
+              size='sm'
+              variant='outline'
+            >
+              <TrashIcon data-icon='inline-start' />
+              {actionLabel}
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {removeOnly ? 'Remove Paperclip authorization?' : 'Revoke Paperclip access?'}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {removeOnly
+                  ? 'This removes the saved authorization entry for this organization.'
+                  : 'Paperclip will stop using AgentTeam Email for this organization until OAuth authorization is completed again from Paperclip.'}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={busy}
+                onClick={() => {
+                  onRevoke(connection.clientId)
+                }}
+                variant='destructive'
+              >
+                {actionLabel}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   )
 }
 
-function paperclipCompanyContextLabel(companyId: string | null) {
-  return companyId ? 'Ready' : 'Pending'
+function formatPaperclipIntegrationStatus(connection: PaperclipIntegration): string {
+  if (connection.status === 'connected') {
+    return 'Connected'
+  }
+  if (connection.status === 'needs_reauthorization') {
+    return 'Disconnected'
+  }
+  return 'Unavailable'
 }
 
-function paperclipPluginContextLabel(pluginId: string | null) {
-  if (!pluginId) {
-    return 'Pending'
+function formatPaperclipIntegrationHelper(connection: PaperclipIntegration): string {
+  if (connection.status === 'connected') {
+    return 'Connected to this organization.'
   }
-  return pluginId === 'agentteam.paperclip-email-plugin' ? 'AgentTeam Email plugin' : 'Unsupported plugin'
+  if (connection.status === 'needs_reauthorization') {
+    return 'Start a new authorization from Paperclip.'
+  }
+  return 'This OAuth client is unavailable. Remove this authorization entry.'
 }
 
 function AgentAccessEnrollmentCard({
@@ -1316,7 +1393,11 @@ export function SettingsDomainsPanel({
   )
 }
 
-export function ConnectedAccountsPanel({ state }: { state?: DomainSettingsState }) {
+export function ConnectedAccountsPanel({
+  state
+}: {
+  state?: DomainSettingsState
+}) {
   return <ConnectedAccountsContent settings={domainSettingsControllerFromState(state)} />
 }
 
@@ -1328,31 +1409,7 @@ function ConnectedAccountsContent({ settings }: { settings: DomainSettingsContro
   if (settings.grants.length === 0) {
     return (
       <div className='grid max-w-3xl gap-4'>
-        <Card className='gap-0 py-4 shadow-none'>
-          <CardHeader className='grid gap-3 px-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start'>
-            <div className='grid min-w-0 gap-2'>
-              <CloudflareLogo className='h-6 w-auto' />
-              <div className='grid min-w-0 gap-1'>
-                <CardTitle className='text-sm'>Connect a Cloudflare account</CardTitle>
-                <CardDescription>
-                  Add provider accounts here before choosing domains for AgentTeam Email.
-                </CardDescription>
-              </div>
-            </div>
-            <CardAction
-              className='w-full self-stretch justify-self-auto sm:w-56 sm:self-start sm:justify-self-end'
-            >
-              <CloudflareConnectButton
-                busy={settings.busy}
-                className='h-8 text-sm'
-                disabled={settings.busy || settings.readOnly}
-                onClick={settings.onStartConnectedAccountOAuth}
-              >
-                Connect Cloudflare account
-              </CloudflareConnectButton>
-            </CardAction>
-          </CardHeader>
-        </Card>
+        <ConnectedAccountsCloudflareConnectCard settings={settings} />
         {settings.message ? <p className='text-muted-foreground text-sm'>{settings.message}</p> : null}
       </div>
     )
@@ -1364,7 +1421,7 @@ function ConnectedAccountsContent({ settings }: { settings: DomainSettingsContro
         <div className='min-w-0'>
           <p className='font-medium'>Connected accounts</p>
           <p className='text-muted-foreground text-sm'>
-            Manage Cloudflare OAuth grants used to list zones and set up AgentTeam Email domains.
+            Manage provider accounts connected to AgentTeam Email.
           </p>
         </div>
         <CloudflareConnectButton
@@ -1373,13 +1430,13 @@ function ConnectedAccountsContent({ settings }: { settings: DomainSettingsContro
           disabled={settings.busy || settings.readOnly}
           onClick={settings.onStartConnectedAccountOAuth}
         >
-          Connect another account
+          Connect Cloudflare
         </CloudflareConnectButton>
       </div>
       {settings.message ? <p className='text-muted-foreground text-sm'>{settings.message}</p> : null}
       <ConnectedAccountsSection title='Cloudflare accounts'>
         {settings.grants.map((grant) => (
-          <ConnectedAccountGrantRow
+          <ConnectedAccountCloudflareGrantRow
             busy={settings.busy}
             grant={grant}
             key={grant.publicId}
@@ -1390,6 +1447,85 @@ function ConnectedAccountsContent({ settings }: { settings: DomainSettingsContro
         ))}
       </ConnectedAccountsSection>
     </section>
+  )
+}
+
+export function IntegrationsPanel({
+  integrationsState
+}: {
+  integrationsState?: IntegrationSettingsState
+}) {
+  return <IntegrationsContent integrations={integrationsControllerFromState(integrationsState)} />
+}
+
+function IntegrationsContent({ integrations }: { integrations: IntegrationsController }) {
+  const paperclipAuthorizations = integrations.view?.paperclip.connections ?? []
+
+  if (!integrations.view && !integrations.message) {
+    return <IntegrationsLoadingContent />
+  }
+
+  return (
+    <section className='grid max-w-3xl gap-4'>
+      <div className='min-w-0'>
+        <p className='font-medium'>Integrations</p>
+        <p className='text-muted-foreground text-sm'>
+          Review application integrations that use AgentTeam Email OAuth.
+        </p>
+      </div>
+      {integrations.message ? (
+        <div className='grid gap-1 rounded-lg border p-3 text-sm'>
+          <p className='font-medium'>Integrations unavailable</p>
+          <p className='text-muted-foreground'>{integrations.message}</p>
+        </div>
+      ) : null}
+      {paperclipAuthorizations.length > 0 ? (
+        <IntegrationPaperclipConnectionsSection
+          busy={integrations.busy}
+          canRevoke={integrations.canRevokePaperclip}
+          connections={paperclipAuthorizations}
+          onRevoke={integrations.onRevokePaperclip}
+          readOnly={integrations.readOnly}
+        />
+      ) : (
+        <SettingsEmptyContent
+          description={
+            integrations.view?.paperclip.available === false
+              ? 'No integration clients are configured for this deployment.'
+              : 'Authorized integrations will appear here after approval is completed.'
+          }
+          title='No integrations'
+        />
+      )}
+    </section>
+  )
+}
+
+function ConnectedAccountsCloudflareConnectCard({ settings }: { settings: DomainSettingsController }) {
+  return (
+    <Card className='gap-0 py-4 shadow-none'>
+      <CardHeader className='grid gap-3 px-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start'>
+        <div className='grid min-w-0 gap-2'>
+          <CloudflareLogo className='h-6 w-auto' />
+          <div className='grid min-w-0 gap-1'>
+            <CardTitle className='text-sm'>Connect Cloudflare</CardTitle>
+            <CardDescription>
+              Add a Cloudflare provider account before choosing domains for AgentTeam Email.
+            </CardDescription>
+          </div>
+        </div>
+        <CardAction className='w-full self-stretch justify-self-auto sm:w-56 sm:self-start sm:justify-self-end'>
+          <CloudflareConnectButton
+            busy={settings.busy}
+            className='h-8 text-sm'
+            disabled={settings.busy || settings.readOnly}
+            onClick={settings.onStartConnectedAccountOAuth}
+          >
+            Connect Cloudflare
+          </CloudflareConnectButton>
+        </CardAction>
+      </CardHeader>
+    </Card>
   )
 }
 
@@ -1411,7 +1547,7 @@ function ConnectedAccountsSection({ children, title }: { children: React.ReactNo
   )
 }
 
-function ConnectedAccountGrantRow({
+function ConnectedAccountCloudflareGrantRow({
   busy,
   grant,
   onDisconnect,
@@ -1467,8 +1603,8 @@ function ConnectedAccountGrantRow({
             <AlertDialogHeader>
               <AlertDialogTitle>Disconnect Cloudflare account?</AlertDialogTitle>
               <AlertDialogDescription>
-                Domains tied to this Cloudflare account may stop provisioning until another connected account
-                can manage them.
+                Domains tied to this Cloudflare account may stop provisioning until another connected
+                account can manage them.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -1490,6 +1626,24 @@ function ConnectedAccountGrantRow({
   )
 }
 
+function IntegrationsLoadingContent() {
+  return (
+    <div className='grid max-w-3xl gap-3'>
+      <Skeleton className='h-16 rounded-lg' />
+      <Skeleton className='h-24 rounded-lg' />
+    </div>
+  )
+}
+
+function IntegrationsSection({ children, title }: { children: React.ReactNode; title: string }) {
+  return (
+    <div className='grid gap-2'>
+      <p className='text-sm font-medium'>{title}</p>
+      <div className='divide-border overflow-hidden rounded-lg border'>{children}</div>
+    </div>
+  )
+}
+
 function formatCloudflareGrantStatus(grant: CloudflareGrantView): string {
   if (grant.isUsable) {
     return 'Connected'
@@ -1507,9 +1661,6 @@ function formatCloudflareGrantHelper(grant: CloudflareGrantView): string {
   }
   if (grant.missingRequiredScopeCount > 0) {
     return `Reconnect this account to grant ${formatMissingPermissionCount(grant.missingRequiredScopeCount)}.`
-  }
-  if (grant.status === 'disconnected') {
-    return 'This account is disconnected and cannot manage domains.'
   }
 
   return 'Reconnect this account before using it to manage domains.'
@@ -1854,7 +2005,7 @@ function cloudflareZoneSelectionValue(zone: CloudflareZoneSummary): string {
   return `${zone.grantPublicId}|${zone.id}`
 }
 
-function aggregateMailRuntimeQueue(status: AgentMailPublicStatus) {
+function aggregateMailRuntimeQueue(status: MailRuntimeStatusSummary) {
   let pending = 0
   let retryWait = 0
   let seen = false
@@ -1871,7 +2022,7 @@ function aggregateMailRuntimeQueue(status: AgentMailPublicStatus) {
   return seen ? { pending, retryWait } : null
 }
 
-function summarizeMailRuntimeModules(status: AgentMailPublicStatus) {
+function summarizeMailRuntimeModules(status: MailRuntimeStatusSummary) {
   const modules = Object.values(status.modules)
   if (modules.length === 0) {
     return null

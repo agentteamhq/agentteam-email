@@ -3,6 +3,8 @@ export const DEFAULT_SERVICE_BASE_URL = 'https://app.agentteam.email'
 export interface AgentTeamEmailPluginConfig {
   serviceBaseUrl: string
   apiKeySecretRef?: string
+  oauthClientId?: string
+  oauthRedirectUri?: string
 }
 
 export interface AgentTeamEmailConfigValidation {
@@ -27,7 +29,9 @@ function validUrl(value: string): boolean {
 export function normalizeAgentTeamEmailConfig(input: Record<string, unknown>): AgentTeamEmailPluginConfig {
   return {
     serviceBaseUrl: stringValue(input.serviceBaseUrl) ?? DEFAULT_SERVICE_BASE_URL,
-    apiKeySecretRef: stringValue(input.apiKeySecretRef)
+    apiKeySecretRef: stringValue(input.apiKeySecretRef),
+    oauthClientId: stringValue(input.oauthClientId),
+    oauthRedirectUri: stringValue(input.oauthRedirectUri)
   }
 }
 
@@ -41,7 +45,17 @@ export function validateAgentTeamEmailConfig(input: Record<string, unknown>): Ag
   }
 
   if (!config.apiKeySecretRef) {
-    warnings.push('No API key secret reference is configured; OAuth connection remains pending.')
+    warnings.push('No API key secret reference is configured; API key fallback remains unavailable.')
+  }
+
+  if (!config.oauthClientId) {
+    warnings.push('No OAuth client ID is configured; OAuth connection cannot start.')
+  }
+
+  if (!config.oauthRedirectUri) {
+    warnings.push('No OAuth redirect URI is configured; OAuth connection cannot start.')
+  } else if (!validUrl(config.oauthRedirectUri)) {
+    errors.push('oauthRedirectUri must be an HTTPS URL.')
   }
 
   return { config, errors, warnings }

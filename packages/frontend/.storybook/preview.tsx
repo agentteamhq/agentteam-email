@@ -35,9 +35,9 @@ const withStorybookProviders: Decorator = (Story, context) => {
       attribute='data-theme'
       defaultTheme={forcedTheme}
       disableTransitionOnChange
-      enableSystem={false}
+      enableSystem
       forcedTheme={forcedTheme}
-      themes={['light', 'dark']}
+      themes={['system', 'light', 'dark']}
     >
       <RouterStoryProvider>
         <Story />

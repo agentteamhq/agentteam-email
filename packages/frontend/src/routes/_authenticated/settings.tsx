@@ -17,7 +17,7 @@ export const Route = createFileRoute('/_authenticated/settings')({
       },
       {
         name: 'description',
-        content: `Manage ${SITE_STRINGS.BRAND_NAME} account, security, connected account, organization, and domain settings.`
+        content: `Manage ${SITE_STRINGS.BRAND_NAME} account, security, connected account, integration, organization, and domain settings.`
       }
     ]
   }),

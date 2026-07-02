@@ -14,7 +14,6 @@ import {
 } from '@main/db'
 
 import {
-  connectPaperclipAgentAccessForWeb,
   decideAgentAccessApprovalForWeb,
   getAgentAccessApprovalForWeb,
   getAgentAccessViewForWeb,
@@ -22,7 +21,6 @@ import {
   revokeAgentAccessAgentForWeb,
   revokeAgentAccessCapabilitiesForWeb
 } from '../agent-access/service'
-import { PAPERCLIP_EMAIL_PLUGIN_ID } from '../agent-access/paperclip'
 import {
   AgentMailTrialError,
   decideAgentMailTrialClaimForWeb,
@@ -36,7 +34,6 @@ import type { IncomingMessage } from 'node:http'
 import type {
   AgentAccessApprovalPreview,
   AgentAccessMutationResult,
-  AgentAccessPaperclipConnectResult,
   AgentAccessView
 } from '../agent-access/service'
 import type {
@@ -147,13 +144,6 @@ const agentAccessCapabilityRevokeBodySchema = t.Object(
   },
   { additionalProperties: false }
 )
-const agentAccessPaperclipConnectBodySchema = t.Object(
-  {
-    companyId: t.String({ maxLength: 256, minLength: 1 }),
-    pluginId: t.Literal(PAPERCLIP_EMAIL_PLUGIN_ID)
-  },
-  { additionalProperties: false }
-)
 const agentAccessAgentParamsSchema = t.Object(
   {
     agentId: t.String({ minLength: 1 })
@@ -261,19 +251,10 @@ const agentAccessApprovalResponseSchema = t.Object({
   status: agentAccessApprovalStatusSchema
 })
 const agentAccessAllowedActionsResponseSchema = t.Object({
-  connectPaperclip: t.Boolean(),
   denyApproval: t.Boolean(),
   reviewApproval: t.Boolean(),
   revokeAgent: t.Boolean(),
   revokeCapabilityGrant: t.Boolean()
-})
-const agentAccessPaperclipConnectionResponseSchema = t.Object({
-  clientId: t.String(),
-  companyId: t.String(),
-  name: t.String(),
-  pluginId: t.Literal(PAPERCLIP_EMAIL_PLUGIN_ID),
-  scope: t.Literal('organization'),
-  status: t.Union([t.Literal('active'), t.Literal('disabled')])
 })
 const agentAccessViewResponseSchema = t.Object({
   agents: t.Array(agentAccessAgentResponseSchema),
@@ -283,7 +264,6 @@ const agentAccessViewResponseSchema = t.Object({
   grants: t.Array(agentAccessGrantResponseSchema),
   hosts: t.Array(agentAccessHostResponseSchema),
   organizationId: t.String(),
-  paperclipConnections: t.Array(agentAccessPaperclipConnectionResponseSchema),
   state: t.Union([t.Literal('empty'), t.Literal('ready')])
 })
 const agentAccessApprovalPreviewResponseSchema = t.Object({
@@ -293,12 +273,6 @@ const agentAccessApprovalPreviewResponseSchema = t.Object({
 })
 const agentAccessMutationResponseSchema = t.Object({
   status: nullableStringResponseSchema,
-  success: t.Literal(true),
-  view: agentAccessViewResponseSchema
-})
-const agentAccessPaperclipConnectResponseSchema = t.Object({
-  connection: agentAccessPaperclipConnectionResponseSchema,
-  status: t.Union([t.Literal('created'), t.Literal('existing')]),
   success: t.Literal(true),
   view: agentAccessViewResponseSchema
 })
@@ -440,23 +414,6 @@ const agentAccess = new Elysia({
       params: agentAccessAgentParamsSchema,
       response: {
         200: typedResponseSchema<AgentAccessMutationResult>(agentAccessMutationResponseSchema),
-        ...agentAccessErrorResponseSchemas
-      }
-    }
-  )
-  .post(
-    '/paperclip/connect',
-    async ({ body, request, set }) =>
-      handleAgentAccessError(
-        () => connectPaperclipAgentAccessForWeb({ headers: request.headers, input: body }),
-        set
-      ),
-    {
-      body: agentAccessPaperclipConnectBodySchema,
-      response: {
-        200: typedResponseSchema<AgentAccessPaperclipConnectResult>(
-          agentAccessPaperclipConnectResponseSchema
-        ),
         ...agentAccessErrorResponseSchemas
       }
     }

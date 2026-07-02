@@ -82,7 +82,7 @@ describe('redirect error page state', () => {
     }
   )
 
-  it('falls back to connected-account settings for invalid Cloudflare OAuth return targets', () => {
+  it('falls back to connected account settings for invalid Cloudflare OAuth return targets', () => {
     expect.hasAssertions()
     const state = createRedirectErrorViewState({
       occurredAt: new Date('2026-06-30T12:00:00.000Z'),

@@ -23,11 +23,17 @@ import {
   agentAccessDeniedExpiredApprovalState,
   agentAccessDenseState,
   agentAccessEmptyState,
-  agentAccessPaperclipConnectedState,
   agentAccessPendingApprovalState,
   agentAccessRevokedExpiredState
 } from '../agent-access-fixtures'
-import { storyAuthClient } from '../auth-client-fixtures'
+import { storyAuthClient, storyAuthClientEmptySecurity } from '../auth-client-fixtures'
+import {
+  integrationsEmptyView,
+  integrationsPaperclipConnectedView,
+  integrationsPaperclipReconnectRequiredView,
+  integrationsPaperclipUnavailableView,
+  integrationsUnavailableView
+} from '../integrations-fixtures'
 import { mailWorkspaceEmptyView } from '../mail-workspace-fixtures'
 import { authenticatedSettingsRouteState, storyPublicEnv } from '../screen-fixtures'
 import { getSettingsSectionHref } from '../../partials/authenticated/settings-dialog-sections'
@@ -36,11 +42,17 @@ import type { SettingsRouteSearch } from '../../lib/dashboard-search'
 import type { DomainSettingsState } from '../../partials/authenticated/settings-dialog'
 import type { SettingsSectionId } from '../../partials/authenticated/settings-dialog-sections'
 import type { DashboardMailControllerStoryFrameProps } from './story-frames'
-import type { AgentAccessView, AgentMailAdminNavigation, AgentMailWebWorkspace } from '@main/backend'
+import type {
+  AgentAccessView,
+  AgentMailAdminNavigation,
+  AgentMailWebWorkspace,
+  IntegrationsView
+} from '@main/backend'
 import type { Meta, StoryObj } from '@storybook/react'
 
 type SettingsStoryArgs = DashboardMailControllerStoryFrameProps
 type AgentAccessViewLoader = NonNullable<SettingsStoryArgs['agentAccessViewLoader']>
+type IntegrationsViewLoader = NonNullable<SettingsStoryArgs['integrationsViewLoader']>
 type MailWorkspaceLoader = NonNullable<SettingsStoryArgs['mailWorkspaceLoader']>
 type MailboxAdminNavigationLoader = NonNullable<SettingsStoryArgs['mailboxAdminNavigationLoader']>
 
@@ -48,7 +60,11 @@ interface SettingsScreenScenario {
   agentAccessError?: Error
   agentAccessPending?: boolean
   agentAccessView?: AgentAccessView
+  authClient?: SettingsStoryArgs['authClient']
   domainSettingsState?: DomainSettingsState
+  integrationsError?: Error
+  integrationsPending?: boolean
+  integrationsView?: IntegrationsView
   routeSearch?: SettingsRouteSearch
   settingsSection: SettingsSectionId
   workspace?: AgentMailWebWorkspace
@@ -62,14 +78,6 @@ const defaultAgentAccessView = requiredAgentAccessView(agentAccessEmptyState)
 const activeAgentAccessView = requiredAgentAccessView(agentAccessActiveState)
 const actionableAgentAccessView = requiredAgentAccessView(agentAccessActionableState)
 
-const agentAccessPaperclipHandoffView = {
-  ...activeAgentAccessView,
-  allowedActions: {
-    ...activeAgentAccessView.allowedActions,
-    connectPaperclip: true
-  }
-} satisfies AgentAccessView
-
 const agentAccessReviewOnlyView = {
   ...actionableAgentAccessView,
   agents: actionableAgentAccessView.agents.map((agent) => ({
@@ -78,7 +86,6 @@ const agentAccessReviewOnlyView = {
   })),
   allowedActions: {
     ...actionableAgentAccessView.allowedActions,
-    connectPaperclip: false,
     denyApproval: false,
     revokeAgent: false,
     revokeCapabilityGrant: false,
@@ -137,6 +144,28 @@ function createStoryAgentAccessViewLoader({
   }
 }
 
+function createStoryIntegrationsViewLoader({
+  error,
+  pending,
+  view = integrationsEmptyView
+}: {
+  error?: Error
+  pending?: boolean
+  view?: IntegrationsView
+}): IntegrationsViewLoader {
+  return async () => {
+    if (pending) {
+      await new Promise(() => {})
+    }
+
+    if (error) {
+      throw error
+    }
+
+    return view
+  }
+}
+
 function createStoryMailWorkspaceLoader(
   workspace: AgentMailWebWorkspace = mailWorkspaceEmptyView
 ): MailWorkspaceLoader {
@@ -153,7 +182,11 @@ function buildSettingsScreenArgs({
   agentAccessError,
   agentAccessPending,
   agentAccessView,
+  authClient = storyAuthClient,
   domainSettingsState = domainSettingsEmptyFirstUseState,
+  integrationsError,
+  integrationsPending,
+  integrationsView,
   routeSearch,
   settingsSection,
   workspace
@@ -164,8 +197,13 @@ function buildSettingsScreenArgs({
       pending: agentAccessPending,
       view: agentAccessView
     }),
-    authClient: storyAuthClient,
+    authClient,
     domainSettingsState,
+    integrationsViewLoader: createStoryIntegrationsViewLoader({
+      error: integrationsError,
+      pending: integrationsPending,
+      view: integrationsView
+    }),
     mailWorkspaceLoader: createStoryMailWorkspaceLoader(workspace),
     mailboxAdminNavigationLoader: createStoryMailboxAdminNavigationLoader(),
     publicEnv: storyPublicEnv,
@@ -182,6 +220,16 @@ function storyBody(canvasElement: HTMLElement) {
   return within(canvasElement.ownerDocument.body)
 }
 
+async function findAndScrollToText(canvasElement: HTMLElement, text: RegExp | string) {
+  const canvas = storyBody(canvasElement)
+  const element = await canvas.findByText(text)
+
+  element.scrollIntoView({ block: 'center' })
+  await expect(element).toBeInTheDocument()
+
+  return canvas
+}
+
 async function expectSettingsDomainsDialog(args: SettingsStoryArgs, canvasElement: HTMLElement) {
   const canvas = storyBody(canvasElement)
 
@@ -195,7 +243,37 @@ async function expectSettingsDomainsDialog(args: SettingsStoryArgs, canvasElemen
 export const Account: Story = {
   args: buildSettingsScreenArgs({
     settingsSection: 'account'
-  })
+  }),
+  play: async ({ canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+
+    await expect(await canvas.findByText('User profile')).toBeInTheDocument()
+    await expect(await canvas.findByText('Change email')).toBeInTheDocument()
+  }
+}
+
+export const AccountManageAccounts: Story = {
+  args: buildSettingsScreenArgs({
+    settingsSection: 'account'
+  }),
+  play: async ({ canvasElement }) => {
+    const canvas = await findAndScrollToText(canvasElement, 'Manage accounts')
+
+    await expect(await canvas.findByText('marin.secondary@northstar-ops.example.test')).toBeInTheDocument()
+  }
+}
+
+export const AccountAppearance: Story = {
+  args: buildSettingsScreenArgs({
+    settingsSection: 'account'
+  }),
+  play: async ({ canvasElement }) => {
+    const canvas = await findAndScrollToText(canvasElement, 'Appearance')
+
+    await expect(await canvas.findByText('System')).toBeInTheDocument()
+    await expect(await canvas.findByText('Light')).toBeInTheDocument()
+    await expect(await canvas.findByText('Dark')).toBeInTheDocument()
+  }
 }
 
 export const Security: Story = {
@@ -210,6 +288,67 @@ export const Security: Story = {
     await expect(await canvas.findByText(/Chrome/i)).toBeInTheDocument()
     await expect(await canvas.findByText(/at-email/i)).toBeInTheDocument()
     await expect(await canvas.findByText(/Linux/i)).toBeInTheDocument()
+  }
+}
+
+export const SecurityActiveSessions: Story = {
+  args: buildSettingsScreenArgs({
+    settingsSection: 'security'
+  }),
+  play: async ({ canvasElement }) => {
+    const canvas = await findAndScrollToText(canvasElement, 'Active sessions')
+
+    await expect(await canvas.findByText(/at-email/i)).toBeInTheDocument()
+    await expect((await canvas.findAllByRole('button', { name: /revoke/i })).length).toBeGreaterThan(0)
+  }
+}
+
+export const SecurityPasskeys: Story = {
+  args: buildSettingsScreenArgs({
+    settingsSection: 'security'
+  }),
+  play: async ({ canvasElement }) => {
+    const canvas = await findAndScrollToText(canvasElement, 'Passkeys')
+
+    await expect(await canvas.findByText('Platform authenticator')).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /^add passkey$/i })).toBeEnabled()
+  }
+}
+
+export const SecurityApiKeys: Story = {
+  args: buildSettingsScreenArgs({
+    settingsSection: 'security'
+  }),
+  play: async ({ canvasElement }) => {
+    const canvas = await findAndScrollToText(canvasElement, 'API keys')
+
+    await expect(await canvas.findByText('CI mailbox client')).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /^create api key$/i })).toBeEnabled()
+  }
+}
+
+export const SecurityDangerZone: Story = {
+  args: buildSettingsScreenArgs({
+    settingsSection: 'security'
+  }),
+  play: async ({ canvasElement }) => {
+    const canvas = await findAndScrollToText(canvasElement, 'Danger zone')
+
+    await expect(await canvas.findByRole('button', { name: /^delete account$/i })).toBeEnabled()
+  }
+}
+
+export const SecurityEmptyCredentials: Story = {
+  args: buildSettingsScreenArgs({
+    authClient: storyAuthClientEmptySecurity,
+    settingsSection: 'security'
+  }),
+  play: async ({ canvasElement }) => {
+    const canvas = await findAndScrollToText(canvasElement, 'Passkeys')
+
+    await expect(await canvas.findByText('No passkeys')).toBeInTheDocument()
+    await findAndScrollToText(canvasElement, 'API keys')
+    await expect(await canvas.findByText('No API keys')).toBeInTheDocument()
   }
 }
 
@@ -248,42 +387,51 @@ export const AgentAccessActive: Story = {
   })
 }
 
-export const AgentAccessPaperclipHandoff: Story = {
+export const IntegrationsPaperclipConnected: Story = {
   args: buildSettingsScreenArgs({
-    agentAccessView: agentAccessPaperclipHandoffView,
-    routeSearch: {
-      agentAccessSource: 'paperclip',
-      paperclipCompanyId: 'paperclip-company-1',
-      paperclipPluginId: 'agentteam.paperclip-email-plugin'
-    },
-    settingsSection: 'agentAccess'
+    agentAccessView: defaultAgentAccessView,
+    integrationsView: integrationsPaperclipConnectedView,
+    settingsSection: 'integrations'
   }),
   play: async ({ canvasElement }) => {
     const canvas = storyBody(canvasElement)
 
-    await canvas.findByText('Paperclip connection requested')
-    await canvas.findByText('Company context: Ready')
-    await canvas.findByText('Plugin: AgentTeam Email plugin')
-    await expect(canvas.queryByText('Company: paperclip-company-1')).toBeNull()
-    await expect(canvas.queryByText('Plugin: agentteam.paperclip-email-plugin')).toBeNull()
-    await expect(await canvas.findByRole('button', { name: /^register principal$/i })).toBeEnabled()
+    await expect(await canvas.findByText('Plugin authorizations')).toBeInTheDocument()
+    await expect((await canvas.findAllByText('Paperclip plugin')).length).toBeGreaterThan(0)
+    await expect(await canvas.findByText('Connected to this organization.')).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /^revoke access$/i })).toBeEnabled()
+    await expect(canvas.queryByText('paperclip-company-1')).not.toBeInTheDocument()
   }
 }
 
-export const AgentAccessPaperclipConnected: Story = {
+export const IntegrationsPaperclipReconnectRequired: Story = {
   args: buildSettingsScreenArgs({
-    agentAccessView: requiredAgentAccessView(agentAccessPaperclipConnectedState),
-    settingsSection: 'agentAccess'
+    agentAccessView: defaultAgentAccessView,
+    integrationsView: integrationsPaperclipReconnectRequiredView,
+    settingsSection: 'integrations'
   }),
   play: async ({ canvasElement }) => {
     const canvas = storyBody(canvasElement)
 
-    await expect(await canvas.findByText('Connected integrations')).toBeInTheDocument()
-    await expect(await canvas.findByText('Paperclip Email')).toBeInTheDocument()
-    await expect(await canvas.findByText('Research Agent')).toBeInTheDocument()
-    await expect(canvas.queryByText('paperclip-company-1')).not.toBeInTheDocument()
-    await expect(canvas.queryByText('Paperclip connection requested')).not.toBeInTheDocument()
-    await expect(canvas.queryByRole('button', { name: /^register principal$/i })).not.toBeInTheDocument()
+    await expect(await canvas.findByText('Disconnected')).toBeInTheDocument()
+    await expect(await canvas.findByText('Start a new authorization from Paperclip.')).toBeInTheDocument()
+    await expect(canvas.queryByRole('button', { name: /^reconnect from paperclip$/i })).not.toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /^remove authorization$/i })).toBeEnabled()
+  }
+}
+
+export const IntegrationsPaperclipUnavailable: Story = {
+  args: buildSettingsScreenArgs({
+    agentAccessView: defaultAgentAccessView,
+    integrationsView: integrationsPaperclipUnavailableView,
+    settingsSection: 'integrations'
+  }),
+  play: async ({ canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+
+    await expect(await canvas.findByText('Unavailable')).toBeInTheDocument()
+    await expect(await canvas.findByText('This OAuth client is unavailable. Remove this authorization entry.')).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /^remove authorization$/i })).toBeEnabled()
   }
 }
 
@@ -388,6 +536,39 @@ export const AgentAccessDense: Story = {
   })
 }
 
+export const IntegrationsEmpty: Story = {
+  args: buildSettingsScreenArgs({
+    agentAccessView: defaultAgentAccessView,
+    integrationsView: integrationsEmptyView,
+    settingsSection: 'integrations'
+  }),
+  play: async ({ args, canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+
+    await expect(args.storyPath).toBe('/settings/integrations/')
+    await expect(await canvas.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument()
+    await expect(await canvas.findByText('No integrations')).toBeInTheDocument()
+    await expect(canvas.queryByRole('button', { name: 'Connect Cloudflare' })).not.toBeInTheDocument()
+    await expect(canvas.queryByText('Cloudflare accounts')).not.toBeInTheDocument()
+  }
+}
+
+export const IntegrationsUnavailable: Story = {
+  args: buildSettingsScreenArgs({
+    agentAccessView: defaultAgentAccessView,
+    integrationsView: integrationsUnavailableView,
+    settingsSection: 'integrations'
+  }),
+  play: async ({ canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+
+    await expect(await canvas.findByText('No integrations')).toBeInTheDocument()
+    await expect(
+      await canvas.findByText('No integration clients are configured for this deployment.')
+    ).toBeInTheDocument()
+  }
+}
+
 export const ConnectedAccountsEmpty: Story = {
   args: buildSettingsScreenArgs({
     domainSettingsState: domainSettingsEmptyFirstUseState,
@@ -398,8 +579,7 @@ export const ConnectedAccountsEmpty: Story = {
 
     await expect(args.storyPath).toBe('/settings/connected-accounts/')
     await expect(await canvas.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument()
-    await expect(await canvas.findByText('Connect a Cloudflare account')).toBeInTheDocument()
-    await expect(await canvas.findByRole('button', { name: 'Connect Cloudflare account' })).toBeEnabled()
+    await expect(await canvas.findByRole('button', { name: 'Connect Cloudflare' })).toBeEnabled()
   }
 }
 
@@ -415,7 +595,7 @@ export const ConnectedAccountsCloudflare: Story = {
     await expect(await canvas.findByText('Connected accounts', { selector: 'p' })).toBeInTheDocument()
     await expect(await canvas.findByText('admin@example.com')).toBeInTheDocument()
     await expect((await canvas.findAllByText('Connected')).length).toBeGreaterThan(0)
-    await expect(await canvas.findByRole('button', { name: 'Connect another account' })).toBeEnabled()
+    await expect(await canvas.findByRole('button', { name: 'Connect Cloudflare' })).toBeEnabled()
     await expect(
       (await canvas.findAllByRole('button', { name: /^disconnect account$/i })).length
     ).toBeGreaterThan(0)
@@ -451,7 +631,7 @@ export const ConnectedAccountsDisconnectConfirmation: Story = {
   }),
   play: async ({ args, canvasElement }) => {
     const canvas = storyBody(canvasElement)
-    const body = within(document.body)
+    const body = within(globalThis.document.body)
     const disconnectCloudflare = args.domainSettingsState?.onDisconnectCloudflare
 
     if (!disconnectCloudflare) {

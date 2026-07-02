@@ -27,7 +27,7 @@ export const Route = createFileRoute('/_authenticated/settings/$section')({
       },
       {
         name: 'description',
-        content: `Manage ${SITE_STRINGS.BRAND_NAME} account, security, connected account, organization, and domain settings.`
+        content: `Manage ${SITE_STRINGS.BRAND_NAME} account, security, connected account, integration, organization, and domain settings.`
       }
     ]
   }),
@@ -44,7 +44,6 @@ function SettingsSectionRouteScreen() {
     notFound({ throw: true })
     return null
   }
-
   return (
     <DashboardMailController
       onSettingsOpenChange={(open) => {

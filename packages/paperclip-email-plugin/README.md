@@ -6,19 +6,24 @@ Email provisioning service.
 The current package is a scaffolded connector with:
 
 - a Paperclip manifest and worker entrypoint
-- an operator config schema for advanced service URL and API key secret
-  reference setup
-- a custom settings page with a branded AgentTeam Email connect handoff and
-  advanced self-hosting fields
+- an operator config schema for advanced service URL, OAuth client, OAuth
+  redirect URI, and API key secret reference setup
+- a custom settings page with a branded AgentTeam Email OAuth start action and
+  advanced provisioning fields
 - a dashboard widget backed by worker data/action handlers
 - Vite, esbuild, declaration emit, and API Extractor build wiring
 
-The worker does not resolve secrets, store OAuth tokens, or call the upstream
-service directly. The connect action returns an AgentTeam Email-owned URL so
-OAuth clients, callbacks, tokens, grants, and mailbox policy remain server-side.
-Runtime email tool execution currently shells out to `at-email paperclip-tool`
-and uses local Agent Auth credentials to call the AgentTeam Email webserver.
-See `OAUTH_AND_PERMISSION_TODO.md` for the remaining credential and per-agent
+Paperclip uses AgentTeam Email OAuth. Paperclip is the OAuth client; the
+AgentTeam Email web server owns authorization, consent, token issuance,
+revocation, and resource API enforcement. The worker does not resolve secrets,
+store OAuth tokens, or call the upstream service directly. The connect action
+returns an AgentTeam Email-owned URL so OAuth callbacks, tokens, grants, and
+mailbox policy remain server-side. Runtime email tool execution currently
+shells out to `at-email paperclip-tool` and uses local Agent Auth credentials to
+call the AgentTeam Email webserver. The plugin must be configured with the
+pre-provisioned AgentTeam Email OAuth client ID and Paperclip redirect URI
+before the OAuth start action can produce an authorization URL. See
+`OAUTH_AND_PERMISSION_TODO.md` for the remaining credential and per-agent
 provisioning work.
 
 ## Development

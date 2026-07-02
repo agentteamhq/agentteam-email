@@ -30,6 +30,7 @@ const webmailTestState = vi.hoisted(() => ({
   listUsers: vi.fn(),
   memberFindOne: vi.fn(),
   oauthClientFindOne: vi.fn(),
+  oauthConsentFindOne: vi.fn(),
   oauthVerifyAccessToken: vi.fn(),
   agentCapabilityGrantCollectionFind: vi.fn(),
   agentCapabilityGrantFind: vi.fn(),
@@ -206,6 +207,9 @@ vi.mock('../globals', () => ({
           },
           oauthClient: {
             findOne: webmailTestState.oauthClientFindOne
+          },
+          oauthConsent: {
+            findOne: webmailTestState.oauthConsentFindOne
           }
         }
       }
@@ -258,6 +262,7 @@ describe('Agent Mail WildDuck webmail service', () => {
     webmailTestState.listUsers.mockReset()
     webmailTestState.memberFindOne.mockReset()
     webmailTestState.oauthClientFindOne.mockReset()
+    webmailTestState.oauthConsentFindOne.mockReset()
     webmailTestState.oauthVerifyAccessToken.mockReset()
     webmailTestState.agentCapabilityGrantCollectionFind.mockReset()
     webmailTestState.agentCapabilityGrantFind.mockReset()
@@ -316,6 +321,9 @@ describe('Agent Mail WildDuck webmail service', () => {
     })
     webmailTestState.authGetAgentSession.mockResolvedValue(null)
     webmailTestState.authVerifyApiKey.mockResolvedValue(invalidApiKeyVerificationResult())
+    webmailTestState.oauthConsentFindOne.mockReturnValue({
+      exec: () => Promise.resolve({ clientId: 'oauth-client-1' })
+    })
     webmailTestState.agentFindById.mockReturnValue({
       exec: () =>
         Promise.resolve({
@@ -1333,7 +1341,7 @@ describe('Agent Mail WildDuck webmail service', () => {
     expect(webmailTestState.submitMessage).not.toHaveBeenCalled()
   }, 15_000)
 
-  it('rejects Paperclip OAuth run context when persisted client metadata does not match', async () => {
+  it('rejects Paperclip OAuth run context when persisted consent is missing', async () => {
     expect.hasAssertions()
     webmailTestState.authGetSession.mockResolvedValue(null)
     webmailTestState.oauthVerifyAccessToken.mockResolvedValue({
@@ -1349,7 +1357,6 @@ describe('Agent Mail WildDuck webmail service', () => {
           disabled: false,
           metadata: {
             agentteamEmail: {
-              companyId: 'other-paperclip-company',
               integration: 'paperclip',
               pluginId: 'agentteam.paperclip-email-plugin'
             }
@@ -1357,6 +1364,9 @@ describe('Agent Mail WildDuck webmail service', () => {
           referenceId: 'org-1',
           softwareId: 'agentteam.paperclip-email-plugin'
         })
+    })
+    webmailTestState.oauthConsentFindOne.mockReturnValue({
+      exec: () => Promise.resolve(null)
     })
 
     const { getAgentMailWorkspaceForWeb } = await import('./webmail-service')

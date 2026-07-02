@@ -24,6 +24,19 @@ const instanceConfigSchema = {
       description: 'Paperclip secret reference for a self-hosted AgentTeam Email API key.',
       'x-paperclip-advanced': true,
       'x-paperclip-group': 'Self-hosting'
+    },
+    oauthClientId: {
+      type: 'string',
+      description: 'Pre-provisioned AgentTeam Email OAuth client ID for this Paperclip plugin.',
+      'x-paperclip-advanced': true,
+      'x-paperclip-group': 'OAuth provisioning'
+    },
+    oauthRedirectUri: {
+      type: 'string',
+      format: 'uri',
+      description: 'Paperclip OAuth callback URI registered with the AgentTeam Email OAuth client.',
+      'x-paperclip-advanced': true,
+      'x-paperclip-group': 'OAuth provisioning'
     }
   }
 } satisfies JsonSchema

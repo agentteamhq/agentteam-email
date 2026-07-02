@@ -608,7 +608,6 @@ paths:
                   - grants
                   - hosts
                   - organizationId
-                  - paperclipConnections
                   - state
                 properties:
                   agents:
@@ -681,14 +680,11 @@ paths:
                   allowedActions:
                     type: object
                     required:
-                      - connectPaperclip
                       - denyApproval
                       - reviewApproval
                       - revokeAgent
                       - revokeCapabilityGrant
                     properties:
-                      connectPaperclip:
-                        type: boolean
                       denyApproval:
                         type: boolean
                       reviewApproval:
@@ -1090,35 +1086,6 @@ paths:
                             - rejected
                   organizationId:
                     type: string
-                  paperclipConnections:
-                    type: array
-                    items:
-                      type: object
-                      required:
-                        - clientId
-                        - companyId
-                        - name
-                        - pluginId
-                        - scope
-                        - status
-                      properties:
-                        clientId:
-                          type: string
-                        companyId:
-                          type: string
-                        name:
-                          type: string
-                        pluginId:
-                          const: agentteam.paperclip-email-plugin
-                          type: string
-                        scope:
-                          const: organization
-                          type: string
-                        status:
-                          type: string
-                          enum:
-                            - active
-                            - disabled
                   state:
                     type: string
                     enum:
@@ -2041,7 +2008,6 @@ paths:
                       - grants
                       - hosts
                       - organizationId
-                      - paperclipConnections
                       - state
                     properties:
                       agents:
@@ -2114,14 +2080,11 @@ paths:
                       allowedActions:
                         type: object
                         required:
-                          - connectPaperclip
                           - denyApproval
                           - reviewApproval
                           - revokeAgent
                           - revokeCapabilityGrant
                         properties:
-                          connectPaperclip:
-                            type: boolean
                           denyApproval:
                             type: boolean
                           reviewApproval:
@@ -2523,35 +2486,6 @@ paths:
                                 - rejected
                       organizationId:
                         type: string
-                      paperclipConnections:
-                        type: array
-                        items:
-                          type: object
-                          required:
-                            - clientId
-                            - companyId
-                            - name
-                            - pluginId
-                            - scope
-                            - status
-                          properties:
-                            clientId:
-                              type: string
-                            companyId:
-                              type: string
-                            name:
-                              type: string
-                            pluginId:
-                              const: agentteam.paperclip-email-plugin
-                              type: string
-                            scope:
-                              const: organization
-                              type: string
-                            status:
-                              type: string
-                              enum:
-                                - active
-                                - disabled
                       state:
                         type: string
                         enum:
@@ -2807,7 +2741,6 @@ paths:
                       - grants
                       - hosts
                       - organizationId
-                      - paperclipConnections
                       - state
                     properties:
                       agents:
@@ -2880,14 +2813,11 @@ paths:
                       allowedActions:
                         type: object
                         required:
-                          - connectPaperclip
                           - denyApproval
                           - reviewApproval
                           - revokeAgent
                           - revokeCapabilityGrant
                         properties:
-                          connectPaperclip:
-                            type: boolean
                           denyApproval:
                             type: boolean
                           reviewApproval:
@@ -3289,35 +3219,6 @@ paths:
                                 - rejected
                       organizationId:
                         type: string
-                      paperclipConnections:
-                        type: array
-                        items:
-                          type: object
-                          required:
-                            - clientId
-                            - companyId
-                            - name
-                            - pluginId
-                            - scope
-                            - status
-                          properties:
-                            clientId:
-                              type: string
-                            companyId:
-                              type: string
-                            name:
-                              type: string
-                            pluginId:
-                              const: agentteam.paperclip-email-plugin
-                              type: string
-                            scope:
-                              const: organization
-                              type: string
-                            status:
-                              type: string
-                              enum:
-                                - active
-                                - disabled
                       state:
                         type: string
                         enum:
@@ -3675,7 +3576,6 @@ paths:
                       - grants
                       - hosts
                       - organizationId
-                      - paperclipConnections
                       - state
                     properties:
                       agents:
@@ -3748,14 +3648,11 @@ paths:
                       allowedActions:
                         type: object
                         required:
-                          - connectPaperclip
                           - denyApproval
                           - reviewApproval
                           - revokeAgent
                           - revokeCapabilityGrant
                         properties:
-                          connectPaperclip:
-                            type: boolean
                           denyApproval:
                             type: boolean
                           reviewApproval:
@@ -4157,35 +4054,6 @@ paths:
                                 - rejected
                       organizationId:
                         type: string
-                      paperclipConnections:
-                        type: array
-                        items:
-                          type: object
-                          required:
-                            - clientId
-                            - companyId
-                            - name
-                            - pluginId
-                            - scope
-                            - status
-                          properties:
-                            clientId:
-                              type: string
-                            companyId:
-                              type: string
-                            name:
-                              type: string
-                            pluginId:
-                              const: agentteam.paperclip-email-plugin
-                              type: string
-                            scope:
-                              const: organization
-                              type: string
-                            status:
-                              type: string
-                              enum:
-                                - active
-                                - disabled
                       state:
                         type: string
                         enum:
@@ -4402,841 +4270,6 @@ paths:
                     patternProperties:
                       ^(.*)$: {}
       operationId: postRpcAgent-accessAgentsByAgentIdCapabilitiesRevoke
-  /rpc/agent-access/paperclip/connect:
-    post:
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              additionalProperties: false
-              type: object
-              required:
-                - companyId
-                - pluginId
-              properties:
-                companyId:
-                  maxLength: 256
-                  minLength: 1
-                  type: string
-                pluginId:
-                  const: agentteam.paperclip-email-plugin
-                  type: string
-          application/x-www-form-urlencoded:
-            schema:
-              additionalProperties: false
-              type: object
-              required:
-                - companyId
-                - pluginId
-              properties:
-                companyId:
-                  maxLength: 256
-                  minLength: 1
-                  type: string
-                pluginId:
-                  const: agentteam.paperclip-email-plugin
-                  type: string
-          multipart/form-data:
-            schema:
-              additionalProperties: false
-              type: object
-              required:
-                - companyId
-                - pluginId
-              properties:
-                companyId:
-                  maxLength: 256
-                  minLength: 1
-                  type: string
-                pluginId:
-                  const: agentteam.paperclip-email-plugin
-                  type: string
-      responses:
-        "200":
-          description: Response for status 200
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - connection
-                  - status
-                  - success
-                  - view
-                properties:
-                  connection:
-                    type: object
-                    required:
-                      - clientId
-                      - companyId
-                      - name
-                      - pluginId
-                      - scope
-                      - status
-                    properties:
-                      clientId:
-                        type: string
-                      companyId:
-                        type: string
-                      name:
-                        type: string
-                      pluginId:
-                        const: agentteam.paperclip-email-plugin
-                        type: string
-                      scope:
-                        const: organization
-                        type: string
-                      status:
-                        type: string
-                        enum:
-                          - active
-                          - disabled
-                  status:
-                    type: string
-                    enum:
-                      - created
-                      - existing
-                  success:
-                    const: true
-                    type: boolean
-                  view:
-                    type: object
-                    required:
-                      - agents
-                      - allowedActions
-                      - approvals
-                      - capabilityCatalog
-                      - grants
-                      - hosts
-                      - organizationId
-                      - paperclipConnections
-                      - state
-                    properties:
-                      agents:
-                        type: array
-                        items:
-                          type: object
-                          required:
-                            - activatedAt
-                            - activeCapabilityCount
-                            - canRevoke
-                            - createdAt
-                            - expiresAt
-                            - hostId
-                            - id
-                            - lastUsedAt
-                            - mode
-                            - name
-                            - organizationId
-                            - pendingCapabilityCount
-                            - status
-                          properties:
-                            activatedAt:
-                              nullable: true
-                              anyOf:
-                                - type: string
-                                - type: "null"
-                            activeCapabilityCount:
-                              type: number
-                            canRevoke:
-                              type: boolean
-                            createdAt:
-                              nullable: true
-                              anyOf:
-                                - type: string
-                                - type: "null"
-                            expiresAt:
-                              nullable: true
-                              anyOf:
-                                - type: string
-                                - type: "null"
-                            hostId:
-                              type: string
-                            id:
-                              type: string
-                            lastUsedAt:
-                              nullable: true
-                              anyOf:
-                                - type: string
-                                - type: "null"
-                            mode:
-                              type: string
-                              enum:
-                                - autonomous
-                                - delegated
-                            name:
-                              type: string
-                            organizationId:
-                              type: string
-                            pendingCapabilityCount:
-                              type: number
-                            status:
-                              type: string
-                              enum:
-                                - active
-                                - pending
-                                - expired
-                                - revoked
-                                - rejected
-                                - claimed
-                      allowedActions:
-                        type: object
-                        required:
-                          - connectPaperclip
-                          - denyApproval
-                          - reviewApproval
-                          - revokeAgent
-                          - revokeCapabilityGrant
-                        properties:
-                          connectPaperclip:
-                            type: boolean
-                          denyApproval:
-                            type: boolean
-                          reviewApproval:
-                            type: boolean
-                          revokeAgent:
-                            type: boolean
-                          revokeCapabilityGrant:
-                            type: boolean
-                      approvals:
-                        type: array
-                        items:
-                          type: object
-                          required:
-                            - agentId
-                            - bindingMessage
-                            - canDeny
-                            - canReview
-                            - capabilityRequests
-                            - capabilities
-                            - createdAt
-                            - expiresAt
-                            - hostId
-                            - id
-                            - method
-                            - status
-                          properties:
-                            agentId:
-                              nullable: true
-                              anyOf:
-                                - type: string
-                                - type: "null"
-                            bindingMessage:
-                              nullable: true
-                              anyOf:
-                                - type: string
-                                - type: "null"
-                            canDeny:
-                              type: boolean
-                            canReview:
-                              type: boolean
-                            capabilityRequests:
-                              type: array
-                              items:
-                                type: object
-                                required:
-                                  - approvalStrength
-                                  - capability
-                                  - constraints
-                                  - reason
-                                properties:
-                                  approvalStrength:
-                                    type: string
-                                    enum:
-                                      - none
-                                      - session
-                                      - webauthn
-                                  capability:
-                                    type: string
-                                    enum:
-                                      - email.domain.manage
-                                      - email.status
-                                      - email.mailbox.provision
-                                      - email.message.list
-                                      - email.message.read
-                                      - email.message.search
-                                      - email.message.create_draft
-                                      - email.message.mark_read
-                                      - email.message.archive
-                                      - email.message.manage
-                                      - email.message.send
-                                      - email.message.reply
-                                      - email.agent.claim
-                                      - email.agent.manage
-                                      - email.oauth_connection.manage
-                                      - email.mailbox.create
-                                      - email.mailbox.update
-                                      - email.forwarding_group.manage
-                                      - email.mailbox.read_all
-                                  constraints:
-                                    nullable: true
-                                    anyOf:
-                                      - type: object
-                                        patternProperties:
-                                          ^(.*)$: {}
-                                      - type: "null"
-                                  reason:
-                                    nullable: true
-                                    anyOf:
-                                      - type: string
-                                      - type: "null"
-                            capabilities:
-                              type: array
-                              items:
-                                type: string
-                                enum:
-                                  - email.domain.manage
-                                  - email.status
-                                  - email.mailbox.provision
-                                  - email.message.list
-                                  - email.message.read
-                                  - email.message.search
-                                  - email.message.create_draft
-                                  - email.message.mark_read
-                                  - email.message.archive
-                                  - email.message.manage
-                                  - email.message.send
-                                  - email.message.reply
-                                  - email.agent.claim
-                                  - email.agent.manage
-                                  - email.oauth_connection.manage
-                                  - email.mailbox.create
-                                  - email.mailbox.update
-                                  - email.forwarding_group.manage
-                                  - email.mailbox.read_all
-                            createdAt:
-                              nullable: true
-                              anyOf:
-                                - type: string
-                                - type: "null"
-                            expiresAt:
-                              nullable: true
-                              anyOf:
-                                - type: string
-                                - type: "null"
-                            hostId:
-                              nullable: true
-                              anyOf:
-                                - type: string
-                                - type: "null"
-                            id:
-                              type: string
-                            method:
-                              type: string
-                              enum:
-                                - ciba
-                                - device_authorization
-                            status:
-                              type: string
-                              enum:
-                                - approved
-                                - denied
-                                - expired
-                                - pending
-                      capabilityCatalog:
-                        type: object
-                        required:
-                          - capabilities
-                          - capabilityOptions
-                        properties:
-                          capabilities:
-                            type: array
-                            items:
-                              type: string
-                              enum:
-                                - email.domain.manage
-                                - email.status
-                                - email.mailbox.provision
-                                - email.message.list
-                                - email.message.read
-                                - email.message.search
-                                - email.message.create_draft
-                                - email.message.mark_read
-                                - email.message.archive
-                                - email.message.manage
-                                - email.message.send
-                                - email.message.reply
-                                - email.agent.claim
-                                - email.agent.manage
-                                - email.oauth_connection.manage
-                                - email.mailbox.create
-                                - email.mailbox.update
-                                - email.forwarding_group.manage
-                                - email.mailbox.read_all
-                          capabilityOptions:
-                            type: array
-                            items:
-                              type: object
-                              required:
-                                - description
-                                - label
-                                - value
-                              properties:
-                                description:
-                                  type: string
-                                label:
-                                  type: string
-                                value:
-                                  type: string
-                                  enum:
-                                    - email.domain.manage
-                                    - email.status
-                                    - email.mailbox.provision
-                                    - email.message.list
-                                    - email.message.read
-                                    - email.message.search
-                                    - email.message.create_draft
-                                    - email.message.mark_read
-                                    - email.message.archive
-                                    - email.message.manage
-                                    - email.message.send
-                                    - email.message.reply
-                                    - email.agent.claim
-                                    - email.agent.manage
-                                    - email.oauth_connection.manage
-                                    - email.mailbox.create
-                                    - email.mailbox.update
-                                    - email.forwarding_group.manage
-                                    - email.mailbox.read_all
-                      grants:
-                        type: array
-                        items:
-                          type: object
-                          required:
-                            - agentId
-                            - canRevoke
-                            - capability
-                            - constraints
-                            - createdAt
-                            - deniedBy
-                            - deniedByUser
-                            - expiresAt
-                            - grantedBy
-                            - grantedByUser
-                            - id
-                            - organizationId
-                            - reason
-                            - status
-                          properties:
-                            agentId:
-                              type: string
-                            canRevoke:
-                              type: boolean
-                            capability:
-                              type: string
-                              enum:
-                                - email.domain.manage
-                                - email.status
-                                - email.mailbox.provision
-                                - email.message.list
-                                - email.message.read
-                                - email.message.search
-                                - email.message.create_draft
-                                - email.message.mark_read
-                                - email.message.archive
-                                - email.message.manage
-                                - email.message.send
-                                - email.message.reply
-                                - email.agent.claim
-                                - email.agent.manage
-                                - email.oauth_connection.manage
-                                - email.mailbox.create
-                                - email.mailbox.update
-                                - email.forwarding_group.manage
-                                - email.mailbox.read_all
-                            constraints:
-                              nullable: true
-                              anyOf:
-                                - type: object
-                                  patternProperties:
-                                    ^(.*)$: {}
-                                - type: "null"
-                            createdAt:
-                              nullable: true
-                              anyOf:
-                                - type: string
-                                - type: "null"
-                            deniedBy:
-                              nullable: true
-                              anyOf:
-                                - type: object
-                                  required:
-                                    - id
-                                    - type
-                                  properties:
-                                    id:
-                                      type: string
-                                    type:
-                                      const: user
-                                      type: string
-                                - type: "null"
-                            deniedByUser:
-                              type: boolean
-                            expiresAt:
-                              nullable: true
-                              anyOf:
-                                - type: string
-                                - type: "null"
-                            grantedBy:
-                              nullable: true
-                              anyOf:
-                                - type: object
-                                  required:
-                                    - id
-                                    - type
-                                  properties:
-                                    id:
-                                      type: string
-                                    type:
-                                      const: user
-                                      type: string
-                                - type: "null"
-                            grantedByUser:
-                              type: boolean
-                            id:
-                              type: string
-                            organizationId:
-                              nullable: true
-                              anyOf:
-                                - type: string
-                                - type: "null"
-                            reason:
-                              nullable: true
-                              anyOf:
-                                - type: string
-                                - type: "null"
-                            status:
-                              type: string
-                              enum:
-                                - active
-                                - pending
-                                - denied
-                                - revoked
-                                - consumed
-                      hosts:
-                        type: array
-                        items:
-                          type: object
-                          required:
-                            - activatedAt
-                            - agentCount
-                            - createdAt
-                            - defaultCapabilities
-                            - expiresAt
-                            - id
-                            - lastUsedAt
-                            - name
-                            - organizationId
-                            - status
-                          properties:
-                            activatedAt:
-                              nullable: true
-                              anyOf:
-                                - type: string
-                                - type: "null"
-                            agentCount:
-                              type: number
-                            createdAt:
-                              nullable: true
-                              anyOf:
-                                - type: string
-                                - type: "null"
-                            defaultCapabilities:
-                              type: array
-                              items:
-                                type: string
-                                enum:
-                                  - email.domain.manage
-                                  - email.status
-                                  - email.mailbox.provision
-                                  - email.message.list
-                                  - email.message.read
-                                  - email.message.search
-                                  - email.message.create_draft
-                                  - email.message.mark_read
-                                  - email.message.archive
-                                  - email.message.manage
-                                  - email.message.send
-                                  - email.message.reply
-                                  - email.agent.claim
-                                  - email.agent.manage
-                                  - email.oauth_connection.manage
-                                  - email.mailbox.create
-                                  - email.mailbox.update
-                                  - email.forwarding_group.manage
-                                  - email.mailbox.read_all
-                            expiresAt:
-                              nullable: true
-                              anyOf:
-                                - type: string
-                                - type: "null"
-                            id:
-                              type: string
-                            lastUsedAt:
-                              nullable: true
-                              anyOf:
-                                - type: string
-                                - type: "null"
-                            name:
-                              type: string
-                            organizationId:
-                              type: string
-                            status:
-                              type: string
-                              enum:
-                                - active
-                                - pending
-                                - pending_enrollment
-                                - revoked
-                                - rejected
-                      organizationId:
-                        type: string
-                      paperclipConnections:
-                        type: array
-                        items:
-                          type: object
-                          required:
-                            - clientId
-                            - companyId
-                            - name
-                            - pluginId
-                            - scope
-                            - status
-                          properties:
-                            clientId:
-                              type: string
-                            companyId:
-                              type: string
-                            name:
-                              type: string
-                            pluginId:
-                              const: agentteam.paperclip-email-plugin
-                              type: string
-                            scope:
-                              const: organization
-                              type: string
-                            status:
-                              type: string
-                              enum:
-                                - active
-                                - disabled
-                      state:
-                        type: string
-                        enum:
-                          - empty
-                          - ready
-        "400":
-          description: Response for status 400
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - error
-                properties:
-                  code:
-                    type: string
-                    enum:
-                      - webauthn_not_enrolled
-                      - webauthn_required
-                      - webauthn_verification_failed
-                  error:
-                    type: string
-                  webauthnOptions:
-                    type: object
-                    patternProperties:
-                      ^(.*)$: {}
-        "401":
-          description: Response for status 401
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - error
-                properties:
-                  code:
-                    type: string
-                    enum:
-                      - webauthn_not_enrolled
-                      - webauthn_required
-                      - webauthn_verification_failed
-                  error:
-                    type: string
-                  webauthnOptions:
-                    type: object
-                    patternProperties:
-                      ^(.*)$: {}
-        "403":
-          description: Response for status 403
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - error
-                properties:
-                  code:
-                    type: string
-                    enum:
-                      - webauthn_not_enrolled
-                      - webauthn_required
-                      - webauthn_verification_failed
-                  error:
-                    type: string
-                  webauthnOptions:
-                    type: object
-                    patternProperties:
-                      ^(.*)$: {}
-        "404":
-          description: Response for status 404
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - error
-                properties:
-                  code:
-                    type: string
-                    enum:
-                      - webauthn_not_enrolled
-                      - webauthn_required
-                      - webauthn_verification_failed
-                  error:
-                    type: string
-                  webauthnOptions:
-                    type: object
-                    patternProperties:
-                      ^(.*)$: {}
-        "409":
-          description: Response for status 409
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - error
-                properties:
-                  code:
-                    type: string
-                    enum:
-                      - webauthn_not_enrolled
-                      - webauthn_required
-                      - webauthn_verification_failed
-                  error:
-                    type: string
-                  webauthnOptions:
-                    type: object
-                    patternProperties:
-                      ^(.*)$: {}
-        "410":
-          description: Response for status 410
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - error
-                properties:
-                  code:
-                    type: string
-                    enum:
-                      - webauthn_not_enrolled
-                      - webauthn_required
-                      - webauthn_verification_failed
-                  error:
-                    type: string
-                  webauthnOptions:
-                    type: object
-                    patternProperties:
-                      ^(.*)$: {}
-        "412":
-          description: Response for status 412
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - error
-                properties:
-                  code:
-                    type: string
-                    enum:
-                      - webauthn_not_enrolled
-                      - webauthn_required
-                      - webauthn_verification_failed
-                  error:
-                    type: string
-                  webauthnOptions:
-                    type: object
-                    patternProperties:
-                      ^(.*)$: {}
-        "429":
-          description: Response for status 429
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - error
-                properties:
-                  code:
-                    type: string
-                    enum:
-                      - webauthn_not_enrolled
-                      - webauthn_required
-                      - webauthn_verification_failed
-                  error:
-                    type: string
-                  webauthnOptions:
-                    type: object
-                    patternProperties:
-                      ^(.*)$: {}
-        "502":
-          description: Response for status 502
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - error
-                properties:
-                  code:
-                    type: string
-                    enum:
-                      - webauthn_not_enrolled
-                      - webauthn_required
-                      - webauthn_verification_failed
-                  error:
-                    type: string
-                  webauthnOptions:
-                    type: object
-                    patternProperties:
-                      ^(.*)$: {}
-        "503":
-          description: Response for status 503
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - error
-                properties:
-                  code:
-                    type: string
-                    enum:
-                      - webauthn_not_enrolled
-                      - webauthn_required
-                      - webauthn_verification_failed
-                  error:
-                    type: string
-                  webauthnOptions:
-                    type: object
-                    patternProperties:
-                      ^(.*)$: {}
-      operationId: postRpcAgent-accessPaperclipConnect
   /rpc/agent-access/trials:
     post:
       requestBody:
@@ -7440,6 +6473,293 @@ paths:
                   error:
                     type: string
       operationId: postRpcCloudflareDisconnect
+  /rpc/integrations/:
+    get:
+      responses:
+        "200":
+          description: Response for status 200
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - allowedActions
+                  - organizationId
+                  - paperclip
+                  - state
+                properties:
+                  allowedActions:
+                    type: object
+                    required:
+                      - revokePaperclip
+                    properties:
+                      revokePaperclip:
+                        type: boolean
+                  organizationId:
+                    type: string
+                  paperclip:
+                    type: object
+                    required:
+                      - available
+                      - connections
+                    properties:
+                      available:
+                        type: boolean
+                      connections:
+                        type: array
+                        items:
+                          type: object
+                          required:
+                            - clientId
+                            - name
+                            - pluginId
+                            - requiresReauthorization
+                            - status
+                          properties:
+                            clientId:
+                              type: string
+                            name:
+                              type: string
+                            pluginId:
+                              const: agentteam.paperclip-email-plugin
+                              type: string
+                            requiresReauthorization:
+                              type: boolean
+                            status:
+                              type: string
+                              enum:
+                                - connected
+                                - needs_reauthorization
+                                - unavailable
+                  state:
+                    type: string
+                    enum:
+                      - empty
+                      - ready
+        "400":
+          description: Response for status 400
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+        "401":
+          description: Response for status 401
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+        "403":
+          description: Response for status 403
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+        "404":
+          description: Response for status 404
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+        "409":
+          description: Response for status 409
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+      operationId: getRpcIntegrations
+  /rpc/integrations/paperclip/revoke:
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              additionalProperties: false
+              type: object
+              required:
+                - clientId
+              properties:
+                clientId:
+                  maxLength: 256
+                  minLength: 1
+                  type: string
+          application/x-www-form-urlencoded:
+            schema:
+              additionalProperties: false
+              type: object
+              required:
+                - clientId
+              properties:
+                clientId:
+                  maxLength: 256
+                  minLength: 1
+                  type: string
+          multipart/form-data:
+            schema:
+              additionalProperties: false
+              type: object
+              required:
+                - clientId
+              properties:
+                clientId:
+                  maxLength: 256
+                  minLength: 1
+                  type: string
+      responses:
+        "200":
+          description: Response for status 200
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - status
+                  - success
+                  - view
+                properties:
+                  status:
+                    const: revoked
+                    type: string
+                  success:
+                    const: true
+                    type: boolean
+                  view:
+                    type: object
+                    required:
+                      - allowedActions
+                      - organizationId
+                      - paperclip
+                      - state
+                    properties:
+                      allowedActions:
+                        type: object
+                        required:
+                          - revokePaperclip
+                        properties:
+                          revokePaperclip:
+                            type: boolean
+                      organizationId:
+                        type: string
+                      paperclip:
+                        type: object
+                        required:
+                          - available
+                          - connections
+                        properties:
+                          available:
+                            type: boolean
+                          connections:
+                            type: array
+                            items:
+                              type: object
+                              required:
+                                - clientId
+                                - name
+                                - pluginId
+                                - requiresReauthorization
+                                - status
+                              properties:
+                                clientId:
+                                  type: string
+                                name:
+                                  type: string
+                                pluginId:
+                                  const: agentteam.paperclip-email-plugin
+                                  type: string
+                                requiresReauthorization:
+                                  type: boolean
+                                status:
+                                  type: string
+                                  enum:
+                                    - connected
+                                    - needs_reauthorization
+                                    - unavailable
+                      state:
+                        type: string
+                        enum:
+                          - empty
+                          - ready
+        "400":
+          description: Response for status 400
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+        "401":
+          description: Response for status 401
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+        "403":
+          description: Response for status 403
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+        "404":
+          description: Response for status 404
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+        "409":
+          description: Response for status 409
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+      operationId: postRpcIntegrationsPaperclipRevoke
   /rpc/mail/admin:
     get:
       parameters:
