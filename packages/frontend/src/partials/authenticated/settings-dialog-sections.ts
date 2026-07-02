@@ -2,6 +2,7 @@ export type SettingsSectionId =
   | 'account'
   | 'security'
   | 'agentAccess'
+  | 'connected-accounts'
   | 'integrations'
   | 'organizations'
   | 'organizationSettings'
@@ -10,7 +11,7 @@ export type SettingsSectionId =
 
 type SettingsRouteSectionId = Extract<
   SettingsSectionId,
-  'account' | 'security' | 'agentAccess' | 'integrations' | 'organizations' | 'domains'
+  'account' | 'security' | 'agentAccess' | 'connected-accounts' | 'integrations' | 'organizations' | 'domains'
 >
 
 type OrganizationRouteSectionId = Extract<
@@ -40,14 +41,11 @@ export const settingsRouteSegments = {
   account: 'account',
   security: 'security',
   agentAccess: 'agent-access',
+  'connected-accounts': 'connected-accounts',
   integrations: 'integrations',
   organizations: 'organizations',
   domains: 'domains'
 } satisfies Record<SettingsRouteSectionId, string>
-
-const legacySettingsRouteSegments = {
-  'connected-accounts': 'integrations'
-} satisfies Record<string, SettingsRouteSectionId>
 
 const organizationRouteSegments = {
   organizationSettings: 'settings',
@@ -58,6 +56,7 @@ const settingsSectionHrefs = {
   account: '/settings/account/',
   security: '/settings/security/',
   agentAccess: '/settings/agent-access/',
+  'connected-accounts': '/settings/connected-accounts/',
   integrations: '/settings/integrations/',
   organizations: '/settings/organizations/',
   organizationSettings: '/organization/settings/',
@@ -66,15 +65,10 @@ const settingsSectionHrefs = {
 } satisfies Record<SettingsSectionId, string>
 
 const settingsRouteSectionsBySegment = new Map<string, SettingsRouteSectionId>(
-  [
-    ...Object.entries(settingsRouteSegments).map(([section, segment]) => [
-      segment,
-      section as SettingsRouteSectionId
-    ] as const),
-    ...Object.entries(legacySettingsRouteSegments).map(
-      ([segment, section]) => [segment, section] as const
-    )
-  ] satisfies readonly (readonly [string, SettingsRouteSectionId])[]
+  Object.entries(settingsRouteSegments).map(([section, segment]) => [
+    segment,
+    section as SettingsRouteSectionId
+  ])
 )
 
 const organizationRouteSectionsBySegment = new Map<string, OrganizationRouteSectionId>(
@@ -88,6 +82,7 @@ const settingsSectionIds = new Set<SettingsSectionId>([
   'account',
   'security',
   'agentAccess',
+  'connected-accounts',
   'integrations',
   'organizations',
   'organizationSettings',

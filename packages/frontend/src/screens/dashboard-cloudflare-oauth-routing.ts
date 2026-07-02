@@ -4,7 +4,6 @@ const cloudflareOAuthCompletionPaths = new Set([
   '/settings/security/',
   '/settings/agent-access/',
   '/settings/connected-accounts/',
-  '/settings/integrations/',
   '/settings/organizations/',
   '/settings/domains/',
   '/organization/settings/',

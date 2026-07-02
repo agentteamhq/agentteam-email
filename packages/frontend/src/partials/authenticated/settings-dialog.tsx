@@ -7,6 +7,7 @@ import {
   LockIcon,
   PlugsConnectedIcon,
   PlusCircleIcon,
+  PuzzlePieceIcon,
   SuitcaseSimpleIcon,
   TrashIcon,
   UserCircleIcon,
@@ -194,8 +195,9 @@ export interface AgentAccessConnectionHandoff {
 const settingsNavigation = [
   { id: 'account', name: 'Account', icon: UserCircleIcon },
   { id: 'security', name: 'Security', icon: LockIcon },
+  { id: 'connected-accounts', name: 'Connected accounts', icon: PlugsConnectedIcon },
+  { id: 'integrations', name: 'Integrations', icon: PuzzlePieceIcon },
   { id: 'agentAccess', name: 'Agent access', icon: UserIcon },
-  { id: 'integrations', name: 'Integrations', icon: PlugsConnectedIcon },
   { id: 'organizations', name: 'Organizations', icon: SuitcaseSimpleIcon },
   { id: 'organizationSettings', name: 'Organization settings', icon: IdentificationCardIcon },
   { id: 'organizationPeople', name: 'Organization people', icon: UsersIcon }
@@ -209,6 +211,7 @@ const settingsNames = {
   account: 'Account',
   security: 'Security',
   agentAccess: 'Agent access',
+  'connected-accounts': 'Connected accounts',
   integrations: 'Integrations',
   organizations: 'Organizations',
   organizationSettings: 'Organization settings',
@@ -269,7 +272,7 @@ export function SettingsDialog({
       >
         <DialogTitle className='sr-only'>Settings</DialogTitle>
         <DialogDescription className='sr-only'>
-          Manage account, security, integration, organization, and domain settings.
+          Manage account, security, connected account, integration, organization, and domain settings.
         </DialogDescription>
         <SidebarProvider className='h-full min-h-0 min-w-0 items-start overflow-hidden'>
           <Sidebar
@@ -472,15 +475,19 @@ function SettingsPanelContent({
     return (
       <SettingsEmptyContent
         description={
-          section === 'integrations'
-            ? 'Provider accounts and plugin authorizations will appear here.'
+          section === 'connected-accounts'
+            ? 'Connected provider accounts will appear here.'
+            : section === 'integrations'
+              ? 'Plugin authorizations will appear here.'
             : section === 'domains'
               ? 'Domains connected to AgentTeam Email will appear here.'
               : 'This settings section has no records to show yet.'
         }
         title={
-          section === 'integrations'
-            ? 'No integrations'
+          section === 'connected-accounts'
+            ? 'No connected accounts'
+            : section === 'integrations'
+              ? 'No integrations'
             : section === 'domains'
               ? 'No domains'
               : 'Nothing to show'
@@ -538,13 +545,12 @@ function SettingsPanelContent({
     )
   }
 
+  if (section === 'connected-accounts') {
+    return <ConnectedAccountsContent settings={domainSettings} />
+  }
+
   if (section === 'integrations') {
-    return (
-      <IntegrationsContent
-        agentAccess={agentAccess}
-        settings={domainSettings}
-      />
-    )
+    return <IntegrationsContent agentAccess={agentAccess} />
   }
 
   if (section === 'domains') {
@@ -1308,39 +1314,23 @@ export function SettingsDomainsPanel({
   )
 }
 
-export function IntegrationsPanel({
-  agentAccessState,
-  domainState
+export function ConnectedAccountsPanel({
+  state
 }: {
-  agentAccessState?: AgentAccessSettingsState
-  domainState?: DomainSettingsState
+  state?: DomainSettingsState
 }) {
-  return (
-    <IntegrationsContent
-      agentAccess={agentAccessControllerFromState(agentAccessState)}
-      settings={domainSettingsControllerFromState(domainState)}
-    />
-  )
+  return <ConnectedAccountsContent settings={domainSettingsControllerFromState(state)} />
 }
 
-function IntegrationsContent({
-  agentAccess,
-  settings
-}: {
-  agentAccess: AgentAccessController
-  settings: DomainSettingsController
-}) {
-  const paperclipConnections = agentAccess.view?.paperclipConnections ?? []
-  const hasPaperclipAuthorization = Boolean(agentAccess.connectionHandoff) || paperclipConnections.length > 0
-
-  if (settings.status === null && !settings.message && !hasPaperclipAuthorization) {
-    return <IntegrationsLoadingContent />
+function ConnectedAccountsContent({ settings }: { settings: DomainSettingsController }) {
+  if (settings.status === null && !settings.message) {
+    return <ConnectedAccountsLoadingContent />
   }
 
-  if (settings.grants.length === 0 && !hasPaperclipAuthorization) {
+  if (settings.grants.length === 0) {
     return (
       <div className='grid max-w-3xl gap-4'>
-        <IntegrationCloudflareConnectCard settings={settings} />
+        <ConnectedAccountsCloudflareConnectCard settings={settings} />
         {settings.message ? <p className='text-muted-foreground text-sm'>{settings.message}</p> : null}
       </div>
     )
@@ -1350,9 +1340,9 @@ function IntegrationsContent({
     <section className='grid max-w-3xl gap-4'>
       <div className='flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'>
         <div className='min-w-0'>
-          <p className='font-medium'>Integrations</p>
+          <p className='font-medium'>Connected accounts</p>
           <p className='text-muted-foreground text-sm'>
-            Manage provider accounts and plugin authorizations used by AgentTeam Email.
+            Manage provider accounts connected to AgentTeam Email.
           </p>
         </div>
         <CloudflareConnectButton
@@ -1365,22 +1355,66 @@ function IntegrationsContent({
         </CloudflareConnectButton>
       </div>
       {settings.message ? <p className='text-muted-foreground text-sm'>{settings.message}</p> : null}
-      {settings.grants.length > 0 ? (
-        <IntegrationsSection title='Cloudflare accounts'>
-          {settings.grants.map((grant) => (
-            <IntegrationCloudflareGrantRow
-              busy={settings.busy}
-              grant={grant}
-              key={grant.publicId}
-              onDisconnect={settings.onDisconnectCloudflare}
-              onReconnect={settings.onStartConnectedAccountOAuth}
-              readOnly={settings.readOnly}
-            />
-          ))}
-        </IntegrationsSection>
-      ) : (
-        <IntegrationCloudflareConnectCard settings={settings} />
-      )}
+      <ConnectedAccountsSection title='Cloudflare accounts'>
+        {settings.grants.map((grant) => (
+          <ConnectedAccountCloudflareGrantRow
+            busy={settings.busy}
+            grant={grant}
+            key={grant.publicId}
+            onDisconnect={settings.onDisconnectCloudflare}
+            onReconnect={settings.onStartConnectedAccountOAuth}
+            readOnly={settings.readOnly}
+          />
+        ))}
+      </ConnectedAccountsSection>
+    </section>
+  )
+}
+
+export function IntegrationsPanel({ agentAccessState }: { agentAccessState?: AgentAccessSettingsState }) {
+  return <IntegrationsContent agentAccess={agentAccessControllerFromState(agentAccessState)} />
+}
+
+function IntegrationsContent({ agentAccess }: { agentAccess: AgentAccessController }) {
+  const paperclipConnections = agentAccess.view?.paperclipConnections ?? []
+  const hasPaperclipAuthorization = Boolean(agentAccess.connectionHandoff) || paperclipConnections.length > 0
+
+  if (!agentAccess.view && !agentAccess.message && !hasPaperclipAuthorization) {
+    return <IntegrationsLoadingContent />
+  }
+
+  if (!hasPaperclipAuthorization) {
+    return (
+      <div className='grid max-w-3xl gap-4'>
+        <div className='min-w-0'>
+          <p className='font-medium'>Integrations</p>
+          <p className='text-muted-foreground text-sm'>
+            Plugin authorizations for AgentTeam Email will appear here.
+          </p>
+        </div>
+        {agentAccess.message ? (
+          <div className='grid gap-1 rounded-lg border p-3 text-sm'>
+            <p className='font-medium'>Integrations unavailable</p>
+            <p className='text-muted-foreground'>{agentAccess.message}</p>
+          </div>
+        ) : (
+          <SettingsEmptyContent
+            description='Plugin authorizations such as Paperclip will appear here.'
+            title='No integrations'
+          />
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <section className='grid max-w-3xl gap-4'>
+      <div className='min-w-0'>
+        <p className='font-medium'>Integrations</p>
+        <p className='text-muted-foreground text-sm'>
+          Manage plugin authorizations used by AgentTeam Email.
+        </p>
+      </div>
       {agentAccess.connectionHandoff ? (
         <IntegrationPaperclipHandoffCard
           busy={agentAccess.busy}
@@ -1396,7 +1430,7 @@ function IntegrationsContent({
   )
 }
 
-function IntegrationCloudflareConnectCard({ settings }: { settings: DomainSettingsController }) {
+function ConnectedAccountsCloudflareConnectCard({ settings }: { settings: DomainSettingsController }) {
   return (
     <Card className='gap-0 py-4 shadow-none'>
       <CardHeader className='grid gap-3 px-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start'>
@@ -1424,7 +1458,7 @@ function IntegrationCloudflareConnectCard({ settings }: { settings: DomainSettin
   )
 }
 
-function IntegrationsLoadingContent() {
+function ConnectedAccountsLoadingContent() {
   return (
     <div className='grid max-w-3xl gap-3'>
       <Skeleton className='h-16 rounded-lg' />
@@ -1433,7 +1467,7 @@ function IntegrationsLoadingContent() {
   )
 }
 
-function IntegrationsSection({ children, title }: { children: React.ReactNode; title: string }) {
+function ConnectedAccountsSection({ children, title }: { children: React.ReactNode; title: string }) {
   return (
     <div className='grid gap-2'>
       <p className='text-sm font-medium'>{title}</p>
@@ -1442,7 +1476,7 @@ function IntegrationsSection({ children, title }: { children: React.ReactNode; t
   )
 }
 
-function IntegrationCloudflareGrantRow({
+function ConnectedAccountCloudflareGrantRow({
   busy,
   grant,
   onDisconnect,
@@ -1498,8 +1532,8 @@ function IntegrationCloudflareGrantRow({
             <AlertDialogHeader>
               <AlertDialogTitle>Disconnect Cloudflare account?</AlertDialogTitle>
               <AlertDialogDescription>
-                Domains tied to this Cloudflare account may stop provisioning until another integration can
-                manage them.
+                Domains tied to this Cloudflare account may stop provisioning until another connected
+                account can manage them.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -1517,6 +1551,24 @@ function IntegrationCloudflareGrantRow({
           </AlertDialogContent>
         </AlertDialog>
       </div>
+    </div>
+  )
+}
+
+function IntegrationsLoadingContent() {
+  return (
+    <div className='grid max-w-3xl gap-3'>
+      <Skeleton className='h-16 rounded-lg' />
+      <Skeleton className='h-24 rounded-lg' />
+    </div>
+  )
+}
+
+function IntegrationsSection({ children, title }: { children: React.ReactNode; title: string }) {
+  return (
+    <div className='grid gap-2'>
+      <p className='text-sm font-medium'>{title}</p>
+      <div className='divide-border overflow-hidden rounded-lg border'>{children}</div>
     </div>
   )
 }

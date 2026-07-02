@@ -137,9 +137,9 @@ describe('DashboardMailController Cloudflare OAuth routing', () => {
     })
   })
 
-  it('starts settings integration OAuth with the Cloudflare connected-account return target', async () => {
+  it('starts settings connected-account OAuth with the Cloudflare connected-account return target', async () => {
     expect.hasAssertions()
-    const props = renderController('/settings/integrations/')
+    const props = renderController('/settings/connected-accounts/')
 
     props.domainSettingsState?.onStartConnectedAccountOAuth?.()
     await flushPromises()
@@ -162,8 +162,8 @@ describe('DashboardMailController Cloudflare OAuth routing', () => {
     expect(cloudflareOAuthCompletionPath('/settings/connected-accounts')).toBe(
       '/settings/connected-accounts/'
     )
-    expect(cloudflareOAuthCompletionPath('/settings/integrations/')).toBe('/settings/integrations/')
-    expect(cloudflareOAuthCompletionPath('/settings/integrations')).toBe('/settings/integrations/')
+    expect(cloudflareOAuthCompletionPath('/settings/integrations/')).toBe('/dashboard/')
+    expect(cloudflareOAuthCompletionPath('/settings/integrations')).toBe('/dashboard/')
     expect(cloudflareOAuthCompletionPath('/settings/connectedAccounts')).toBe('/dashboard/')
     expect(cloudflareOAuthCompletionPath('/settings/connectedAccounts/?cloudflareIntentId=abc')).toBe(
       '/dashboard/'

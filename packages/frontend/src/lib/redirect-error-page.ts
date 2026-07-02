@@ -26,7 +26,7 @@ const SENSITIVE_PARAM_NAMES = new Set([
 
 const CLOUDFLARE_RETRY_HREF_BY_RETURN_TARGET = {
   'dashboard-onboarding': '/dashboard/',
-  'settings-connected-accounts': '/settings/integrations/',
+  'settings-connected-accounts': '/settings/connected-accounts/',
   'settings-domains': '/settings/domains/'
 } satisfies Record<CloudflareOAuthReturnTarget, string>
 
@@ -66,7 +66,7 @@ export function createRedirectErrorViewState({
   const providerMessage = readProviderMessage(pageUrl)
   const redactedPageUri = createRedactedPageUri(pageUrl)
   const providerLabel = isCloudflare ? 'Cloudflare' : 'Unknown provider'
-  const flowLabel = isConnectedAccount ? 'Integration' : 'Authentication'
+  const flowLabel = isConnectedAccount ? 'Connected account' : 'Authentication'
   const supportReference = [
     'redirect-error',
     isCloudflare ? 'cloudflare' : 'unknown-provider',
@@ -118,7 +118,7 @@ function readRetryHref(
     return CLOUDFLARE_RETRY_HREF_BY_RETURN_TARGET[returnTarget]
   }
 
-  return isConnectedAccount ? '/settings/integrations/' : '/'
+  return isConnectedAccount ? '/settings/connected-accounts/' : '/'
 }
 
 function readCloudflareOAuthReturnTarget(value: string | null): CloudflareOAuthReturnTarget | null {

@@ -495,7 +495,7 @@ export const AgentAccessDense: Story = {
 
 export const IntegrationsEmpty: Story = {
   args: buildSettingsScreenArgs({
-    domainSettingsState: domainSettingsEmptyFirstUseState,
+    agentAccessView: defaultAgentAccessView,
     settingsSection: 'integrations'
   }),
   play: async ({ args, canvasElement }) => {
@@ -503,20 +503,36 @@ export const IntegrationsEmpty: Story = {
 
     await expect(args.storyPath).toBe('/settings/integrations/')
     await expect(await canvas.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument()
-    await expect(await canvas.findByRole('button', { name: 'Connect Cloudflare' })).toBeEnabled()
+    await expect(await canvas.findByText('No integrations')).toBeInTheDocument()
+    await expect(canvas.queryByRole('button', { name: 'Connect Cloudflare' })).not.toBeInTheDocument()
+    await expect(canvas.queryByText('Cloudflare accounts')).not.toBeInTheDocument()
   }
 }
 
-export const IntegrationsCloudflare: Story = {
+export const ConnectedAccountsEmpty: Story = {
   args: buildSettingsScreenArgs({
-    domainSettingsState: domainSettingsAddDomainSelectZoneState,
-    settingsSection: 'integrations'
+    domainSettingsState: domainSettingsEmptyFirstUseState,
+    settingsSection: 'connected-accounts'
   }),
   play: async ({ args, canvasElement }) => {
     const canvas = storyBody(canvasElement)
 
-    await expect(args.storyPath).toBe('/settings/integrations/')
-    await expect(await canvas.findByText('Integrations', { selector: 'p' })).toBeInTheDocument()
+    await expect(args.storyPath).toBe('/settings/connected-accounts/')
+    await expect(await canvas.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: 'Connect Cloudflare' })).toBeEnabled()
+  }
+}
+
+export const ConnectedAccountsCloudflare: Story = {
+  args: buildSettingsScreenArgs({
+    domainSettingsState: domainSettingsAddDomainSelectZoneState,
+    settingsSection: 'connected-accounts'
+  }),
+  play: async ({ args, canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+
+    await expect(args.storyPath).toBe('/settings/connected-accounts/')
+    await expect(await canvas.findByText('Connected accounts', { selector: 'p' })).toBeInTheDocument()
     await expect(await canvas.findByText('admin@example.com')).toBeInTheDocument()
     await expect((await canvas.findAllByText('Connected')).length).toBeGreaterThan(0)
     await expect(await canvas.findByRole('button', { name: 'Connect Cloudflare' })).toBeEnabled()
@@ -530,10 +546,10 @@ export const IntegrationsCloudflare: Story = {
   }
 }
 
-export const IntegrationsReconnectRequired: Story = {
+export const ConnectedAccountsReconnectRequired: Story = {
   args: buildSettingsScreenArgs({
     domainSettingsState: domainSettingsMissingCloudflarePermissionsState,
-    settingsSection: 'integrations'
+    settingsSection: 'connected-accounts'
   }),
   play: async ({ canvasElement }) => {
     const canvas = storyBody(canvasElement)
@@ -545,13 +561,13 @@ export const IntegrationsReconnectRequired: Story = {
   }
 }
 
-export const IntegrationsDisconnectConfirmation: Story = {
+export const ConnectedAccountsDisconnectConfirmation: Story = {
   args: buildSettingsScreenArgs({
     domainSettingsState: {
       ...domainSettingsAddDomainSelectZoneState,
       onDisconnectCloudflare: fn()
     },
-    settingsSection: 'integrations'
+    settingsSection: 'connected-accounts'
   }),
   play: async ({ args, canvasElement }) => {
     const canvas = storyBody(canvasElement)

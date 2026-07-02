@@ -9,7 +9,7 @@ const cloudflareReturnTargetRetryCases = [
     returnTarget: 'dashboard-onboarding'
   },
   {
-    retryHref: '/settings/integrations/',
+    retryHref: '/settings/connected-accounts/',
     returnTarget: 'settings-connected-accounts'
   },
   {
@@ -44,11 +44,11 @@ describe('redirect error page state', () => {
 
     expect(state.title).toBe('Cloudflare connection failed')
     expect(state.providerLabel).toBe('Cloudflare')
-    expect(state.flowLabel).toBe('Integration')
+    expect(state.flowLabel).toBe('Connected account')
     expect(state.errorCode).toBe('invalid_request')
     expect(state.providerMessage).toBe('The request is missing the required redirect uri')
     expect(state.callbackUri).toBe('https://mail.example.test/rpc/auth/api/oauth2/callback/cloudflare')
-    expect(state.retryHref).toBe('/settings/integrations/')
+    expect(state.retryHref).toBe('/settings/connected-accounts/')
     expect(state.redactedQueryKeys).toStrictEqual(['access_token', 'code', 'state'])
     expect(state.pageUri).toContain('code=%5Bredacted%5D')
     expect(state.pageUri).toContain('state=%5Bredacted%5D')
@@ -82,7 +82,7 @@ describe('redirect error page state', () => {
     }
   )
 
-  it('falls back to integration settings for invalid Cloudflare OAuth return targets', () => {
+  it('falls back to connected account settings for invalid Cloudflare OAuth return targets', () => {
     expect.hasAssertions()
     const state = createRedirectErrorViewState({
       occurredAt: new Date('2026-06-30T12:00:00.000Z'),
@@ -97,7 +97,7 @@ describe('redirect error page state', () => {
         }).toString()
     })
 
-    expect(state.retryHref).toBe('/settings/integrations/')
+    expect(state.retryHref).toBe('/settings/connected-accounts/')
   })
 
   it('falls back to generic redirect context when provider metadata is absent', () => {

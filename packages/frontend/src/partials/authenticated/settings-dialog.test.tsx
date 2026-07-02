@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
+import { agentMailCapabilityCatalog } from '@main/backend'
 
-import { IntegrationsPanel, SettingsDomainsPanel } from './settings-dialog'
+import { ConnectedAccountsPanel, IntegrationsPanel, SettingsDomainsPanel } from './settings-dialog'
 import type { DomainSettingsState, DomainSettingsStatus } from './settings-dialog'
 
 describe('settings Cloudflare account and domain separation', () => {
@@ -13,18 +14,18 @@ describe('settings Cloudflare account and domain separation', () => {
     expect(markup).not.toContain('Disconnect account')
   })
 
-  it('keeps Cloudflare grant disconnect on the integrations surface', () => {
+  it('keeps Cloudflare grant disconnect on the connected accounts surface', () => {
     const onDisconnectCloudflare = vi.fn()
     const markup = renderToStaticMarkup(
-      <IntegrationsPanel
-        domainState={{
+      <ConnectedAccountsPanel
+        state={{
           ...domainSettingsState(),
           onDisconnectCloudflare
         }}
       />
     )
 
-    expect(markup).toContain('Integrations')
+    expect(markup).toContain('Connected accounts')
     expect(markup).toContain('Disconnect account')
     expect(markup).not.toContain('Disconnect Cloudflare')
     expect(markup).not.toContain('cloudflare-user-id')
@@ -32,6 +33,38 @@ describe('settings Cloudflare account and domain separation', () => {
     expect(markup).not.toContain('account:read')
     expect(markup).not.toContain('zone:read')
     expect(markup).not.toContain('Last checked')
+  })
+
+  it('does not expose Cloudflare connected accounts on the integrations surface', () => {
+    const markup = renderToStaticMarkup(
+      <IntegrationsPanel
+        agentAccessState={{
+          readOnly: true,
+          view: {
+            agents: [],
+            allowedActions: {
+              connectPaperclip: false,
+              denyApproval: false,
+              reviewApproval: false,
+              revokeAgent: false,
+              revokeCapabilityGrant: false
+            },
+            approvals: [],
+            capabilityCatalog: agentMailCapabilityCatalog,
+            grants: [],
+            hosts: [],
+            organizationId: 'org-test',
+            paperclipConnections: [],
+            state: 'empty'
+          }
+        }}
+      />
+    )
+
+    expect(markup).toContain('No integrations')
+    expect(markup).not.toContain('Connect Cloudflare')
+    expect(markup).not.toContain('Cloudflare accounts')
+    expect(markup).not.toContain('Disconnect account')
   })
 })
 

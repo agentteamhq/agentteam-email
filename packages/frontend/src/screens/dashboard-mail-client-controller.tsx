@@ -601,7 +601,7 @@ function useDomainSettingsController({
     startOAuth('dashboard-onboarding').catch(handleUnexpectedCloudflareActionError)
   }, [handleUnexpectedCloudflareActionError, startOAuth])
 
-  const startSettingsIntegrationOAuth = React.useCallback(() => {
+  const startSettingsConnectedAccountOAuth = React.useCallback(() => {
     startOAuth('settings-connected-accounts').catch(handleUnexpectedCloudflareActionError)
   }, [handleUnexpectedCloudflareActionError, startOAuth])
 
@@ -824,7 +824,7 @@ function useDomainSettingsController({
       onSetupDomain: () => {
         setupDomain().catch(handleUnexpectedCloudflareActionError)
       },
-      onStartConnectedAccountOAuth: startSettingsIntegrationOAuth,
+      onStartConnectedAccountOAuth: startSettingsConnectedAccountOAuth,
       onStartOAuth: startSettingsDomainsOAuth,
       readOnly,
       selectedGrantPublicId: runtimeSelectedGrantPublicId || undefined,
