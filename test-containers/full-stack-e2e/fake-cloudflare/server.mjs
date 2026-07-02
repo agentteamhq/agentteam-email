@@ -10,6 +10,7 @@ const oauthSubject =
   process.env.AT_EMAIL_ADMIN_FAKE_CF_OAUTH_SUB ||
   process.env.FAKE_AT_EMAIL_ADMIN_CF_OAUTH_SUB ||
   'cloudflare-user-1'
+const interactiveOAuth = process.env.FAKE_CLOUDFLARE_INTERACTIVE_OAUTH === '1'
 const cloudflareOAuthScopes = [
   'workers-r2.read',
   'workers-r2.write',
@@ -334,6 +335,79 @@ function handleOAuth(request, response, url) {
       sendJson(response, 400, { error: 'invalid_request', error_description: 'redirect_uri is required' })
       return
     }
+    if (interactiveOAuth && url.searchParams.get('__approved') !== '1') {
+      const approveUrl = new URL(url)
+      approveUrl.searchParams.set('__approved', '1')
+      sendHtml(
+        response,
+        200,
+        `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Authorize AgentTeam Email</title>
+    <style>
+      body {
+        align-items: center;
+        background: #f8fafc;
+        color: #0f172a;
+        display: grid;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        margin: 0;
+        min-height: 100vh;
+        padding: 24px;
+      }
+      main {
+        background: #fff;
+        border: 1px solid #dbe3ef;
+        border-radius: 12px;
+        box-shadow: 0 24px 80px rgba(15, 23, 42, 0.12);
+        margin: 0 auto;
+        max-width: 460px;
+        padding: 28px;
+      }
+      h1 {
+        font-size: 24px;
+        line-height: 1.2;
+        margin: 0 0 12px;
+      }
+      p {
+        color: #475569;
+        line-height: 1.6;
+        margin: 0 0 20px;
+      }
+      button {
+        background: #f97316;
+        border: 0;
+        border-radius: 8px;
+        color: #fff;
+        cursor: pointer;
+        font: inherit;
+        font-weight: 600;
+        min-height: 42px;
+        padding: 0 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Authorize AgentTeam Email</h1>
+      <p>This fake Cloudflare screen is used only by the recorded browser E2E flow.</p>
+      <form action="${escapeHtml(approveUrl.toString())}" method="get">
+        ${[...approveUrl.searchParams.entries()]
+          .map(
+            ([name, value]) => `<input type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(value)}">`
+          )
+          .join('\n        ')}
+        <button type="submit">Authorize AgentTeam Email</button>
+      </form>
+    </main>
+  </body>
+</html>`
+      )
+      return
+    }
     const redirect = new URL(redirectURI)
     redirect.searchParams.set('code', 'full-stack-e2e-cloudflare-code')
     const state = url.searchParams.get('state')
@@ -461,6 +535,11 @@ function sendJson(response, statusCode, body) {
   response.end(`${JSON.stringify(body)}\n`)
 }
 
+function sendHtml(response, statusCode, body) {
+  response.writeHead(statusCode, { 'content-type': 'text/html; charset=utf-8' })
+  response.end(body)
+}
+
 async function readBody(request) {
   const chunks = []
   for await (const chunk of request) {
@@ -478,6 +557,15 @@ function parseJsonBody(body) {
   } catch {
     return null
   }
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
 }
 
 async function parseWorkerUpload(request, body) {
