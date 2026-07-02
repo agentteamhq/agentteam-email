@@ -362,6 +362,97 @@ func TestRuntimeBootstrapFetchesWebSnapshotWithScopedToken(t *testing.T) {
 	}
 }
 
+func TestRuntimeBootstrapRetriesUntilWebSnapshotSucceeds(t *testing.T) {
+	ctx := context.Background()
+	store := controlstate.NewMemoryStore()
+	var mu sync.Mutex
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != controlToWebRuntimeSnapshotPath {
+			t.Fatalf("path = %q, want %q", r.URL.Path, controlToWebRuntimeSnapshotPath)
+		}
+		if got := r.Header.Get("X-Agent-Mail-Control-Web-Token"); got != "test-control-to-web-token" {
+			t.Fatalf("control-to-web token header = %q", got)
+		}
+		mu.Lock()
+		requests++
+		requestNumber := requests
+		mu.Unlock()
+		if requestNumber < 3 {
+			http.Error(w, "web not ready", http.StatusServiceUnavailable)
+			return
+		}
+		if err := json.NewEncoder(w).Encode(runtimeSnapshotResponse{
+			Domains: []controlstate.DomainConfigParams{testControlServiceDomainConfig("example.com", true)},
+		}); err != nil {
+			t.Fatalf("encode snapshot: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	bootstrapRuntimeProjectionFromWebWithRetryPolicy(ctx, store, controlstate.ProviderCloudflare, runtimeBootstrapConfig{
+		BaseURL: server.URL,
+		Token:   "test-control-to-web-token",
+	}, testRuntimeBootstrapRetryPolicy(false))
+
+	active, err := controlstate.ActiveDomainRecords(ctx, store, nil)
+	if err != nil {
+		t.Fatalf("ActiveDomainRecords: %v", err)
+	}
+	if len(active) != 1 || active[0].Domain != "example.com" {
+		t.Fatalf("active domains = %#v, want bootstrapped example.com after retry", active)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if requests != 3 {
+		t.Fatalf("requests = %d, want initial request plus two retries", requests)
+	}
+}
+
+func TestRuntimeBootstrapRetryStopsAfterDeadline(t *testing.T) {
+	ctx := context.Background()
+	store := controlstate.NewMemoryStore()
+	var mu sync.Mutex
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("X-Agent-Mail-Control-Web-Token"); got != "test-control-to-web-token" {
+			t.Fatalf("control-to-web token header = %q", got)
+		}
+		mu.Lock()
+		requests++
+		mu.Unlock()
+		http.Error(w, "web not ready", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	bootstrapRuntimeProjectionFromWebWithRetryPolicy(ctx, store, controlstate.ProviderCloudflare, runtimeBootstrapConfig{
+		BaseURL: server.URL,
+		Token:   "test-control-to-web-token",
+	}, testRuntimeBootstrapRetryPolicy(false))
+
+	active, err := controlstate.ActiveDomainRecords(ctx, store, nil)
+	if err != nil {
+		t.Fatalf("ActiveDomainRecords: %v", err)
+	}
+	if len(active) != 0 {
+		t.Fatalf("active domains = %#v, want no runtime domains after retry exhaustion", active)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if requests < 2 {
+		t.Fatalf("requests = %d, want initial request and at least one retry", requests)
+	}
+}
+
+func testRuntimeBootstrapRetryPolicy(background bool) runtimeBootstrapRetryPolicy {
+	return runtimeBootstrapRetryPolicy{
+		AttemptTimeout: 50 * time.Millisecond,
+		RetryInterval:  5 * time.Millisecond,
+		RetryWindow:    40 * time.Millisecond,
+		Background:     background,
+	}
+}
+
 func TestRuntimeSyncRejectsMismatchedArchivePrefix(t *testing.T) {
 	ctx := context.Background()
 	store := controlstate.NewMemoryStore()
