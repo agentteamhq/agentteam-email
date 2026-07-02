@@ -3,16 +3,34 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { cloudflareOAuthCompletionPath } from './dashboard-cloudflare-oauth-routing'
-import { DashboardMailController } from './dashboard-mail-client-controller'
+import {
+  cloudflareConnectionInputForSelectedDomain,
+  DashboardMailController
+} from './dashboard-mail-client-controller'
 import { validateDashboardSearch } from '../lib/dashboard-search'
 import type { DashboardSearch } from '../lib/dashboard-search'
 import type { DashboardScreenProps } from './dashboard-screen'
 import type { PublicEnv } from '../types'
 import type { SettingsRouteState } from '@main/backend/routes/webapp'
 
+type CloudflareAccountFixture = NonNullable<
+  NonNullable<DashboardScreenProps['domainSettingsState']>['accounts']
+>[number]
+type CloudflareZoneFixture = NonNullable<
+  NonNullable<DashboardScreenProps['domainSettingsState']>['zones']
+>[number]
+type CloudflareGrantPublicIdFixture = CloudflareAccountFixture['grantPublicId']
+
 const controllerTestState = vi.hoisted(() => ({
   capturedScreenProps: undefined as DashboardScreenProps | undefined,
+  connectCloudflareDomain: vi.fn(),
+  disconnectCloudflareConnection: vi.fn(),
+  fetchCloudflareAccounts: vi.fn(),
+  fetchCloudflareStatus: vi.fn(),
+  fetchCloudflareZones: vi.fn(),
+  finalizeCloudflareOAuth: vi.fn(),
   navigate: vi.fn(() => Promise.resolve()),
+  provisionCloudflareConnection: vi.fn(),
   routePathname: '/dashboard/',
   startCloudflareOAuth: vi.fn()
 }))
@@ -40,13 +58,13 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
 })
 
 vi.mock('../lib/cloudflare-rpc', () => ({
-  connectCloudflareDomain: vi.fn(),
-  disconnectCloudflareConnection: vi.fn(),
-  fetchCloudflareAccounts: vi.fn(),
-  fetchCloudflareStatus: vi.fn(),
-  fetchCloudflareZones: vi.fn(),
-  finalizeCloudflareOAuth: vi.fn(),
-  provisionCloudflareConnection: vi.fn(),
+  connectCloudflareDomain: controllerTestState.connectCloudflareDomain,
+  disconnectCloudflareConnection: controllerTestState.disconnectCloudflareConnection,
+  fetchCloudflareAccounts: controllerTestState.fetchCloudflareAccounts,
+  fetchCloudflareStatus: controllerTestState.fetchCloudflareStatus,
+  fetchCloudflareZones: controllerTestState.fetchCloudflareZones,
+  finalizeCloudflareOAuth: controllerTestState.finalizeCloudflareOAuth,
+  provisionCloudflareConnection: controllerTestState.provisionCloudflareConnection,
   startCloudflareOAuth: controllerTestState.startCloudflareOAuth
 }))
 
@@ -80,7 +98,14 @@ const routeState = {
 describe('DashboardMailController Cloudflare OAuth routing', () => {
   beforeEach(() => {
     controllerTestState.capturedScreenProps = undefined
+    controllerTestState.connectCloudflareDomain.mockReset()
+    controllerTestState.disconnectCloudflareConnection.mockReset()
+    controllerTestState.fetchCloudflareAccounts.mockReset()
+    controllerTestState.fetchCloudflareStatus.mockReset()
+    controllerTestState.fetchCloudflareZones.mockReset()
+    controllerTestState.finalizeCloudflareOAuth.mockReset()
     controllerTestState.navigate.mockClear()
+    controllerTestState.provisionCloudflareConnection.mockReset()
     controllerTestState.routePathname = '/dashboard/'
     controllerTestState.startCloudflareOAuth.mockReset()
     controllerTestState.startCloudflareOAuth.mockResolvedValue({
@@ -172,6 +197,60 @@ describe('DashboardMailController Cloudflare OAuth routing', () => {
     expect(props.settingsSection).toBeUndefined()
     expect(props.agentAccessState?.connectionHandoff).toBeNull()
   })
+
+  it('loads Cloudflare zones with the account grantPublicId for each usable account', async () => {
+    expect.hasAssertions()
+    controllerTestState.fetchCloudflareAccounts.mockResolvedValue([
+      cloudflareAccount({
+        grantPublicId: cloudflareGrantPublicId('grant-primary-public-id'),
+        id: 'cloudflare-account-primary'
+      }),
+      cloudflareAccount({
+        grantPublicId: cloudflareGrantPublicId('grant-secondary-public-id'),
+        id: 'cloudflare-account-secondary'
+      })
+    ])
+    controllerTestState.fetchCloudflareZones.mockResolvedValue([])
+    const props = renderController('/settings/domains/')
+
+    props.domainSettingsState?.onLoadAccounts?.()
+    await flushPromises()
+
+    expect(controllerTestState.fetchCloudflareZones).toHaveBeenNthCalledWith(1, {
+      accountId: 'cloudflare-account-primary',
+      grantPublicId: 'grant-primary-public-id'
+    })
+    expect(controllerTestState.fetchCloudflareZones).toHaveBeenNthCalledWith(2, {
+      accountId: 'cloudflare-account-secondary',
+      grantPublicId: 'grant-secondary-public-id'
+    })
+  })
+
+  it('builds Cloudflare domain setup input with the selected zone grantPublicId', () => {
+    expect(
+      cloudflareConnectionInputForSelectedDomain({
+        account: cloudflareAccount({
+          grantPublicId: cloudflareGrantPublicId('grant-secondary-public-id'),
+          id: 'cloudflare-account-secondary',
+          name: 'AgentTeam Secondary'
+        }),
+        domain: 'agentteam.example',
+        zone: cloudflareZone({
+          accountId: 'cloudflare-account-secondary',
+          accountName: 'AgentTeam Secondary',
+          grantPublicId: cloudflareGrantPublicId('grant-secondary-public-id'),
+          id: 'cloudflare-zone-secondary'
+        })
+      })
+    ).toStrictEqual({
+      cloudflareAccountId: 'cloudflare-account-secondary',
+      cloudflareAccountName: 'AgentTeam Secondary',
+      cloudflareZoneId: 'cloudflare-zone-secondary',
+      cloudflareZoneName: 'agentteam.example',
+      domain: 'agentteam.example',
+      grantPublicId: 'grant-secondary-public-id'
+    })
+  })
 })
 
 function renderController(routePathname = '/dashboard/', routeSearch?: DashboardSearch) {
@@ -216,4 +295,30 @@ async function flushPromises() {
   await new Promise((resolve) => {
     setTimeout(resolve, 0)
   })
+}
+
+function cloudflareAccount(overrides: Partial<CloudflareAccountFixture> = {}): CloudflareAccountFixture {
+  return {
+    grantPublicId: cloudflareGrantPublicId('grant-public-id'),
+    id: 'cloudflare-account-id',
+    name: 'AgentTeam Production',
+    type: 'standard',
+    ...overrides
+  }
+}
+
+function cloudflareZone(overrides: Partial<CloudflareZoneFixture> = {}): CloudflareZoneFixture {
+  return {
+    accountId: 'cloudflare-account-id',
+    accountName: 'AgentTeam Production',
+    grantPublicId: cloudflareGrantPublicId('grant-public-id'),
+    id: 'cloudflare-zone-id',
+    name: 'agentteam.example',
+    status: 'active',
+    ...overrides
+  }
+}
+
+function cloudflareGrantPublicId(value: string): CloudflareGrantPublicIdFixture {
+  return value as CloudflareGrantPublicIdFixture
 }

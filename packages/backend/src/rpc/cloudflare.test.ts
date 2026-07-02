@@ -8,9 +8,13 @@ type CloudflareStartMock = (input: {
 }) => Promise<unknown>
 type CloudflareConnectionMock = (input: { headers: Headers; input: unknown }) => Promise<unknown>
 type CloudflareProvisionMock = (input: { connectionPublicId: string; headers: Headers }) => Promise<unknown>
-type CloudflareDisconnectMock = (input: { grantPublicId?: string; headers: Headers }) => Promise<unknown>
+type CloudflareDisconnectMock = (input: { grantPublicId: string; headers: Headers }) => Promise<unknown>
 type CloudflareFinalizeMock = (input: { headers: Headers; intentPublicId: string }) => Promise<unknown>
-type CloudflareZonesMock = (input: { cloudflareAccountId?: string; headers: Headers }) => Promise<unknown>
+type CloudflareZonesMock = (input: {
+  cloudflareAccountId?: string
+  grantPublicId?: string
+  headers: Headers
+}) => Promise<unknown>
 type IsCloudflareAccessErrorMock = (error: unknown) => error is Error & { status: 401 | 403 }
 
 const cloudflareRpcTestState = vi.hoisted(() => ({
@@ -187,7 +191,8 @@ describe('Cloudflare RPC routes', () => {
           cloudflareAccountName: 'Example Account',
           cloudflareZoneId: 'cf-zone-1',
           cloudflareZoneName: null,
-          domain: 'Example.COM'
+          domain: 'Example.COM',
+          grantPublicId: 'grant-public-1'
         }),
         headers: {
           authorization: 'Bearer user-token',
@@ -215,7 +220,8 @@ describe('Cloudflare RPC routes', () => {
         cloudflareAccountName: 'Example Account',
         cloudflareZoneId: 'cf-zone-1',
         cloudflareZoneName: null,
-        domain: 'Example.COM'
+        domain: 'Example.COM',
+        grantPublicId: 'grant-public-1'
       }
     })
     expect(cloudflareRpcTestState.connectCloudflareDomain.mock.calls[0][0].headers.get('authorization')).toBe(
@@ -243,6 +249,108 @@ describe('Cloudflare RPC routes', () => {
 
     expect(response.status).toBe(422)
     expect(cloudflareRpcTestState.connectCloudflareDomain).not.toHaveBeenCalled()
+  })
+
+  it('rejects missing connection grant public ids before reaching the Cloudflare service', async () => {
+    expect.hasAssertions()
+
+    const { default: cloudflare } = await import('./cloudflare')
+    const response = await cloudflare.handle(
+      new Request('https://mail.example.com/cloudflare/connections', {
+        body: JSON.stringify({
+          cloudflareAccountId: 'cf-account-1',
+          cloudflareZoneId: 'cf-zone-1',
+          domain: 'example.com'
+        }),
+        headers: {
+          'content-type': 'application/json'
+        },
+        method: 'POST'
+      })
+    )
+
+    expect(response.status).toBe(422)
+    expect(cloudflareRpcTestState.connectCloudflareDomain).not.toHaveBeenCalled()
+  })
+
+  it('returns Cloudflare account summaries with grant public ids', async () => {
+    expect.hasAssertions()
+
+    cloudflareRpcTestState.listConnectedCloudflareAccounts.mockResolvedValue([
+      {
+        grantPublicId: 'grant-public-1',
+        id: 'cf-account-1',
+        name: 'Example Account',
+        type: 'standard'
+      }
+    ])
+
+    const { default: cloudflare } = await import('./cloudflare')
+    const response = await cloudflare.handle(new Request('https://mail.example.com/cloudflare/accounts'))
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toStrictEqual({
+      accounts: [
+        {
+          grantPublicId: 'grant-public-1',
+          id: 'cf-account-1',
+          name: 'Example Account',
+          type: 'standard'
+        }
+      ]
+    })
+    expect(cloudflareRpcTestState.listConnectedCloudflareAccounts).toHaveBeenCalledWith(expect.any(Headers))
+  })
+
+  it('passes optional grant public id selectors to Cloudflare zone listing', async () => {
+    expect.hasAssertions()
+
+    cloudflareRpcTestState.listConnectedCloudflareZones.mockResolvedValue([
+      {
+        accountId: 'cf-account-2',
+        accountName: 'Example Account',
+        grantPublicId: 'grant-public-2',
+        id: 'cf-zone-2',
+        name: 'example.com',
+        status: 'active'
+      }
+    ])
+
+    const { default: cloudflare } = await import('./cloudflare')
+    const response = await cloudflare.handle(
+      new Request('https://mail.example.com/cloudflare/zones?accountId=cf-account-2&grantPublicId=grant-public-2')
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toStrictEqual({
+      zones: [
+        {
+          accountId: 'cf-account-2',
+          accountName: 'Example Account',
+          grantPublicId: 'grant-public-2',
+          id: 'cf-zone-2',
+          name: 'example.com',
+          status: 'active'
+        }
+      ]
+    })
+    expect(cloudflareRpcTestState.listConnectedCloudflareZones).toHaveBeenCalledWith({
+      cloudflareAccountId: 'cf-account-2',
+      grantPublicId: 'grant-public-2',
+      headers: expect.any(Headers)
+    })
+  })
+
+  it('rejects empty Cloudflare zone grant public id selectors before reaching the service', async () => {
+    expect.hasAssertions()
+
+    const { default: cloudflare } = await import('./cloudflare')
+    const response = await cloudflare.handle(
+      new Request('https://mail.example.com/cloudflare/zones?accountId=cf-account-2&grantPublicId=')
+    )
+
+    expect(response.status).toBe(422)
+    expect(cloudflareRpcTestState.listConnectedCloudflareZones).not.toHaveBeenCalled()
   })
 
   it('maps Cloudflare access errors without exposing a Bearer challenge for UI routes', async () => {
@@ -299,5 +407,79 @@ describe('Cloudflare RPC routes', () => {
       connectionPublicId: 'connection-public-1',
       headers: expect.any(Headers)
     })
+  })
+
+  it('disconnects the selected Cloudflare grant through the service boundary', async () => {
+    expect.hasAssertions()
+
+    cloudflareRpcTestState.disconnectCloudflare.mockResolvedValue({
+      connections: [],
+      grants: []
+    })
+
+    const { default: cloudflare } = await import('./cloudflare')
+    const response = await cloudflare.handle(
+      new Request('https://mail.example.com/cloudflare/disconnect', {
+        body: JSON.stringify({
+          grantPublicId: 'grant-public-1'
+        }),
+        headers: {
+          authorization: 'Bearer user-token',
+          'content-type': 'application/json'
+        },
+        method: 'POST'
+      })
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toStrictEqual({
+      connections: [],
+      grants: []
+    })
+    expect(cloudflareRpcTestState.disconnectCloudflare).toHaveBeenCalledWith({
+      grantPublicId: 'grant-public-1',
+      headers: expect.any(Headers)
+    })
+    expect(cloudflareRpcTestState.disconnectCloudflare.mock.calls[0][0].headers.get('authorization')).toBe(
+      'Bearer user-token'
+    )
+  })
+
+  it('rejects missing disconnect grant public ids before reaching the Cloudflare service', async () => {
+    expect.hasAssertions()
+
+    const { default: cloudflare } = await import('./cloudflare')
+    const response = await cloudflare.handle(
+      new Request('https://mail.example.com/cloudflare/disconnect', {
+        body: JSON.stringify({}),
+        headers: {
+          'content-type': 'application/json'
+        },
+        method: 'POST'
+      })
+    )
+
+    expect(response.status).toBe(422)
+    expect(cloudflareRpcTestState.disconnectCloudflare).not.toHaveBeenCalled()
+  })
+
+  it('rejects empty disconnect grant public ids before reaching the Cloudflare service', async () => {
+    expect.hasAssertions()
+
+    const { default: cloudflare } = await import('./cloudflare')
+    const response = await cloudflare.handle(
+      new Request('https://mail.example.com/cloudflare/disconnect', {
+        body: JSON.stringify({
+          grantPublicId: ''
+        }),
+        headers: {
+          'content-type': 'application/json'
+        },
+        method: 'POST'
+      })
+    )
+
+    expect(response.status).toBe(422)
+    expect(cloudflareRpcTestState.disconnectCloudflare).not.toHaveBeenCalled()
   })
 })

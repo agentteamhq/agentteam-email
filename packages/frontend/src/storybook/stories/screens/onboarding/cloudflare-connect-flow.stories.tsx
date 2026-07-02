@@ -13,7 +13,7 @@ const onboardingHandlers = {
 } satisfies Pick<DomainSettingsState, 'onStartOAuth'>
 
 const meta = {
-  title: 'Screens/Onboarding/Flows/Cloudflare Connect',
+  title: 'Screens/Onboarding/Integration/Cloudflare Connect Flow',
   component: DashboardMailControllerStoryFrame,
   args: buildProductOnboardingControllerArgs(productOnboardingScenarios.connectCloudflare, onboardingHandlers),
   parameters: {

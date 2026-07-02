@@ -14,6 +14,10 @@ import type { AgentMailWebWorkspace } from '@main/backend'
 import type { MailboxAdminView } from '../partials/authenticated/mailbox-admin-models'
 import type { DomainSettingsState, DomainSettingsStatus } from '../partials/authenticated/settings-dialog'
 
+type CloudflareAccountFixture = NonNullable<DomainSettingsState['accounts']>[number]
+type CloudflareGrantPublicIdFixture = CloudflareAccountFixture['grantPublicId']
+type CloudflareZoneFixture = NonNullable<DomainSettingsState['zones']>[number]
+
 const noAllowedActions = {
   createAccount: false,
   createAgent: false,
@@ -310,6 +314,64 @@ describe('mail client controller view mapping', () => {
       state: 'ready',
       title: 'Choose your domain'
     })
+  })
+
+  it('skips first-use dashboard OAuth when any active Cloudflare grant is usable', () => {
+    expect.hasAssertions()
+    const view = toDashboardView(
+      'success',
+      null,
+      undefined,
+      firstUseMailWorkspace(),
+      domainSettings({
+        status: {
+          connections: [],
+          grants: [
+            cloudflareGrant({
+              grantedScopes: ['account:read'],
+              publicId: 'grant-missing-scope-public-id' as DomainSettingsStatus['grants'][number]['publicId']
+            }),
+            cloudflareGrant({
+              publicId: 'grant-usable-public-id' as DomainSettingsStatus['grants'][number]['publicId']
+            })
+          ]
+        }
+      })
+    )
+
+    expect(view.onboardingPrompt).toMatchObject({
+      actionLabel: 'Connect domain',
+      mode: 'configureDomain',
+      state: 'ready',
+      title: 'Choose your domain'
+    })
+  })
+
+  it('keeps first-use dashboard OAuth when active Cloudflare grants are missing required scopes', () => {
+    expect.hasAssertions()
+    const view = toDashboardView(
+      'success',
+      null,
+      undefined,
+      firstUseMailWorkspace(),
+      domainSettings({
+        status: {
+          connections: [],
+          grants: [
+            cloudflareGrant({
+              grantedScopes: ['account:read']
+            })
+          ]
+        }
+      })
+    )
+
+    expect(view.onboardingPrompt).toMatchObject({
+      actionLabel: 'Continue with Cloudflare',
+      state: 'ready',
+      title: 'Connect your domain'
+    })
+    expect(view.onboardingPrompt?.mode).toBeUndefined()
   })
 
   it('keeps first-use dashboard onboarding on domain setup while a connected domain needs provisioning', () => {
@@ -731,7 +793,9 @@ function domainSettings(overrides: Partial<DomainSettingsState> = {}): DomainSet
   }
 }
 
-function cloudflareGrant(): DomainSettingsStatus['grants'][number] {
+function cloudflareGrant(
+  overrides: Partial<DomainSettingsStatus['grants'][number]> = {}
+): DomainSettingsStatus['grants'][number] {
   return {
     cloudflareEmail: 'admin@example.com',
     cloudflareUserId: 'cloudflare-user-id',
@@ -740,7 +804,8 @@ function cloudflareGrant(): DomainSettingsStatus['grants'][number] {
     lastTokenCheckAt: new Date('2026-06-21T16:12:00.000Z'),
     publicId: 'grant-public-id' as DomainSettingsStatus['grants'][number]['publicId'],
     requiredScopes: ['account:read', 'zone:read'],
-    status: 'active'
+    status: 'active',
+    ...overrides
   }
 }
 
@@ -764,20 +829,26 @@ function cloudflareConnection(
   }
 }
 
-function cloudflareAccount(): NonNullable<DomainSettingsState['accounts']>[number] {
+function cloudflareAccount(): CloudflareAccountFixture {
   return {
+    grantPublicId: cloudflareGrantPublicId('grant-public-id'),
     id: 'cloudflare-account-id',
     name: 'AgentTeam Production',
     type: 'standard'
   }
 }
 
-function cloudflareZone(): NonNullable<DomainSettingsState['zones']>[number] {
+function cloudflareZone(): CloudflareZoneFixture {
   return {
     accountId: 'cloudflare-account-id',
     accountName: 'AgentTeam Production',
+    grantPublicId: cloudflareGrantPublicId('grant-public-id'),
     id: 'cloudflare-zone-id',
     name: 'agentteam.example',
     status: 'active'
   }
+}
+
+function cloudflareGrantPublicId(value: string): CloudflareGrantPublicIdFixture {
+  return value as CloudflareGrantPublicIdFixture
 }

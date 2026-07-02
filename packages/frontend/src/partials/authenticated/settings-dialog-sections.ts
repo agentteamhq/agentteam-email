@@ -13,14 +13,24 @@ type SettingsRouteSectionId = Extract<
   'account' | 'security' | 'agentAccess' | 'connected-accounts' | 'organizations' | 'domains'
 >
 
+type OrganizationRouteSectionId = Extract<
+  SettingsSectionId,
+  'organizationSettings' | 'organizationPeople'
+>
+
 type SettingsRouteSegmentResolution =
   | {
       section: SettingsRouteSectionId
       type: 'section'
     }
   | {
-      href: string
-      type: 'redirect'
+      type: 'notFound'
+    }
+
+type OrganizationRouteSegmentResolution =
+  | {
+      section: OrganizationRouteSectionId
+      type: 'section'
     }
   | {
       type: 'notFound'
@@ -34,6 +44,11 @@ export const settingsRouteSegments = {
   organizations: 'organizations',
   domains: 'domains'
 } satisfies Record<SettingsRouteSectionId, string>
+
+const organizationRouteSegments = {
+  organizationSettings: 'settings',
+  organizationPeople: 'people'
+} satisfies Record<OrganizationRouteSectionId, string>
 
 const settingsSectionHrefs = {
   account: '/settings/account/',
@@ -53,10 +68,12 @@ const settingsRouteSectionsBySegment = new Map<string, SettingsRouteSectionId>(
   ])
 )
 
-const settingsRedirectHrefsBySegment = new Map<string, string>([
-  ['cli-access', settingsSectionHrefs.security],
-  ['developer', settingsSectionHrefs.security]
-])
+const organizationRouteSectionsBySegment = new Map<string, OrganizationRouteSectionId>(
+  Object.entries(organizationRouteSegments).map(([section, segment]) => [
+    segment,
+    section as OrganizationRouteSectionId
+  ])
+)
 
 const settingsSectionIds = new Set<SettingsSectionId>([
   'account',
@@ -89,9 +106,19 @@ export function resolveSettingsRouteSegment(
     return { section, type: 'section' }
   }
 
-  const href = settingsRedirectHrefsBySegment.get(segment)
-  if (href) {
-    return { href, type: 'redirect' }
+  return { type: 'notFound' }
+}
+
+export function resolveOrganizationRouteSegment(
+  segment: string | undefined
+): OrganizationRouteSegmentResolution {
+  if (!segment) {
+    return { type: 'notFound' }
+  }
+
+  const section = organizationRouteSectionsBySegment.get(segment)
+  if (section) {
+    return { section, type: 'section' }
   }
 
   return { type: 'notFound' }
@@ -99,6 +126,14 @@ export function resolveSettingsRouteSegment(
 
 export function getSettingsSectionFromSegment(segment: string | undefined): SettingsSectionId | null {
   const resolution = resolveSettingsRouteSegment(segment)
+
+  return resolution.type === 'section' ? resolution.section : null
+}
+
+export function getOrganizationSettingsSectionFromSegment(
+  segment: string | undefined
+): OrganizationRouteSectionId | null {
+  const resolution = resolveOrganizationRouteSegment(segment)
 
   return resolution.type === 'section' ? resolution.section : null
 }

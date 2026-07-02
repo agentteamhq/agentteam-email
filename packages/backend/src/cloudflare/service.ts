@@ -40,7 +40,6 @@ import type {
   CloudflareOAuthConnectionIntentPublicView,
   CloudflareOAuthGrantPublicView
 } from './public-views'
-import type { CloudflareAccountSummary, CloudflareZoneSummary } from './client'
 import type {
   AgentMailDomainDocument,
   CloudflareConnectionDocument,
@@ -50,6 +49,7 @@ import type {
   CloudflareOAuthConnectionIntentPublicId,
   CloudflareOAuthGrantDocument,
   CloudflareOAuthGrantId,
+  CloudflareOAuthGrantPublicId,
   OrganizationId,
   OrganizationPublicId,
   UserId
@@ -74,12 +74,27 @@ const CLOUDFLARE_OAUTH_CALLBACK_PATH_BY_RETURN_TARGET = {
   'settings-domains': '/settings/domains/'
 } satisfies Record<CloudflareOAuthReturnTarget, string>
 
-export type { CloudflareAccountSummary, CloudflareZoneSummary } from './client'
 export type {
   CloudflareConnectionPublicView,
   CloudflareOAuthConnectionIntentPublicView,
   CloudflareOAuthGrantPublicView
 } from './public-views'
+
+export interface CloudflareAccountSummary {
+  grantPublicId: CloudflareOAuthGrantPublicId
+  id: string
+  name: string
+  type: 'standard' | 'enterprise'
+}
+
+export interface CloudflareZoneSummary {
+  accountId: string
+  accountName: string | null
+  grantPublicId: CloudflareOAuthGrantPublicId
+  id: string
+  name: string
+  status: 'initializing' | 'pending' | 'active' | 'moved' | null
+}
 
 export interface StartCloudflareOAuthResult {
   intent: CloudflareOAuthConnectionIntentPublicView
@@ -103,6 +118,7 @@ export interface CloudflareConnectionInput {
   cloudflareZoneId: string
   cloudflareZoneName?: string | null
   domain: string
+  grantPublicId: CloudflareOAuthGrantPublicId | string
 }
 
 export interface CloudflareStatusResult {
@@ -179,7 +195,7 @@ export async function startCloudflareOAuth({
     body: {
       providerId: CLOUDFLARE_OAUTH_PROVIDER_ID,
       callbackURL,
-      errorCallbackURL: createOAuthErrorCallbackURL(intentView.publicId)
+      errorCallbackURL: createOAuthErrorCallbackURL(intentView.publicId, returnTarget)
     },
     headers,
     returnHeaders: true
@@ -275,10 +291,17 @@ export async function listConnectedCloudflareAccounts(headers: Headers): Promise
   const { db } = await globals()
   const context = await requireCloudflareOrganizationContext(headers)
   await requireCloudflareDomainManagement(headers, context)
-  const grant = await getActiveGrantForUser(db, context.userId, context.organizationId)
-  const accessToken = await getCloudflareAccessToken(headers, grant)
+  const grants = await listActiveGrantsForUser(db, context.userId, context.organizationId)
+  const accounts: CloudflareAccountSummary[] = []
 
-  return listCloudflareAccounts(accessToken)
+  for (const grant of grants) {
+    const accessToken = await getCloudflareAccessToken(headers, grant)
+    const grantPublicId = cloudflareGrantPublicId(grant)
+    const grantAccounts = await listCloudflareAccounts(accessToken)
+    accounts.push(...grantAccounts.map((account) => ({ ...account, grantPublicId })))
+  }
+
+  return accounts
 }
 
 export async function sendCloudflareRawEmailForControl({
@@ -376,18 +399,29 @@ export async function sendCloudflareRawEmailForControl({
 
 export async function listConnectedCloudflareZones({
   cloudflareAccountId,
+  grantPublicId,
   headers
 }: {
   cloudflareAccountId?: string
+  grantPublicId?: CloudflareOAuthGrantPublicId | string
   headers: Headers
 }): Promise<CloudflareZoneSummary[]> {
   const { db } = await globals()
   const context = await requireCloudflareOrganizationContext(headers)
   await requireCloudflareDomainManagement(headers, context)
-  const grant = await getActiveGrantForUser(db, context.userId, context.organizationId)
-  const accessToken = await getCloudflareAccessToken(headers, grant)
+  const grants = grantPublicId
+    ? [await getActiveGrantByPublicIdForUser(db, grantPublicId, context.userId, context.organizationId)]
+    : await listActiveGrantsForUser(db, context.userId, context.organizationId)
+  const zones: CloudflareZoneSummary[] = []
 
-  return listCloudflareZones({ accessToken, cloudflareAccountId })
+  for (const grant of grants) {
+    const accessToken = await getCloudflareAccessToken(headers, grant)
+    const grantZones = await listCloudflareZones({ accessToken, cloudflareAccountId })
+    const resolvedGrantPublicId = cloudflareGrantPublicId(grant)
+    zones.push(...grantZones.map((zone) => ({ ...zone, grantPublicId: resolvedGrantPublicId })))
+  }
+
+  return zones
 }
 
 export async function connectCloudflareDomain({
@@ -402,7 +436,12 @@ export async function connectCloudflareDomain({
   const userId = context.userId
   const domain = normalizeDomain(input.domain)
   await requireCloudflareDomainManagement(headers, context, domain)
-  const grant = await getActiveGrantForUser(db, userId, context.organizationId)
+  const grant = await getActiveGrantByPublicIdForUser(
+    db,
+    input.grantPublicId,
+    userId,
+    context.organizationId
+  )
   const archivePrefix = createAgentMailArchivePrefix(context.organizationPublicId, domain)
 
   const connection = await db.models.cloudflareConnection
@@ -733,26 +772,20 @@ export async function disconnectCloudflare({
   headers,
   grantPublicId
 }: {
-  grantPublicId?: string
+  grantPublicId: CloudflareOAuthGrantPublicId | string
   headers: Headers
 }): Promise<CloudflareStatusResult> {
   const { auth, db } = await globals()
   const context = await requireCloudflareOrganizationContext(headers)
   await requireCloudflareDomainManagement(headers, context)
   const userId = context.userId
-  const grant = grantPublicId
-    ? await db.models.cloudflareOAuthGrant
-        .findOne({
-          _id: parseCloudflareGrantPublicId(grantPublicId),
-          organizationId: context.organizationId,
-          userId
-        })
-        .exec()
-    : await getActiveGrantForUser(db, userId, context.organizationId)
-
-  if (!grant) {
-    throw new Error('Cloudflare grant was not found')
-  }
+  const requestedGrantPublicId = requireNonEmptyString(grantPublicId, 'Cloudflare grant public id')
+  const grant = await getActiveGrantByPublicIdForUser(
+    db,
+    requestedGrantPublicId,
+    userId,
+    context.organizationId
+  )
 
   const connectionsToDisconnect = await db.models.cloudflareConnection
     .find({ grantId: grant._id, organizationId: context.organizationId })
@@ -1179,7 +1212,8 @@ async function upsertCloudflareGrant(
     .findOneAndUpdate(
       {
         organizationId: input.organizationId,
-        cloudflareUserId: input.cloudflareUserId
+        cloudflareUserId: input.cloudflareUserId,
+        userId: input.userId
       },
       {
         $set: {
@@ -1208,13 +1242,13 @@ async function upsertCloudflareGrant(
   return grant
 }
 
-async function getActiveGrantForUser(
+async function listActiveGrantsForUser(
   db: Database,
   userId: UserId,
   organizationId: OrganizationId
-): Promise<CloudflareOAuthGrantDocument> {
-  const grant = await db.models.cloudflareOAuthGrant
-    .findOne({
+): Promise<CloudflareOAuthGrantDocument[]> {
+  const grants = await db.models.cloudflareOAuthGrant
+    .find({
       organizationId,
       userId,
       status: 'active'
@@ -1222,11 +1256,28 @@ async function getActiveGrantForUser(
     .sort({ updatedAt: -1, createdAt: -1 })
     .exec()
 
-  if (!grant) {
+  if (grants.length === 0) {
     throw new Error('Cloudflare OAuth is not connected')
   }
 
-  return grant
+  return grants
+}
+
+async function getActiveGrantByPublicIdForUser(
+  db: Database,
+  grantPublicId: CloudflareOAuthGrantPublicId | string,
+  userId: UserId,
+  organizationId: OrganizationId
+): Promise<CloudflareOAuthGrantDocument> {
+  let grantId: CloudflareOAuthGrantId
+
+  try {
+    grantId = parseCloudflareGrantPublicId(grantPublicId)
+  } catch {
+    throw new CloudflareAccessError('Cloudflare OAuth grant is not active', 403)
+  }
+
+  return getGrantById(db, grantId, userId, organizationId)
 }
 
 async function getGrantById(
@@ -1240,7 +1291,7 @@ async function getGrantById(
     .exec()
 
   if (!grant) {
-    throw new Error('Cloudflare OAuth grant is not active')
+    throw new CloudflareAccessError('Cloudflare OAuth grant is not active', 403)
   }
 
   return grant
@@ -1360,6 +1411,10 @@ function parseCloudflareGrantPublicId(value: string): CloudflareOAuthGrantId {
   return base62UUIDv7ToUUIDv7(parseBase62UUIDv7(value)) as CloudflareOAuthGrantId
 }
 
+function cloudflareGrantPublicId(grant: CloudflareOAuthGrantDocument): CloudflareOAuthGrantPublicId {
+  return publicIdFromUUIDv7(grant._id) as CloudflareOAuthGrantPublicId
+}
+
 function parseCloudflareConnectionPublicId(
   value: CloudflareConnectionPublicId | string
 ): CloudflareConnectionId {
@@ -1418,11 +1473,15 @@ function createOAuthCallbackURL(
   return url.toString()
 }
 
-function createOAuthErrorCallbackURL(intentPublicId: CloudflareOAuthConnectionIntentPublicId): string {
+function createOAuthErrorCallbackURL(
+  intentPublicId: CloudflareOAuthConnectionIntentPublicId,
+  returnTarget: CloudflareOAuthReturnTarget
+): string {
   const url = new URL(AUTH_REDIRECT_ERROR_ROUTE)
   url.searchParams.set('provider', CLOUDFLARE_OAUTH_PROVIDER_ID)
   url.searchParams.set('flow', 'connected-account')
   url.searchParams.set('cloudflareIntentId', intentPublicId)
+  url.searchParams.set('returnTarget', returnTarget)
   url.searchParams.set('callbackUri', createCloudflareOAuthRedirectURI())
   return url.toString()
 }

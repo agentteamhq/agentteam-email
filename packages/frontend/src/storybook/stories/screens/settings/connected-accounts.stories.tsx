@@ -7,7 +7,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 
 const meta = {
   ...settingsScreenStoryMeta,
-  title: 'Screens/Settings/Connected Accounts'
+  title: 'Screens/Settings/Integration/Connected Accounts'
 } satisfies Meta<typeof settingsScreenStoryMeta.component>
 
 export default meta

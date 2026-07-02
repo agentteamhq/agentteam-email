@@ -2,7 +2,6 @@ import {
   DomainsAddDomainAuthorizeCloudflare as DomainsAddDomainAuthorizeCloudflareStory,
   DomainsAddDomainSelectZone as DomainsAddDomainSelectZoneStory,
   DomainsDenseDomainList as DomainsDenseDomainListStory,
-  DomainsDisconnectAction as DomainsDisconnectActionStory,
   DomainsDomainConnected as DomainsDomainConnectedStory,
   DomainsDomainLive as DomainsDomainLiveStory,
   DomainsDomainNeedsAttention as DomainsDomainNeedsAttentionStory,
@@ -14,7 +13,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 
 const meta = {
   ...settingsScreenStoryMeta,
-  title: 'Screens/Settings/Domains'
+  title: 'Screens/Settings/Integration/Domains'
 } satisfies Meta<typeof settingsScreenStoryMeta.component>
 
 export default meta
@@ -49,11 +48,6 @@ export const DomainsDomainProvisioning: Story = {
 export const DomainsDomainLive: Story = {
   ...DomainsDomainLiveStory,
   name: 'Domain live'
-}
-
-export const DomainsDisconnectAction: Story = {
-  ...DomainsDisconnectActionStory,
-  name: 'Disconnect action'
 }
 
 export const DomainsDomainNeedsAttention: Story = {

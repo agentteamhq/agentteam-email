@@ -2,7 +2,6 @@ import { createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 
 import { readAuthenticatedRouteState } from '../../lib/authenticated-app-route'
 import { validateSettingsSearch } from '../../lib/dashboard-search'
-import { throwRouteRedirect } from '../../lib/route-redirect'
 import {
   getSettingsSectionFromSegment,
   getSettingsSectionHref,
@@ -16,9 +15,6 @@ export const Route = createFileRoute('/_authenticated/settings/$section')({
   validateSearch: validateSettingsSearch,
   loader: ({ context, params }) => {
     const sectionRoute = resolveSettingsRouteSegment(params.section)
-    if (sectionRoute.type === 'redirect') {
-      throwRouteRedirect(sectionRoute.href)
-    }
     if (sectionRoute.type === 'notFound') {
       notFound({ throw: true })
     }

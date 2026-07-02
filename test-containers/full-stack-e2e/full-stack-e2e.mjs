@@ -73,6 +73,8 @@ const runtime = {
   cookieHeader: null,
   organizationId: null,
   ingestId: null,
+  cloudflareAccount: null,
+  cloudflareZones: new Map(),
   connections: new Map(),
   workers: new Map()
 }
@@ -921,10 +923,49 @@ async function checkCloudflareOAuthConnectionThroughWeb() {
     headers: { accept: 'application/json', cookie: runtime.cookieHeader }
   })
   assert(accounts.status === 200, `Cloudflare accounts returned ${accounts.status}`)
-  const zones = await fetch(`${runtime.webBaseUrl}/rpc/cloudflare/zones?accountId=cf-account-1`, {
+  const accountsBody = parseJson(await accounts.text())
+  assert(
+    Array.isArray(accountsBody.accounts),
+    'Cloudflare accounts response did not include an accounts array'
+  )
+  const selectedAccount = accountsBody.accounts.find((account) => account.id === 'cf-account-1')
+  assert(selectedAccount, 'Cloudflare accounts did not include expected account cf-account-1')
+  assert(
+    typeof selectedAccount.grantPublicId === 'string' && selectedAccount.grantPublicId.length > 0,
+    'Cloudflare account cf-account-1 did not include grantPublicId'
+  )
+  runtime.cloudflareAccount = selectedAccount
+
+  const zonesUrl = new URL(`${runtime.webBaseUrl}/rpc/cloudflare/zones`)
+  zonesUrl.searchParams.set('accountId', selectedAccount.id)
+  zonesUrl.searchParams.set('grantPublicId', selectedAccount.grantPublicId)
+  const zones = await fetch(zonesUrl, {
     headers: { accept: 'application/json', cookie: runtime.cookieHeader }
   })
   assert(zones.status === 200, `Cloudflare zones returned ${zones.status}`)
+  const zonesBody = parseJson(await zones.text())
+  assert(Array.isArray(zonesBody.zones), 'Cloudflare zones response did not include a zones array')
+  runtime.cloudflareZones.clear()
+  for (const zone of zonesBody.zones) {
+    assert(zone.id, 'Cloudflare zone response included a zone without an id')
+    assert(
+      typeof zone.grantPublicId === 'string' && zone.grantPublicId.length > 0,
+      `Cloudflare zone ${zone.id} did not include grantPublicId`
+    )
+    assert(
+      zone.grantPublicId === selectedAccount.grantPublicId,
+      `Cloudflare zone ${zone.id} grantPublicId ${zone.grantPublicId} did not match selected account grantPublicId ${selectedAccount.grantPublicId}`
+    )
+    runtime.cloudflareZones.set(zone.name, zone)
+  }
+  for (const domain of domains) {
+    const zone = runtime.cloudflareZones.get(domain)
+    assert(zone, `Cloudflare zones did not include expected domain ${domain}`)
+    assert(
+      zone.accountId === selectedAccount.id,
+      `Cloudflare zone ${zone.id} did not preserve account ${selectedAccount.id}`
+    )
+  }
   const fakeCloudflare = await fetchClusterJson('http://fake-cloudflare:8080/__requests')
   const observedUserDetails = (fakeCloudflare.requests || []).some(
     (request) => request.method === 'GET' && request.path === '/client/v4/user'
@@ -935,16 +976,22 @@ async function checkCloudflareOAuthConnectionThroughWeb() {
 
 async function checkDomainConnectionThroughWebServer() {
   assert(runtime.cookieHeader, 'authenticated cookie is required for domain connection')
+  const account = requireCloudflareAccount()
   for (const domain of domains) {
-    const zoneId = domain === 'example.test' ? 'cf-zone-example' : 'cf-zone-second'
+    const zone = requireCloudflareZone(domain)
+    assert(
+      zone.accountId === account.id,
+      `Cloudflare zone ${zone.id} account ${zone.accountId} did not match selected account ${account.id}`
+    )
     const response = await postJson(
       '/rpc/cloudflare/connections',
       {
-        cloudflareAccountId: 'cf-account-1',
-        cloudflareAccountName: 'Full Stack E2E Account',
-        cloudflareZoneId: zoneId,
-        cloudflareZoneName: domain,
-        domain
+        cloudflareAccountId: account.id,
+        cloudflareAccountName: account.name,
+        cloudflareZoneId: zone.id,
+        cloudflareZoneName: zone.name,
+        domain,
+        grantPublicId: zone.grantPublicId
       },
       {
         cookie: runtime.cookieHeader
@@ -2305,6 +2352,29 @@ function requireWorker(domain) {
     assert(typeof value === 'string' && value.length > 0, `Worker metadata ${key} is missing for ${domain}`)
   }
   return worker
+}
+
+function requireCloudflareAccount() {
+  const account = runtime.cloudflareAccount
+  assert(account, 'missing selected Cloudflare account; account listing must run before domain connection')
+  assert(
+    typeof account.grantPublicId === 'string' && account.grantPublicId.length > 0,
+    `selected Cloudflare account ${account.id} is missing grantPublicId`
+  )
+  return account
+}
+
+function requireCloudflareZone(domain) {
+  const zone = runtime.cloudflareZones.get(domain)
+  assert(
+    zone,
+    `missing selected Cloudflare zone for ${domain}; zone listing must run before domain connection`
+  )
+  assert(
+    typeof zone.grantPublicId === 'string' && zone.grantPublicId.length > 0,
+    `selected Cloudflare zone ${zone.id} for ${domain} is missing grantPublicId`
+  )
+  return zone
 }
 
 function testNotification(domain, ingestId, options = {}) {

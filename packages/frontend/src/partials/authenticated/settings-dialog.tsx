@@ -132,7 +132,7 @@ export interface DomainSettingsState {
   mode?: 'addDomain' | 'domain'
   onAddDomain?: () => void
   onConnectDomain?: () => void
-  onDisconnectCloudflare?: (grantPublicId?: CloudflareGrantView['publicId']) => void
+  onDisconnectCloudflare?: (grantPublicId: CloudflareGrantView['publicId']) => void
   onDraftDomainChange?: (domain: string) => void
   onLoadAccounts?: () => void
   onLoadZones?: () => void
@@ -147,6 +147,7 @@ export interface DomainSettingsState {
   readOnly?: boolean
   selectedAccountId?: string
   selectedDomainPublicId?: CloudflareConnectionView['publicId'] | null
+  selectedGrantPublicId?: CloudflareGrantView['publicId']
   selectedZoneId?: string
   status: DomainSettingsStatus | null
   zones?: readonly CloudflareZoneSummary[]
@@ -1198,7 +1199,7 @@ interface DomainSettingsController {
   mode: 'addDomain' | 'domain'
   onAddDomain: () => void
   onConnectDomain: () => void
-  onDisconnectCloudflare: (grantPublicId?: CloudflareGrantPublicId) => void
+  onDisconnectCloudflare: (grantPublicId: CloudflareGrantPublicId) => void
   onDraftDomainChange: (domain: string) => void
   onLoadAccounts: () => void
   onLoadZones: () => void
@@ -1214,8 +1215,10 @@ interface DomainSettingsController {
   selectedAccountId: string
   selectedDomain: CloudflareConnectionView | null
   selectedDomainPublicId: DomainPublicId | null
+  selectedGrantPublicId: CloudflareGrantPublicId | ''
   selectedZoneId: string
   status: DomainSettingsStatus | null
+  usableGrants: readonly CloudflareGrantView[]
   zones: readonly CloudflareZoneSummary[]
 }
 
@@ -1225,6 +1228,7 @@ function domainSettingsControllerFromState(state?: DomainSettingsState): DomainS
   const accounts = state?.accounts ?? []
   const zones = state?.zones ?? []
   const selectedAccountId = state?.selectedAccountId ?? ''
+  const selectedGrantPublicId = state?.selectedGrantPublicId ?? ''
   const selectedZoneId = state?.selectedZoneId ?? ''
   const draftDomain = state?.draftDomain ?? ''
   const mailStatus = state?.mailStatus ?? null
@@ -1239,7 +1243,9 @@ function domainSettingsControllerFromState(state?: DomainSettingsState): DomainS
       null)
     : (connections[0] ?? null)
   const mode = state?.mode ?? (connections.length > 0 ? 'domain' : 'addDomain')
-  const activeGrant = grants.find((grant) => grant.status === 'active') ?? null
+  const activeGrants = grants.filter((grant) => grant.status === 'active')
+  const usableGrants = activeGrants.filter((grant) => getMissingScopes(grant).length === 0)
+  const activeGrant = usableGrants[0] ?? activeGrants[0] ?? null
   const missingScopes = activeGrant ? getMissingScopes(activeGrant) : []
   const action =
     <TArgs extends unknown[]>(handler: ((...args: TArgs) => void) | undefined) =>
@@ -1279,8 +1285,10 @@ function domainSettingsControllerFromState(state?: DomainSettingsState): DomainS
     selectedAccountId,
     selectedDomain,
     selectedDomainPublicId,
+    selectedGrantPublicId,
     selectedZoneId,
     status,
+    usableGrants,
     zones
   }
 }
@@ -1301,6 +1309,10 @@ export function DomainSettingsPanel({
       settings={domainSettingsControllerFromState(state)}
     />
   )
+}
+
+export function ConnectedAccountsPanel({ state }: { state?: DomainSettingsState }) {
+  return <ConnectedAccountsContent settings={domainSettingsControllerFromState(state)} />
 }
 
 function ConnectedAccountsContent({ settings }: { settings: DomainSettingsController }) {
@@ -1369,6 +1381,7 @@ function ConnectedAccountsContent({ settings }: { settings: DomainSettingsContro
             grant={grant}
             key={grant.publicId}
             onDisconnect={settings.onDisconnectCloudflare}
+            onReconnect={settings.onStartConnectedAccountOAuth}
             readOnly={settings.readOnly}
           />
         ))}
@@ -1399,15 +1412,18 @@ function ConnectedAccountGrantRow({
   busy,
   grant,
   onDisconnect,
+  onReconnect,
   readOnly
 }: {
   busy: boolean
   grant: CloudflareGrantView
-  onDisconnect: (grantPublicId?: CloudflareGrantPublicId) => void
+  onDisconnect: (grantPublicId: CloudflareGrantPublicId) => void
+  onReconnect: () => void
   readOnly: boolean
 }) {
   const missingScopes = getMissingScopes(grant)
   const statusVariant = grant.status === 'active' && missingScopes.length === 0 ? 'secondary' : 'outline'
+  const reconnectVisible = grant.status !== 'active' || missingScopes.length > 0
 
   return (
     <div className='grid gap-2 border-b p-3 text-sm last:border-b-0'>
@@ -1430,7 +1446,18 @@ function ConnectedAccountGrantRow({
       {missingScopes.length > 0 ? (
         <p className='text-muted-foreground text-xs'>Missing Cloudflare scopes: {missingScopes.join(', ')}</p>
       ) : null}
-      <div>
+      <div className='flex flex-wrap gap-2'>
+        {reconnectVisible ? (
+          <Button
+            disabled={busy || readOnly}
+            onClick={onReconnect}
+            size='sm'
+            variant='outline'
+          >
+            <ArrowClockwiseIcon data-icon='inline-start' />
+            Reconnect account
+          </Button>
+        ) : null}
         <Button
           disabled={busy || readOnly}
           onClick={() => {
@@ -1578,7 +1605,7 @@ function AddDomainPanel({ settings }: { settings: DomainSettingsController }) {
   const selectedDomainName = selectedZone?.name ?? settings.draftDomain
   const zoneGroups = groupCloudflareZonesByAccount(settings.zones)
   const hasDomains = settings.zones.length > 0
-  const hasUsableGrant = Boolean(activeGrant && settings.missingScopes.length === 0)
+  const hasUsableGrant = settings.usableGrants.length > 0
   const primaryAction = hasDomains ? settings.onSetupDomain : settings.onLoadAccounts
   const primaryDisabled =
     settings.busy ||
@@ -1647,7 +1674,7 @@ function AddDomainPanel({ settings }: { settings: DomainSettingsController }) {
           {hasDomains ? (
             <Select
               disabled={settings.readOnly || settings.busy}
-              value={settings.selectedZoneId || undefined}
+              value={selectedZone ? cloudflareZoneSelectionValue(selectedZone) : undefined}
               onValueChange={settings.onSelectZone}
             >
               <SelectTrigger
@@ -1659,14 +1686,14 @@ function AddDomainPanel({ settings }: { settings: DomainSettingsController }) {
               </SelectTrigger>
               <SelectContent>
                 {zoneGroups.map((group, index) => (
-                  <React.Fragment key={group.accountId}>
+                  <React.Fragment key={group.groupId}>
                     {index > 0 ? <SelectSeparator /> : null}
                     <SelectGroup>
                       <SelectLabel>{group.accountName}</SelectLabel>
                       {group.zones.map((zone) => (
                         <SelectItem
-                          key={zone.id}
-                          value={zone.id}
+                          key={cloudflareZoneSelectionValue(zone)}
+                          value={cloudflareZoneSelectionValue(zone)}
                         >
                           {zone.name}
                         </SelectItem>
@@ -1741,8 +1768,6 @@ function DomainDetailPanel({ settings }: { settings: DomainSettingsController })
       : domain.provisioningStatus === 'not_started'
         ? 'Set up email routing'
         : 'Setting up email routing'
-  const disconnectDisabled =
-    settings.busy || settings.readOnly || !settings.activeGrant || domain.status === 'disconnected'
 
   return (
     <Card className='mx-auto w-full max-w-md gap-0 overflow-hidden py-6 shadow-none'>
@@ -1803,36 +1828,21 @@ function DomainDetailPanel({ settings }: { settings: DomainSettingsController })
         {settings.message ? <p className='text-muted-foreground text-sm'>{settings.message}</p> : null}
       </CardContent>
 
-      {provisionVisible || settings.activeGrant ? (
+      {provisionVisible ? (
         <CardFooter className='flex-col gap-2 border-t px-6 pt-4 sm:flex-row sm:justify-end'>
-          {provisionVisible ? (
-            <Button
-              className='w-full sm:w-auto'
-              disabled={settings.busy || settings.readOnly || isProvisioning || domain.status === 'disconnected'}
-              onClick={() => {
-                settings.onProvisionDomain(domain.publicId)
-              }}
-              variant={
-                domain.status === 'degraded' || domain.provisioningStatus === 'failed' ? 'default' : 'outline'
-              }
-            >
-              {settings.busy || isProvisioning ? <Spinner data-icon='inline-start' /> : null}
-              {provisionLabel}
-            </Button>
-          ) : null}
-          {settings.activeGrant ? (
-            <Button
-              className='w-full sm:w-auto'
-              disabled={disconnectDisabled}
-              onClick={() => {
-                settings.onDisconnectCloudflare(settings.activeGrant?.publicId)
-              }}
-              variant='outline'
-            >
-              <TrashIcon data-icon='inline-start' />
-              Disconnect Cloudflare
-            </Button>
-          ) : null}
+          <Button
+            className='w-full sm:w-auto'
+            disabled={settings.busy || settings.readOnly || isProvisioning || domain.status === 'disconnected'}
+            onClick={() => {
+              settings.onProvisionDomain(domain.publicId)
+            }}
+            variant={
+              domain.status === 'degraded' || domain.provisioningStatus === 'failed' ? 'default' : 'outline'
+            }
+          >
+            {settings.busy || isProvisioning ? <Spinner data-icon='inline-start' /> : null}
+            {provisionLabel}
+          </Button>
         </CardFooter>
       ) : null}
     </Card>
@@ -1938,35 +1948,51 @@ function DomainSetupChecklistIcon({ state }: { state: DomainSetupChecklistState 
 }
 
 function selectedCloudflareZone(settings: DomainSettingsController): CloudflareZoneSummary | null {
-  return settings.zones.find((zone) => zone.id === settings.selectedZoneId) ?? null
+  return (
+    settings.zones.find(
+      (zone) =>
+        zone.id === settings.selectedZoneId &&
+        (!settings.selectedGrantPublicId || zone.grantPublicId === settings.selectedGrantPublicId)
+    ) ?? null
+  )
 }
 
 function groupCloudflareZonesByAccount(zones: readonly CloudflareZoneSummary[]) {
+  const grantCount = new Set(zones.map((zone) => zone.grantPublicId)).size
   const groups = new Map<
     string,
     {
       accountId: string
       accountName: string
+      groupId: string
       zones: CloudflareZoneSummary[]
     }
   >()
 
   for (const zone of zones) {
-    const accountId = zone.accountId
-    const group = groups.get(accountId)
+    const groupId = `${zone.grantPublicId}|${zone.accountId}`
+    const group = groups.get(groupId)
     if (group) {
       group.zones.push(zone)
       continue
     }
 
-    groups.set(accountId, {
-      accountId,
-      accountName: zone.accountName ?? accountId,
+    groups.set(groupId, {
+      accountId: zone.accountId,
+      accountName:
+        grantCount > 1
+          ? `${zone.accountName ?? zone.accountId} · Grant ${formatReferenceId(zone.grantPublicId)}`
+          : (zone.accountName ?? zone.accountId),
+      groupId,
       zones: [zone]
     })
   }
 
   return Array.from(groups.values())
+}
+
+function cloudflareZoneSelectionValue(zone: CloudflareZoneSummary): string {
+  return `${zone.grantPublicId}|${zone.id}`
 }
 
 function getMissingScopes(grant: CloudflareGrantView): string[] {

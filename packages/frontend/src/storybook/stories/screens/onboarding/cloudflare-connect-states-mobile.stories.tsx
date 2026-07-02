@@ -7,7 +7,7 @@ import {
 import type { Meta, StoryObj } from '@storybook/react'
 
 const meta = {
-  title: 'Screens/Onboarding/States - Mobile',
+  title: 'Screens/Onboarding/Integration/States - Mobile',
   component: DashboardMailControllerStoryFrame,
   args: cloudflareConnectStateMetaArgs,
   globals: {
