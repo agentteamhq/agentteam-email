@@ -76,29 +76,8 @@ export const Step03SettingUpDomain: Story = {
   }
 }
 
-export const Step04DomainProvisioning: Story = {
-  name: '04 domain provisioning',
-  args: buildProductOnboardingControllerArgs(
-    productOnboardingScenarios.domainProvisioning,
-    onboardingHandlers
-  ),
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-    const provisionButton = await canvas.findByRole('button', { name: /Setting up email routing/i })
-
-    await expect(await canvas.findByText('agentteam.example')).toBeInTheDocument()
-    await expect(
-      await canvas.findByText('AgentTeam Email will configure Cloudflare routing for send and receive mail.')
-    ).toBeInTheDocument()
-    await expect(provisionButton).toBeDisabled()
-    await expect(within(provisionButton).getByRole('status', { name: 'Loading' })).toBeInTheDocument()
-    await expect(canvas.queryByRole('button', { name: 'Adopt agentteam.example' })).not.toBeInTheDocument()
-    await expect(canvas.queryByRole('button', { name: 'Continue with Cloudflare' })).not.toBeInTheDocument()
-  }
-}
-
-export const Step05CreateFirstMailbox: Story = {
-  name: '05 create first mailbox',
+export const Step04CreateFirstMailbox: Story = {
+  name: '04 create first mailbox',
   args: buildProductOnboardingControllerArgs(
     productOnboardingScenarios.createFirstMailbox,
     onboardingHandlers
@@ -112,8 +91,8 @@ export const Step05CreateFirstMailbox: Story = {
   }
 }
 
-export const Step06CreatingMailbox: Story = {
-  name: '06 creating mailbox',
+export const Step05CreatingMailbox: Story = {
+  name: '05 creating mailbox',
   args: buildProductOnboardingControllerArgs(
     productOnboardingScenarios.creatingFirstMailbox,
     onboardingHandlers
@@ -126,8 +105,8 @@ export const Step06CreatingMailbox: Story = {
   }
 }
 
-export const Step07MailboxReady: Story = {
-  name: '07 mailbox ready',
+export const Step06MailboxReady: Story = {
+  name: '06 mailbox ready',
   args: buildProductOnboardingControllerArgs(productOnboardingScenarios.mailboxReady, onboardingHandlers)
 }
 

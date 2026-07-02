@@ -3,7 +3,6 @@ import { storyAuthClient } from './auth-client-fixtures'
 import {
   domainSettingsAddDomainAuthorizeCloudflareState,
   domainSettingsAddDomainSelectZoneState,
-  domainSettingsDomainProvisioningState,
   domainSettingsDomainLiveState
 } from './authenticated-section-fixtures'
 import { mailboxAdminEmptyView } from './mailbox-admin-fixtures'
@@ -99,10 +98,6 @@ export const productOnboardingScenarios = {
   },
   connectingCloudflare: {
     domainSettingsState: cloudflareConnectingState,
-    workspace: firstUseWorkspace
-  },
-  domainProvisioning: {
-    domainSettingsState: domainSettingsDomainProvisioningState,
     workspace: firstUseWorkspace
   },
   mailboxReady: {

@@ -5,10 +5,17 @@ import {
   domainSettingsAddDomainSelectZoneState,
   domainSettingsDenseDomainListState,
   domainSettingsDomainConnectedState,
+  domainSettingsDomainDisconnectedState,
   domainSettingsDomainLiveState,
   domainSettingsDomainNeedsAttentionState,
   domainSettingsDomainProvisioningState,
-  domainSettingsEmptyFirstUseState
+  domainSettingsDomainRetryBusyState,
+  domainSettingsEmptyFirstUseState,
+  domainSettingsLoadDomainsBusyState,
+  domainSettingsLoadDomainsState,
+  domainSettingsLoadErrorState,
+  domainSettingsLoadingState,
+  domainSettingsMissingCloudflareScopesState
 } from '../authenticated-section-fixtures'
 import {
   agentAccessActionableState,
@@ -175,6 +182,16 @@ function buildSettingsScreenArgs({
 
 function storyBody(canvasElement: HTMLElement) {
   return within(canvasElement.ownerDocument.body)
+}
+
+async function expectSettingsDomainsDialog(args: SettingsStoryArgs, canvasElement: HTMLElement) {
+  const canvas = storyBody(canvasElement)
+
+  await expect(args.storyPath).toBe('/settings/domains/')
+  await expect(await canvas.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument()
+  await expect(canvas.queryByRole('dialog', { name: /onboarding/i })).not.toBeInTheDocument()
+
+  return canvas
 }
 
 export const Account: Story = {
@@ -400,9 +417,9 @@ export const ConnectedAccountsCloudflare: Story = {
     await expect(await canvas.findByText('Connected accounts', { selector: 'p' })).toBeInTheDocument()
     await expect(await canvas.findByText('admin@example.com')).toBeInTheDocument()
     await expect(await canvas.findByRole('button', { name: 'Connect another account' })).toBeEnabled()
-    await expect((await canvas.findAllByRole('button', { name: /^disconnect account$/i })).length).toBeGreaterThan(
-      0
-    )
+    await expect(
+      (await canvas.findAllByRole('button', { name: /^disconnect account$/i })).length
+    ).toBeGreaterThan(0)
     await expect(canvas.queryByRole('button', { name: /^disconnect cloudflare$/i })).not.toBeInTheDocument()
   }
 }
@@ -425,11 +442,26 @@ export const OrganizationPeople: Story = {
   })
 }
 
-export const DomainsEmptyFirstUse: Story = {
+export const DomainsLoading: Story = {
   args: buildSettingsScreenArgs({
-    domainSettingsState: domainSettingsEmptyFirstUseState,
+    domainSettingsState: domainSettingsLoadingState,
     settingsSection: 'domains'
-  })
+  }),
+  play: async ({ args, canvasElement }) => {
+    await expectSettingsDomainsDialog(args, canvasElement)
+  }
+}
+
+export const DomainsLoadErrorMessage: Story = {
+  args: buildSettingsScreenArgs({
+    domainSettingsState: domainSettingsLoadErrorState,
+    settingsSection: 'domains'
+  }),
+  play: async ({ args, canvasElement }) => {
+    const canvas = await expectSettingsDomainsDialog(args, canvasElement)
+
+    await expect(await canvas.findByRole('button', { name: /cloudflare/i })).toBeEnabled()
+  }
 }
 
 export const DomainsAddDomainAuthorizeCloudflare: Story = {
@@ -438,11 +470,45 @@ export const DomainsAddDomainAuthorizeCloudflare: Story = {
     settingsSection: 'domains'
   }),
   play: async ({ args, canvasElement }) => {
-    const canvas = storyBody(canvasElement)
+    const canvas = await expectSettingsDomainsDialog(args, canvasElement)
 
-    await expect(args.storyPath).toBe('/settings/domains/')
-    await expect(await canvas.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument()
-    await expect(await canvas.findByRole('button', { name: 'Continue with Cloudflare' })).toBeEnabled()
+    await expect(await canvas.findByRole('button', { name: /cloudflare/i })).toBeEnabled()
+  }
+}
+
+export const DomainsMissingCloudflareScopes: Story = {
+  args: buildSettingsScreenArgs({
+    domainSettingsState: domainSettingsMissingCloudflareScopesState,
+    settingsSection: 'domains'
+  }),
+  play: async ({ args, canvasElement }) => {
+    const canvas = await expectSettingsDomainsDialog(args, canvasElement)
+
+    await expect(await canvas.findByRole('button', { name: /cloudflare/i })).toBeEnabled()
+  }
+}
+
+export const DomainsLoadDomains: Story = {
+  args: buildSettingsScreenArgs({
+    domainSettingsState: domainSettingsLoadDomainsState,
+    settingsSection: 'domains'
+  }),
+  play: async ({ args, canvasElement }) => {
+    const canvas = await expectSettingsDomainsDialog(args, canvasElement)
+
+    await expect(await canvas.findByRole('button', { name: /load domains/i })).toBeEnabled()
+  }
+}
+
+export const DomainsLoadDomainsBusy: Story = {
+  args: buildSettingsScreenArgs({
+    domainSettingsState: domainSettingsLoadDomainsBusyState,
+    settingsSection: 'domains'
+  }),
+  play: async ({ args, canvasElement }) => {
+    const canvas = await expectSettingsDomainsDialog(args, canvasElement)
+
+    await expect(await canvas.findByRole('button', { name: /load domains/i })).toBeDisabled()
   }
 }
 
@@ -486,6 +552,30 @@ export const DomainsDomainNeedsAttention: Story = {
     domainSettingsState: domainSettingsDomainNeedsAttentionState,
     settingsSection: 'domains'
   })
+}
+
+export const DomainsDomainDisconnected: Story = {
+  args: buildSettingsScreenArgs({
+    domainSettingsState: domainSettingsDomainDisconnectedState,
+    settingsSection: 'domains'
+  }),
+  play: async ({ args, canvasElement }) => {
+    const canvas = await expectSettingsDomainsDialog(args, canvasElement)
+
+    await expect(await canvas.findByRole('button', { name: /email|routing|setup/i })).toBeDisabled()
+  }
+}
+
+export const DomainsDomainRetryBusy: Story = {
+  args: buildSettingsScreenArgs({
+    domainSettingsState: domainSettingsDomainRetryBusyState,
+    settingsSection: 'domains'
+  }),
+  play: async ({ args, canvasElement }) => {
+    const canvas = await expectSettingsDomainsDialog(args, canvasElement)
+
+    await expect(await canvas.findByRole('button', { name: /email|routing|setup/i })).toBeDisabled()
+  }
 }
 
 export const DomainsDenseDomainList: Story = {
