@@ -194,8 +194,8 @@ hermes skills tap add agentteamhq/agentteam-email
 ```
 
 Skill marketplace publishing is manual. See the root
-`SKILL-PUBLISHING.md` runbook for skills.sh, Hermes, ClawHub/OpenClaw, and
-LobeHub update steps. The ClawHub publish shape is:
+`RELEASE.md` runbook for skills.sh, Hermes, ClawHub/OpenClaw, and LobeHub update
+steps. The ClawHub publish shape is:
 
 ```bash
 npx --yes clawhub@latest skill publish skills/at-email-cli --owner agentteamhq --dry-run
