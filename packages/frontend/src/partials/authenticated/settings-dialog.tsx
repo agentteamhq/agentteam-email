@@ -7,16 +7,27 @@ import {
   LockIcon,
   PlugsConnectedIcon,
   PlusCircleIcon,
-  RobotIcon,
   SuitcaseSimpleIcon,
   TrashIcon,
   UserCircleIcon,
+  UserIcon,
   UsersIcon,
   XCircleIcon
 } from '@phosphor-icons/react'
 
 import { Organization } from '../../components/auth/organization/organization'
 import { Settings } from '../../components/auth/settings/settings'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger
+} from '../../components/ui/alert-dialog'
 import { Badge } from '../../components/ui/badge'
 import {
   Breadcrumb,
@@ -80,12 +91,11 @@ export type SettingsDialogContentState = 'ready' | 'loading' | 'empty'
 type CloudflareGrantView = Pick<
   CloudflareStatusResult['grants'][number],
   | 'cloudflareEmail'
-  | 'cloudflareUserId'
-  | 'grantedScopes'
+  | 'isUsable'
   | 'lastErrorMessage'
-  | 'lastTokenCheckAt'
+  | 'missingRequiredScopeCount'
   | 'publicId'
-  | 'requiredScopes'
+  | 'requiresReconnect'
   | 'status'
 >
 
@@ -119,7 +129,6 @@ export interface DomainSettingsState {
   message?: string | null
   mode?: 'addDomain' | 'domain'
   onAddDomain?: () => void
-  onConnectDomain?: () => void
   onDisconnectCloudflare?: (grantPublicId: CloudflareGrantView['publicId']) => void
   onDraftDomainChange?: (domain: string) => void
   onLoadAccounts?: () => void
@@ -171,7 +180,7 @@ export interface AgentAccessConnectionHandoff {
 const settingsNavigation = [
   { id: 'account', name: 'Account', icon: UserCircleIcon },
   { id: 'security', name: 'Security', icon: LockIcon },
-  { id: 'agentAccess', name: 'Agent access', icon: RobotIcon },
+  { id: 'agentAccess', name: 'Agent access', icon: UserIcon },
   { id: 'connected-accounts', name: 'Connected accounts', icon: PlugsConnectedIcon },
   { id: 'organizations', name: 'Organizations', icon: SuitcaseSimpleIcon },
   { id: 'organizationSettings', name: 'Organization settings', icon: IdentificationCardIcon },
@@ -240,7 +249,10 @@ export function SettingsDialog({
       onOpenChange={setOpen}
     >
       {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
-      <DialogContent className='overflow-hidden p-0 md:max-h-[500px] md:max-w-[700px] lg:max-w-[800px]'>
+      <DialogContent
+        className='h-[calc(100svh-2rem)] overflow-hidden p-0 md:h-[500px] md:max-h-[500px]
+          md:max-w-[700px] lg:max-w-[800px]'
+      >
         <DialogTitle className='sr-only'>Settings</DialogTitle>
         <DialogDescription className='sr-only'>
           Manage account, security, connected account, organization, and domain settings.
@@ -250,7 +262,7 @@ export function SettingsDialog({
             collapsible='none'
             className='hidden md:flex'
           >
-            <SidebarContent className='min-h-0'>
+            <SidebarContent className='min-h-0 overflow-x-hidden overflow-y-auto'>
               <SidebarGroup>
                 <SidebarGroupContent>
                   <SidebarMenu>
@@ -275,8 +287,8 @@ export function SettingsDialog({
                   </SidebarMenu>
                 </SidebarGroupContent>
               </SidebarGroup>
-              <SidebarGroup className='min-h-0 flex-1'>
-                <SidebarGroupContent className='min-h-0 overflow-hidden'>
+              <SidebarGroup>
+                <SidebarGroupContent>
                   <SidebarMenu>
                     <SidebarMenuItem>
                       <SidebarMenuButton
@@ -313,7 +325,7 @@ export function SettingsDialog({
                     </SidebarMenuItem>
                   </SidebarMenu>
                   {domainSettings.connections.length > 0 ? (
-                    <SidebarMenu className='mt-1 max-h-52 overflow-y-auto pr-1'>
+                    <SidebarMenu className='mt-1 pr-1'>
                       {domainSettings.connections.map((connection) => (
                         <SidebarMenuItem key={connection.publicId}>
                           <SidebarMenuButton
@@ -1199,10 +1211,9 @@ interface DomainSettingsController {
   draftDomain: string
   grants: readonly CloudflareGrantView[]
   message: string | null
-  missingScopes: readonly string[]
+  missingRequiredScopeCount: number
   mode: 'addDomain' | 'domain'
   onAddDomain: () => void
-  onConnectDomain: () => void
   onDisconnectCloudflare: (grantPublicId: CloudflareGrantPublicId) => void
   onDraftDomainChange: (domain: string) => void
   onLoadAccounts: () => void
@@ -1245,9 +1256,9 @@ function domainSettingsControllerFromState(state?: DomainSettingsState): DomainS
     : (connections[0] ?? null)
   const mode = state?.mode ?? (connections.length > 0 ? 'domain' : 'addDomain')
   const activeGrants = grants.filter((grant) => grant.status === 'active')
-  const usableGrants = activeGrants.filter((grant) => getMissingScopes(grant).length === 0)
+  const usableGrants = activeGrants.filter((grant) => grant.isUsable)
   const activeGrant = usableGrants[0] ?? activeGrants[0] ?? null
-  const missingScopes = activeGrant ? getMissingScopes(activeGrant) : []
+  const missingRequiredScopeCount = activeGrant?.missingRequiredScopeCount ?? 0
   const action =
     <TArgs extends unknown[]>(handler: ((...args: TArgs) => void) | undefined) =>
     (...args: TArgs) => {
@@ -1264,10 +1275,9 @@ function domainSettingsControllerFromState(state?: DomainSettingsState): DomainS
     draftDomain,
     grants,
     message,
-    missingScopes,
+    missingRequiredScopeCount,
     mode,
     onAddDomain: action(state?.onAddDomain),
-    onConnectDomain: action(state?.onConnectDomain),
     onDisconnectCloudflare: action(state?.onDisconnectCloudflare),
     onDraftDomainChange: action(state?.onDraftDomainChange),
     onLoadAccounts: action(state?.onLoadAccounts),
@@ -1319,20 +1329,18 @@ function ConnectedAccountsContent({ settings }: { settings: DomainSettingsContro
     return (
       <div className='grid max-w-3xl gap-4'>
         <Card className='gap-0 py-4 shadow-none'>
-          <CardHeader
-            className='flex flex-col gap-3 px-4 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center'
-          >
-            <div className='flex min-w-0 items-start gap-3'>
-              <CloudflareLogo className='mt-0.5 h-6 w-auto shrink-0' />
-              <div className='min-w-0'>
+          <CardHeader className='grid gap-3 px-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start'>
+            <div className='grid min-w-0 gap-2'>
+              <CloudflareLogo className='h-6 w-auto' />
+              <div className='grid min-w-0 gap-1'>
                 <CardTitle className='text-sm'>Connect a Cloudflare account</CardTitle>
-                <CardDescription className='mt-1'>
+                <CardDescription>
                   Add provider accounts here before choosing domains for AgentTeam Email.
                 </CardDescription>
               </div>
             </div>
             <CardAction
-              className='w-full self-stretch justify-self-auto sm:w-56 sm:self-center sm:justify-self-end'
+              className='w-full self-stretch justify-self-auto sm:w-56 sm:self-start sm:justify-self-end'
             >
               <CloudflareConnectButton
                 busy={settings.busy}
@@ -1416,39 +1424,22 @@ function ConnectedAccountGrantRow({
   onReconnect: () => void
   readOnly: boolean
 }) {
-  const missingScopes = getMissingScopes(grant)
-  const statusVariant = grant.status === 'active' && missingScopes.length === 0 ? 'secondary' : 'outline'
-  const reconnectVisible = grant.status !== 'active' || missingScopes.length > 0
+  const statusVariant = grant.isUsable ? 'secondary' : 'outline'
+  const reconnectVisible = grant.requiresReconnect
 
   return (
     <div className='grid gap-2 border-b p-3 text-sm last:border-b-0'>
       <div className='flex items-start justify-between gap-3'>
-        <div className='min-w-0'>
-          <p className='truncate font-medium'>{grant.cloudflareEmail ?? 'Cloudflare account'}</p>
-          <p className='text-muted-foreground truncate'>
-            User {formatReferenceId(grant.cloudflareUserId) ?? 'Unknown'} · Grant{' '}
-            {formatReferenceId(grant.publicId)}
-          </p>
+        <div className='flex min-w-0 items-start gap-3'>
+          <CloudflareLogo className='mt-0.5 h-6 w-auto shrink-0' />
+          <div className='min-w-0'>
+            <p className='truncate font-medium'>{grant.cloudflareEmail ?? 'Cloudflare account'}</p>
+            <p className='text-muted-foreground'>{formatCloudflareGrantHelper(grant)}</p>
+          </div>
         </div>
-        <Badge variant={statusVariant}>{formatCloudflareGrantStatus(grant, missingScopes)}</Badge>
-      </div>
-      <div className='text-muted-foreground grid gap-1 sm:grid-cols-3'>
-        <span>{formatCloudflareGrantScopeSummary(grant)}</span>
-        <span>
-          Last checked{' '}
-          <LocalDateTime
-            value={grant.lastTokenCheckAt}
-            emptyFallback='Never'
-          />
-        </span>
-        <span>
-          {missingScopes.length > 0 ? `${missingScopes.length} missing scopes` : 'Required scopes ready'}
-        </span>
+        <Badge variant={statusVariant}>{formatCloudflareGrantStatus(grant)}</Badge>
       </div>
       {grant.lastErrorMessage ? <p className='text-destructive text-xs'>{grant.lastErrorMessage}</p> : null}
-      {missingScopes.length > 0 ? (
-        <p className='text-muted-foreground text-xs'>Missing Cloudflare scopes: {missingScopes.join(', ')}</p>
-      ) : null}
       <div className='flex flex-wrap gap-2'>
         {reconnectVisible ? (
           <Button
@@ -1461,34 +1452,71 @@ function ConnectedAccountGrantRow({
             Reconnect account
           </Button>
         ) : null}
-        <Button
-          disabled={busy || readOnly}
-          onClick={() => {
-            onDisconnect(grant.publicId)
-          }}
-          size='sm'
-          variant='outline'
-        >
-          <TrashIcon data-icon='inline-start' />
-          Disconnect account
-        </Button>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button
+              disabled={busy || readOnly}
+              size='sm'
+              variant='outline'
+            >
+              <TrashIcon data-icon='inline-start' />
+              Disconnect account
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Disconnect Cloudflare account?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Domains tied to this Cloudflare account may stop provisioning until another connected account
+                can manage them.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={busy}
+                onClick={() => {
+                  onDisconnect(grant.publicId)
+                }}
+                variant='destructive'
+              >
+                Disconnect account
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   )
 }
 
-function formatCloudflareGrantStatus(grant: CloudflareGrantView, missingScopes: readonly string[]): string {
-  if (grant.status === 'active' && missingScopes.length > 0) {
-    return 'Missing scopes'
+function formatCloudflareGrantStatus(grant: CloudflareGrantView): string {
+  if (grant.isUsable) {
+    return 'Connected'
+  }
+  if (grant.missingRequiredScopeCount > 0) {
+    return 'Reconnect required'
   }
 
   return formatStatusLabel(grant.status)
 }
 
-function formatCloudflareGrantScopeSummary(grant: CloudflareGrantView): string {
-  const grantedRequiredScopes = grant.requiredScopes.filter((scope) => grant.grantedScopes.includes(scope))
+function formatCloudflareGrantHelper(grant: CloudflareGrantView): string {
+  if (grant.isUsable) {
+    return 'Ready to list domains and set up AgentTeam Email routing.'
+  }
+  if (grant.missingRequiredScopeCount > 0) {
+    return `Reconnect this account to grant ${formatMissingPermissionCount(grant.missingRequiredScopeCount)}.`
+  }
+  if (grant.status === 'disconnected') {
+    return 'This account is disconnected and cannot manage domains.'
+  }
 
-  return `${grantedRequiredScopes.length}/${grant.requiredScopes.length} required scopes granted`
+  return 'Reconnect this account before using it to manage domains.'
+}
+
+function formatMissingPermissionCount(count: number): string {
+  return `${count} required permission${count === 1 ? '' : 's'}`
 }
 
 function SettingsDomainsContent({
@@ -1533,7 +1561,7 @@ function SettingsAddDomainPanel({ settings }: { settings: DomainSettingsControll
   const primaryDisabled =
     settings.busy ||
     settings.readOnly ||
-    settings.missingScopes.length > 0 ||
+    settings.missingRequiredScopeCount > 0 ||
     (hasDomains && (!selectedZone || !selectedDomainName))
 
   if (!hasUsableGrant) {
@@ -1558,7 +1586,7 @@ function SettingsAddDomainPanel({ settings }: { settings: DomainSettingsControll
                 </p>
                 <p className='text-muted-foreground'>
                   {activeGrant
-                    ? 'Refresh the Cloudflare grant with the scopes required to list domains.'
+                    ? 'Refresh the Cloudflare connection with the permissions required to list domains.'
                     : 'Choose the Cloudflare account used to list and add domains.'}
                 </p>
               </div>
@@ -1573,9 +1601,9 @@ function SettingsAddDomainPanel({ settings }: { settings: DomainSettingsControll
             </CloudflareConnectButton>
           </div>
         </SettingsDomainsSection>
-        {settings.missingScopes.length > 0 ? (
+        {settings.missingRequiredScopeCount > 0 ? (
           <div className='border-destructive/40 text-destructive rounded-lg border p-3 text-sm'>
-            Missing Cloudflare scopes: {settings.missingScopes.join(', ')}
+            Reconnect Cloudflare to grant {formatMissingPermissionCount(settings.missingRequiredScopeCount)}.
           </div>
         ) : null}
         {settings.message ? <p className='text-muted-foreground text-sm'>{settings.message}</p> : null}
@@ -1599,11 +1627,11 @@ function SettingsAddDomainPanel({ settings }: { settings: DomainSettingsControll
       </div>
 
       <SettingsDomainsSection title='Cloudflare domain'>
-        <div className='grid gap-3 border-b p-3 text-sm last:border-b-0'>
-          <div className='grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end'>
-            <div className='grid gap-2'>
-              <p className='text-sm font-medium'>Domain</p>
-              {hasDomains ? (
+        {hasDomains ? (
+          <div className='grid gap-3 border-b p-3 text-sm last:border-b-0'>
+            <div className='grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end'>
+              <div className='grid gap-2'>
+                <p className='text-sm font-medium'>Domain</p>
                 <Select
                   disabled={settings.readOnly || settings.busy}
                   value={selectedZone ? cloudflareZoneSelectionValue(selectedZone) : undefined}
@@ -1635,33 +1663,48 @@ function SettingsAddDomainPanel({ settings }: { settings: DomainSettingsControll
                     ))}
                   </SelectContent>
                 </Select>
-              ) : (
-                <div className='text-muted-foreground rounded-md border border-dashed px-3 py-2'>
-                  Load the Cloudflare domains available to this connection.
-                </div>
-              )}
+              </div>
+              <Button
+                className='w-full sm:w-auto'
+                disabled={primaryDisabled}
+                onClick={primaryAction}
+                size='sm'
+                type='button'
+              >
+                {settings.busy ? <Spinner data-icon='inline-start' /> : null}
+                Add selected domain
+              </Button>
+            </div>
+            <p className='text-muted-foreground text-xs'>
+              Adding a domain configures Cloudflare email routing and may replace existing mail routing DNS
+              records, including MX records.
+            </p>
+          </div>
+        ) : (
+          <div className='grid gap-3 border-b p-3 text-sm last:border-b-0'>
+            <div className='grid gap-1'>
+              <p className='font-medium'>Load Cloudflare domains</p>
+              <p className='text-muted-foreground'>
+                Fetch available domains from the connected Cloudflare account.
+              </p>
             </div>
             <Button
-              className='w-full sm:w-auto'
+              className='w-full sm:w-fit'
               disabled={primaryDisabled}
               onClick={primaryAction}
               size='sm'
               type='button'
             >
               {settings.busy ? <Spinner data-icon='inline-start' /> : null}
-              {hasDomains ? 'Add selected domain' : 'Load domains'}
+              Load domains
             </Button>
           </div>
-          <p className='text-muted-foreground text-xs'>
-            Adding a domain configures Cloudflare email routing and may replace existing mail routing DNS
-            records, including MX records.
-          </p>
-        </div>
+        )}
       </SettingsDomainsSection>
 
-      {settings.missingScopes.length > 0 ? (
+      {settings.missingRequiredScopeCount > 0 ? (
         <div className='border-destructive/40 text-destructive rounded-lg border p-3 text-sm'>
-          Missing Cloudflare scopes: {settings.missingScopes.join(', ')}
+          Reconnect Cloudflare to grant {formatMissingPermissionCount(settings.missingRequiredScopeCount)}.
         </div>
       ) : null}
       {settings.message ? <p className='text-muted-foreground text-sm'>{settings.message}</p> : null}
@@ -1809,10 +1852,6 @@ function groupCloudflareZonesByAccount(zones: readonly CloudflareZoneSummary[]) 
 
 function cloudflareZoneSelectionValue(zone: CloudflareZoneSummary): string {
   return `${zone.grantPublicId}|${zone.id}`
-}
-
-function getMissingScopes(grant: CloudflareGrantView): string[] {
-  return grant.requiredScopes.filter((scope) => !grant.grantedScopes.includes(scope))
 }
 
 function aggregateMailRuntimeQueue(status: AgentMailPublicStatus) {

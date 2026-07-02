@@ -111,7 +111,7 @@ export interface StartCloudflareOAuthInput {
 
 export interface FinalizeCloudflareOAuthResult {
   grant: CloudflareOAuthGrantPublicView
-  missingScopes: string[]
+  missingRequiredScopeCount: number
 }
 
 export interface CloudflareConnectionInput {
@@ -285,7 +285,7 @@ export async function finalizeCloudflareOAuth({
 
   return {
     grant: cloudflareOAuthGrantPublicView(grant),
-    missingScopes
+    missingRequiredScopeCount: missingScopes.length
   }
 }
 
