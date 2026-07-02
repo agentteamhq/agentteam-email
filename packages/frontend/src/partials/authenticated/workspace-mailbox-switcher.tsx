@@ -25,6 +25,7 @@ import { ScrollArea } from '../../components/ui/scroll-area'
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from '../../components/ui/sidebar'
 import { Skeleton } from '../../components/ui/skeleton'
 import { cn } from '../../lib/utils'
+import { AgentTeamEmailDarkLogo, AgentTeamEmailLightLogo } from './agentteam-email-logo'
 
 export type WorkspaceMailboxSwitcherState = 'empty' | 'loading' | 'ready'
 
@@ -99,30 +100,29 @@ export function WorkspaceMailboxSwitcher({
             <SidebarMenuButton
               aria-label='Open workspace and mailbox switcher'
               className={cn(
-                'group/workspace-switcher focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground',
+                `group/workspace-switcher data-[state=open]:bg-sidebar-accent
+                data-[state=open]:text-sidebar-accent-foreground focus-visible:ring-0
+                focus-visible:ring-offset-0`,
                 className
               )}
               size='lg'
               tooltip='Workspace and mailboxes'
             >
               <span className='relative flex aspect-square size-8 shrink-0 overflow-hidden rounded-lg'>
-                <img
-                  alt=''
+                <AgentTeamEmailDarkLogo
                   aria-hidden='true'
                   className='hidden size-8 dark:block'
                   draggable={false}
-                  src='/agentteam-email-dark-logo.svg'
                 />
-                <img
-                  alt=''
+                <AgentTeamEmailLightLogo
                   aria-hidden='true'
                   className='block size-8 dark:hidden'
                   draggable={false}
-                  src='/agentteam-email-light-logo.svg'
                 />
                 <span
                   aria-hidden='true'
-                  className='pointer-events-none absolute inset-0 bg-black/5 opacity-100 transition-opacity duration-150 ease-out group-hover/workspace-switcher:opacity-0'
+                  className='pointer-events-none absolute inset-0 bg-black/5 opacity-100 transition-opacity
+                    duration-150 ease-out group-hover/workspace-switcher:opacity-0'
                 />
               </span>
               <div className='grid min-w-0 flex-1 text-left text-sm leading-tight'>
