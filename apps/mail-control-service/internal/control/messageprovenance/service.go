@@ -6,10 +6,10 @@ import (
 	"os"
 	"strings"
 
-	"agent-mail/internal/archive/r2archive"
-	"agent-mail/internal/config/configfile"
-	"agent-mail/internal/mail/rfc822"
-	"agent-mail/internal/stores/wildduck"
+	"mail-control-service/internal/archive/r2archive"
+	"mail-control-service/internal/config/configfile"
+	"mail-control-service/internal/mail/rfc822"
+	"mail-control-service/internal/stores/wildduck"
 )
 
 type Params struct {

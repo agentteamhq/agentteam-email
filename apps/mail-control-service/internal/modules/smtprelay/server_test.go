@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"agent-mail/internal/mail/rfc822"
+	"mail-control-service/internal/mail/rfc822"
 )
 
 type noopLocalDeliverer struct{}

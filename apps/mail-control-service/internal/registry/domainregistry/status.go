@@ -5,9 +5,9 @@ import (
 	"slices"
 	"time"
 
-	"agent-mail/internal/mail/structured"
-	"agent-mail/internal/modules/poller"
-	"agent-mail/internal/modules/smtprelay"
+	"mail-control-service/internal/mail/structured"
+	"mail-control-service/internal/modules/poller"
+	"mail-control-service/internal/modules/smtprelay"
 )
 
 type ProjectedStatusConfig struct {

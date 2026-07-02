@@ -1,4 +1,4 @@
-module agent-mail/test-containers/go-testing-container
+module mail-control-service/test-containers/go-testing-container
 
 go 1.25.0
 

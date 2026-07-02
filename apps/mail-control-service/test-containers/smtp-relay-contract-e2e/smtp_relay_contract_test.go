@@ -20,9 +20,9 @@ import (
 	"testing"
 	"time"
 
-	"agent-mail/internal/archive/r2archive"
-	"agent-mail/internal/modules/smtprelay"
-	gotestingcontainer "agent-mail/test-containers/go-testing-container"
+	"mail-control-service/internal/archive/r2archive"
+	"mail-control-service/internal/modules/smtprelay"
+	gotestingcontainer "mail-control-service/test-containers/go-testing-container"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"

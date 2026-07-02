@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"agent-mail/internal/control/controlstate"
-	"agent-mail/internal/modules/poller"
-	"agent-mail/internal/modules/smtprelay"
+	"mail-control-service/internal/control/controlstate"
+	"mail-control-service/internal/modules/poller"
+	"mail-control-service/internal/modules/smtprelay"
 )
 
 func TestProjectorReadsRuntimeConfigSchemas(t *testing.T) {

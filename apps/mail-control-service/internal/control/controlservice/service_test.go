@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"agent-mail/internal/archive/r2archive"
-	"agent-mail/internal/control/controlapi"
-	"agent-mail/internal/control/controlstate"
-	"agent-mail/internal/modules/poller"
+	"mail-control-service/internal/archive/r2archive"
+	"mail-control-service/internal/control/controlapi"
+	"mail-control-service/internal/control/controlstate"
+	"mail-control-service/internal/modules/poller"
 
 	gosasl "github.com/emersion/go-sasl"
 	gosmtp "github.com/emersion/go-smtp"

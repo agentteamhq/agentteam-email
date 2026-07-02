@@ -1,10 +1,8 @@
-module agent-mail/test-containers/inbound-replay-smoke-e2e
+module mail-control-service/test-containers/inbound-replay-smoke-e2e
 
 go 1.25.0
 
 require (
-	agent-mail v0.0.0
-	agent-mail/test-containers/go-testing-container v0.0.0
 	github.com/aws/aws-sdk-go-v2 v1.41.12
 	github.com/aws/aws-sdk-go-v2/config v1.32.23
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.22
@@ -13,6 +11,8 @@ require (
 	github.com/emersion/go-message v0.18.2
 	github.com/emersion/go-smtp v0.24.0
 	go.mongodb.org/mongo-driver/v2 v2.5.0
+	mail-control-service v0.0.0
+	mail-control-service/test-containers/go-testing-container v0.0.0
 )
 
 require (
@@ -114,6 +114,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace agent-mail => ../..
+replace mail-control-service => ../..
 
-replace agent-mail/test-containers/go-testing-container => ../go-testing-container
+replace mail-control-service/test-containers/go-testing-container => ../go-testing-container

@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"agent-mail/internal/archive/r2archive"
-	"agent-mail/internal/mail/structured"
+	"mail-control-service/internal/archive/r2archive"
+	"mail-control-service/internal/mail/structured"
 )
 
 const Schema = "agent-mail.control-state.v1"

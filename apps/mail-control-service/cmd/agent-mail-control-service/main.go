@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"agent-mail/internal/control/controlservice"
+	"mail-control-service/internal/control/controlservice"
 )
 
 func main() {

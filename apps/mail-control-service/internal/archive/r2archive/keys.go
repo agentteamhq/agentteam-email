@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"agent-mail/internal/mail/structured"
+	"mail-control-service/internal/mail/structured"
 
 	"github.com/google/uuid"
 )

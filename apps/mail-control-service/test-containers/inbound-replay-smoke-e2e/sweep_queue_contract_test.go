@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"agent-mail/internal/archive/r2archive"
-	"agent-mail/internal/modules/poller"
-	gotestingcontainer "agent-mail/test-containers/go-testing-container"
+	"mail-control-service/internal/archive/r2archive"
+	"mail-control-service/internal/modules/poller"
+	gotestingcontainer "mail-control-service/test-containers/go-testing-container"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"

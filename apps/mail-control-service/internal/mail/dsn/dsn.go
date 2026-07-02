@@ -9,7 +9,7 @@ import (
 	texttemplate "text/template"
 	"time"
 
-	"agent-mail/internal/mail/structured"
+	"mail-control-service/internal/mail/structured"
 
 	"github.com/emersion/go-message"
 	messagemail "github.com/emersion/go-message/mail"

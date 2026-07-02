@@ -12,9 +12,9 @@ import (
 	"slices"
 	"strings"
 
-	"agent-mail/internal/mail/dsn"
-	"agent-mail/internal/mail/structured"
-	"agent-mail/internal/providers/cloudflaremail"
+	"mail-control-service/internal/mail/dsn"
+	"mail-control-service/internal/mail/structured"
+	"mail-control-service/internal/providers/cloudflaremail"
 
 	"github.com/emersion/go-message"
 	messagemail "github.com/emersion/go-message/mail"

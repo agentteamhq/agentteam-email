@@ -1,4 +1,4 @@
-module agent-mail
+module mail-control-service
 
 go 1.25.0
 

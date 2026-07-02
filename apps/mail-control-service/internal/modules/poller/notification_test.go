@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"agent-mail/internal/archive/r2archive"
+	"mail-control-service/internal/archive/r2archive"
 )
 
 func TestEnqueueNotificationPersistsInboundBundleAndWakesPoller(t *testing.T) {

@@ -1,6 +1,6 @@
 package domainregistry
 
-import "agent-mail/internal/control/controlstate"
+import "mail-control-service/internal/control/controlstate"
 
 func StatusesFromControlState(records []controlstate.DomainRecord, selectedProvider string) []DomainStatus {
 	statuses := make([]DomainStatus, 0, len(records))

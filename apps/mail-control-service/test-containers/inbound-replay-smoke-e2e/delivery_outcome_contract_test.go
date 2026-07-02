@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"agent-mail/internal/archive/r2archive"
-	"agent-mail/internal/modules/poller"
+	"mail-control-service/internal/archive/r2archive"
+	"mail-control-service/internal/modules/poller"
 
 	"github.com/emersion/go-message"
 	messagetextproto "github.com/emersion/go-message/textproto"

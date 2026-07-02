@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"time"
 
-	"agent-mail/internal/control/controlstate"
+	"mail-control-service/internal/control/controlstate"
 )
 
 const controlToWebRuntimeSnapshotPath = "/rpc/internal/agent-mail/runtime/snapshot"

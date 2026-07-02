@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"agent-mail/internal/archive/r2archive"
-	"agent-mail/internal/mail/rfc822"
+	"mail-control-service/internal/archive/r2archive"
+	"mail-control-service/internal/mail/rfc822"
 
 	"github.com/emersion/go-message"
 	moxmessage "github.com/mjl-/mox/message"

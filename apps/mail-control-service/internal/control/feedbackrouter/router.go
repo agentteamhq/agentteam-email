@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"agent-mail/internal/config/configfile"
-	"agent-mail/internal/mail/structured"
+	"mail-control-service/internal/config/configfile"
+	"mail-control-service/internal/mail/structured"
 
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapclient"

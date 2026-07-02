@@ -11,8 +11,8 @@ import (
 	"net/url"
 	"time"
 
-	"agent-mail/internal/control/controlstate"
-	"agent-mail/internal/mail/structured"
+	"mail-control-service/internal/control/controlstate"
+	"mail-control-service/internal/mail/structured"
 )
 
 var errNotFound = errors.New("wildduck resource not found")

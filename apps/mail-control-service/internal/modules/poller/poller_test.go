@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"agent-mail/internal/archive/r2archive"
-	"agent-mail/internal/stores/wildduck"
+	"mail-control-service/internal/archive/r2archive"
+	"mail-control-service/internal/stores/wildduck"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"

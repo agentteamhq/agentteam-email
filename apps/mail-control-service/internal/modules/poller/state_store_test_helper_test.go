@@ -6,7 +6,7 @@ import (
 	"sort"
 	"time"
 
-	"agent-mail/internal/archive/r2archive"
+	"mail-control-service/internal/archive/r2archive"
 )
 
 type testStateStore struct {

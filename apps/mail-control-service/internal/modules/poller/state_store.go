@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"agent-mail/internal/archive/r2archive"
+	"mail-control-service/internal/archive/r2archive"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"

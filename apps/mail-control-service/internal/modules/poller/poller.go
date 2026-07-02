@@ -17,12 +17,12 @@ import (
 	"strings"
 	"time"
 
-	"agent-mail/internal/archive/r2archive"
-	"agent-mail/internal/config/configfile"
-	"agent-mail/internal/mail/dsn"
-	"agent-mail/internal/mail/rfc822"
-	"agent-mail/internal/mail/structured"
-	"agent-mail/internal/stores/wildduck"
+	"mail-control-service/internal/archive/r2archive"
+	"mail-control-service/internal/config/configfile"
+	"mail-control-service/internal/mail/dsn"
+	"mail-control-service/internal/mail/rfc822"
+	"mail-control-service/internal/mail/structured"
+	"mail-control-service/internal/stores/wildduck"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"go.mongodb.org/mongo-driver/v2/bson"

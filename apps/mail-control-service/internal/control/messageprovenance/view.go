@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"strings"
 
-	"agent-mail/internal/mail/rfc822"
+	"mail-control-service/internal/mail/rfc822"
 
 	"github.com/jhillyerd/enmime"
 	"github.com/microcosm-cc/bluemonday"
