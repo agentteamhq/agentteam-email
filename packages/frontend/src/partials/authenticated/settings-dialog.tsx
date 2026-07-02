@@ -249,7 +249,10 @@ export function SettingsDialog({
       onOpenChange={setOpen}
     >
       {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
-      <DialogContent className='overflow-hidden p-0 md:max-h-[500px] md:max-w-[700px] lg:max-w-[800px]'>
+      <DialogContent
+        className='h-[calc(100svh-2rem)] overflow-hidden p-0 md:h-[500px] md:max-h-[500px]
+          md:max-w-[700px] lg:max-w-[800px]'
+      >
         <DialogTitle className='sr-only'>Settings</DialogTitle>
         <DialogDescription className='sr-only'>
           Manage account, security, connected account, organization, and domain settings.
@@ -259,7 +262,7 @@ export function SettingsDialog({
             collapsible='none'
             className='hidden md:flex'
           >
-            <SidebarContent className='min-h-0'>
+            <SidebarContent className='min-h-0 overflow-x-hidden overflow-y-auto'>
               <SidebarGroup>
                 <SidebarGroupContent>
                   <SidebarMenu>
@@ -284,8 +287,8 @@ export function SettingsDialog({
                   </SidebarMenu>
                 </SidebarGroupContent>
               </SidebarGroup>
-              <SidebarGroup className='min-h-0 flex-1'>
-                <SidebarGroupContent className='min-h-0 overflow-hidden'>
+              <SidebarGroup>
+                <SidebarGroupContent>
                   <SidebarMenu>
                     <SidebarMenuItem>
                       <SidebarMenuButton
@@ -322,7 +325,7 @@ export function SettingsDialog({
                     </SidebarMenuItem>
                   </SidebarMenu>
                   {domainSettings.connections.length > 0 ? (
-                    <SidebarMenu className='mt-1 max-h-52 overflow-y-auto pr-1'>
+                    <SidebarMenu className='mt-1 pr-1'>
                       {domainSettings.connections.map((connection) => (
                         <SidebarMenuItem key={connection.publicId}>
                           <SidebarMenuButton

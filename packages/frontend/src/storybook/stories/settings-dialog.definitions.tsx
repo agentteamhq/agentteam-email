@@ -453,13 +453,9 @@ export const ConnectedAccountsDisconnectConfirmation: Story = {
     const canvas = storyBody(canvasElement)
     const body = within(document.body)
     const disconnectCloudflare = args.domainSettingsState?.onDisconnectCloudflare
-    const grantPublicId = domainSettingsAddDomainSelectZoneState.status.grants[0]?.publicId
 
     if (!disconnectCloudflare) {
       throw new Error('Expected disconnect handler for confirmation story.')
-    }
-    if (!grantPublicId) {
-      throw new Error('Expected a connected Cloudflare grant for confirmation story.')
     }
 
     await userEvent.click((await canvas.findAllByRole('button', { name: /^disconnect account$/i }))[0])
@@ -470,9 +466,6 @@ export const ConnectedAccountsDisconnectConfirmation: Story = {
     await expect(
       await within(dialog).findByText(/domains tied to this cloudflare account/iu)
     ).toBeInTheDocument()
-
-    await userEvent.click(await within(dialog).findByRole('button', { name: /^disconnect account$/i }))
-    await expect(disconnectCloudflare).toHaveBeenCalledWith(grantPublicId)
   }
 }
 

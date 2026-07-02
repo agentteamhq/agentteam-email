@@ -150,7 +150,28 @@ const denseCloudflareConnections = [
     domain: 'reply.agentteam.example',
     cloudflareZoneName: 'reply.agentteam.example'
   },
-  disconnectedCloudflareConnection
+  disconnectedCloudflareConnection,
+  ...[
+    'billing.agentteam.example',
+    'alerts.agentteam.example',
+    'invoices.agentteam.example',
+    'sales.agentteam.example',
+    'legal.agentteam.example',
+    'security.agentteam.example',
+    'partners.agentteam.example',
+    'careers.agentteam.example',
+    'status.agentteam.example',
+    'feedback.agentteam.example',
+    'research.agentteam.example',
+    'ops-alerts.agentteam.example'
+  ].map((domain, index) => ({
+    ...liveCloudflareConnection,
+    publicId: cloudflareConnectionPublicId(`denseCloudflareConnection${index + 1}`),
+    domain,
+    cloudflareZoneName: domain,
+    workerScriptName: `agent-mail-ingest-${domain.replaceAll('.', '-')}`,
+    updatedAt: new Date(`2026-06-21T17:${String(index).padStart(2, '0')}:00.000Z`)
+  }))
 ] satisfies CloudflareConnectionFixture[]
 
 export const domainSettingsEmptyFirstUseState = {
