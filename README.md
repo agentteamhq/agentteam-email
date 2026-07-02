@@ -11,8 +11,8 @@
 
 <p align="center">
   Open-source email infrastructure for AI agents. Give every agent a dedicated
-  mailbox, capture inbound mail, archive message evidence, review mail safely,
-  and send outbound mail from connected domains.
+  mailbox, review untrusted mail safely, and send outbound mail from connected
+  domains.
 </p>
 
 <p align="center">
@@ -44,10 +44,18 @@
 - Full web email client for everyday work mail, startup team inboxes, and
   agent-operated accounts.
 - Seamless Cloudflare integration for sending and receiving through your domain.
-- Authenticated and secure message review for agents, with untrusted mail kept
-  inside a controlled viewing surface.
-- Docker Compose and Helm deployment surfaces for self-hosted installs.
+- Safe message review for agents, with untrusted mail opened in a dedicated
+  product surface.
+- Self-hosted deployment with Docker Compose or Helm.
 - A portable `at-email` CLI and agent skill for operating authorized mailboxes.
+
+## Why It Matters
+
+- **Give agents real inboxes without handing them your inbox:** agents can read,
+  draft, and send through scoped mailbox access instead of broad personal account
+  access.
+- **Start self-hosted and keep ownership:** run it yourself, adapt it to your
+  workflow, and contribute changes back under a permissive license.
 
 ## Use Cases
 
@@ -65,11 +73,11 @@ AgentTeam Email is built for operators running mail for AI agents.
 
 - **Agent mailboxes:** each agent gets a real mailbox for receiving, reviewing,
   and sending mail.
-- **Operator-first self-hosting:** you expose the web app, while mail servers,
-  queues, databases, and credentials stay on your internal network.
+- **Operator-first self-hosting:** run the web app and mail services on your own
+  infrastructure.
 - **Bucket-first receive path:** inbound mail lands in R2 before AgentTeam Email
-  processes it, so downtime or backlog delays mailbox delivery instead of
-  making receive-time capture depend on the app server.
+  processes it, so backlog or downtime affects processing instead of initial
+  receipt.
 
 ```mermaid
 %%{init: {"flowchart": {"curve": "basis"}}}%%
@@ -79,18 +87,16 @@ flowchart TB
   app --> bucket
 ```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full architecture contract and
-[Mail Flow](https://agentteamemail.mintlify.com/how-it-works/mail-flow) for the
-complete inbound and outbound paths.
+For deeper detail, see [ARCHITECTURE.md](ARCHITECTURE.md) and
+[Mail Flow](https://agentteamemail.mintlify.com/how-it-works/mail-flow).
 
 ## Get Started
 
 Start with the
 [Quickstart](https://agentteamemail.mintlify.com/get-started/quickstart) to
-choose a runtime, prepare the admin instance, expose the web server, provision
-the first domain, and validate mail delivery.
+go from install to your first connected domain and mailbox.
 
-Main setup docs:
+Useful setup docs:
 
 - [Self-host setup guide](https://agentteamemail.mintlify.com/self-host/setup)
 - [Docker Compose deployment](https://agentteamemail.mintlify.com/self-host/docker-compose)
@@ -100,37 +106,17 @@ Main setup docs:
 
 ## Self-Hosting
 
-AgentTeam Email runs the same service graph through Compose or Helm:
+AgentTeam Email can run on one host with Docker Compose or on Kubernetes with
+Helm. The self-hosting docs cover environment setup, Cloudflare connection, R2
+storage, ingress, and post-install checks.
 
-- `compose.yaml` for a single-host deployment.
-- `charts/agentteam-email` for Kubernetes deployments.
-
-Compose users configure the environment from the published example:
-
-```bash
-cp docs/examples/compose/.env.example .env
-docker compose up -d
-docker compose ps
-```
-
-Helm users install the chart from GHCR:
-
-```bash
-helm upgrade --install atemail \
-  oci://ghcr.io/agentteamhq/agentteam-email \
-  --namespace agentteam-email \
-  --create-namespace \
-  -f values.yaml
-```
-
-Only the web server should be public. WildDuck, Haraka, ZoneMTA, Rspamd,
-MongoDB, Redis, and the Mail Control Service must remain internal.
+- [Deploy with Docker Compose](https://agentteamemail.mintlify.com/self-host/docker-compose)
+- [Deploy with Helm](https://agentteamemail.mintlify.com/self-host/helm)
 
 ## CLI And Agent Skill
 
-The `at-email` CLI lets agents and operators use authorized mailboxes through
-the AgentTeam Email web server. Public clients must not call WildDuck or the
-Mail Control Service directly.
+The `at-email` CLI lets agents and operators check mailbox status, review
+messages, search mail, and send approved outbound email.
 
 Check local availability:
 
@@ -153,8 +139,10 @@ at-email agent trial
 at-email agent enroll TOKEN
 ```
 
-The canonical skill lives in [skills/at-email-cli](skills/at-email-cli).
-Publishing and marketplace notes live in [RELEASE.md](RELEASE.md).
+The bundled agent skill lives in [skills/at-email-cli](skills/at-email-cli).
+Read the
+[CLI and agent skill docs](https://agentteamemail.mintlify.com/usage/cli-and-agent-skill)
+for the full workflow.
 
 ## Development
 
@@ -165,33 +153,15 @@ mise install
 pnpm install
 ```
 
-Common checks:
-
-```bash
-pnpm typecheck
-pnpm lint
-mise run test
-```
-
-Run source-development services and the local app graph through repo-owned
-tasks:
-
-```bash
-mise run db:start
-mise run mail:start
-mise run dev
-```
-
-For worktree identity, local runtime, image builds, and validation command
-selection, read [SETUP.md](SETUP.md).
+For the full local development workflow, read [SETUP.md](SETUP.md).
 
 ## Repository Layout
 
-- `apps/web-server`: public web server and deployable Node entrypoint.
-- `apps/mail-control-service`: internal mail runtime coordination service.
+- `apps/web-server`: deployable web app and Node server.
+- `apps/mail-control-service`: mail runtime coordination service.
 - `apps/at-email-cli`: portable CLI distribution.
 - `packages/frontend`: authenticated product UI and Storybook surface.
-- `packages/backend`: backend APIs, auth, and service integration logic.
+- `packages/backend`: backend APIs and integration logic.
 - `packages/cloudflare-email-worker`: Cloudflare Email Routing Worker source.
 - `charts/agentteam-email`: Helm chart for Kubernetes installs.
 - `docs`: Mintlify documentation source.
@@ -199,29 +169,16 @@ selection, read [SETUP.md](SETUP.md).
 
 ## Security
 
-Read [SECURITY.md](SECURITY.md) before changing authentication, authorization,
-credentials, encryption, sessions, cookies, API keys, tokens, OAuth, JWKS, or
-other security-sensitive behavior.
-
-AgentTeam Email keeps public and internal boundaries separate:
-
-- Public clients call the web server only.
-- WildDuck admin credentials, internal service URLs, and mail-control tokens
-  stay server-side.
-- User-domain Cloudflare credentials are connected through the web UI, not
-  placed in Compose files or Helm values.
-- Self-hosted operators expose the web server and keep the mail runtime
-  internal.
-
-Report vulnerabilities through the private process in
-[SECURITY.md](SECURITY.md).
+Please report vulnerabilities through GitHub Security Advisories, not public
+issues. See [SECURITY.md](SECURITY.md) for the private reporting path and
+security-sensitive contribution rules.
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for local setup, validation, pull request
-guidance, and public issue expectations. Do not include secrets, private
-hostnames, credentials, tokens, or private operational details in issues,
-pull requests, docs, examples, or logs.
+guidance, and public issue expectations. Keep public issues and pull requests
+free of secrets, credentials, tokens, private hostnames, and private operational
+details.
 
 ## License
 

@@ -8,6 +8,10 @@ owning documentation before changing documented behavior.
 Agents must not edit any `AGENTS.md` file without explicit current-task approval
 for that specific file.
 
+`README.md` is the public product and project presentation surface; agents must
+not use it for architecture requirements, security rules, runtime contracts,
+release procedures, validation workflows, or operational runbooks.
+
 Before work involving authentication, authorization, Better Auth, credentials,
 encryption, sessions, cookies, API keys, tokens, JWT, OAuth, JWKS, secret
 storage, security-sensitive routes, or anything that could be security related,
