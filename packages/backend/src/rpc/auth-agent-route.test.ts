@@ -77,6 +77,65 @@ describe('Better Auth Agent Auth mounted routes', () => {
     vi.stubEnv('PUBLIC_HOSTNAME', 'https://mail.example.com')
   })
 
+  it('does not mount development debug or test RPC routes', async () => {
+    expect.hasAssertions()
+
+    vi.stubEnv('NODE_ENV', 'development')
+
+    const { backendRpcApp } = await import('./index')
+
+    for (const path of [
+      '/rpc/internal/debug/error',
+      '/rpc/internal/debug/rejection',
+      '/rpc/internal/debug/ok'
+    ]) {
+      const response = await backendRpcApp.handle(new Request(`https://mail.example.com${path}`))
+
+      expect({ path, status: response.status }).toStrictEqual({
+        path,
+        status: 404
+      })
+    }
+
+    for (const path of ['/rpc/internal/test/stream', '/rpc/internal/test/new']) {
+      const response = await backendRpcApp.handle(new Request(`https://mail.example.com${path}`))
+
+      expect({ path, status: response.status }).toStrictEqual({
+        path,
+        status: 404
+      })
+      expect(response.headers.get('content-type')).not.toContain('text/event-stream')
+      expect(response.headers.get('content-encoding')).not.toBe('identity')
+      expect(response.headers.get('x-accel-buffering')).toBeNull()
+    }
+  })
+
+  it('does not expose Better Auth OpenAPI routes in development', async () => {
+    expect.hasAssertions()
+
+    vi.stubEnv('NODE_ENV', 'development')
+
+    const adapterStore = createMemoryBetterAuthAdapterStore()
+    routeTestState.betterAuthAdapter = adapterStore.adapter
+
+    const { createGlobalAuth } = await import('../auth/auth')
+    routeTestState.auth = createGlobalAuth(createFakeDatabase(vi.fn(async (input: unknown) => input)))
+
+    const { backendRpcApp } = await import('./index')
+
+    for (const path of ['/rpc/auth/api/open-api/generate-schema', '/rpc/auth/api/reference']) {
+      const response = await backendRpcApp.handle(new Request(`https://mail.example.com${path}`))
+      const body = await response.text()
+
+      expect({ path, status: response.status }).toStrictEqual({
+        path,
+        status: 404
+      })
+      expect(body).not.toContain('openapi')
+      expect(body).not.toContain('Scalar API Reference')
+    }
+  })
+
   it('does not expose raw Better Auth capability mutation routes outside the CASL agent-access boundary', async () => {
     expect.hasAssertions()
 

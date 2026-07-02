@@ -20,11 +20,7 @@ import {
   updateAgentMailPrincipalMailboxGrantsForWeb,
   updateAgentMailPrincipalSystemPermissionsForWeb
 } from '../agent-mail/admin-service'
-import {
-  getAgentMailStatusForWeb,
-  isAgentMailAccessError,
-  submitAgentMailOutboundFromWeb
-} from '../agent-mail/service'
+import { isAgentMailAccessError, submitAgentMailOutboundFromWeb } from '../agent-mail/service'
 import {
   agentMailWebErrorStatus,
   createAgentMailFolderForWeb,
@@ -58,7 +54,6 @@ import type {
   AgentMailAdminSavePrincipalSystemPermissionsResult,
   AgentMailAdminView
 } from '../agent-mail/admin-service'
-import type { AgentMailPublicStatus } from '../agent-mail/service'
 import type { AgentMailWebFolder, AgentMailWebWorkspace } from '../agent-mail/webmail-service'
 
 const accountParamsSchema = t.Object({
@@ -438,89 +433,6 @@ const mailWebWorkspaceResponseSchema = t.Object({
     total: t.Nullable(t.Number())
   }),
   selectedMessage: t.Nullable(mailWebMessageDetailResponseSchema)
-})
-const mailPublicStatusResponseSchema = t.Object({
-  controlState: t.Optional(
-    t.Object({
-      domainsActive: optionalNumberResponseSchema,
-      domainsDisabled: optionalNumberResponseSchema,
-      domainsTotal: optionalNumberResponseSchema,
-      issues: stringArrayResponseSchema,
-      ok: optionalBooleanResponseSchema,
-      schema: optionalStringResponseSchema,
-      updatedAt: optionalStringResponseSchema
-    })
-  ),
-  dependencies: t.Record(
-    t.String(),
-    t.Object({
-      configured: optionalBooleanResponseSchema,
-      issues: stringArrayResponseSchema,
-      ok: optionalBooleanResponseSchema
-    })
-  ),
-  domains: t.Array(
-    t.Object({
-      cloudflare: t.Optional(
-        t.Object({
-          catchAllConfigured: optionalBooleanResponseSchema,
-          catchAllEnabled: optionalBooleanResponseSchema,
-          issues: stringArrayResponseSchema,
-          ok: optionalBooleanResponseSchema
-        })
-      ),
-      domain: t.String(),
-      feedback: t.Optional(
-        t.Object({
-          configured: optionalBooleanResponseSchema,
-          ok: optionalBooleanResponseSchema,
-          wildDuckExists: optionalBooleanResponseSchema
-        })
-      ),
-      inbound: t.Optional(
-        t.Object({
-          dsnConfigured: optionalBooleanResponseSchema,
-          provider: optionalStringResponseSchema,
-          sweepConfigured: optionalBooleanResponseSchema
-        })
-      ),
-      issues: stringArrayResponseSchema,
-      outbound: t.Optional(
-        t.Object({
-          configured: optionalBooleanResponseSchema,
-          provider: optionalStringResponseSchema
-        })
-      ),
-      status: t.String()
-    })
-  ),
-  generatedAt: optionalStringResponseSchema,
-  issues: stringArrayResponseSchema,
-  modules: t.Record(
-    t.String(),
-    t.Object({
-      activeDomains: optionalNumberResponseSchema,
-      configured: optionalBooleanResponseSchema,
-      issues: stringArrayResponseSchema,
-      lastSweepAt: optionalStringResponseSchema,
-      maxMessageBytes: optionalNumberResponseSchema,
-      ok: optionalBooleanResponseSchema,
-      provider: optionalStringResponseSchema,
-      queue: t.Optional(
-        t.Object({
-          blocked: optionalNumberResponseSchema,
-          completed: optionalNumberResponseSchema,
-          delivered: optionalNumberResponseSchema,
-          leased: optionalNumberResponseSchema,
-          pending: optionalNumberResponseSchema,
-          retryWait: optionalNumberResponseSchema
-        })
-      )
-    })
-  ),
-  ok: optionalBooleanResponseSchema,
-  selectedProvider: optionalStringResponseSchema,
-  status: t.String()
 })
 const mailOutboundResponseSchema = t.Object({
   idempotency_key: optionalStringResponseSchema,
@@ -1282,22 +1194,6 @@ const mail = new Elysia({
       }),
       response: {
         200: mailSuccessResponseSchema,
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .get(
-    '/status',
-    async ({ request, set }) => {
-      try {
-        return await getAgentMailStatusForWeb(mailAuthHeaders(request))
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      response: {
-        200: typedResponseSchema<AgentMailPublicStatus>(mailPublicStatusResponseSchema),
         ...mailErrorResponseSchemas
       }
     }

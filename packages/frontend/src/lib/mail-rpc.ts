@@ -2,7 +2,6 @@ import { rpc } from './rpc-api-client'
 import type {
   AgentMailComposeInput,
   AgentMailMessageActionInput,
-  AgentMailPublicStatus,
   AgentMailWebFolder,
   AgentMailWebWorkspace
 } from '@main/backend'
@@ -45,11 +44,6 @@ export interface MailUpdateInput extends AgentMailMessageActionInput {
 export async function fetchMailWorkspace(input: MailWorkspaceQuery): Promise<AgentMailWebWorkspace> {
   const result = await rpc.mail.workspace.get({ query: mailWorkspaceQuery(input) })
   return readMailRpcResult<AgentMailWebWorkspace>(result)
-}
-
-export async function fetchMailStatus(): Promise<AgentMailPublicStatus> {
-  const result = await rpc.mail.status.get()
-  return readMailRpcResult<AgentMailPublicStatus>(result)
 }
 
 export function sendMailMessage(input: AgentMailComposeInput) {

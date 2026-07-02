@@ -79,7 +79,6 @@ import type {
   AgentAccessPaperclipConnection,
   AgentAccessView,
   AgentMailAdminAgentEnrollment,
-  AgentMailPublicStatus,
   CloudflareAccountSummary,
   CloudflareStatusResult,
   CloudflareZoneSummary
@@ -126,8 +125,6 @@ export interface DomainSettingsState {
   accounts?: readonly CloudflareAccountSummary[]
   busy?: boolean
   draftDomain?: string
-  mailStatus?: AgentMailPublicStatus | null
-  mailStatusMessage?: string | null
   message?: string | null
   mode?: 'addDomain' | 'domain'
   onAddDomain?: () => void
@@ -137,7 +134,6 @@ export interface DomainSettingsState {
   onLoadAccounts?: () => void
   onLoadZones?: () => void
   onProvisionDomain?: (connectionPublicId: CloudflareConnectionView['publicId']) => void
-  onRefreshMailStatus?: () => void
   onSelectAccount?: (accountId: string) => void
   onSelectDomain?: (connectionPublicId: CloudflareConnectionView['publicId']) => void
   onSelectZone?: (zoneId: string) => void
@@ -1192,8 +1188,6 @@ interface DomainSettingsController {
   connections: readonly CloudflareConnectionView[]
   draftDomain: string
   grants: readonly CloudflareGrantView[]
-  mailStatus: AgentMailPublicStatus | null
-  mailStatusMessage: string | null
   message: string | null
   missingScopes: readonly string[]
   mode: 'addDomain' | 'domain'
@@ -1204,7 +1198,6 @@ interface DomainSettingsController {
   onLoadAccounts: () => void
   onLoadZones: () => void
   onProvisionDomain: (connectionPublicId: DomainPublicId) => void
-  onRefreshMailStatus: () => void
   onSelectAccount: (accountId: string) => void
   onSelectDomain: (connectionPublicId: DomainPublicId) => void
   onSelectZone: (zoneId: string) => void
@@ -1231,8 +1224,6 @@ function domainSettingsControllerFromState(state?: DomainSettingsState): DomainS
   const selectedGrantPublicId = state?.selectedGrantPublicId ?? ''
   const selectedZoneId = state?.selectedZoneId ?? ''
   const draftDomain = state?.draftDomain ?? ''
-  const mailStatus = state?.mailStatus ?? null
-  const mailStatusMessage = state?.mailStatusMessage ?? null
   const message = state?.message ?? null
   const connections = status?.connections ?? []
   const grants = status?.grants ?? []
@@ -1262,8 +1253,6 @@ function domainSettingsControllerFromState(state?: DomainSettingsState): DomainS
     connections,
     draftDomain,
     grants,
-    mailStatus,
-    mailStatusMessage,
     message,
     missingScopes,
     mode,
@@ -1274,7 +1263,6 @@ function domainSettingsControllerFromState(state?: DomainSettingsState): DomainS
     onLoadAccounts: action(state?.onLoadAccounts),
     onLoadZones: action(state?.onLoadZones),
     onProvisionDomain: action(state?.onProvisionDomain),
-    onRefreshMailStatus: action(state?.onRefreshMailStatus),
     onSelectAccount: action(state?.onSelectAccount),
     onSelectDomain: action(state?.onSelectDomain),
     onSelectZone: action(state?.onSelectZone),
@@ -1295,17 +1283,14 @@ function domainSettingsControllerFromState(state?: DomainSettingsState): DomainS
 
 export function DomainSettingsPanel({
   className,
-  includeMailRuntimeStatus = true,
   state
 }: {
   className?: string
-  includeMailRuntimeStatus?: boolean
   state?: DomainSettingsState
 }) {
   return (
     <DomainSettingsContent
       className={className}
-      includeMailRuntimeStatus={includeMailRuntimeStatus}
       settings={domainSettingsControllerFromState(state)}
     />
   )
@@ -1440,7 +1425,9 @@ function ConnectedAccountGrantRow({
       <div className='text-muted-foreground grid gap-1 sm:grid-cols-3'>
         <span>{formatCloudflareGrantScopeSummary(grant)}</span>
         <span>Last checked {formatDateTime(grant.lastTokenCheckAt)}</span>
-        <span>{missingScopes.length > 0 ? `${missingScopes.length} missing scopes` : 'Required scopes ready'}</span>
+        <span>
+          {missingScopes.length > 0 ? `${missingScopes.length} missing scopes` : 'Required scopes ready'}
+        </span>
       </div>
       {grant.lastErrorMessage ? <p className='text-destructive text-xs'>{grant.lastErrorMessage}</p> : null}
       {missingScopes.length > 0 ? (
@@ -1474,10 +1461,7 @@ function ConnectedAccountGrantRow({
   )
 }
 
-function formatCloudflareGrantStatus(
-  grant: CloudflareGrantView,
-  missingScopes: readonly string[]
-): string {
+function formatCloudflareGrantStatus(grant: CloudflareGrantView, missingScopes: readonly string[]): string {
   if (grant.status === 'active' && missingScopes.length > 0) {
     return 'Missing scopes'
   }
@@ -1493,11 +1477,9 @@ function formatCloudflareGrantScopeSummary(grant: CloudflareGrantView): string {
 
 function DomainSettingsContent({
   className,
-  includeMailRuntimeStatus = true,
   settings
 }: {
   className?: string
-  includeMailRuntimeStatus?: boolean
   settings: DomainSettingsController
 }) {
   if (settings.status === null && !settings.message) {
@@ -1511,12 +1493,7 @@ function DomainSettingsContent({
       <DomainDetailPanel settings={settings} />
     )
 
-  return (
-    <div className={cn('grid max-w-3xl gap-4', className)}>
-      {domainPanel}
-      {includeMailRuntimeStatus ? <MailRuntimeStatusPanel settings={settings} /> : null}
-    </div>
-  )
+  return <div className={cn('grid max-w-3xl gap-4', className)}>{domainPanel}</div>
 }
 
 function DomainSettingsLoadingContent() {
@@ -1526,76 +1503,6 @@ function DomainSettingsLoadingContent() {
       <Skeleton className='h-28 rounded-lg' />
       <Skeleton className='h-28 rounded-lg' />
     </div>
-  )
-}
-
-function MailRuntimeStatusPanel({ settings }: { settings: DomainSettingsController }) {
-  const status = settings.mailStatus
-  const queue = status ? aggregateMailRuntimeQueue(status) : null
-  const moduleSummary = status ? summarizeMailRuntimeModules(status) : null
-  const activeDomains = status?.controlState?.domainsActive
-  const totalDomains = status?.controlState?.domainsTotal
-
-  if (!status && !settings.mailStatusMessage) {
-    return null
-  }
-
-  return (
-    <Card className='p-0'>
-      <CardContent className='space-y-3 p-4'>
-        <div className='flex items-start justify-between gap-3'>
-          <div className='min-w-0'>
-            <p className='text-sm font-medium'>Mail runtime</p>
-            <p className='text-muted-foreground text-sm'>
-              {status?.selectedProvider ? `${status.selectedProvider} provider` : 'Runtime status'}
-            </p>
-          </div>
-          <div className='flex items-center gap-2'>
-            {status ? (
-              <Badge variant={status.ok ? 'secondary' : 'destructive'}>
-                {formatStatusLabel(status.status)}
-              </Badge>
-            ) : null}
-            <Button
-              disabled={settings.busy || settings.readOnly}
-              onClick={settings.onRefreshMailStatus}
-              size='icon'
-              variant='ghost'
-            >
-              <ArrowClockwiseIcon />
-              <span className='sr-only'>Refresh mail runtime status</span>
-            </Button>
-          </div>
-        </div>
-
-        {settings.mailStatusMessage ? (
-          <p className='text-destructive text-sm'>{settings.mailStatusMessage}</p>
-        ) : null}
-
-        {status ? (
-          <div className='grid gap-2 text-sm md:grid-cols-2'>
-            <DomainDetailRow
-              label='Modules'
-              value={
-                moduleSummary ? `${moduleSummary.ok}/${moduleSummary.total} healthy` : 'No module status'
-              }
-            />
-            <DomainDetailRow
-              label='Queue'
-              value={queue ? `${queue.pending} pending · ${queue.retryWait} retry` : 'No queue status'}
-            />
-            <DomainDetailRow
-              label='Runtime domains'
-              value={
-                typeof activeDomains === 'number' && typeof totalDomains === 'number'
-                  ? `${activeDomains}/${totalDomains} active`
-                  : 'No domain status'
-              }
-            />
-          </div>
-        ) : null}
-      </CardContent>
-    </Card>
   )
 }
 
@@ -1824,7 +1731,9 @@ function DomainDetailPanel({ settings }: { settings: DomainSettingsController })
           </div>
         </div>
 
-        {domain.lastErrorMessage ? <p className='text-destructive text-sm'>{domain.lastErrorMessage}</p> : null}
+        {domain.lastErrorMessage ? (
+          <p className='text-destructive text-sm'>{domain.lastErrorMessage}</p>
+        ) : null}
         {settings.message ? <p className='text-muted-foreground text-sm'>{settings.message}</p> : null}
       </CardContent>
 
@@ -1832,7 +1741,9 @@ function DomainDetailPanel({ settings }: { settings: DomainSettingsController })
         <CardFooter className='flex-col gap-2 border-t px-6 pt-4 sm:flex-row sm:justify-end'>
           <Button
             className='w-full sm:w-auto'
-            disabled={settings.busy || settings.readOnly || isProvisioning || domain.status === 'disconnected'}
+            disabled={
+              settings.busy || settings.readOnly || isProvisioning || domain.status === 'disconnected'
+            }
             onClick={() => {
               settings.onProvisionDomain(domain.publicId)
             }}
@@ -1905,13 +1816,7 @@ function DomainSetupConnectionVisual({ domain }: { domain?: string }) {
   )
 }
 
-function DomainSetupLogoCircle({
-  children,
-  label
-}: {
-  children: React.ReactNode
-  label: string
-}) {
+function DomainSetupLogoCircle({ children, label }: { children: React.ReactNode; label: string }) {
   return (
     <span
       aria-label={label}
@@ -1997,35 +1902,6 @@ function cloudflareZoneSelectionValue(zone: CloudflareZoneSummary): string {
 
 function getMissingScopes(grant: CloudflareGrantView): string[] {
   return grant.requiredScopes.filter((scope) => !grant.grantedScopes.includes(scope))
-}
-
-function aggregateMailRuntimeQueue(status: AgentMailPublicStatus) {
-  let pending = 0
-  let retryWait = 0
-  let seen = false
-
-  for (const moduleStatus of Object.values(status.modules)) {
-    if (!moduleStatus.queue) {
-      continue
-    }
-    pending += moduleStatus.queue.pending ?? 0
-    retryWait += moduleStatus.queue.retryWait ?? 0
-    seen = true
-  }
-
-  return seen ? { pending, retryWait } : null
-}
-
-function summarizeMailRuntimeModules(status: AgentMailPublicStatus) {
-  const modules = Object.values(status.modules)
-  if (modules.length === 0) {
-    return null
-  }
-
-  return {
-    ok: modules.filter((moduleStatus) => moduleStatus.ok === true).length,
-    total: modules.length
-  }
 }
 
 function formatDateTime(value: Date | string | null | undefined): string {

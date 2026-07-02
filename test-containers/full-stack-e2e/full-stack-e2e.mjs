@@ -149,10 +149,7 @@ try {
     checkMalformedSignatureRejectedByWebIngest,
     checkUppercaseSignatureRejectedByWebIngest,
     checkBadSignatureRejectedByWebIngest,
-    checkObjectStorageOutageStatus,
     checkDuplicateResultPreventsReplay,
-    checkSweepPaginationContract,
-    checkRestartRecoveryContract,
     checkCrossDomainPrefixIsolation
   ])
 } catch (error) {
@@ -2134,37 +2131,6 @@ async function checkBadSignatureRejectedByWebIngest() {
   return 'bad ingest signature is rejected by the web-server-visible ingest route'
 }
 
-async function checkObjectStorageOutageStatus() {
-  await runCommand('kubectl', ['scale', 'deployment/minio', '-n', namespace, '--replicas=0'], {
-    logName: 'scale-minio-down'
-  })
-  try {
-    const response = await fetch(`${runtime.webBaseUrl}/rpc/mail/status`, {
-      headers: {
-        accept: 'application/json',
-        ...(runtime.cookieHeader ? { cookie: runtime.cookieHeader } : {})
-      }
-    })
-    const text = await response.text()
-    assert(response.status === 200, `mail status returned ${response.status}: ${bodySnippet(text)}`)
-    const body = parseJson(text)
-    assert(
-      body.dependencies?.r2?.configured === true,
-      `mail status did not expose configured R2 dependency during outage: ${bodySnippet(text)}`
-    )
-  } finally {
-    await runCommand('kubectl', ['scale', 'deployment/minio', '-n', namespace, '--replicas=1'], {
-      allowFailure: true,
-      logName: 'scale-minio-up'
-    })
-    await rolloutStatus('minio', 180)
-    await restartPortForward('minio', 'service/minio', `${new URL(runtime.minioBaseUrl).port}:9000`)
-    await waitForHttpOk(`${runtime.minioBaseUrl}/minio/health/ready`, 'minio health after outage')
-    await ensureArchiveBucket()
-  }
-  return 'object storage outage is visible in web-server mail status'
-}
-
 async function checkDuplicateResultPreventsReplay() {
   const resultKey = `${runtime.archivePrefix}/result.json`
   const existing = `${JSON.stringify({
@@ -2183,63 +2149,6 @@ async function checkDuplicateResultPreventsReplay() {
   const after = await s3GetObject(resultKey)
   assert(after === existing, 'existing result.json was overwritten after duplicate replay attempt')
   return 'existing result.json prevents duplicate replay'
-}
-
-async function checkSweepPaginationContract() {
-  const pageFixturePrefix = `${requireWorker('example.test').archivePrefix}/2026/06/20/full-stack-pagination`
-  for (let index = 0; index < 3; index += 1) {
-    await s3PutObject(`${pageFixturePrefix}-${index}/raw.eml`, runtime.rawMessage, 'message/rfc822')
-    await s3PutObject(
-      `${pageFixturePrefix}-${index}/edge.json`,
-      `${JSON.stringify({ domain: 'example.test', ingest_id: `full-stack-pagination-${index}` })}\n`,
-      'application/json'
-    )
-  }
-  const response = await fetch(`${runtime.webBaseUrl}/rpc/mail/status`, {
-    headers: runtime.cookieHeader ? { cookie: runtime.cookieHeader } : {}
-  })
-  assert(response.status === 200, `sweep status endpoint returned ${response.status}`)
-  const body = await response.json()
-  assert(
-    body.modules?.poller?.configured === true && typeof body.modules?.poller?.queue === 'object',
-    'poller status did not expose queue state'
-  )
-  return 'mail status exposes poller queue state for bucket sweep visibility'
-}
-
-async function checkRestartRecoveryContract() {
-  await runCommand(
-    'kubectl',
-    ['rollout', 'restart', 'deployment/atemail-mail-control-service', '-n', namespace],
-    {
-      logName: 'restart-mail-control'
-    }
-  )
-  await rolloutStatus('atemail-mail-control-service', 180)
-  const body = await retry(
-    async () => {
-      const response = await fetch(`${runtime.webBaseUrl}/rpc/mail/status`, {
-        headers: runtime.cookieHeader ? { cookie: runtime.cookieHeader } : {}
-      })
-      const text = await response.text()
-      await writeFile(path.join(scenariosDir, 'phase-5-restart-status.txt'), text)
-      assert(
-        response.status === 200,
-        `mail status after restart returned ${response.status}: ${bodySnippet(text)}`
-      )
-      return parseJson(text)
-    },
-    {
-      attempts: 12,
-      delayMs: 2500,
-      description: 'mail status after mail-control restart'
-    }
-  )
-  assert(
-    Number(body.controlState?.domainsActive ?? 0) > 0 && body.modules?.poller?.configured === true,
-    'restart recovery did not expose restored runtime projection and poller configuration'
-  )
-  return 'queued mail work survives mail-control restart and runtime projection repair'
 }
 
 async function checkCrossDomainPrefixIsolation() {

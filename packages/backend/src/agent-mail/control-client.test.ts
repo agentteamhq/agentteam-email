@@ -10,40 +10,6 @@ describe('Agent Mail control client', () => {
     vi.stubEnv('PUBLIC_HOSTNAME', 'https://mail.example.test')
   })
 
-  it('throws a safe error without exposing control response details', async () => {
-    expect.hasAssertions()
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          jsonrpc: '2.0',
-          error: {
-            message: 'runtime rejected credential control_secret_123 for archive archive_internal_456'
-          }
-        }),
-        {
-          headers: { 'content-type': 'application/json' },
-          status: 502
-        }
-      )
-    )
-    vi.stubGlobal('fetch', fetchMock)
-    const { AgentMailControlAPIError, getAgentMailControlStatus } = await import('./control-client')
-
-    try {
-      await getAgentMailControlStatus()
-      throw new Error('Expected control status request to fail')
-    } catch (error) {
-      expect(error).toBeInstanceOf(AgentMailControlAPIError)
-      expect(error).toMatchObject({
-        method: 'agentMail.status.get',
-        status: 502
-      })
-      expect(error).toHaveProperty('message', 'Agent Mail control API request failed with HTTP 502')
-      expect(JSON.stringify(error)).not.toContain('control_secret_123')
-      expect(JSON.stringify(error)).not.toContain('archive_internal_456')
-    }
-  })
-
   it('rejects malformed successful control results without returning weakened credential types', async () => {
     expect.hasAssertions()
     const fetchMock = vi.fn().mockResolvedValue(

@@ -23,7 +23,6 @@ const mailRpcTestState = vi.hoisted(() => {
     messageSourceGet: vi.fn(),
     messagesPost: vi.fn(),
     messagesRoute,
-    statusGet: vi.fn(),
     workspaceGet: vi.fn()
   }
 })
@@ -32,9 +31,6 @@ vi.mock('./rpc-api-client', () => ({
   rpc: {
     mail: {
       accounts: mailRpcTestState.accountsRoute,
-      status: {
-        get: mailRpcTestState.statusGet
-      },
       workspace: {
         get: mailRpcTestState.workspaceGet
       }
@@ -59,7 +55,6 @@ describe('mail RPC adapter', () => {
     mailRpcTestState.messageSourceGet.mockReset()
     mailRpcTestState.messagesPost.mockReset()
     mailRpcTestState.messagesRoute.mockReset()
-    mailRpcTestState.statusGet.mockReset()
     mailRpcTestState.workspaceGet.mockReset()
 
     mailRpcTestState.accountsRoute.mockReturnValue({
@@ -186,23 +181,6 @@ describe('mail RPC adapter', () => {
       subject: 'Draft',
       to: 'recipient@example.net'
     })
-  })
-
-  it('loads public mail status through the typed status RPC', async () => {
-    expect.hasAssertions()
-    mailRpcTestState.statusGet.mockResolvedValue({
-      data: { issues: [], ok: true, status: 'ready' },
-      error: null,
-      status: 200
-    })
-    const { fetchMailStatus } = await import('./mail-rpc')
-
-    await expect(fetchMailStatus()).resolves.toStrictEqual({
-      issues: [],
-      ok: true,
-      status: 'ready'
-    })
-    expect(mailRpcTestState.statusGet).toHaveBeenCalledWith()
   })
 
   it('routes message updates and moves through the selected mailbox message path', async () => {

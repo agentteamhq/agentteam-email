@@ -9,17 +9,14 @@ import { isValidAgentMailCapabilityRequestBody } from '../auth/agent-auth-config
 import { hasBearerCredential, hasBearerJwt, parseBearerAuthorization } from '../auth/authorization-header'
 import { handleCloudflareControlSendRawRequest } from '../cloudflare/internal-send'
 import { rewritePublicOAuthMetadataResponse } from '../auth/oauth-metadata'
-import { PUBLIC_VARS } from '../vars.public'
 
 import { PRIVATE_VARS } from '../vars.private'
 import admin from './admin'
 import adminSetup from './admin-setup'
 import agentAccess from './agent-access'
 import cloudflare from './cloudflare'
-import debugRoute from './debug'
 import e2eTestSupport from './e2e-test-support'
 import mail from './mail'
-import test from './test'
 import whoami from './whoami'
 
 const apiLog = debug('api:backend')
@@ -46,10 +43,6 @@ const AGENT_AUTH_BEARER_CREDENTIAL_PATHS = new Set([
 const internalRpcApp = new Elysia({ name: 'rpc-internal', prefix: '/internal' })
   .get('/agent-mail/runtime/snapshot', ({ request }) => handleAgentMailRuntimeSnapshotRequest(request))
   .post('/agent-mail/cloudflare/send-raw', ({ request }) => handleCloudflareControlSendRawRequest(request))
-
-if (PUBLIC_VARS.DEV) {
-  internalRpcApp.use(debugRoute).use(test)
-}
 
 if (PRIVATE_VARS.E2E_TEST_SUPPORT_ENABLED) {
   internalRpcApp.use(e2eTestSupport)

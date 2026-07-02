@@ -16,6 +16,35 @@ This directory owns same-origin app RPC under `/rpc/*`.
   CRUD/read/reporting routes may use app RPC routes with strict authorization
   and public return types.
 
+## Authorization And Data Boundary
+
+- Every `/rpc/*` route must declare its accepted principal class by using the
+  owning Better Auth session helper, bearer agent/OAuth/API-key helper, or
+  explicit internal service-token helper before protected service logic runs.
+- Protected RPC routes must authenticate the caller, derive the authoritative
+  user, organization, and principal context on the server, and authorize the
+  exact action through the owning permission contract.
+- Caller-supplied organization ids, public ids, domains, account ids, labels,
+  route params, and query params are filters only. They must not establish
+  authority.
+- Non-internal, non-global-admin RPC routes must not return backend operational
+  diagnostics, dependency or module status, queue state, runtime snapshots,
+  setup state, deployment names, credential lifecycle metadata, raw provider
+  ids, raw provider errors, or unscoped service status.
+- RPC read models must query or filter by the authenticated `organizationId`,
+  `userId`, and/or principal id before mapping response DTOs.
+- Cross-organization and global operational data must live only behind
+  global-admin or internal service-token routes.
+- `/rpc/internal/*`, debug, test, e2e, and setup routes must require explicit
+  internal, test, or setup credentials before returning data or mutating state.
+  Environment flags are not authorization.
+- Shared admission, setup, or service credentials must not be accepted in JSON
+  bodies. Use `Authorization: Bearer` or a named internal header and compare
+  credentials in constant time.
+- RPC tests for protected routes must prove unauthenticated rejection,
+  wrong-organization rejection, insufficient-authority rejection, and no
+  operational or cross-organization data disclosure.
+
 ## Sensitive Return Types
 
 - RPC routes that return DB-owned records with secret, credential, internal-only,
@@ -24,6 +53,9 @@ This directory owns same-origin app RPC under `/rpc/*`.
 - RPC routes must not return raw encrypted values, decrypted secret values,
   secret-derived hashes, credential tokens, runtime JWTs, or internal service
   credentials to the frontend.
+- RPC routes must not include backend dependency names, internal config paths,
+  archive prefixes, worker script names, queue counts, raw provider diagnostic
+  payloads, or unscoped object snapshots in public response schemas.
 - Frontend fixture and Storybook types are not live RPC contracts. If the UI
   needs a new live field, add it to the DB-derived public/read type or compose
   it from exported public/read types instead of redeclaring the table shape in

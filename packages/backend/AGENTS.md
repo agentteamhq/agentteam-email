@@ -25,3 +25,25 @@ These rules apply to `packages/backend`.
   server-to-server clients such as typed calls to Go services.
 - They must not be used for first-party frontend `/rpc/*` calls; frontend RPC
   uses the Eden client typed from `BackendRpcAppType`.
+
+## Backend Security Contracts
+
+- Backend service functions used by protected RPC routes must accept an
+  authenticated context or derive one through the owning auth helper before
+  reading protected records, external service state, or operational status.
+- Organization-scoped service functions must include `organizationId` in
+  storage queries and external-status projections before returning DTOs.
+- User-scoped or principal-scoped service functions must include the
+  authenticated `userId`, principal id, or grant owner in storage queries before
+  returning DTOs.
+- Global operational diagnostics must live only behind global-admin or internal
+  service-token boundaries.
+- Backend DTOs returned outside global-admin or internal service-token
+  boundaries must contain user-actionable product state only. They must not
+  expose backend topology, dependency state, queue state, unscoped runtime
+  snapshots, deployment identifiers, or credential lifecycle metadata.
+- Security-boundary tests must prove unauthenticated rejection,
+  wrong-organization rejection, insufficient-authority rejection, and
+  non-disclosure of operational diagnostics for every backend service used by
+  RPC routes that return status, setup, admin, provider, runtime, or diagnostic
+  data.

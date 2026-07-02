@@ -43,7 +43,6 @@ import {
   deleteMailFolder,
   deleteMailMessage,
   fetchMailOriginalSource,
-  fetchMailStatus,
   fetchMailWorkspace,
   moveMailMessage,
   renameMailFolder,
@@ -68,7 +67,6 @@ import type {
   AgentAccessView,
   AgentMailComposeInput,
   AgentMailMessageActionInput,
-  AgentMailPublicStatus,
   AgentMailWebAccount,
   AgentMailWebFolder,
   AgentMailWebMessageDetail,
@@ -392,8 +390,6 @@ function useDomainSettingsController({
   const isInjectedState = state !== undefined
   const readOnly = state?.readOnly ?? false
   const [runtimeStatus, setRuntimeStatus] = React.useState<CloudflareStatusResult | null>(null)
-  const [runtimeMailStatus, setRuntimeMailStatus] = React.useState<AgentMailPublicStatus | null>(null)
-  const [runtimeMailStatusMessage, setRuntimeMailStatusMessage] = React.useState<string | null>(null)
   const [runtimeAccounts, setRuntimeAccounts] = React.useState<CloudflareAccountSummary[]>([])
   const [runtimeZones, setRuntimeZones] = React.useState<CloudflareZoneSummary[]>([])
   const [runtimeSelectedGrantPublicId, setRuntimeSelectedGrantPublicId] = React.useState<
@@ -464,17 +460,6 @@ function useDomainSettingsController({
     return nextStatus
   }, [isInjectedState])
 
-  const refreshMailStatus = React.useCallback(async () => {
-    if (isInjectedState) {
-      return null
-    }
-
-    const nextStatus = await fetchMailStatus()
-    setRuntimeMailStatus(nextStatus)
-    setRuntimeMailStatusMessage(null)
-    return nextStatus
-  }, [isInjectedState])
-
   const handleUnexpectedCloudflareActionError = React.useCallback((error: unknown) => {
     setRuntimeMessage(errorMessage(error, 'Cloudflare action failed.'))
     setRuntimeBusy(false)
@@ -487,21 +472,12 @@ function useDomainSettingsController({
 
     Promise.resolve()
       .then(async () => {
-        const [cloudflareStatus, mailStatus] = await Promise.allSettled([
-          refreshStatus(),
-          refreshMailStatus()
-        ])
-        if (cloudflareStatus.status === 'rejected') {
-          setRuntimeMessage(errorMessage(cloudflareStatus.reason, 'Failed to load Cloudflare status.'))
-        }
-        if (mailStatus.status === 'rejected') {
-          setRuntimeMailStatusMessage(errorMessage(mailStatus.reason, 'Failed to load mail runtime status.'))
-        }
+        await refreshStatus()
       })
       .catch((error: unknown) => {
         setRuntimeMessage(errorMessage(error, 'Failed to load Cloudflare status.'))
       })
-  }, [isInjectedState, refreshMailStatus, refreshStatus])
+  }, [isInjectedState, refreshStatus])
 
   React.useEffect(() => {
     if (
@@ -567,12 +543,9 @@ function useDomainSettingsController({
         href: cloudflareOAuthCompletionHref,
         replace: true
       })
-      const [cloudflareStatus, mailStatus] = await Promise.allSettled([refreshStatus(), refreshMailStatus()])
-      if (cloudflareStatus.status === 'fulfilled' && cloudflareStatus.value) {
-        await loadCloudflareDomainsForStatus(cloudflareStatus.value)
-      }
-      if (mailStatus.status === 'rejected') {
-        setRuntimeMailStatusMessage(errorMessage(mailStatus.reason, 'Failed to load mail runtime status.'))
+      const cloudflareStatus = await refreshStatus()
+      if (cloudflareStatus) {
+        await loadCloudflareDomainsForStatus(cloudflareStatus)
       }
       setRuntimeMode('addDomain')
     }
@@ -592,7 +565,6 @@ function useDomainSettingsController({
     isInjectedState,
     loadCloudflareDomainsForStatus,
     refreshStatus,
-    refreshMailStatus,
     router
   ])
 
@@ -701,13 +673,12 @@ function useDomainSettingsController({
       )
       setRuntimeMode('domain')
       setRuntimeMessage('Cloudflare domain connected')
-      await refreshMailStatus().catch(() => null)
     } catch (error) {
       setRuntimeMessage(errorMessage(error, 'Failed to connect Cloudflare domain.'))
     } finally {
       setRuntimeBusy(false)
     }
-  }, [isInjectedState, readOnly, refreshMailStatus, runtimeDraftDomain, selectedAccount, selectedZone])
+  }, [isInjectedState, readOnly, runtimeDraftDomain, selectedAccount, selectedZone])
 
   const provisionDomain = React.useCallback(
     async (connectionPublicId: NonNullable<DomainSettingsState['selectedDomainPublicId']>) => {
@@ -723,14 +694,13 @@ function useDomainSettingsController({
         setRuntimeSelectedDomainPublicId(selectCloudflareConnectionPublicId(nextStatus, connectionPublicId))
         setRuntimeMode('domain')
         setRuntimeMessage('Cloudflare provisioning applied')
-        await refreshMailStatus().catch(() => null)
       } catch (error) {
         setRuntimeMessage(errorMessage(error, 'Failed to provision Cloudflare connection.'))
       } finally {
         setRuntimeBusy(false)
       }
     },
-    [isInjectedState, readOnly, refreshMailStatus]
+    [isInjectedState, readOnly]
   )
 
   const setupDomain = React.useCallback(async () => {
@@ -774,13 +744,12 @@ function useDomainSettingsController({
         selectCloudflareConnectionPublicId(provisionedStatus, connectionPublicId)
       )
       setRuntimeMessage('Domain setup complete')
-      await refreshMailStatus().catch(() => null)
     } catch (error) {
       setRuntimeMessage(errorMessage(error, 'Failed to set up Cloudflare domain.'))
     } finally {
       setRuntimeBusy(false)
     }
-  }, [isInjectedState, readOnly, refreshMailStatus, runtimeDraftDomain, selectedAccount, selectedZone])
+  }, [isInjectedState, readOnly, runtimeDraftDomain, selectedAccount, selectedZone])
 
   const disconnectCloudflare = React.useCallback(
     async (grantPublicId: CloudflareGrantPublicId) => {
@@ -797,14 +766,13 @@ function useDomainSettingsController({
         setRuntimeSelectedDomainPublicId(nextSelectedDomainPublicId)
         setRuntimeMode(nextSelectedDomainPublicId ? 'domain' : 'addDomain')
         setRuntimeMessage('Cloudflare disconnected')
-        await refreshMailStatus().catch(() => null)
       } catch (error) {
         setRuntimeMessage(errorMessage(error, 'Failed to disconnect Cloudflare.'))
       } finally {
         setRuntimeBusy(false)
       }
     },
-    [isInjectedState, readOnly, refreshMailStatus]
+    [isInjectedState, readOnly]
   )
 
   if (state) {
@@ -821,8 +789,6 @@ function useDomainSettingsController({
       busy: runtimeBusy,
       draftDomain: runtimeDraftDomain,
       message: runtimeMessage,
-      mailStatus: runtimeMailStatus,
-      mailStatusMessage: runtimeMailStatusMessage,
       mode: runtimeMode ?? ((runtimeStatus?.connections.length ?? 0) > 0 ? 'domain' : 'addDomain'),
       onAddDomain: () => {
         if (readOnly) {
@@ -891,11 +857,6 @@ function useDomainSettingsController({
       },
       onStartConnectedAccountOAuth: startSettingsConnectedAccountsOAuth,
       onStartOAuth: startSettingsDomainsOAuth,
-      onRefreshMailStatus: () => {
-        refreshMailStatus().catch((error: unknown) => {
-          setRuntimeMailStatusMessage(errorMessage(error, 'Failed to load mail runtime status.'))
-        })
-      },
       readOnly,
       selectedGrantPublicId: runtimeSelectedGrantPublicId || undefined,
       selectedAccountId: runtimeSelectedAccountId,

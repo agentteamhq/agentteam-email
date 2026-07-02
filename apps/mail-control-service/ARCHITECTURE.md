@@ -75,9 +75,10 @@ database. Mail-control stores this projection only in memory; domains omitted
 from the snapshot are removed from active routing.
 
 Mail-control can also request the web server's internal runtime projection
-snapshot during startup with `AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN`. This is
-a bootstrap aid only. Web-initiated runtime sync remains the steady-state
-contract.
+snapshot during startup with `AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN`. That
+startup bootstrap retries every 10 seconds for up to two minutes to tolerate
+service startup ordering, but this is a bootstrap aid only. Web-initiated
+runtime sync remains the steady-state contract.
 
 `agentMail.ingest.enqueue` is the internal queue handoff for web-owned Worker
 ingest. The web server verifies the public Worker request, resolves the active
