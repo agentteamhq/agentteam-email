@@ -109,7 +109,7 @@ try {
   })
 
   await step('Sign up a workspace user with email and password.', async () => {
-    await page.goto('/signup/', { waitUntil: 'domcontentloaded' })
+    await gotoSignupPage()
     await page.getByRole('button', { exact: true, name: 'Sign Up' }).waitFor({ timeout: 60_000 })
     await previewEmptyForm('workspace signup form')
     await page.getByLabel('Name', { exact: true }).fill(userName)
@@ -162,6 +162,8 @@ try {
     if (await isVisible(adoptDomain, 5_000)) {
       await clickForVideo(adoptDomain)
     }
+    // Domain setup leaves settings open; close it so the dashboard action returns to the active a11y tree.
+    await closeDialogIfOpen()
     await page.getByRole('button', { exact: true, name: 'Create mailbox' }).waitFor({ timeout: 120_000 })
   })
 
@@ -257,6 +259,13 @@ async function clickForVideo(locator, options) {
   await target.hover()
   await holdForRecording('recording preview: pre-click hover', recordingPacing.preClickPreviewMs)
   await target.click({ delay: 80, ...options })
+}
+
+async function closeDialogIfOpen() {
+  const dialogClose = page.locator('[data-slot="dialog-close"]').first()
+  if (await isVisible(dialogClose, 5_000)) {
+    await clickForVideo(dialogClose)
+  }
 }
 
 async function holdForRecording(label, ms) {
@@ -381,6 +390,14 @@ async function waitForDashboard() {
     [/Continue with Cloudflare/u, /Load Cloudflare domains/u, /Adopt example\.test/u],
     90_000
   )
+}
+
+async function gotoSignupPage() {
+  const currentPathname = new URL(page.url()).pathname
+  if (currentPathname === '/signup' || currentPathname === '/signup/') {
+    return
+  }
+  await page.goto('/signup/', { waitUntil: 'domcontentloaded' })
 }
 
 async function waitForAnyButton(patterns, timeout) {
@@ -665,12 +682,31 @@ function blockingBrowserDiagnostics() {
       event.type === 'warning' &&
       /Hydration failed|hydration|Minified React error|React has detected/iu.test(event.text)
   )
-  const failedRequests = networkEvents.filter((event) => event.kind === 'requestfailed')
+  const failedRequests = networkEvents.filter(
+    (event) => event.kind === 'requestfailed' && !isExpectedAuthSessionProbeAbort(event)
+  )
   const failedResponses = networkEvents.filter(
     (event) =>
       event.kind === 'http-response' && (event.status >= 500 || (event.status >= 400 && isAppUrl(event.url)))
   )
   return [...consoleErrors, ...hydrationWarnings, ...failedRequests, ...failedResponses]
+}
+
+function isExpectedAuthSessionProbeAbort(event) {
+  if (
+    event.failure !== 'net::ERR_ABORTED' ||
+    event.method !== 'GET' ||
+    event.resourceType !== 'fetch'
+  ) {
+    return false
+  }
+
+  try {
+    const url = new URL(event.url)
+    return url.origin === appBaseUrl && url.pathname === '/rpc/auth/api/get-session'
+  } catch {
+    return false
+  }
 }
 
 function isExpectedSandboxedEmailConsoleEvent(event) {

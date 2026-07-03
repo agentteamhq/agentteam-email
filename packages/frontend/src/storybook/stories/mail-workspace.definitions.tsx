@@ -178,8 +178,9 @@ export const MailboxUnreadOnly: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
 
-    await expect(await canvas.findByRole('switch', { name: /show unread messages only/i })).toBeChecked()
     await expect(await canvas.findByRole('heading', { name: /appointment alert/i })).toBeInTheDocument()
+    await expect(await canvas.findByText(/deployment checklist and routing review/i)).toBeInTheDocument()
+    await expect(canvas.queryByText(/welcome aboard/i)).not.toBeInTheDocument()
   }
 }
 

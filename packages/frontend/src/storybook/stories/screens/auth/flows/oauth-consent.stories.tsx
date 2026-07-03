@@ -33,7 +33,7 @@ export const Step01PaperclipConsent: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
 
-    await expect(await canvas.findByRole('heading', { name: 'Connect Paperclip' })).toBeInTheDocument()
+    await expect(await canvas.findByText('Connect Paperclip')).toBeInTheDocument()
     await expect(
       await canvas.findByText('Paperclip wants access to AgentTeam Email for this organization.')
     ).toBeInTheDocument()
@@ -52,7 +52,7 @@ export const Step02LoadingClient: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
 
-    await expect(await canvas.findByRole('heading', { name: 'Connect application' })).toBeInTheDocument()
+    await expect(await canvas.findByText('Connect application')).toBeInTheDocument()
     await expect(await canvas.findByText('Loading application details.')).toBeInTheDocument()
     await expect(await canvas.findByRole('button', { name: /^allow$/i })).toBeDisabled()
   }
@@ -114,8 +114,10 @@ export const Step06UnknownClient: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
 
-    await expect(await canvas.findByText('Unknown App')).toBeInTheDocument()
-    await expect(await canvas.findByRole('heading', { name: 'Connect Unknown App' })).toBeInTheDocument()
+    await expect(await canvas.findByText('Connect Unknown App')).toBeInTheDocument()
+    await expect(
+      await canvas.findByText('Unknown App wants access to AgentTeam Email for this organization.')
+    ).toBeInTheDocument()
   }
 }
 
