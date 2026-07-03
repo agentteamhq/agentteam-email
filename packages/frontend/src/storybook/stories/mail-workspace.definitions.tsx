@@ -341,13 +341,14 @@ export const ConversationThread: Story = {
 
     await expect(await canvas.findByRole('heading', { name: /agent mail smoke/i })).toBeInTheDocument()
     await expect(
-      await canvas.findByRole('button', { name: /collapse agentteam email message/i })
+      await canvas.findByRole('button', { name: /expand agentteam email message/i })
     ).toBeInTheDocument()
     await expect(await canvas.findByRole('button', { name: /collapse testing message/i })).toBeInTheDocument()
-    await expect(await canvas.findByRole('button', { name: /collapse draft message/i })).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /collapse support agent message/i })).toBeInTheDocument()
+    await expect(await canvas.findByText('Draft')).toBeInTheDocument()
     const draftFrameSource = await findEmailFrameSource(
       canvasElement,
-      /draft message body/i,
+      /support agent message body/i,
       'draft reply body'
     )
 
@@ -370,7 +371,7 @@ export const ConversationThreadCollapsedMiddle: Story = {
       await canvas.findByRole('button', { name: /collapse agentteam email message/i })
     ).toBeInTheDocument()
     await expect(await canvas.findByRole('button', { name: /expand testing message/i })).toBeInTheDocument()
-    await expect(await canvas.findByRole('button', { name: /collapse draft message/i })).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /collapse support agent message/i })).toBeInTheDocument()
   }
 }
 

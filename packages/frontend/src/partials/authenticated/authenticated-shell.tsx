@@ -2166,6 +2166,7 @@ function EmailPreviewPane({
     null
   )
   const hasAttachments = Boolean(email.attachments?.length)
+  const selectedThreadMessage = email.thread?.find((message) => isSelectedThreadMessage(email, message))
 
   return (
     <main className='bg-background flex min-h-0 flex-1 flex-col overflow-hidden'>
@@ -2178,15 +2179,29 @@ function EmailPreviewPane({
         onEmailAction={onEmailAction}
         onExternalLinkSelect={setSelectedExternalLink}
       />
-      <EmailPreviewHeader email={email} />
+      <EmailPreviewHeader
+        email={email}
+        onEmailAction={onEmailAction}
+        selectedThreadMessage={selectedThreadMessage}
+      />
       <div className='bg-background min-h-0 flex-1 overflow-auto'>
         {email.thread?.length ? (
-          <EmailThreadView
-            email={email}
-            onAttachmentPreview={onAttachmentPreview}
-            onEmailAction={onEmailAction}
-            onExternalLinkSelect={setSelectedExternalLink}
-          />
+          <>
+            {selectedThreadMessage?.state === 'collapsed' ? null : (
+              <EmailSelectedThreadMessageBody
+                email={email}
+                message={selectedThreadMessage}
+                onAttachmentPreview={onAttachmentPreview}
+                onExternalLinkSelect={setSelectedExternalLink}
+              />
+            )}
+            <EmailThreadView
+              email={email}
+              onAttachmentPreview={onAttachmentPreview}
+              onEmailAction={onEmailAction}
+              onExternalLinkSelect={setSelectedExternalLink}
+            />
+          </>
         ) : (
           <>
             <EmailMessageBodyFrame
@@ -2224,20 +2239,74 @@ function EmailPreviewPane({
   )
 }
 
-function EmailPreviewHeader({ email }: { email: AuthenticatedEmailPreview }) {
+function EmailPreviewHeader({
+  email,
+  onEmailAction,
+  selectedThreadMessage
+}: {
+  email: AuthenticatedEmailPreview
+  onEmailAction?: (action: AuthenticatedEmailAction, email: AuthenticatedEmailPreview) => void
+  selectedThreadMessage?: AuthenticatedEmailThreadMessage
+}) {
+  const selectedThreadActionTarget = selectedThreadMessage
+    ? getThreadMessageActionTarget(email, selectedThreadMessage)
+    : undefined
+  const selectedThreadMessageIsCollapsed = selectedThreadMessage?.state === 'collapsed'
+  const selectedThreadMessageAction: AuthenticatedEmailAction = selectedThreadMessageIsCollapsed
+    ? 'expand-thread-message'
+    : 'collapse-thread-message'
+
   return (
     <header className='border-b px-4 py-3'>
       <div className='flex min-w-0 flex-wrap items-center gap-2'>
-        <h1 className='text-foreground min-w-0 truncate text-sm leading-5 font-semibold'>{email.subject}</h1>
+        <h1 className='text-foreground min-w-0 truncate text-sm leading-5 font-semibold'>
+          {email.subject}
+        </h1>
         <EmailStateBadges email={email} />
       </div>
-      <EmailMessageMeta
-        className='mt-2'
-        receivedAt={email.receivedAt}
-        recipientEmail={email.recipientEmail}
-        senderEmail={email.senderEmail}
-        senderName={email.senderName}
-      />
+      <div className='mt-2 flex min-w-0 items-center justify-between gap-3'>
+        <EmailMessageMeta
+          className='min-w-0 flex-1'
+          receivedAt={email.receivedAt}
+          recipientEmail={email.recipientEmail}
+          senderEmail={email.senderEmail}
+          senderName={email.senderName}
+          showDate={false}
+        />
+        <div className='flex shrink-0 items-center gap-1.5'>
+          <LocalDateTime
+            className='text-muted-foreground shrink-0 text-xs whitespace-nowrap'
+            value={email.receivedAt}
+          />
+          {selectedThreadActionTarget ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  aria-label={`${
+                    selectedThreadMessageIsCollapsed ? 'Expand' : 'Collapse'
+                  } ${selectedThreadMessage.senderName} message`}
+                  className='size-8 shrink-0'
+                  onClick={() => {
+                    onEmailAction?.(selectedThreadMessageAction, selectedThreadActionTarget)
+                  }}
+                  size='icon'
+                  type='button'
+                  variant='ghost'
+                >
+                  {selectedThreadMessageIsCollapsed ? (
+                    <CaretDownIcon data-icon='icon-only' />
+                  ) : (
+                    <CaretUpIcon data-icon='icon-only' />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {selectedThreadMessageIsCollapsed ? 'Expand message' : 'Collapse message'}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
+        </div>
+      </div>
     </header>
   )
 }
@@ -2258,16 +2327,20 @@ function EmailStateBadges({ email }: { email: AuthenticatedEmailPreview }) {
 
 function EmailMessageMeta({
   className,
+  isDraft = false,
   receivedAt,
   recipientEmail,
   senderEmail,
-  senderName
+  senderName,
+  showDate = true
 }: {
   className?: string
+  isDraft?: boolean
   receivedAt: string
   recipientEmail: string
   senderEmail: string
   senderName: string
+  showDate?: boolean
 }) {
   return (
     <div className={cn('flex min-w-0 items-center justify-between gap-3', className)}>
@@ -2280,17 +2353,82 @@ function EmailMessageMeta({
           {getSenderInitial(senderName)}
         </div>
         <div className='min-w-0'>
-          <div className='text-foreground truncate text-xs font-medium'>
-            {senderName} <span className='text-muted-foreground font-normal'>{senderEmail}</span>
+          <div className='flex min-w-0 items-center gap-1.5'>
+            <span className='text-foreground min-w-0 truncate text-xs font-medium'>
+              {senderName} <span className='text-muted-foreground font-normal'>{senderEmail}</span>
+            </span>
+            {isDraft ? (
+              <Badge
+                className='shrink-0'
+                variant='secondary'
+              >
+                Draft
+              </Badge>
+            ) : null}
           </div>
           <div className='text-muted-foreground text-xs'>To: {recipientEmail}</div>
         </div>
       </div>
-      <LocalDateTime
-        className='text-muted-foreground shrink-0 text-xs whitespace-nowrap'
-        value={receivedAt}
-      />
+      {showDate ? (
+        <LocalDateTime
+          className='text-muted-foreground shrink-0 text-xs whitespace-nowrap'
+          value={receivedAt}
+        />
+      ) : null}
     </div>
+  )
+}
+
+function isSelectedThreadMessage(
+  email: AuthenticatedEmailPreview,
+  message: AuthenticatedEmailThreadMessage
+) {
+  return message.id === email.id && message.folderId === email.folderId
+}
+
+function EmailSelectedThreadMessageBody({
+  email,
+  message,
+  onAttachmentPreview,
+  onExternalLinkSelect
+}: {
+  email: AuthenticatedEmailPreview
+  message: AuthenticatedEmailThreadMessage | undefined
+  onAttachmentPreview?: (attachment: AuthenticatedEmailAttachment, email: AuthenticatedEmailPreview) => void
+  onExternalLinkSelect?: (link: AuthenticatedExternalLink) => void
+}) {
+  if (!message) {
+    return null
+  }
+
+  const messageActionTarget = getThreadMessageActionTarget(email, message)
+
+  return (
+    <article
+      className='border-b'
+      data-email-message-state='expanded'
+    >
+      <EmailMessageBodyFrame
+        allowRemoteImages={message.remoteImagesAllowed}
+        externalLinks={message.externalLinks ?? []}
+        fitContent
+        html={message.html}
+        loading='eager'
+        onExternalLinkSelect={onExternalLinkSelect}
+        title={`${message.senderName} message body`}
+      />
+      <EmailAttachmentList
+        attachments={message.attachments ?? []}
+        onAttachmentPreview={
+          onAttachmentPreview
+            ? (attachment) => {
+                onAttachmentPreview(attachment, messageActionTarget)
+              }
+            : undefined
+        }
+      />
+      <EmailCollapsedQuoteList quotes={message.collapsedQuotes ?? []} />
+    </article>
   )
 }
 
@@ -2698,9 +2836,12 @@ function EmailThreadView({
   onEmailAction?: (action: AuthenticatedEmailAction, email: AuthenticatedEmailPreview) => void
   onExternalLinkSelect?: (link: AuthenticatedExternalLink) => void
 }) {
+  const visibleThreadMessages =
+    email.thread?.filter((message) => !isSelectedThreadMessage(email, message)) ?? []
+
   return (
     <div className='bg-background flex min-h-full flex-col'>
-      {email.thread?.map((message, index) => (
+      {visibleThreadMessages.map((message, index) => (
         <EmailThreadMessageItem
           email={email}
           index={index}
@@ -2781,28 +2922,36 @@ function EmailThreadMessageItem({
       <div className='flex items-center gap-2 px-4 py-3'>
         <EmailMessageMeta
           className='flex-1'
+          isDraft={message.isDraft}
           receivedAt={message.receivedAt}
           recipientEmail={message.recipientEmail}
           senderEmail={message.senderEmail}
           senderName={message.senderName}
+          showDate={false}
         />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              aria-label={`Collapse ${message.senderName} message`}
-              className='size-8 shrink-0'
-              onClick={() => {
-                triggerMessageAction('collapse-thread-message')
-              }}
-              size='icon'
-              type='button'
-              variant='ghost'
-            >
-              <CaretUpIcon data-icon='icon-only' />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Collapse message</TooltipContent>
-        </Tooltip>
+        <div className='flex shrink-0 items-center gap-1.5'>
+          <LocalDateTime
+            className='text-muted-foreground shrink-0 text-xs whitespace-nowrap'
+            value={message.receivedAt}
+          />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                aria-label={`Collapse ${message.senderName} message`}
+                className='size-8 shrink-0'
+                onClick={() => {
+                  triggerMessageAction('collapse-thread-message')
+                }}
+                size='icon'
+                type='button'
+                variant='ghost'
+              >
+                <CaretUpIcon data-icon='icon-only' />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Collapse message</TooltipContent>
+          </Tooltip>
+        </div>
       </div>
       <EmailMessageBodyFrame
         allowRemoteImages={message.remoteImagesAllowed}
@@ -2879,29 +3028,41 @@ function EmailCollapsedThreadMessage({
             {getSenderInitial(message.senderName)}
           </span>
           <span className='flex min-w-0 flex-1 flex-col gap-1'>
-            <span className='flex min-w-0 items-center justify-between gap-3'>
-              <span className='text-foreground min-w-0 truncate text-xs font-medium'>
-                {message.senderName}{' '}
-                <span className='text-muted-foreground font-normal'>{message.senderEmail}</span>
+            <span className='flex min-w-0 items-center gap-1.5'>
+              <span className='flex min-w-0 items-center gap-1.5'>
+                <span className='text-foreground min-w-0 truncate text-xs font-medium'>
+                  {message.senderName}{' '}
+                  <span className='text-muted-foreground font-normal'>{message.senderEmail}</span>
+                </span>
+                {message.isDraft ? (
+                  <Badge
+                    className='shrink-0'
+                    variant='secondary'
+                  >
+                    Draft
+                  </Badge>
+                ) : null}
               </span>
-              <LocalDateTime
-                className='text-muted-foreground shrink-0 text-xs whitespace-nowrap'
-                value={message.receivedAt}
-              />
             </span>
             <span className='text-muted-foreground truncate text-xs'>To: {message.recipientEmail}</span>
             {message.teaser ? (
               <span className='text-muted-foreground mt-1 line-clamp-1 text-xs'>{message.teaser}</span>
             ) : null}
           </span>
-          <span
-            className='text-muted-foreground flex size-8 shrink-0 items-center justify-center'
-            aria-hidden='true'
-          >
-            <CaretDownIcon
-              className='size-4'
-              data-icon='icon-only'
+          <span className='flex shrink-0 items-center gap-1.5'>
+            <LocalDateTime
+              className='text-muted-foreground shrink-0 text-xs whitespace-nowrap'
+              value={message.receivedAt}
             />
+            <span
+              className='text-muted-foreground flex size-8 shrink-0 items-center justify-center'
+              aria-hidden='true'
+            >
+              <CaretDownIcon
+                className='size-4'
+                data-icon='icon-only'
+              />
+            </span>
           </span>
         </span>
       </Button>

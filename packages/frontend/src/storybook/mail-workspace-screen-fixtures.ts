@@ -240,7 +240,7 @@ const conversationThreadAttachmentMessage = createThreadMessage({
 })
 
 const conversationDraftMessage = createThreadMessage({
-  from: 'Draft <support@agentteam.test>',
+  from: 'Support Agent <support@agentteam.test>',
   html: '<p>Drafting reply from the selected WildDuck Drafts folder.</p>',
   id: 'thread-draft-reply',
   isDraft: true,

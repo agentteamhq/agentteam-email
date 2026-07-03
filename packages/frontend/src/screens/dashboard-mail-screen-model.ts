@@ -118,11 +118,10 @@ export function toEmailPreview(
     senderEmail: mailboxAddressOrRaw(message.from),
     senderName: mailboxDisplayName(message.from),
     subject: message.subject,
-    thread: message.thread?.map((threadMessage: AgentMailWebThreadMessage, index) =>
+    thread: message.thread?.map((threadMessage: AgentMailWebThreadMessage) =>
       toEmailThreadMessage(
         threadMessage,
-        index === 0 ||
-          threadMessage.isDraft ||
+        threadMessage.isDraft ||
           (threadMessage.id === message.id && threadMessage.mailboxId === message.mailboxId)
           ? 'expanded'
           : 'collapsed'
