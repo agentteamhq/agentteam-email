@@ -655,7 +655,11 @@ async function writeBrowserDiagnosticsSummary() {
 }
 
 function blockingBrowserDiagnostics() {
-  const consoleErrors = consoleEvents.filter((event) => event.type === 'pageerror' || event.type === 'error')
+  const consoleErrors = consoleEvents.filter(
+    (event) =>
+      (event.type === 'pageerror' || event.type === 'error') &&
+      !isExpectedSandboxedEmailConsoleEvent(event)
+  )
   const hydrationWarnings = consoleEvents.filter(
     (event) =>
       event.type === 'warning' &&
@@ -667,6 +671,25 @@ function blockingBrowserDiagnostics() {
       event.kind === 'http-response' && (event.status >= 500 || (event.status >= 400 && isAppUrl(event.url)))
   )
   return [...consoleErrors, ...hydrationWarnings, ...failedRequests, ...failedResponses]
+}
+
+function isExpectedSandboxedEmailConsoleEvent(event) {
+  if (event.type !== 'error') {
+    return false
+  }
+  const text = event.text || ''
+  const locationUrl = event.location?.url || ''
+  const isSandboxedEmailFrame =
+    locationUrl === 'about:srcdoc' || text.includes("'about:srcdoc'") || text.includes('"about:srcdoc"')
+
+  return (
+    isSandboxedEmailFrame &&
+    (text ===
+      "The Content Security Policy directive 'frame-ancestors' is ignored when delivered via a <meta> element." ||
+      text === "Unrecognized Content-Security-Policy directive 'navigate-to'." ||
+      text ===
+        "Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed and the 'allow-scripts' permission is not set.")
+  )
 }
 
 function describeBrowserDiagnostic(event) {
