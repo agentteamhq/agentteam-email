@@ -1,5 +1,5 @@
 import { mailboxAddressOrRaw, mailboxDisplayName } from '../lib/mail-addresses'
-import { actionsForMessage, threadActionsForMessage, toSidebarView } from './dashboard-mail-sidebar-view'
+import { actionsForMessage, toSidebarView } from './dashboard-mail-sidebar-view'
 import { toDashboardView } from './dashboard-mail-dashboard-view'
 import type { DashboardSearch } from '../lib/dashboard-search'
 import type {
@@ -118,11 +118,12 @@ export function toEmailPreview(
     senderEmail: mailboxAddressOrRaw(message.from),
     senderName: mailboxDisplayName(message.from),
     subject: message.subject,
-    thread: message.thread?.map((threadMessage: AgentMailWebThreadMessage) =>
+    thread: message.thread?.map((threadMessage: AgentMailWebThreadMessage, index) =>
       toEmailThreadMessage(
         threadMessage,
-        folders,
-        threadMessage.id === message.id && threadMessage.mailboxId === message.mailboxId
+        index === 0 ||
+          threadMessage.isDraft ||
+          (threadMessage.id === message.id && threadMessage.mailboxId === message.mailboxId)
           ? 'expanded'
           : 'collapsed'
       )
@@ -133,11 +134,9 @@ export function toEmailPreview(
 
 function toEmailThreadMessage(
   message: AgentMailWebThreadMessage,
-  folders: ReadonlyArray<AgentMailWebFolder>,
   state: 'collapsed' | 'expanded'
 ): NonNullable<AuthenticatedEmailPreview['thread']>[number] {
   return {
-    actions: threadActionsForMessage(message, folders),
     attachments: message.attachments.map(toEmailAttachment),
     externalLinks: message.externalLinks,
     folderId: message.mailboxId,

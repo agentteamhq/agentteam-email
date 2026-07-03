@@ -148,6 +148,97 @@ const conversationLatestMessage = createThreadMessage({
   to: ['Support Agent <support@agentteam.test>']
 })
 
+const conversationThreadAttachmentMessage = createThreadMessage({
+  ...messageInputFromDetail(conversationLatestMessage),
+  attachments: [
+    attachment({
+      filename: 'customer-data-export-2026-06.csv',
+      id: 'thread-attachment-customer-data',
+      messageId: 'conversation-thread',
+      mimetype: 'text/csv',
+      size: 128 * 1024
+    }),
+    attachment({
+      filename: 'routing-diagnostics-full-trace.json',
+      id: 'thread-attachment-routing-diagnostics',
+      messageId: 'conversation-thread',
+      mimetype: 'application/json',
+      size: 76 * 1024
+    }),
+    attachment({
+      filename: 'provider-delivery-preview.png',
+      id: 'thread-attachment-provider-preview',
+      messageId: 'conversation-thread',
+      mimetype: 'image/png',
+      size: 340 * 1024
+    }),
+    attachment({
+      filename: 'mx-record-screenshot-before-cutover.png',
+      id: 'thread-attachment-mx-before',
+      messageId: 'conversation-thread',
+      mimetype: 'image/png',
+      size: 418 * 1024
+    }),
+    attachment({
+      filename: 'incident-notes-with-very-long-file-name-for-layout-review.md',
+      id: 'thread-attachment-long-notes',
+      messageId: 'conversation-thread',
+      mimetype: 'text/markdown',
+      size: 18 * 1024
+    }),
+    attachment({
+      filename: 'wildduck-raw-source.eml',
+      id: 'thread-attachment-raw-source',
+      messageId: 'conversation-thread',
+      mimetype: 'message/rfc822',
+      size: 52 * 1024
+    }),
+    attachment({
+      filename: 'dmarc-alignment-report.pdf',
+      id: 'thread-attachment-dmarc-report',
+      messageId: 'conversation-thread',
+      mimetype: 'application/pdf',
+      size: 884 * 1024
+    }),
+    attachment({
+      filename: 'cloudflare-email-routing-rules.json',
+      id: 'thread-attachment-routing-rules',
+      messageId: 'conversation-thread',
+      mimetype: 'application/json',
+      size: 44 * 1024
+    }),
+    attachment({
+      filename: 'forwarding-group-members.csv',
+      id: 'thread-attachment-group-members',
+      messageId: 'conversation-thread',
+      mimetype: 'text/csv',
+      size: 12 * 1024
+    }),
+    attachment({
+      filename: 'delivery-latency-chart.svg',
+      id: 'thread-attachment-latency-chart',
+      messageId: 'conversation-thread',
+      mimetype: 'image/svg+xml',
+      size: 64 * 1024
+    }),
+    attachment({
+      filename: 'mailbox-import-results.txt',
+      id: 'thread-attachment-import-results',
+      messageId: 'conversation-thread',
+      mimetype: 'text/plain',
+      size: 21 * 1024
+    }),
+    attachment({
+      filename: 'provider-side-export.zip',
+      id: 'thread-attachment-provider-export',
+      messageId: 'conversation-thread',
+      mimetype: 'application/zip',
+      size: 4 * 1024 * 1024
+    })
+  ],
+  teaser: 'Confirming the mailbox flow with the attached review bundle.'
+})
+
 const conversationDraftMessage = createThreadMessage({
   from: 'Draft <support@agentteam.test>',
   html: '<p>Drafting reply from the selected WildDuck Drafts folder.</p>',
@@ -163,6 +254,16 @@ const conversationDraftMessage = createThreadMessage({
 const conversationMessage = {
   ...conversationLatestMessage,
   thread: [conversationOriginalMessage, conversationLatestMessage, conversationDraftMessage]
+} satisfies MailMessageDetail
+
+const conversationOriginalDetail = {
+  ...conversationOriginalMessage,
+  thread: [conversationOriginalMessage, conversationLatestMessage, conversationDraftMessage]
+} satisfies MailMessageDetail
+
+const conversationThreadAttachmentDetail = {
+  ...conversationThreadAttachmentMessage,
+  thread: [conversationOriginalMessage, conversationThreadAttachmentMessage, conversationDraftMessage]
 } satisfies MailMessageDetail
 
 const sentMessage = createMessageDetail({
@@ -503,6 +604,22 @@ export const mailWorkspaceScreenConversationView = workspace({
   selectedMessage: conversationMessage
 })
 
+export const mailWorkspaceScreenConversationOriginalView = workspace({
+  messages: [
+    summaryFromDetail(conversationOriginalDetail),
+    ...baseMessages.filter((message) => message.id !== 'conversation-thread')
+  ],
+  selectedMessage: conversationOriginalDetail
+})
+
+export const mailWorkspaceScreenThreadAttachmentsView = workspace({
+  messages: [
+    summaryFromDetail(conversationThreadAttachmentDetail),
+    ...baseMessages.filter((message) => message.id !== 'conversation-thread')
+  ],
+  selectedMessage: conversationThreadAttachmentDetail
+})
+
 export const mailWorkspaceScreenDraftView = workspace({
   activeFolderId: draftsFolder.id,
   messages: [summaryFromDetail(draftMessage)],
@@ -663,6 +780,7 @@ function attachment({
   disposition = 'attachment',
   filename,
   id,
+  messageId = 'attachment-message',
   mimetype,
   size,
   url
@@ -671,6 +789,7 @@ function attachment({
   disposition?: string
   filename: string
   id: string
+  messageId?: string
   mimetype?: string
   size?: number
   url?: string
@@ -683,7 +802,7 @@ function attachment({
     mimetype,
     size,
     url:
-      url ?? `/rpc/mail/accounts/agent-support/mailboxes/inbox/messages/attachment-message/attachments/${id}`
+      url ?? `/rpc/mail/accounts/agent-support/mailboxes/inbox/messages/${messageId}/attachments/${id}`
   } satisfies MailAttachment
 }
 
@@ -759,7 +878,7 @@ function summaryFromDetail(message: MailThreadMessage): MailMessageSummary {
   }
 }
 
-function messageInputFromDetail(message: MailMessageDetail): MessageInput {
+function messageInputFromDetail(message: MailMessageDetail | MailThreadMessage): MessageInput {
   return {
     attachmentCount: message.attachmentCount,
     attachments: message.attachments,

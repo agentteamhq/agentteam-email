@@ -2165,6 +2165,7 @@ function EmailPreviewPane({
   const [selectedExternalLink, setSelectedExternalLink] = React.useState<AuthenticatedExternalLink | null>(
     null
   )
+  const hasAttachments = Boolean(email.attachments?.length)
 
   return (
     <main className='bg-background flex min-h-0 flex-1 flex-col overflow-hidden'>
@@ -2178,16 +2179,6 @@ function EmailPreviewPane({
         onExternalLinkSelect={setSelectedExternalLink}
       />
       <EmailPreviewHeader email={email} />
-      <EmailAttachmentList
-        attachments={email.attachments ?? []}
-        onAttachmentPreview={
-          onAttachmentPreview
-            ? (attachment) => {
-                onAttachmentPreview(attachment, email)
-              }
-            : undefined
-        }
-      />
       <div className='bg-background min-h-0 flex-1 overflow-auto'>
         {email.thread?.length ? (
           <EmailThreadView
@@ -2197,15 +2188,28 @@ function EmailPreviewPane({
             onExternalLinkSelect={setSelectedExternalLink}
           />
         ) : (
-          <EmailMessageBodyFrame
-            allowRemoteImages={email.remoteImagesAllowed}
-            className={getEmailBodyFrameClass(email.bodySize ?? 'fill')}
-            externalLinks={email.externalLinks ?? []}
-            html={email.html}
-            loading='lazy'
-            onExternalLinkSelect={setSelectedExternalLink}
-            title={`${email.subject} email body`}
-          />
+          <>
+            <EmailMessageBodyFrame
+              allowRemoteImages={email.remoteImagesAllowed}
+              className={hasAttachments ? undefined : getEmailBodyFrameClass(email.bodySize ?? 'fill')}
+              externalLinks={email.externalLinks ?? []}
+              fitContent={hasAttachments}
+              html={email.html}
+              loading='lazy'
+              onExternalLinkSelect={setSelectedExternalLink}
+              title={`${email.subject} email body`}
+            />
+            <EmailAttachmentList
+              attachments={email.attachments ?? []}
+              onAttachmentPreview={
+                onAttachmentPreview
+                  ? (attachment) => {
+                      onAttachmentPreview(attachment, email)
+                    }
+                  : undefined
+              }
+            />
+          </>
         )}
       </div>
       <ExternalLinkWarningDialog
@@ -2266,8 +2270,8 @@ function EmailMessageMeta({
   senderName: string
 }) {
   return (
-    <div className={cn('flex min-w-0 items-start justify-between gap-3', className)}>
-      <div className='flex min-w-0 items-start gap-2.5'>
+    <div className={cn('flex min-w-0 items-center justify-between gap-3', className)}>
+      <div className='flex min-w-0 items-center gap-2.5'>
         <div
           className='bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center
             rounded-full text-xs font-semibold'
@@ -2774,7 +2778,7 @@ function EmailThreadMessageItem({
       className='border-b last:border-b-0'
       data-email-message-state='expanded'
     >
-      <div className='flex items-start gap-2 px-4 py-3'>
+      <div className='flex items-center gap-2 px-4 py-3'>
         <EmailMessageMeta
           className='flex-1'
           receivedAt={message.receivedAt}
@@ -2800,19 +2804,6 @@ function EmailThreadMessageItem({
           <TooltipContent>Collapse message</TooltipContent>
         </Tooltip>
       </div>
-      {message.actions?.length || message.isDraft ? (
-        <div className='flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2'>
-          <div className='flex min-w-0 flex-wrap gap-1'>
-            {message.isDraft ? <Badge variant='secondary'>Draft</Badge> : null}
-          </div>
-          {message.actions?.length ? (
-            <EmailToolbarButtonList
-              actions={message.actions}
-              onAction={triggerMessageAction}
-            />
-          ) : null}
-        </div>
-      ) : null}
       <EmailMessageBodyFrame
         allowRemoteImages={message.remoteImagesAllowed}
         externalLinks={message.externalLinks ?? []}
@@ -2879,7 +2870,7 @@ function EmailCollapsedThreadMessage({
         type='button'
         variant='ghost'
       >
-        <span className='flex min-w-0 flex-1 items-start gap-2.5'>
+        <span className='flex min-w-0 flex-1 items-center gap-2.5'>
           <span
             className='bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center
               rounded-full text-xs font-semibold'
@@ -2888,7 +2879,7 @@ function EmailCollapsedThreadMessage({
             {getSenderInitial(message.senderName)}
           </span>
           <span className='flex min-w-0 flex-1 flex-col gap-1'>
-            <span className='flex min-w-0 items-start justify-between gap-3'>
+            <span className='flex min-w-0 items-center justify-between gap-3'>
               <span className='text-foreground min-w-0 truncate text-xs font-medium'>
                 {message.senderName}{' '}
                 <span className='text-muted-foreground font-normal'>{message.senderEmail}</span>
@@ -2903,10 +2894,15 @@ function EmailCollapsedThreadMessage({
               <span className='text-muted-foreground mt-1 line-clamp-1 text-xs'>{message.teaser}</span>
             ) : null}
           </span>
-          <CaretDownIcon
-            className='text-muted-foreground mt-1 size-4 shrink-0'
-            data-icon='icon-only'
-          />
+          <span
+            className='text-muted-foreground flex size-8 shrink-0 items-center justify-center'
+            aria-hidden='true'
+          >
+            <CaretDownIcon
+              className='size-4'
+              data-icon='icon-only'
+            />
+          </span>
         </span>
       </Button>
     </article>

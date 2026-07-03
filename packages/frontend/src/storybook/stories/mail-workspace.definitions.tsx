@@ -12,6 +12,7 @@ import {
   mailWorkspaceScreenAttachmentView,
   mailWorkspaceScreenBillingAccountView,
   mailWorkspaceScreenBlockedImagesView,
+  mailWorkspaceScreenConversationOriginalView,
   mailWorkspaceScreenConversationView,
   mailWorkspaceScreenCustomFolderView,
   mailWorkspaceScreenDocumentResourceView,
@@ -31,6 +32,7 @@ import {
   mailWorkspaceScreenSearchEmptyView,
   mailWorkspaceScreenSearchFilteredView,
   mailWorkspaceScreenSentView,
+  mailWorkspaceScreenThreadAttachmentsView,
   mailWorkspaceScreenTrashView,
   mailWorkspaceScreenUnreadOnlyView,
   mailWorkspaceScreenViewsByFolderId,
@@ -286,8 +288,12 @@ export const MessageAttachments: Story = {
     }),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
+    const messageBody = await canvas.findByTitle(/deployment attachments email body/i)
     const manifestLink = await canvas.findByRole('link', { name: /manifest\.json/i })
 
+    expect(
+      Boolean(messageBody.compareDocumentPosition(manifestLink) & Node.DOCUMENT_POSITION_FOLLOWING)
+    ).toBe(true)
     await expect(manifestLink).toHaveAttribute(
       'href',
       expect.stringContaining(
@@ -335,8 +341,72 @@ export const ConversationThread: Story = {
 
     await expect(await canvas.findByRole('heading', { name: /agent mail smoke/i })).toBeInTheDocument()
     await expect(
-      await canvas.findByText(/drafting reply from the selected wildduck drafts/i)
+      await canvas.findByRole('button', { name: /collapse agentteam email message/i })
     ).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /collapse testing message/i })).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /collapse draft message/i })).toBeInTheDocument()
+    const draftFrameSource = await findEmailFrameSource(
+      canvasElement,
+      /draft message body/i,
+      'draft reply body'
+    )
+
+    await expect(draftFrameSource).toContain('Drafting reply from the selected WildDuck Drafts folder.')
+  }
+}
+
+export const ConversationThreadCollapsedMiddle: Story = {
+  args: {
+    routeSearch: { messageId: 'thread-original' }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenConversationOriginalView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+
+    await expect(
+      await canvas.findByRole('button', { name: /collapse agentteam email message/i })
+    ).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /expand testing message/i })).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /collapse draft message/i })).toBeInTheDocument()
+  }
+}
+
+export const ConversationThreadAttachments: Story = {
+  args: {
+    routeSearch: { messageId: 'conversation-thread' }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenThreadAttachmentsView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    const messageBody = await canvas.findByTitle(/testing message body/i)
+    const firstAttachment = await canvas.findByText('customer-data-export-2026-06.csv')
+    const attachmentNames = [
+      'customer-data-export-2026-06.csv',
+      'routing-diagnostics-full-trace.json',
+      'provider-delivery-preview.png',
+      'mx-record-screenshot-before-cutover.png',
+      'incident-notes-with-very-long-file-name-for-layout-review.md',
+      'wildduck-raw-source.eml',
+      'dmarc-alignment-report.pdf',
+      'cloudflare-email-routing-rules.json',
+      'forwarding-group-members.csv',
+      'delivery-latency-chart.svg',
+      'mailbox-import-results.txt',
+      'provider-side-export.zip'
+    ]
+
+    expect(
+      Boolean(messageBody.compareDocumentPosition(firstAttachment) & Node.DOCUMENT_POSITION_FOLLOWING)
+    ).toBe(true)
+    for (const attachmentName of attachmentNames) {
+      await expect(await canvas.findByText(attachmentName)).toBeInTheDocument()
+    }
   }
 }
 

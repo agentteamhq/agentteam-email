@@ -415,16 +415,6 @@ export function actionsForMessage(
   })
 }
 
-export function threadActionsForMessage(
-  message: Pick<AgentMailWebMessageSummary, 'isDraft' | 'isStarred' | 'mailboxId' | 'unread'>,
-  folders: ReadonlyArray<AgentMailWebFolder>
-): ReadonlyArray<AuthenticatedEmailToolbarAction> {
-  if (message.isDraft) {
-    return actionsForMessage(message, folders)
-  }
-  return [toolbarAction('view-original', 'utility', 'end', 'View original')]
-}
-
 function toolbarAction(
   action: AuthenticatedEmailAction,
   group: AuthenticatedEmailToolbarAction['group'],
