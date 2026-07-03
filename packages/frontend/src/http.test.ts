@@ -30,6 +30,7 @@ describe('getRequestOrigin', () => {
 
 describe('sendWebResponse', () => {
   it('does not write an HTTP status message', async () => {
+    expect.assertions(3)
     const res = responseTarget()
 
     await sendWebResponse(
@@ -44,7 +45,7 @@ describe('sendWebResponse', () => {
     )
 
     expect(res.statusCode).toBe(204)
-    expect(res.headers).toEqual({ 'x-test': 'ok' })
+    expect(res.headers).toStrictEqual({ 'x-test': 'ok' })
     expect(res.ended).toBe(true)
   })
 })

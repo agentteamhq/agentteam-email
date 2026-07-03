@@ -1302,8 +1302,8 @@ export function DashboardMailController({
     await queryClient.invalidateQueries({ queryKey: workspaceQueryOptions.queryKey })
   }, [queryClient, workspaceQueryOptions])
   const invalidateMailWorkspaces = React.useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: ['mail', 'workspace'] })
-  }, [queryClient])
+    await queryClient.invalidateQueries({ queryKey: workspaceQueryOptions.queryKey.slice(0, 2) })
+  }, [queryClient, workspaceQueryOptions])
   const invalidateMailboxAdmin = React.useCallback(async () => {
     await invalidateMailboxAdminQueries(queryClient)
   }, [queryClient])

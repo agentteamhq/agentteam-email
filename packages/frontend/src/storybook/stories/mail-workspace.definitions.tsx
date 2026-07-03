@@ -292,7 +292,7 @@ export const MessageAttachments: Story = {
     const messageBody = await canvas.findByTitle(/deployment attachments email body/i)
     const manifestLink = await canvas.findByRole('link', { name: /manifest\.json/i })
 
-    expect(
+    await expect(
       Boolean(messageBody.compareDocumentPosition(manifestLink) & Node.DOCUMENT_POSITION_FOLLOWING)
     ).toBe(true)
     await expect(manifestLink).toHaveAttribute(
@@ -353,10 +353,10 @@ export const ConversationThread: Story = {
     ).toBeInTheDocument()
     await userEvent.click(await canvas.findByRole('button', { name: /more actions for agentteam email message/i }))
     await expect(await body.findByRole('menuitem', { name: /^view original$/i })).toBeInTheDocument()
-    expect(body.queryByRole('menuitem', { name: /^mark as spam$/i })).not.toBeInTheDocument()
+    await expect(body.queryByRole('menuitem', { name: /^mark as spam$/i })).not.toBeInTheDocument()
     await userEvent.keyboard('{Escape}')
     await expect(await canvas.findByText('Draft')).toBeInTheDocument()
-    expectSelectedThreadHeaderActionCentered(canvasElement, 'conversation thread')
+    await expectSelectedThreadHeaderActionCentered(canvasElement, 'conversation thread')
     await expectThreadScrollRegionNotOverflowing(canvasElement, 'conversation thread')
     await expect(await canvas.findByTitle(/testing message body/i)).toBeInTheDocument()
     const draftFrameSource = await findEmailFrameSource(
@@ -411,9 +411,9 @@ export const ConversationThreadCollapsedMiddle: Story = {
     ).toBeInTheDocument()
     await expect(await canvas.findByRole('button', { name: /expand testing message/i })).toBeInTheDocument()
     await expect(await canvas.findByRole('button', { name: /collapse support agent message/i })).toBeInTheDocument()
-    expectSelectedThreadHeaderActionCentered(canvasElement, 'collapsed middle thread')
-    expectCollapsedThreadRowsNotOverflowing(canvasElement, 'collapsed middle thread')
-    expectThreadBodyFramesFitContent(canvasElement, 'collapsed middle thread')
+    await expectSelectedThreadHeaderActionCentered(canvasElement, 'collapsed middle thread')
+    await expectCollapsedThreadRowsNotOverflowing(canvasElement, 'collapsed middle thread')
+    await expectThreadBodyFramesFitContent(canvasElement, 'collapsed middle thread')
     await expectThreadScrollRegionNotOverflowing(canvasElement, 'collapsed middle thread')
   }
 }
@@ -462,7 +462,7 @@ export const ConversationThreadAttachments: Story = {
       'provider-side-export.zip'
     ]
 
-    expect(
+    await expect(
       Boolean(messageBody.compareDocumentPosition(firstAttachment) & Node.DOCUMENT_POSITION_FOLLOWING)
     ).toBe(true)
     for (const attachmentName of attachmentNames) {
@@ -1095,8 +1095,8 @@ async function expectThreadScrollRegionNotOverflowing(
   const scrollRegion = await findThreadScrollRegion(canvasElement, description)
 
   await waitFor(
-    () => {
-      expect(scrollRegion.scrollHeight).toBeLessThanOrEqual(scrollRegion.clientHeight + 1)
+    async () => {
+      await expect(scrollRegion.scrollHeight).toBeLessThanOrEqual(scrollRegion.clientHeight + 1)
     },
     { timeout: 5_000 }
   )
@@ -1106,24 +1106,24 @@ async function expectThreadScrollRegionOverflowing(canvasElement: HTMLElement, d
   const scrollRegion = await findThreadScrollRegion(canvasElement, description)
 
   await waitFor(
-    () => {
-      expect(scrollRegion.scrollHeight).toBeGreaterThan(scrollRegion.clientHeight + 1)
+    async () => {
+      await expect(scrollRegion.scrollHeight).toBeGreaterThan(scrollRegion.clientHeight + 1)
     },
     { timeout: 5_000 }
   )
 }
 
-function expectCollapsedThreadRowsNotOverflowing(canvasElement: HTMLElement, description: string) {
+async function expectCollapsedThreadRowsNotOverflowing(canvasElement: HTMLElement, description: string) {
   const collapsedRows = canvasElement.querySelectorAll('[data-email-message-state="collapsed"]')
-  expect(collapsedRows.length).toBeGreaterThan(0)
+  await expect(collapsedRows.length).toBeGreaterThan(0)
 
   for (const row of collapsedRows) {
-    expect(row.scrollHeight).toBeLessThanOrEqual(row.clientHeight + 1)
-    expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth + 1)
+    await expect(row.scrollHeight).toBeLessThanOrEqual(row.clientHeight + 1)
+    await expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth + 1)
   }
 }
 
-function expectSelectedThreadHeaderActionCentered(canvasElement: HTMLElement, description: string) {
+async function expectSelectedThreadHeaderActionCentered(canvasElement: HTMLElement, description: string) {
   const header = canvasElement
     .querySelector('[data-email-thread-scroll-region="thread"]')
     ?.querySelector('header')
@@ -1141,12 +1141,12 @@ function expectSelectedThreadHeaderActionCentered(canvasElement: HTMLElement, de
   const headerCenter = headerRect.top + headerRect.height / 2
   const actionCenter = actionRect.top + actionRect.height / 2
 
-  expect(Math.abs(headerCenter - actionCenter)).toBeLessThanOrEqual(1)
+  await expect(Math.abs(headerCenter - actionCenter)).toBeLessThanOrEqual(1)
 }
 
-function expectThreadBodyFramesFitContent(canvasElement: HTMLElement, description: string) {
+async function expectThreadBodyFramesFitContent(canvasElement: HTMLElement, description: string) {
   const threadFrames = canvasElement.querySelectorAll('[data-email-thread-scroll-region="thread"] iframe')
-  expect(threadFrames.length).toBeGreaterThan(0)
+  await expect(threadFrames.length).toBeGreaterThan(0)
 
   for (const frame of threadFrames) {
     if (!(frame instanceof HTMLIFrameElement) || !frame.contentDocument?.body) {
@@ -1165,7 +1165,7 @@ function expectThreadBodyFramesFitContent(canvasElement: HTMLElement, descriptio
       )
     )
 
-    expect(frame.clientHeight).toBeGreaterThanOrEqual(contentHeight)
+    await expect(frame.clientHeight).toBeGreaterThanOrEqual(contentHeight)
   }
 }
 

@@ -13,6 +13,7 @@ type ApiResponseSet = {
   status?: number | string
 }
 type ApiErrorBody = { error: string }
+const HTTP_STATUS_UNAUTHORIZED: number = HttpStatusCode.Unauthorized
 
 const publicJwkBodySchema = t.Object(
   {
@@ -110,7 +111,7 @@ async function handleApiError<T>(
     return await operation()
   } catch (error) {
     if (isAgentMailTrialError(error)) {
-      if (error.status === HttpStatusCode.Unauthorized) {
+      if (error.status === HTTP_STATUS_UNAUTHORIZED) {
         set.headers['WWW-Authenticate'] = 'Bearer realm="agentteam-api"'
       }
       set.status = error.status

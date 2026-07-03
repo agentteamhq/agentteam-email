@@ -141,6 +141,7 @@ describe('Agent Mail control client', () => {
   })
 
   it('requests the mail-control message view contract', async () => {
+    expect.assertions(3)
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({

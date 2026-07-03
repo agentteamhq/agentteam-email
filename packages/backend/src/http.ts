@@ -14,6 +14,10 @@ import { backendRpcApp } from './rpc'
 
 const log = debug('app:http')
 
+function safeErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : typeof error === 'string' ? error : 'Non-Error thrown'
+}
+
 function isRoutePath(pathname: string, basePath: string): boolean {
   return pathname === basePath || pathname.startsWith(`${basePath}/`)
 }
@@ -38,7 +42,7 @@ export const backendHttpApp = new Elysia({
     const url = new URL(request.url)
     log('backend_http_unhandled_error %o', {
       errorCode: code,
-      errorMessage: error instanceof Error ? error.message : String(error),
+      errorMessage: safeErrorMessage(error),
       errorName: error instanceof Error ? error.name : typeof error,
       errorStack: error instanceof Error ? error.stack : undefined,
       method: request.method,

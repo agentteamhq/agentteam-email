@@ -21,6 +21,7 @@ const OAUTH_METADATA_PATHS = new Set([
   '/api/.well-known/oauth-authorization-server',
   '/api/.well-known/openid-configuration'
 ])
+const HTTP_STATUS_UNAUTHORIZED: number = HttpStatusCode.Unauthorized
 
 export async function handleBetterAuthProtocolRequest(request: Request): Promise<Response> {
   const authRequest = betterAuthLogicalRequest(request)
@@ -109,7 +110,7 @@ async function invalidAgentMailCapabilityRequestResponse(request: Request): Prom
 
 function agentAuthBearerChallengeResponse(request: Request, response: Response): Response {
   if (
-    response.status !== HttpStatusCode.Unauthorized ||
+    response.status !== HTTP_STATUS_UNAUTHORIZED ||
     !hasBearerCredential(request.headers) ||
     !AGENT_AUTH_BEARER_CREDENTIAL_PATHS.has(new URL(request.url).pathname)
   ) {

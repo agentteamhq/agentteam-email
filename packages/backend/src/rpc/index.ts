@@ -22,6 +22,10 @@ import whoami from './whoami'
 const apiLog = debug('api:backend')
 const rpcLog = debug('app:rpc')
 
+function safeErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : typeof error === 'string' ? error : 'Non-Error thrown'
+}
+
 const internalRpcApp = new Elysia({ name: 'rpc-internal', prefix: '/internal' })
   .get('/agent-mail/runtime/snapshot', ({ request }) => handleAgentMailRuntimeSnapshotRequest(request))
   .post('/agent-mail/cloudflare/send-raw', ({ request }) => handleCloudflareControlSendRawRequest(request))
@@ -46,7 +50,7 @@ export const backendRpcApp = new Elysia({ name: 'rpc', prefix: '/rpc', normalize
     const url = new URL(request.url)
     rpcLog('rpc_unhandled_error %o', {
       errorCode: code,
-      errorMessage: error instanceof Error ? error.message : String(error),
+      errorMessage: safeErrorMessage(error),
       errorName: error instanceof Error ? error.name : typeof error,
       errorStack: error instanceof Error ? error.stack : undefined,
       method: request.method,

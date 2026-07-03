@@ -1184,7 +1184,7 @@ export async function removeCloudflareDomain({
       stage: 'complete',
       workerScriptName
     })
-    return getCloudflareStatus(headers)
+    return await getCloudflareStatus(headers)
   } catch (error) {
     const sanitized = sanitizeCloudflareProvisioningError(stage, error)
     log('Cloudflare domain removal failed', {
@@ -1481,8 +1481,8 @@ function readCloudflareProviderErrorProperties(value: unknown, key: 'code' | 'me
     if (!entry || typeof entry !== 'object') {
       return []
     }
-    const value = (entry as Record<string, unknown>)[key]
-    return typeof value === 'string' || typeof value === 'number' ? [value] : []
+    const propertyValue = (entry as Record<string, unknown>)[key]
+    return typeof propertyValue === 'string' || typeof propertyValue === 'number' ? [propertyValue] : []
   })
   return values.length > 0 ? values : undefined
 }

@@ -308,7 +308,7 @@ describe('Cloudflare email Worker provisioning', () => {
     expect.hasAssertions()
     cloudflareClientTestState.catchAllUpdate.mockResolvedValue({})
     cloudflareClientTestState.scriptDelete.mockResolvedValue({})
-    cloudflareClientTestState.dnsDelete.mockImplementation(async function* () {
+    cloudflareClientTestState.dnsDelete.mockImplementation(async () => {
       throw Object.assign(new Error('Cloudflare DNS disable failed for Bearer cf_secret_token_123'), {
         status: 403
       })
