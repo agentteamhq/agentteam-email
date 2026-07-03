@@ -55,6 +55,7 @@ export interface WorkspaceMailboxSwitcherProps {
   align?: 'center' | 'end' | 'start'
   className?: string
   defaultOpen?: boolean
+  iconOnly?: boolean
   mailboxes: ReadonlyArray<WorkspaceMailboxSwitcherMailbox>
   onMailboxSelect?: (mailboxId: string) => void
   onOpenChange?: (open: boolean) => void
@@ -71,6 +72,7 @@ export function WorkspaceMailboxSwitcher({
   align = 'start',
   className,
   defaultOpen,
+  iconOnly = false,
   mailboxes,
   onMailboxSelect,
   onOpenChange,
@@ -125,15 +127,17 @@ export function WorkspaceMailboxSwitcher({
                     duration-150 ease-out group-hover/workspace-switcher:opacity-0'
                 />
               </span>
-              <div className='grid min-w-0 flex-1 text-left text-sm leading-tight'>
-                <span className='truncate font-medium'>
-                  {activeMailbox?.name ?? activeWorkspace?.name ?? 'Mailboxes'}
-                </span>
-                <span className='text-muted-foreground truncate text-xs'>
-                  {activeMailbox?.address ?? activeWorkspace?.slug ?? mailboxCountLabel}
-                </span>
-              </div>
-              <CaretUpDownIcon className='ml-auto shrink-0' />
+              {iconOnly ? null : (
+                <div className='grid min-w-0 flex-1 text-left text-sm leading-tight'>
+                  <span className='truncate font-medium'>
+                    {activeMailbox?.name ?? activeWorkspace?.name ?? 'Mailboxes'}
+                  </span>
+                  <span className='text-muted-foreground truncate text-xs'>
+                    {activeMailbox?.address ?? activeWorkspace?.slug ?? mailboxCountLabel}
+                  </span>
+                </div>
+              )}
+              {iconOnly ? null : <CaretUpDownIcon className='ml-auto shrink-0' />}
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent

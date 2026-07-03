@@ -1186,6 +1186,7 @@ export function AuthenticatedSidebar({
               activeMailboxId={view.activeAccountId}
               activeWorkspaceId={workspaceSwitcherActiveWorkspaceId}
               className='md:h-8 md:p-0'
+              iconOnly
               mailboxes={workspaceSwitcherMailboxes}
               onMailboxSelect={onAccountSelect}
               state={workspaceSwitcherState}
@@ -1685,14 +1686,7 @@ function MailNavButton({
       >
         <Icon />
         <span className='sr-only'>{item.title}</span>
-        {item.badgeLabel ? (
-          <Badge
-            className='ml-auto min-w-5 justify-center px-1 text-[10px]'
-            variant='secondary'
-          >
-            {item.badgeLabel}
-          </Badge>
-        ) : null}
+        {item.badgeLabel ? <span className='sr-only'>{item.badgeLabel}</span> : null}
       </SidebarMenuButton>
     </>
   )
@@ -1800,7 +1794,7 @@ function ManagementNavButton({
       )}
     >
       <Icon />
-      <span>{item.title}</span>
+      <span className='sr-only'>{item.title}</span>
     </SidebarMenuButton>
   )
 }
