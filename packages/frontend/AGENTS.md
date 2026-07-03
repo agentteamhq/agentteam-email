@@ -1,5 +1,12 @@
 # Frontend Package Rules
 
+## Message Body Rendering
+
+Frontend message viewers must render the message-view `displayHtml` without
+rewriting the message body DOM. They must not replace message elements with
+placeholders, status text, or explanatory UI. Resource blocking must be enforced
+through iframe sandbox and CSP, with controls rendered outside the message body.
+
 ## Validation
 
 - Frontend browser and interaction validation can use `pnpm playwright-cli`

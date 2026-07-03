@@ -70,6 +70,11 @@ export async function provisionCloudflareConnection(
   return fetchCloudflareStatus()
 }
 
+export async function removeCloudflareDomain(connectionPublicId: string): Promise<CloudflareStatusResult> {
+  const result = await rpc.cloudflare.connections({ connectionPublicId }).delete()
+  return readCloudflareRpcResult<CloudflareStatusResult>(result)
+}
+
 export async function disconnectCloudflareConnection(grantPublicId: string): Promise<CloudflareStatusResult> {
   const result = await rpc.cloudflare.disconnect.post({ grantPublicId })
   return readCloudflareRpcResult<CloudflareStatusResult>(result)

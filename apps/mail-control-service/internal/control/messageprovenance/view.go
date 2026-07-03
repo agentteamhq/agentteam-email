@@ -20,7 +20,6 @@ import (
 var (
 	agentMailTokenValue  = regexp.MustCompile(`^[A-Za-z0-9._:-]+$`)
 	linkRelValue         = regexp.MustCompile(`^noopener noreferrer$`)
-	remoteImageURLValue  = regexp.MustCompile(`^https?://[^\s<>"']+$`)
 	displayHTMLSanitizer = newDisplayHTMLSanitizer()
 )
 
@@ -81,7 +80,7 @@ func buildMessageView(identity WildDuckIdentity, deliveryKey string, idempotency
 	} else if strings.TrimSpace(plainText) == "" {
 		plainText = htmlToPlainText(env.HTML)
 	}
-	transform, err := transformDisplayHTML(body, remoteImagesAllowed, ownedInlineContentIDs(env))
+	transform, err := transformDisplayHTML(body, ownedInlineContentIDs(env))
 	if err != nil {
 		return MessageViewResult{}, err
 	}
@@ -230,7 +229,7 @@ type htmlTransformResult struct {
 	InlineImages  []InlineImage
 }
 
-func transformDisplayHTML(body string, remoteImagesAllowed bool, inlineContentIDs map[string]inlineImagePart) (htmlTransformResult, error) {
+func transformDisplayHTML(body string, inlineContentIDs map[string]inlineImagePart) (htmlTransformResult, error) {
 	contextNode := &xhtml.Node{Type: xhtml.ElementNode, Data: "body", DataAtom: atom.Body}
 	nodes, err := xhtml.ParseFragment(strings.NewReader(body), contextNode)
 	if err != nil {
@@ -242,7 +241,7 @@ func transformDisplayHTML(body string, remoteImagesAllowed bool, inlineContentID
 		InlineImages:  []InlineImage{},
 	}
 	for _, node := range nodes {
-		transformHTMLNode(node, &result, remoteImagesAllowed, inlineContentIDs)
+		transformHTMLNode(node, &result, inlineContentIDs)
 	}
 
 	var rendered strings.Builder
@@ -255,18 +254,18 @@ func transformDisplayHTML(body string, remoteImagesAllowed bool, inlineContentID
 	return result, nil
 }
 
-func transformHTMLNode(node *xhtml.Node, result *htmlTransformResult, remoteImagesAllowed bool, inlineContentIDs map[string]inlineImagePart) {
+func transformHTMLNode(node *xhtml.Node, result *htmlTransformResult, inlineContentIDs map[string]inlineImagePart) {
 	if node.Type == xhtml.ElementNode {
 		stripMessageControlledAttributes(node)
 		switch strings.ToLower(node.Data) {
 		case "a":
 			transformAnchor(node, result)
 		case "img":
-			transformImage(node, result, remoteImagesAllowed, inlineContentIDs)
+			transformImage(node, result, inlineContentIDs)
 		}
 	}
 	for child := node.FirstChild; child != nil; child = child.NextSibling {
-		transformHTMLNode(child, result, remoteImagesAllowed, inlineContentIDs)
+		transformHTMLNode(child, result, inlineContentIDs)
 	}
 }
 
@@ -298,10 +297,8 @@ func transformAnchor(node *xhtml.Node, result *htmlTransformResult) {
 	setHTMLAttr(node, "rel", "noopener noreferrer")
 }
 
-func transformImage(node *xhtml.Node, result *htmlTransformResult, remoteImagesAllowed bool, inlineContentIDs map[string]inlineImagePart) {
+func transformImage(node *xhtml.Node, result *htmlTransformResult, inlineContentIDs map[string]inlineImagePart) {
 	alt, _ := getHTMLAttr(node, "alt")
-	delHTMLAttr(node, "sizes")
-	delHTMLAttr(node, "srcset")
 	rawSrc, ok := getHTMLAttr(node, "src")
 	if !ok {
 		return
@@ -312,12 +309,7 @@ func transformImage(node *xhtml.Node, result *htmlTransformResult, remoteImagesA
 		return
 	}
 	if isRemoteURL(parsed) {
-		id := addRemoteImage(result, rawSrc, alt)
-		if !remoteImagesAllowed {
-			delHTMLAttr(node, "src")
-			setHTMLAttr(node, "data-agent-mail-remote-image-id", id)
-			setHTMLAttr(node, "data-agent-mail-remote-image-src", rawSrc)
-		}
+		addRemoteImage(result, rawSrc, alt)
 		return
 	}
 	if parsed.Scheme == "cid" {
@@ -330,7 +322,6 @@ func transformImage(node *xhtml.Node, result *htmlTransformResult, remoteImagesA
 			})
 			return
 		}
-		delHTMLAttr(node, "src")
 		return
 	}
 	delHTMLAttr(node, "src")
@@ -524,8 +515,6 @@ func newDisplayHTMLSanitizer() *bluemonday.Policy {
 	policy.AllowAttrs("href").OnElements("a")
 	policy.AllowAttrs("rel").Matching(linkRelValue).OnElements("a")
 	policy.AllowAttrs("data-agent-mail-external-link-id").Matching(agentMailTokenValue).OnElements("a")
-	policy.AllowAttrs("data-agent-mail-remote-image-id").Matching(agentMailTokenValue).OnElements("img")
-	policy.AllowAttrs("data-agent-mail-remote-image-src").Matching(remoteImageURLValue).OnElements("img")
 	policy.AllowAttrs("src").OnElements("img")
 	policy.AllowAttrs("alt").Matching(bluemonday.Paragraph).OnElements("img")
 	policy.AllowAttrs("height", "width").Matching(bluemonday.NumberOrPercent).OnElements("img", "table", "td", "th", "col", "colgroup")

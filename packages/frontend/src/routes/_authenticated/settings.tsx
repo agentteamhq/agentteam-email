@@ -1,8 +1,11 @@
-import { createFileRoute, useRouter } from '@tanstack/react-router'
+import { createFileRoute, useRouter, useRouterState } from '@tanstack/react-router'
 
 import { readAuthenticatedRouteState } from '../../lib/authenticated-app-route'
 import { validateSettingsSearch } from '../../lib/dashboard-search'
-import { getSettingsSectionHref } from '../../partials/authenticated/settings-dialog-sections'
+import {
+  getSettingsSectionFromPathname,
+  getSettingsSectionHref
+} from '../../partials/authenticated/settings-dialog-sections'
 import { DashboardMailController } from '../../screens/dashboard-mail-client-controller'
 import { SITE_STRINGS, formatSiteTitle } from '../../strings'
 import type { SettingsSectionId } from '../../partials/authenticated/settings-dialog-sections'
@@ -28,6 +31,8 @@ function SettingsRouteScreen() {
   const routeState = Route.useLoaderData()
   const search = Route.useSearch()
   const router = useRouter()
+  const pathname = useRouterState({ select: (state) => state.location.pathname })
+  const settingsSection = getSettingsSectionFromPathname(pathname) ?? 'account'
 
   return (
     <DashboardMailController
@@ -43,7 +48,7 @@ function SettingsRouteScreen() {
       routeState={routeState}
       routeSearch={search}
       settingsOpen
-      settingsSection='account'
+      settingsSection={settingsSection}
     />
   )
 }

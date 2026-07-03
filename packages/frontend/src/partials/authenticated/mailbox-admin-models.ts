@@ -51,7 +51,9 @@ export interface MailboxAdminPagination {
 
 export type MailboxAdminDialogState =
   | { accountId?: string; agentId?: string; type: 'accountEditor' }
+  | { accountId: string; type: 'accountDelete' }
   | { groupId?: string; type: 'groupEditor' }
+  | { groupId: string; type: 'groupDelete' }
   | { groupId: string; type: 'groupRecipients' }
   | { agentId?: string; type: 'agentEditor' }
   | { agentId: string; type: 'agentAccounts' }
@@ -80,6 +82,8 @@ export interface MailboxAdminView extends Omit<AgentMailAdminView, 'pagination' 
   onCopyAgentEnrollmentCommand?: (command: string) => void
   onPageChange?: (page: number) => void
   onDisableAccount?: (accountId: string) => void
+  onDeleteAccount?: (accountId: string) => void
+  onDeleteGroup?: (groupId: string) => void
   onDisableGroup?: (groupId: string) => void
   onRevokeAgent?: (agentId: string) => void
   onRevokeAgentEnrollment?: (enrollmentId: string) => void
@@ -103,6 +107,7 @@ export interface MailboxAdminView extends Omit<AgentMailAdminView, 'pagination' 
   pendingAgentRevokeId?: string | null
   pendingAgentEnrollmentRevokeId?: string | null
   pendingAccountDisableId?: string | null
+  pendingAccountDeleteId?: string | null
   pendingAccountSave?: boolean
   pendingAgentCreate?: boolean
   pendingAgentSaveId?: string | null
@@ -111,6 +116,7 @@ export interface MailboxAdminView extends Omit<AgentMailAdminView, 'pagination' 
   pendingPrincipalMailboxGrantsSaveId?: string | null
   pendingPrincipalSystemPermissionsSaveId?: string | null
   pendingGroupDisableId?: string | null
+  pendingGroupDeleteId?: string | null
   pendingGroupSave?: boolean
   pagination?: MailboxAdminPagination
   retryLabel?: string

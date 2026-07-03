@@ -27,8 +27,8 @@
   <body>
     <p>Thanks for checking out the deployment notes.</p>
     <img
+      src="https://static.mailjet.com/mjml-website/templates/welcome-hero.jpg"
       alt="Remote launch banner"
-      data-agent-mail-remote-image-id="image-1"
       height="120"
       width="320"
     >

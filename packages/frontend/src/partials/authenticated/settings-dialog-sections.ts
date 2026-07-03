@@ -134,6 +134,16 @@ export function getSettingsSectionFromSegment(segment: string | undefined): Sett
   return resolution.type === 'section' ? resolution.section : null
 }
 
+export function getSettingsSectionFromPathname(pathname: string): SettingsSectionId | null {
+  const [pathWithoutSearch] = pathname.split(/[?#]/u, 1)
+  const segments = pathWithoutSearch.split('/').filter(Boolean)
+  if (segments[0] !== 'settings') {
+    return null
+  }
+
+  return getSettingsSectionFromSegment(segments[1])
+}
+
 export function getOrganizationSettingsSectionFromSegment(
   segment: string | undefined
 ): OrganizationRouteSectionId | null {

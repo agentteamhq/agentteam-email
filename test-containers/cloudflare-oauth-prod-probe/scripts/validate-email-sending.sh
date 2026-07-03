@@ -26,7 +26,7 @@ callback_path="${PROBE_CALLBACK_PATH:-/oauth/callback/cloudflare}"
 redirect_uri="https://${cloudflare_tunnel_hostname}${callback_path}"
 cloudflare_api_base_url="${AT_EMAIL_ADMIN_CF_API_BASE_URL:-https://api.cloudflare.com/client/v4}"
 cloudflare_oauth_authorization_url="${AT_EMAIL_ADMIN_CF_OAUTH_AUTHORIZATION_URL:-https://dash.cloudflare.com/oauth2/auth}"
-cloudflare_oauth_scopes="${AT_EMAIL_ADMIN_CF_OAUTH_SCOPES:-workers-r2.read workers-r2.write workers-scripts.read workers-scripts.write dns.read dns.write zone.read cloud-email-security.read email-routing-address.read email-routing-address.write email-routing-rule.read email-routing-rule.write email-routing-suppression.read email-security-dmarcreports.read email-sending.read email-sending.write offline_access}"
+cloudflare_oauth_scopes="${AT_EMAIL_ADMIN_CF_OAUTH_SCOPES:-workers-r2.read workers-r2.write workers-scripts.read workers-scripts.write user-details.read dns.read dns.write zone-dns-settings.read zone-dns-settings.write zone.read zone-settings.read zone-settings.write cloud-email-security.read email-routing-address.read email-routing-address.write email-routing-rule.read email-routing-rule.write email-routing-suppression.read email-security-dmarcreports.read email-sending.read email-sending.write offline_access}"
 cloudflare_oauth_token_url="${AT_EMAIL_ADMIN_CF_OAUTH_TOKEN_URL:-https://dash.cloudflare.com/oauth2/token}"
 
 : "${AT_EMAIL_ADMIN_CF_OAUTH_CLIENT_ID:?AT_EMAIL_ADMIN_CF_OAUTH_CLIENT_ID is required}"

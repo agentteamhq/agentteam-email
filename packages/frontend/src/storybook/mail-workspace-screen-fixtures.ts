@@ -1,4 +1,3 @@
-import allowedRemoteImagesHtml from './fixtures/emails/allowed-remote-images.fixture?raw'
 import appointmentAlertEmailHtml from './fixtures/emails/appointment-alert.fixture?raw'
 import conversationLatestHtml from './fixtures/emails/conversation-latest.fixture?raw'
 import conversationOriginalHtml from './fixtures/emails/conversation-original.fixture?raw'
@@ -88,16 +87,33 @@ const welcomeMessage = createMessageDetail({
 })
 
 const blockedImagesMessage = createMessageDetail({
+  externalLinks: [
+    {
+      host: 'dash.cloudflare.com',
+      id: 'link-1',
+      text: 'the provider portal',
+      url: 'https://dash.cloudflare.com/provider/example'
+    }
+  ],
   from: 'Provider Portal <updates@provider.example>',
   html: [
     '<p>Thanks for checking out the deployment notes.</p>',
     '<img src="https://assets.provider.example/launch-banner.png" alt="Remote launch banner" height="120" width="320">',
-    '<p>Review the rollout checklist at <a href="https://dash.cloudflare.com/provider/example">the provider portal</a>.</p>'
+    '<p>Review the rollout checklist at <a href="#agent-mail-external-link-1" data-agent-mail-external-link-id="link-1" rel="noopener noreferrer">the provider portal</a>.</p>'
   ].join(''),
   id: 'blocked-images',
   isUnread: true,
   receivedAt: '2026-06-20T16:22:00.000Z',
   replyTo: ['updates@provider.example'],
+  remoteImages: [
+    {
+      alt: 'Remote launch banner',
+      host: 'assets.provider.example',
+      id: 'image-1',
+      url: 'https://assets.provider.example/launch-banner.png'
+    }
+  ],
+  remoteImagesAllowed: false,
   subject: 'Deployment checklist and routing review',
   teaser: 'Review the rollout checklist at the provider portal.',
   to: ['Support Agent <support@agentteam.test>']
@@ -105,8 +121,8 @@ const blockedImagesMessage = createMessageDetail({
 
 const blockedImagesAllowedMessage = createMessageDetail({
   ...messageInputFromDetail(blockedImagesMessage),
-  html: allowedRemoteImagesHtml,
-  id: 'blocked-images-allowed'
+  id: 'blocked-images-allowed',
+  remoteImagesAllowed: true
 })
 
 const conversationOriginalMessage = createThreadMessage({
@@ -260,13 +276,7 @@ const inlineAttachmentMessage = createMessageDetail({
 
 const remoteBackgroundMessage = createMessageDetail({
   from: 'Provider Portal <updates@provider.example>',
-  html: [
-    '<table background="https://assets.provider.example/tracker-table.png">',
-    '<tr><td style="background-image: url(https://assets.provider.example/tracker-cell.png); color: #111827">',
-    'Background image content',
-    '</td></tr>',
-    '</table>'
-  ].join(''),
+  html: '<table><tr><td>Background image content</td></tr></table>',
   id: 'remote-background-images-message',
   receivedAt: '2026-06-22T17:38:00.000Z',
   subject: 'Background image tracking',
@@ -276,16 +286,7 @@ const remoteBackgroundMessage = createMessageDetail({
 
 const documentResourceMessage = createMessageDetail({
   from: 'Provider Portal <updates@provider.example>',
-  html: [
-    '<base href="https://wildduck.example.test/">',
-    '<meta http-equiv="refresh" content="0; url=https://wildduck.example.test/session">',
-    '<link rel="stylesheet" href="https://wildduck.example.test/email.css">',
-    '<p>Document resource content</p>',
-    '<script><img src="https://wildduck.example.test/script-pixel.png"></script>',
-    '<iframe src="https://wildduck.example.test/frame">iframe fallback</iframe>',
-    '<object data="https://wildduck.example.test/object">object fallback</object>',
-    '<embed src="https://wildduck.example.test/embed">'
-  ].join(''),
+  html: '<p>Document resource content</p>',
   id: 'document-resource-message',
   receivedAt: '2026-06-22T17:44:00.000Z',
   subject: 'Document resource controls',
@@ -294,8 +295,17 @@ const documentResourceMessage = createMessageDetail({
 })
 
 const mailtoLinkMessage = createMessageDetail({
+  externalLinks: [
+    {
+      host: 'support@example.test',
+      id: 'link-1',
+      scheme: 'mailto',
+      text: 'Email support',
+      url: 'mailto:support@example.test?subject=Routing%20review'
+    }
+  ],
   from: 'Provider Portal <updates@provider.example>',
-  html: '<p>Need follow-up?</p><p><a href="mailto:support@example.test?subject=Routing%20review">Email support</a></p>',
+  html: '<p>Need follow-up?</p><p><a href="#agent-mail-external-link-1" data-agent-mail-external-link-id="link-1" rel="noopener noreferrer">Email support</a></p>',
   id: 'mailto-link-message',
   receivedAt: '2026-06-22T18:08:00.000Z',
   subject: 'Contact support by email',
@@ -304,8 +314,17 @@ const mailtoLinkMessage = createMessageDetail({
 })
 
 const externalLinkMessage = createMessageDetail({
+  externalLinks: [
+    {
+      host: 'docs.example.test',
+      id: 'link-1',
+      scheme: 'https',
+      text: 'Generated docs link',
+      url: 'https://docs.example.test/path'
+    }
+  ],
   from: 'Provider Portal <updates@provider.example>',
-  html: '<p><a href="https://docs.example.test/path">Generated docs link</a></p>',
+  html: '<p><a href="#agent-mail-external-link-1" data-agent-mail-external-link-id="link-1" rel="noopener noreferrer">Generated docs link</a></p>',
   id: 'external-link-message',
   receivedAt: '2026-06-22T18:16:00.000Z',
   subject: 'External link handling',
@@ -315,13 +334,7 @@ const externalLinkMessage = createMessageDetail({
 
 const formMessage = createMessageDetail({
   from: 'Provider Portal <updates@provider.example>',
-  html: [
-    '<p>Please do not submit credentials from an email.</p>',
-    '<form action="https://phish.example.test/login" method="post" target="_blank">',
-    '<label>Email <input name="email" required autofocus></label>',
-    '<button formaction="https://phish.example.test/pay">Submit</button>',
-    '</form>'
-  ].join(''),
+  html: '<p>Please do not submit credentials from an email.</p>',
   id: 'form-message',
   receivedAt: '2026-06-22T18:22:00.000Z',
   subject: 'Form in email body',
@@ -685,6 +698,7 @@ function createThreadMessage({
   attachmentCount,
   attachments = [],
   cc = [],
+  externalLinks = [],
   from,
   html,
   id,
@@ -696,6 +710,8 @@ function createThreadMessage({
   plainText,
   receivedAt,
   replyTo = [],
+  remoteImages = [],
+  remoteImagesAllowed = false,
   subject,
   teaser,
   threadId = `thread-${id}`,
@@ -705,6 +721,7 @@ function createThreadMessage({
     attachmentCount: attachmentCount ?? attachments.length,
     attachments,
     cc,
+    externalLinks,
     from,
     html,
     id,
@@ -715,6 +732,8 @@ function createThreadMessage({
     plainText: plainText ?? teaser,
     receivedAt,
     replyTo,
+    remoteImages,
+    remoteImagesAllowed,
     sourceUrl: `/rpc/mail/accounts/agent-support/mailboxes/${mailboxId}/messages/${id}/source`,
     subject,
     teaser,
@@ -745,6 +764,7 @@ function messageInputFromDetail(message: MailMessageDetail): MessageInput {
     attachmentCount: message.attachmentCount,
     attachments: message.attachments,
     cc: message.cc,
+    externalLinks: message.externalLinks,
     from: message.from,
     html: message.html,
     id: message.id,
@@ -756,6 +776,8 @@ function messageInputFromDetail(message: MailMessageDetail): MessageInput {
     plainText: message.plainText,
     receivedAt: message.receivedAt,
     replyTo: message.replyTo,
+    remoteImages: message.remoteImages,
+    remoteImagesAllowed: message.remoteImagesAllowed,
     subject: message.subject,
     teaser: message.teaser,
     threadId: message.threadId,
@@ -767,6 +789,7 @@ interface MessageInput {
   attachmentCount?: number
   attachments?: MailAttachment[]
   cc?: string[]
+  externalLinks?: MailThreadMessage['externalLinks']
   from: string
   html: string
   id: string
@@ -778,6 +801,8 @@ interface MessageInput {
   plainText?: string
   receivedAt?: string
   replyTo?: string[]
+  remoteImages?: MailThreadMessage['remoteImages']
+  remoteImagesAllowed?: boolean
   subject: string
   teaser: string
   threadId?: string

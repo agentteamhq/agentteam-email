@@ -1,3 +1,5 @@
+'use client'
+
 import * as React from 'react'
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
@@ -17,6 +19,7 @@ import {
   fetchCloudflareZones,
   finalizeCloudflareOAuth,
   provisionCloudflareConnection,
+  removeCloudflareDomain,
   startCloudflareOAuth
 } from '../lib/cloudflare-rpc'
 import {
@@ -27,6 +30,8 @@ import {
   createMailboxAdminAccount,
   createMailboxAdminAgentEnrollment,
   createMailboxAdminGroup,
+  deleteMailboxAdminAccount,
+  deleteMailboxAdminGroup,
   disableMailboxAdminAccount,
   disableMailboxAdminGroup,
   fetchMailboxAdminNavigation,
@@ -66,6 +71,7 @@ import { mailboxAdminViewQueryForSection } from './dashboard-mailbox-admin-query
 import { deriveDashboardMailWorkspaceScreenModel } from './dashboard-mail-screen-model'
 import type { MailWorkspaceQuery } from '../lib/mail-rpc'
 import type { MailboxAdminViewQuery } from '../lib/mail-admin-rpc'
+import type { MailboxAdminControllerActions } from './dashboard-mailbox-admin-view'
 import type {
   AgentAccessGrant,
   AgentAccessView,
@@ -798,6 +804,29 @@ function useDomainSettingsController({
     [isInjectedState, readOnly]
   )
 
+  const removeDomain = React.useCallback(
+    async (connectionPublicId: NonNullable<DomainSettingsState['selectedDomainPublicId']>) => {
+      if (isInjectedState || readOnly) {
+        return
+      }
+
+      setRuntimeBusy(true)
+      setRuntimeMessage(null)
+      try {
+        const nextStatus = await removeCloudflareDomain(connectionPublicId)
+        setRuntimeStatus(nextStatus)
+        setRuntimeSelectedDomainPublicId(null)
+        setRuntimeMode('addDomain')
+        setRuntimeMessage('Domain removed')
+      } catch (error) {
+        setRuntimeMessage(errorMessage(error, 'Failed to remove Cloudflare domain.'))
+      } finally {
+        setRuntimeBusy(false)
+      }
+    },
+    [isInjectedState, readOnly]
+  )
+
   if (state) {
     return {
       dashboardOnboardingStartOAuth: state.onStartOAuth,
@@ -836,6 +865,9 @@ function useDomainSettingsController({
       },
       onProvisionDomain: (connectionPublicId) => {
         provisionDomain(connectionPublicId).catch(handleUnexpectedCloudflareActionError)
+      },
+      onRemoveDomain: (connectionPublicId) => {
+        removeDomain(connectionPublicId).catch(handleUnexpectedCloudflareActionError)
       },
       onSelectAccount: (accountId) => {
         if (readOnly) {
@@ -881,7 +913,7 @@ function useDomainSettingsController({
       selectedGrantPublicId: runtimeSelectedGrantPublicId || undefined,
       selectedAccountId: runtimeSelectedAccountId,
       selectedDomainPublicId:
-        runtimeSelectedDomainPublicId ?? runtimeStatus?.connections[0]?.publicId ?? null,
+        runtimeSelectedDomainPublicId ?? firstSelectableCloudflareConnection(runtimeStatus)?.publicId ?? null,
       selectedZoneId: runtimeSelectedZoneId,
       status: runtimeStatus,
       zones: runtimeZones
@@ -895,16 +927,18 @@ function selectCloudflareConnectionPublicId(
 ): DomainSettingsState['selectedDomainPublicId'] {
   if (
     preferredPublicId &&
-    status.connections.some((connection) => connection.publicId === preferredPublicId)
+    status.connections.some(
+      (connection) => connection.publicId === preferredPublicId && connection.status !== 'disconnected'
+    )
   ) {
     return preferredPublicId
   }
 
-  return (
-    status.connections.find((connection) => connection.status !== 'disconnected')?.publicId ??
-    status.connections[0]?.publicId ??
-    null
-  )
+  return firstSelectableCloudflareConnection(status)?.publicId ?? null
+}
+
+function firstSelectableCloudflareConnection(status: CloudflareStatusResult | null) {
+  return status?.connections.find((connection) => connection.status !== 'disconnected') ?? null
 }
 
 function isCloudflareConnectionProvisioned(
@@ -1050,17 +1084,41 @@ interface DashboardMailControllerProps extends Pick<
 > {
   agentAccessViewLoader?: AgentAccessViewLoader
   integrationsViewLoader?: IntegrationsViewLoader
+  initialMailboxAdminControllerState?: InitialMailboxAdminControllerState
   mailWorkspaceLoader?: MailWorkspaceLoader
   mailboxAdminViewLoader?: MailboxAdminViewLoader
   mailboxAdminNavigationLoader?: MailboxAdminNavigationLoader
   routeSearch?: SettingsRouteSearch
 }
 
+type InitialMailboxAdminControllerState = Partial<
+  Pick<
+    MailboxAdminControllerActions,
+    | 'activeDialog'
+    | 'createdAgentEnrollment'
+    | 'pendingAccountDeleteId'
+    | 'pendingAccountDisableId'
+    | 'pendingAccountSave'
+    | 'pendingAgentCreate'
+    | 'pendingAgentEnrollmentRevokeId'
+    | 'pendingAgentMailboxGrantsSaveId'
+    | 'pendingAgentRevokeId'
+    | 'pendingAgentSaveId'
+    | 'pendingAgentSystemPermissionsSaveId'
+    | 'pendingGroupDeleteId'
+    | 'pendingGroupDisableId'
+    | 'pendingGroupSave'
+    | 'pendingPrincipalMailboxGrantsSaveId'
+    | 'pendingPrincipalSystemPermissionsSaveId'
+  >
+>
+
 export function DashboardMailController({
   agentAccessViewLoader = fetchAgentAccessView,
   integrationsViewLoader = fetchIntegrationsView,
   firstMailboxSetupState: providedFirstMailboxSetupState,
   domainSettingsState: providedDomainSettingsState,
+  initialMailboxAdminControllerState,
   mailWorkspaceLoader = fetchMailWorkspace,
   mailboxAdminNavigationLoader = fetchMailboxAdminNavigation,
   mailboxAdminViewLoader = fetchMailboxAdminView,
@@ -1111,9 +1169,13 @@ export function DashboardMailController({
     state: 'closed' | 'open'
     title?: string
   }>({ name: '', state: 'closed' })
-  const [mailboxAdminDialog, setMailboxAdminDialog] = React.useState<MailboxAdminDialogState | null>(null)
+  const [mailboxAdminDialog, setMailboxAdminDialog] = React.useState<MailboxAdminDialogState | null>(
+    () => initialMailboxAdminControllerState?.activeDialog ?? null
+  )
   const [createdAgentEnrollment, setCreatedAgentEnrollment] =
-    React.useState<MailboxAdminAgentEnrollment | null>(null)
+    React.useState<MailboxAdminAgentEnrollment | null>(
+      () => initialMailboxAdminControllerState?.createdAgentEnrollment ?? null
+    )
   const [firstMailboxDraftState, setFirstMailboxDraftState] = React.useState<FirstMailboxDraft>({
     addressLocalPart: '',
     displayName: '',
@@ -1177,8 +1239,8 @@ export function DashboardMailController({
 
   const activeMailboxAdminSection = routeSearch?.mailboxAdmin
   const workspaceQueryOptions = React.useMemo(
-    () => mailWorkspaceQueryOptions(routeSearch, !activeMailboxAdminSection, mailWorkspaceLoader),
-    [activeMailboxAdminSection, mailWorkspaceLoader, routeSearch]
+    () => mailWorkspaceQueryOptions(routeSearch, true, mailWorkspaceLoader),
+    [mailWorkspaceLoader, routeSearch]
   )
   const {
     data: workspace,
@@ -1239,6 +1301,9 @@ export function DashboardMailController({
   const invalidateMail = React.useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: workspaceQueryOptions.queryKey })
   }, [queryClient, workspaceQueryOptions])
+  const invalidateMailWorkspaces = React.useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: ['mail', 'workspace'] })
+  }, [queryClient])
   const invalidateMailboxAdmin = React.useCallback(async () => {
     await invalidateMailboxAdminQueries(queryClient)
   }, [queryClient])
@@ -1248,24 +1313,20 @@ export function DashboardMailController({
     onSuccess: invalidateMail
   })
   const { mutateAsync: moveMessage } = useMutation({
-    mutationFn: moveMailMessage,
-    onSuccess: invalidateMail
+    mutationFn: moveMailMessage
   })
   const { mutateAsync: deleteMessage } = useMutation({
-    mutationFn: deleteMailMessage,
-    onSuccess: invalidateMail
+    mutationFn: deleteMailMessage
   })
   const { isPending: isSendingMessage, mutateAsync: sendMessage } = useMutation({
     mutationFn: sendMailMessage,
     onSuccess: invalidateMail
   })
   const { isPending: isSavingDraft, mutateAsync: saveDraft } = useMutation({
-    mutationFn: saveMailDraft,
-    onSuccess: invalidateMail
+    mutationFn: saveMailDraft
   })
   const { isPending: isSendingDraft, mutateAsync: sendDraft } = useMutation({
-    mutationFn: sendMailDraft,
-    onSuccess: invalidateMail
+    mutationFn: sendMailDraft
   })
   const { mutateAsync: createFolder } = useMutation({
     mutationFn: createMailFolder,
@@ -1331,6 +1392,21 @@ export function DashboardMailController({
     onSuccess: async () => {
       await Promise.all([invalidateMailboxAdmin(), invalidateMail()])
       toast.success('Mailbox account disabled')
+    }
+  })
+  const {
+    isPending: isDeletingAccount,
+    mutateAsync: deleteAccount,
+    variables: deletingAccountId
+  } = useMutation({
+    mutationFn: deleteMailboxAdminAccount,
+    onError: (error) => {
+      toast.error(errorMessage(error, 'Mailbox account could not be deleted.'))
+    },
+    onSuccess: async () => {
+      setMailboxAdminDialog(null)
+      await Promise.all([invalidateMailboxAdmin(), invalidateMail()])
+      toast.success('Mailbox account deleted')
     }
   })
   const {
@@ -1472,6 +1548,21 @@ export function DashboardMailController({
     onSuccess: async () => {
       await invalidateMailboxAdmin()
       toast.success('Forwarding group disabled')
+    }
+  })
+  const {
+    isPending: isDeletingGroup,
+    mutateAsync: deleteGroup,
+    variables: deletingGroupId
+  } = useMutation({
+    mutationFn: deleteMailboxAdminGroup,
+    onError: (error) => {
+      toast.error(errorMessage(error, 'Forwarding group could not be deleted.'))
+    },
+    onSuccess: async () => {
+      setMailboxAdminDialog(null)
+      await invalidateMailboxAdmin()
+      toast.success('Forwarding group deleted')
     }
   })
 
@@ -1654,6 +1745,12 @@ export function DashboardMailController({
               onDisableAccount: (accountId) => {
                 runAsync(disableAccount(accountId))
               },
+              onDeleteAccount: (accountId) => {
+                runAsync(deleteAccount(accountId))
+              },
+              onDeleteGroup: (groupId) => {
+                runAsync(deleteGroup(groupId))
+              },
               onDisableGroup: (groupId) => {
                 runAsync(disableGroup(groupId))
               },
@@ -1688,30 +1785,48 @@ export function DashboardMailController({
               onSaveGroup: (groupId, input) => {
                 runAsync(saveGroup({ groupId, input }))
               },
-              pendingAccountDisableId: isDisablingAccount ? disablingAccountId : null,
-              pendingAccountSave: isSavingAccount,
-              pendingAgentCreate: isCreatingAgent,
-              pendingAgentEnrollmentRevokeId: isRevokingAgentEnrollment ? revokingAgentEnrollmentId : null,
-              pendingAgentSaveId: isSavingAgent ? savingAgentVariables?.agentId : null,
+              pendingAccountDisableId: isDisablingAccount
+                ? disablingAccountId
+                : (initialMailboxAdminControllerState?.pendingAccountDisableId ?? null),
+              pendingAccountDeleteId: isDeletingAccount
+                ? deletingAccountId
+                : (initialMailboxAdminControllerState?.pendingAccountDeleteId ?? null),
+              pendingAccountSave:
+                isSavingAccount || Boolean(initialMailboxAdminControllerState?.pendingAccountSave),
+              pendingAgentCreate:
+                isCreatingAgent || Boolean(initialMailboxAdminControllerState?.pendingAgentCreate),
+              pendingAgentEnrollmentRevokeId: isRevokingAgentEnrollment
+                ? revokingAgentEnrollmentId
+                : (initialMailboxAdminControllerState?.pendingAgentEnrollmentRevokeId ?? null),
+              pendingAgentSaveId: isSavingAgent
+                ? savingAgentVariables?.agentId
+                : (initialMailboxAdminControllerState?.pendingAgentSaveId ?? null),
               pendingAgentMailboxGrantsSaveId: isSavingAgentMailboxGrants
                 ? savingAgentMailboxGrantsVariables?.agentId
-                : null,
-              pendingAgentRevokeId: isRevokingAgent ? revokingAgentId : null,
+                : (initialMailboxAdminControllerState?.pendingAgentMailboxGrantsSaveId ?? null),
+              pendingAgentRevokeId: isRevokingAgent
+                ? revokingAgentId
+                : (initialMailboxAdminControllerState?.pendingAgentRevokeId ?? null),
               pendingAgentSystemPermissionsSaveId: isSavingAgentSystemPermissions
                 ? savingAgentSystemPermissionsVariables?.agentId
-                : null,
+                : (initialMailboxAdminControllerState?.pendingAgentSystemPermissionsSaveId ?? null),
               pendingPrincipalMailboxGrantsSaveId: isSavingPrincipalMailboxGrants
                 ? savingPrincipalMailboxGrantsVariables?.principal
                   ? mailboxAdminPrincipalKey(savingPrincipalMailboxGrantsVariables.principal)
                   : null
-                : null,
+                : (initialMailboxAdminControllerState?.pendingPrincipalMailboxGrantsSaveId ?? null),
               pendingPrincipalSystemPermissionsSaveId: isSavingPrincipalSystemPermissions
                 ? savingPrincipalSystemPermissionsVariables?.principal
                   ? mailboxAdminPrincipalKey(savingPrincipalSystemPermissionsVariables.principal)
                   : null
-                : null,
-              pendingGroupDisableId: isDisablingGroup ? disablingGroupId : null,
-              pendingGroupSave: isSavingGroup
+                : (initialMailboxAdminControllerState?.pendingPrincipalSystemPermissionsSaveId ?? null),
+              pendingGroupDisableId: isDisablingGroup
+                ? disablingGroupId
+                : (initialMailboxAdminControllerState?.pendingGroupDisableId ?? null),
+              pendingGroupDeleteId: isDeletingGroup
+                ? deletingGroupId
+                : (initialMailboxAdminControllerState?.pendingGroupDeleteId ?? null),
+              pendingGroupSave: isSavingGroup || Boolean(initialMailboxAdminControllerState?.pendingGroupSave)
             }
           )
         : undefined,
@@ -1719,12 +1834,18 @@ export function DashboardMailController({
       activeMailboxAdminSection,
       createAgent,
       createdAgentEnrollment,
+      deleteAccount,
+      deletingAccountId,
+      deleteGroup,
+      deletingGroupId,
       disableAccount,
       disablingAccountId,
       disableGroup,
       disablingGroupId,
       isDisablingAccount,
+      isDeletingAccount,
       isDisablingGroup,
+      isDeletingGroup,
       isCreatingAgent,
       isSavingAgentMailboxGrants,
       isSavingAgentSystemPermissions,
@@ -1735,6 +1856,7 @@ export function DashboardMailController({
       isSavingAgent,
       isSavingAccount,
       isSavingGroup,
+      initialMailboxAdminControllerState,
       mailboxAdminDialog,
       mailboxAdminData,
       mailboxAdminError,
@@ -1869,21 +1991,25 @@ export function DashboardMailController({
     [composeState, isSavingDraft, isSendingDraft, isSendingMessage]
   )
 
-  const navigateMail = React.useCallback(
+  const navigateMailAsync = React.useCallback(
     (patch: Partial<DashboardSearch>) => {
       const nextSearch: DashboardSearch = {
         ...routeSearch,
         ...patch
       }
 
-      router
-        .navigate({
-          search: cleanDashboardSearch(nextSearch),
-          to: '/dashboard/'
-        })
-        .catch(ignoreAsyncError)
+      return router.navigate({
+        search: cleanDashboardSearch(nextSearch),
+        to: '/dashboard/'
+      })
     },
     [routeSearch, router]
+  )
+  const navigateMail = React.useCallback(
+    (patch: Partial<DashboardSearch>) => {
+      navigateMailAsync(patch).catch(ignoreAsyncError)
+    },
+    [navigateMailAsync]
   )
 
   const handleComposeOpenChange = React.useCallback(
@@ -1924,13 +2050,29 @@ export function DashboardMailController({
         draftMailboxId: result.mailboxId,
         errorMessage: undefined
       }))
+      if (composeState.draftId && result.previousDeleted && routeSearch?.messageId === composeState.draftId) {
+        await navigateMailAsync({
+          cursor: undefined,
+          direction: undefined,
+          folderId: result.mailboxId,
+          messageId: result.draftId
+        })
+      }
+      await invalidateMailWorkspaces()
     } catch (error) {
       setComposeState((current) => ({
         ...current,
         errorMessage: errorMessage(error, 'Draft could not be saved.')
       }))
     }
-  }, [composeState, saveDraft, workspace?.activeAccountId])
+  }, [
+    composeState,
+    invalidateMailWorkspaces,
+    navigateMailAsync,
+    routeSearch?.messageId,
+    saveDraft,
+    workspace?.activeAccountId
+  ])
   const handleComposeSubmit = React.useCallback(async () => {
     if (!workspace?.activeAccountId) {
       setComposeState((current) => ({ ...current, errorMessage: 'Select a mailbox before sending.' }))
@@ -1938,12 +2080,20 @@ export function DashboardMailController({
     }
     try {
       if (composeState.draftId && composeState.draftMailboxId) {
+        if (routeSearch?.messageId === composeState.draftId) {
+          await navigateMailAsync({
+            cursor: undefined,
+            direction: undefined,
+            messageId: undefined
+          })
+        }
         const draft = await saveDraft(composePayload(workspace.activeAccountId, composeState))
         await sendDraft({
           accountId: workspace.activeAccountId,
           mailboxId: draft.mailboxId,
           messageId: draft.draftId
         })
+        await invalidateMailWorkspaces()
       } else {
         await sendMessage(composePayload(workspace.activeAccountId, composeState))
       }
@@ -1954,7 +2104,16 @@ export function DashboardMailController({
         errorMessage: errorMessage(error, 'Message could not be sent.')
       }))
     }
-  }, [composeState, saveDraft, sendDraft, sendMessage, workspace?.activeAccountId])
+  }, [
+    composeState,
+    invalidateMailWorkspaces,
+    navigateMailAsync,
+    routeSearch?.messageId,
+    saveDraft,
+    sendDraft,
+    sendMessage,
+    workspace?.activeAccountId
+  ])
   const handleComposeDiscardDraft = React.useCallback(async () => {
     if (workspace?.activeAccountId && composeState.draftId && composeState.draftMailboxId) {
       await deleteMessage({
@@ -1962,9 +2121,58 @@ export function DashboardMailController({
         mailboxId: composeState.draftMailboxId,
         messageId: composeState.draftId
       })
+      if (routeSearch?.messageId === composeState.draftId) {
+        await navigateMailAsync({
+          cursor: undefined,
+          direction: undefined,
+          messageId: undefined
+        })
+      }
+      await invalidateMailWorkspaces()
     }
     setComposeState(closedComposeState())
-  }, [composeState.draftId, composeState.draftMailboxId, deleteMessage, workspace?.activeAccountId])
+  }, [
+    composeState.draftId,
+    composeState.draftMailboxId,
+    deleteMessage,
+    invalidateMailWorkspaces,
+    navigateMailAsync,
+    routeSearch?.messageId,
+    workspace?.activeAccountId
+  ])
+
+  const handleSendDraftAction = React.useCallback(
+    async (actionInput: AgentMailMessageActionInput) => {
+      await sendDraft(actionInput)
+      if (routeSearch?.messageId === actionInput.messageId) {
+        await navigateMailAsync({
+          cursor: undefined,
+          direction: undefined,
+          messageId: undefined
+        })
+      }
+      await invalidateMailWorkspaces()
+    },
+    [invalidateMailWorkspaces, navigateMailAsync, routeSearch?.messageId, sendDraft]
+  )
+  const handleMoveMessageAction = React.useCallback(
+    async (actionInput: AgentMailMessageActionInput, targetMailboxId: string) => {
+      await moveMessage({
+        ...actionInput,
+        targetMailboxId
+      })
+      if (routeSearch?.messageId === actionInput.messageId) {
+        await navigateMailAsync({
+          cursor: undefined,
+          direction: undefined,
+          folderId: targetMailboxId,
+          messageId: actionInput.messageId
+        })
+      }
+      await invalidateMailWorkspaces()
+    },
+    [invalidateMailWorkspaces, moveMessage, navigateMailAsync, routeSearch?.messageId]
+  )
 
   const handleEmailAction = React.useCallback(
     (action: AuthenticatedEmailAction, email: AuthenticatedEmailPreview) => {
@@ -2023,12 +2231,7 @@ export function DashboardMailController({
               : { path: 'INBOX', specialUse: '\\Inbox' }
           )
           if (targetMailbox) {
-            runAsync(
-              moveMessage({
-                ...actionInput,
-                targetMailboxId: targetMailbox.id
-              })
-            )
+            runAsync(handleMoveMessageAction(actionInput, targetMailbox.id))
           }
           break
         }
@@ -2047,7 +2250,7 @@ export function DashboardMailController({
           setComposeState(composeFromDraft(targetMessage, workspace?.activeAccountId))
           break
         case 'send-draft':
-          runAsync(sendDraft(actionInput))
+          runAsync(handleSendDraftAction(actionInput))
           break
         case 'view-original':
           setOriginalSourceDialog({ isLoading: true, state: 'open' })
@@ -2065,7 +2268,6 @@ export function DashboardMailController({
           )
           break
         case 'back':
-        case 'close':
           navigateMail({ messageId: undefined })
           break
         case 'archive': {
@@ -2074,12 +2276,7 @@ export function DashboardMailController({
             specialUse: '\\Archive'
           })
           if (archiveFolder && archiveFolder.id !== targetMessage.mailboxId) {
-            runAsync(
-              moveMessage({
-                ...actionInput,
-                targetMailboxId: archiveFolder.id
-              })
-            )
+            runAsync(handleMoveMessageAction(actionInput, archiveFolder.id))
           }
           break
         }
@@ -2089,10 +2286,10 @@ export function DashboardMailController({
       }
     },
     [
-      moveMessage,
+      handleMoveMessageAction,
       navigateMail,
       selectedMessage,
-      sendDraft,
+      handleSendDraftAction,
       updateMessage,
       workspace?.activeAccountId,
       workspace?.folders
@@ -2109,8 +2306,13 @@ export function DashboardMailController({
       await deleteMessage(actionInput)
       setDeleteDialog({ state: 'closed' })
       if (actionInput.messageId === selectedMessage?.id) {
-        navigateMail({ messageId: undefined })
+        await navigateMailAsync({
+          cursor: undefined,
+          direction: undefined,
+          messageId: undefined
+        })
       }
+      await invalidateMailWorkspaces()
     } catch (error) {
       setDeleteDialog({
         actionInput,
@@ -2123,7 +2325,8 @@ export function DashboardMailController({
     deleteDialog.actionInput,
     deleteDialog.isDraft,
     deleteMessage,
-    navigateMail,
+    invalidateMailWorkspaces,
+    navigateMailAsync,
     selectedMessage?.id,
     selectedMessageActionInput
   ])
@@ -2135,10 +2338,7 @@ export function DashboardMailController({
     }
     setMoveDialog((current) => ({ ...current, isSubmitting: true }))
     try {
-      await moveMessage({
-        ...actionInput,
-        targetMailboxId: moveDialog.selectedFolderId
-      })
+      await handleMoveMessageAction(actionInput, moveDialog.selectedFolderId)
       setMoveDialog({ state: 'closed' })
     } catch (error) {
       setMoveDialog({
@@ -2148,7 +2348,7 @@ export function DashboardMailController({
         state: 'open'
       })
     }
-  }, [moveDialog.actionInput, moveDialog.selectedFolderId, moveMessage, selectedMessageActionInput])
+  }, [handleMoveMessageAction, moveDialog.actionInput, moveDialog.selectedFolderId, selectedMessageActionInput])
 
   const handleMailboxFolderCreateSubmit = React.useCallback(async () => {
     if (!workspace?.activeAccountId) {

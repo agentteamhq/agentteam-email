@@ -4,6 +4,8 @@ const mailRpcTestState = vi.hoisted(() => ({
   createAgentMailAccountForWeb: vi.fn(),
   createAgentMailAgentEnrollmentForWeb: vi.fn(),
   createAgentMailForwardingGroupForWeb: vi.fn(),
+  deleteAgentMailAccountForWeb: vi.fn(),
+  deleteAgentMailForwardingGroupForWeb: vi.fn(),
   disableAgentMailAccountForWeb: vi.fn(),
   getAgentMailAccountsForWeb: vi.fn(),
   getAgentMailOriginalSourceForWeb: vi.fn(),
@@ -32,6 +34,8 @@ vi.mock('../agent-mail/admin-service', () => ({
   createAgentMailAccountForWeb: mailRpcTestState.createAgentMailAccountForWeb,
   createAgentMailAgentEnrollmentForWeb: mailRpcTestState.createAgentMailAgentEnrollmentForWeb,
   createAgentMailForwardingGroupForWeb: mailRpcTestState.createAgentMailForwardingGroupForWeb,
+  deleteAgentMailAccountForWeb: mailRpcTestState.deleteAgentMailAccountForWeb,
+  deleteAgentMailForwardingGroupForWeb: mailRpcTestState.deleteAgentMailForwardingGroupForWeb,
   disableAgentMailAccountForWeb: mailRpcTestState.disableAgentMailAccountForWeb,
   disableAgentMailForwardingGroupForWeb: mailRpcTestState.disableAgentMailForwardingGroupForWeb,
   getAgentMailAdminNavigationForWeb: mailRpcTestState.getAgentMailAdminNavigationForWeb,
@@ -77,6 +81,8 @@ describe('mail RPC routes', () => {
     mailRpcTestState.createAgentMailAccountForWeb.mockReset()
     mailRpcTestState.createAgentMailAgentEnrollmentForWeb.mockReset()
     mailRpcTestState.createAgentMailForwardingGroupForWeb.mockReset()
+    mailRpcTestState.deleteAgentMailAccountForWeb.mockReset()
+    mailRpcTestState.deleteAgentMailForwardingGroupForWeb.mockReset()
     mailRpcTestState.disableAgentMailAccountForWeb.mockReset()
     mailRpcTestState.disableAgentMailForwardingGroupForWeb.mockReset()
     mailRpcTestState.getAgentMailAccountsForWeb.mockReset()
@@ -105,6 +111,8 @@ describe('mail RPC routes', () => {
         createAccount: false,
         createAgent: false,
         createGroup: false,
+        deleteAccount: false,
+        deleteGroup: false,
         disableAccount: false,
         disableGroup: false,
         manageAgentMailboxGrants: false,
@@ -581,6 +589,31 @@ describe('mail RPC routes', () => {
     })
   })
 
+  it('routes forwarding group deletes through the webserver admin boundary', async () => {
+    expect.hasAssertions()
+    mailRpcTestState.deleteAgentMailForwardingGroupForWeb.mockResolvedValue({
+      groupId: 'group_public_1',
+      success: true
+    })
+
+    const { default: mail } = await import('./mail')
+    const response = await mail.handle(
+      new Request('https://mail.example.com/mail/admin/groups/group_public_1', {
+        method: 'DELETE'
+      })
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toStrictEqual({
+      groupId: 'group_public_1',
+      success: true
+    })
+    expect(mailRpcTestState.deleteAgentMailForwardingGroupForWeb).toHaveBeenCalledWith({
+      groupId: 'group_public_1',
+      headers: expect.any(Headers)
+    })
+  })
+
   it('routes account updates through the webserver admin boundary', async () => {
     expect.hasAssertions()
     mailRpcTestState.updateAgentMailAccountForWeb.mockResolvedValue({
@@ -661,6 +694,31 @@ describe('mail RPC routes', () => {
       success: true
     })
     expect(mailRpcTestState.disableAgentMailAccountForWeb).toHaveBeenCalledWith({
+      accountId: 'support@example.test',
+      headers: expect.any(Headers)
+    })
+  })
+
+  it('routes account deletes through the webserver admin boundary', async () => {
+    expect.hasAssertions()
+    mailRpcTestState.deleteAgentMailAccountForWeb.mockResolvedValue({
+      accountId: 'support@example.test',
+      success: true
+    })
+
+    const { default: mail } = await import('./mail')
+    const response = await mail.handle(
+      new Request('https://mail.example.com/mail/admin/accounts/support%40example.test', {
+        method: 'DELETE'
+      })
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toStrictEqual({
+      accountId: 'support@example.test',
+      success: true
+    })
+    expect(mailRpcTestState.deleteAgentMailAccountForWeb).toHaveBeenCalledWith({
       accountId: 'support@example.test',
       headers: expect.any(Headers)
     })

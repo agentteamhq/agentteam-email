@@ -35,7 +35,7 @@ const (
 	connectPath             = "/connect/cloudflare"
 	accountSelectionPath    = "/probe/cloudflare/account"
 	defaultListenAddr       = "127.0.0.1:9003"
-	defaultScopes           = "workers-r2.read workers-r2.write workers-scripts.read workers-scripts.write dns.read dns.write zone.read cloud-email-security.read email-routing-address.read email-routing-address.write email-routing-rule.read email-routing-rule.write email-routing-suppression.read email-security-dmarcreports.read email-sending.read email-sending.write offline_access"
+	defaultScopes           = "workers-r2.read workers-r2.write workers-scripts.read workers-scripts.write user-details.read dns.read dns.write zone-dns-settings.read zone-dns-settings.write zone.read zone-settings.read zone-settings.write cloud-email-security.read email-routing-address.read email-routing-address.write email-routing-rule.read email-routing-rule.write email-routing-suppression.read email-security-dmarcreports.read email-sending.read email-sending.write offline_access"
 	defaultEventsPath       = "tmp/run/current/events.jsonl"
 	probeSessionTTL         = 15 * time.Minute
 	refreshTokenStoreSchema = "cloudflare-oauth-prod-probe.refresh-token.v1"

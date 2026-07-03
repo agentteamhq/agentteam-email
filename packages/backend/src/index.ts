@@ -49,6 +49,8 @@ export type {
   AgentMailAdminAgentInput,
   AgentMailAdminAgentSystemPermissionsInput,
   AgentMailAdminCreateAgentResult,
+  AgentMailAdminDeleteAccountResult,
+  AgentMailAdminDeleteForwardingGroupResult,
   AgentMailAdminForwardingGroupInput,
   AgentMailAdminExternalPrincipal,
   AgentMailAdminGroup,

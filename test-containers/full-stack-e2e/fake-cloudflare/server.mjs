@@ -19,6 +19,8 @@ const cloudflareOAuthScopes = [
   'user-details.read',
   'dns.read',
   'dns.write',
+  'zone-dns-settings.read',
+  'zone-dns-settings.write',
   'zone.read',
   'cloud-email-security.read',
   'email-routing-address.read',
@@ -62,6 +64,7 @@ const state = {
   dnsEnabledZones: new Set(),
   operations: [],
   requests: [],
+  sendingSubdomains: new Map(),
   scripts: new Map(),
   secrets: [],
   workerRuntimeBindings: new Map()
@@ -91,6 +94,9 @@ const server = http.createServer(async (request, response) => {
         dnsEnabledZones: [...state.dnsEnabledZones].sort(),
         operations: state.operations,
         requests: state.requests,
+        sendingSubdomains: Object.fromEntries(
+          [...state.sendingSubdomains.entries()].map(([zoneId, names]) => [zoneId, [...names].sort()])
+        ),
         scripts: Object.fromEntries(state.scripts),
         secrets: state.secrets
       })
@@ -273,6 +279,15 @@ async function handleCloudflareApi(request, response, url, body) {
   )
   if (sendMatch?.groups && request.method === 'POST') {
     const json = parseJsonBody(body) || {}
+    const fromDomain = domainFromAddress(readString(json, 'from') || '')
+    if (!isSendingDomainEnabled(fromDomain)) {
+      sendJson(
+        response,
+        403,
+        cloudflareResponse(null, false, [{ code: 10203, message: 'email.sending.error.email.sending_disabled' }])
+      )
+      return
+    }
     const delivered = [
       ...arrayOfStrings(json.to),
       ...arrayOfStrings(json.cc),
@@ -291,6 +306,55 @@ async function handleCloudflareApi(request, response, url, body) {
         delivered,
         permanent_bounces: [],
         queued: delivered.length > 0 ? [] : ['accepted-without-recipient-projection']
+      })
+    )
+    return
+  }
+
+  const sendingSubdomainsMatch = url.pathname.match(
+    /^\/client\/v4\/zones\/(?<zoneId>[^/]+)\/email\/sending\/subdomains$/u
+  )
+  if (sendingSubdomainsMatch?.groups && request.method === 'GET') {
+    const zoneId = decodeURIComponent(sendingSubdomainsMatch.groups.zoneId)
+    const names = state.sendingSubdomains.get(zoneId) || new Set()
+    recordOperation({ zoneId, type: 'email-sending.subdomains.list' })
+    sendJson(
+      response,
+      200,
+      paginatedCloudflareResponse(
+        [...names].map((name) => ({
+          enabled: true,
+          name,
+          tag: `sending-${hashText(`${zoneId}:${name}`).slice(0, 12)}`
+        })),
+        url
+      )
+    )
+    return
+  }
+  if (sendingSubdomainsMatch?.groups && request.method === 'POST') {
+    const zoneId = decodeURIComponent(sendingSubdomainsMatch.groups.zoneId)
+    const json = parseJsonBody(body)
+    const name = readString(json, 'name')
+    if (!name) {
+      sendJson(
+        response,
+        400,
+        cloudflareResponse(null, false, [{ code: 1000, message: 'Sending subdomain name is required' }])
+      )
+      return
+    }
+    const names = state.sendingSubdomains.get(zoneId) || new Set()
+    names.add(name)
+    state.sendingSubdomains.set(zoneId, names)
+    recordOperation({ name, zoneId, type: 'email-sending.subdomain.create' })
+    sendJson(
+      response,
+      200,
+      cloudflareResponse({
+        enabled: true,
+        name,
+        tag: `sending-${hashText(`${zoneId}:${name}`).slice(0, 12)}`
       })
     )
     return
@@ -634,6 +698,23 @@ function readString(value, key) {
   return typeof candidate === 'string' && candidate.trim() ? candidate : null
 }
 
+function domainFromAddress(address) {
+  const atIndex = address.lastIndexOf('@')
+  return atIndex === -1 ? '' : address.slice(atIndex + 1).trim().toLowerCase()
+}
+
+function isSendingDomainEnabled(domain) {
+  if (!domain) {
+    return false
+  }
+  for (const names of state.sendingSubdomains.values()) {
+    if (names.has(domain)) {
+      return true
+    }
+  }
+  return false
+}
+
 function recordRequest(request, url, body) {
   state.requests.push({
     bodySha256: hashBody(body),
@@ -727,6 +808,7 @@ function resetState() {
   state.dnsEnabledZones.clear()
   state.operations.length = 0
   state.requests.length = 0
+  state.sendingSubdomains.clear()
   state.scripts.clear()
   state.secrets.length = 0
   state.workerRuntimeBindings.clear()
@@ -734,4 +816,8 @@ function resetState() {
 
 function hashBody(body) {
   return createHash('sha256').update(body).digest('hex')
+}
+
+function hashText(text) {
+  return createHash('sha256').update(text).digest('hex')
 }

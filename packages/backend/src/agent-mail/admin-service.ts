@@ -14,6 +14,7 @@ import {
   base62UUIDv7ToUUIDv7,
   publicIdFromUUIDv7
 } from '@main/db'
+import debug from 'debug'
 import { z } from 'zod'
 
 import { globals } from '../globals'
@@ -71,6 +72,7 @@ const AgentMailAdminGrantPrincipalTypeSchema = z.enum(['api_key', 'oauth_client'
 export type AgentMailAdminGrantPrincipalType = 'api_key' | 'oauth_client'
 const DEFAULT_ADMIN_PAGE_SIZE = 25
 const MAX_ADMIN_PAGE_SIZE = 100
+const log = debug('app:agent-mail:admin')
 
 export const AgentMailAdminAccountInput = z
   .object({
@@ -297,6 +299,8 @@ export interface AgentMailAdminAllowedActions {
   createAccount: boolean
   createAgent: boolean
   createGroup: boolean
+  deleteAccount: boolean
+  deleteGroup: boolean
   disableAccount: boolean
   disableGroup: boolean
   manageAgentMailboxGrants: boolean
@@ -354,6 +358,16 @@ export interface AgentMailAdminRevokeAgentEnrollmentResult {
 
 export interface AgentMailAdminSaveAccountResult {
   account: AgentMailAdminAccount
+  success: true
+}
+
+export interface AgentMailAdminDeleteAccountResult {
+  accountId: string
+  success: true
+}
+
+export interface AgentMailAdminDeleteForwardingGroupResult {
+  groupId: string
   success: true
 }
 
@@ -431,13 +445,30 @@ export async function createAgentMailForwardingGroupForWeb({
   const client = createWildDuckClient()
   const wildDuckResult = await client.createForwardedAddress({
     address,
-    forwardedDisabled: status !== 'active',
     name: description,
     targets: recipients
   })
 
   if (!wildDuckResult.id) {
     throw new AgentMailAdminError('Forwarding group could not be created', 400)
+  }
+  log('forwarding_group_wildduck_created %o', {
+    domain: mailboxDomain(address),
+    organizationId: String(context.organizationId),
+    recipientCount: recipients.length,
+    status,
+    wildDuckAddressId: wildDuckResult.id
+  })
+  if (status !== 'active') {
+    await client.updateForwardedAddress(wildDuckResult.id, {
+      forwardedDisabled: true
+    })
+    log('forwarding_group_wildduck_disabled_after_create %o', {
+      domain: mailboxDomain(address),
+      organizationId: String(context.organizationId),
+      status,
+      wildDuckAddressId: wildDuckResult.id
+    })
   }
 
   const group = await db.models.agentMailForwardingGroup.create({
@@ -588,6 +619,64 @@ export async function updateAgentMailAccountForWeb({
   }
 }
 
+export async function deleteAgentMailAccountForWeb({
+  accountId,
+  headers
+}: {
+  accountId: string
+  headers: Headers
+}): Promise<AgentMailAdminDeleteAccountResult> {
+  const { db } = await globals()
+  const context = await requireAgentMailOrganizationContext(headers)
+  const domains = await listManageableMailDomains(context.organizationId)
+  const address = normalizeAccountAddress(accountId, domains)
+  requireAdminAccountManageAccess(context, address)
+
+  const client = createWildDuckClient()
+  const userId = await resolveExistingMailboxUser(client, address)
+  const user = await client.getUser(userId)
+  if (!user.disabled && !user.suspended) {
+    throw new AgentMailAdminError('Mailbox account must be disabled before deletion', 400)
+  }
+
+  const [mailboxGrants, forwardingGroups] = await Promise.all([
+    db.models.agentMailMailboxGrant
+      .find({
+        mailboxAddress: address,
+        organizationId: context.organizationId,
+        status: { $in: ['active', 'pending'] }
+      })
+      .exec(),
+    db.models.agentMailForwardingGroup
+      .find({
+        organizationId: context.organizationId,
+        status: { $in: ['active', 'degraded', 'pending'] }
+      })
+      .exec()
+  ])
+  if (mailboxGrants.length > 0) {
+    throw new AgentMailAdminError('Mailbox account has active access grants', 400)
+  }
+  const referencingGroups = forwardingGroups.filter((group) =>
+    normalizeRecipients(group.recipients).includes(address)
+  )
+  if (referencingGroups.length > 0) {
+    throw new AgentMailAdminError('Mailbox account is still used by forwarding groups', 400)
+  }
+
+  await client.deleteUser(userId)
+  await auditAgentMailAdmin(context, 'agent_mail.account.deleted', {
+    mailboxAddress: address,
+    organizationId: String(context.organizationId),
+    wildDuckUserId: userId
+  })
+
+  return {
+    accountId: address,
+    success: true
+  }
+}
+
 export async function updateAgentMailForwardingGroupForWeb({
   groupId,
   headers,
@@ -633,8 +722,16 @@ export async function updateAgentMailForwardingGroupForWeb({
     name: nextDescription,
     targets: nextRecipients
   })
+  log('forwarding_group_wildduck_updated %o', {
+    domain: mailboxDomain(nextAddress),
+    forwardingGroupId: String(group._id),
+    organizationId: String(context.organizationId),
+    recipientCount: nextRecipients.length,
+    status: nextStatus,
+    wildDuckAddressId: group.wildDuckAddressId
+  })
   const now = new Date()
-  await db.models.agentMailForwardingGroup
+  const updateResult = await db.models.agentMailForwardingGroup
     .updateOne(
       { _id: group._id, organizationId: context.organizationId },
       {
@@ -648,14 +745,21 @@ export async function updateAgentMailForwardingGroupForWeb({
       }
     )
     .exec()
-  const updatedGroup: AgentMailForwardingGroupDocument = {
-    ...group,
+  log('forwarding_group_persisted %o', {
+    domain: mailboxDomain(nextAddress),
+    forwardingGroupId: String(group._id),
+    modifiedCount: modifiedCount(updateResult),
+    organizationId: String(context.organizationId),
+    recipientCount: nextRecipients.length,
+    status: nextStatus
+  })
+  const updatedGroup = Object.assign(group, {
     address: nextAddress,
     description: nextDescription,
     recipients: nextRecipients,
     status: nextStatus,
     updatedAt: now
-  }
+  })
   await auditAgentMailAdmin(context, 'agent_mail.forwarding_group.updated', {
     address: nextAddress,
     forwardingGroupId: String(group._id),
@@ -667,6 +771,57 @@ export async function updateAgentMailForwardingGroupForWeb({
 
   return {
     group: toAdminGroup(updatedGroup),
+    success: true
+  }
+}
+
+export async function deleteAgentMailForwardingGroupForWeb({
+  groupId,
+  headers
+}: {
+  groupId: string
+  headers: Headers
+}): Promise<AgentMailAdminDeleteForwardingGroupResult> {
+  const { db } = await globals()
+  const context = await requireAgentMailOrganizationContext(headers)
+  requireAdminSectionAccess(getAdminSectionAccess(context), 'groups')
+  const groupUuid = parseForwardingGroupPublicId(groupId)
+  const group = await db.models.agentMailForwardingGroup
+    .findOne({ _id: groupUuid, organizationId: context.organizationId })
+    .exec()
+
+  if (!group) {
+    throw new AgentMailAdminError('Forwarding group was not found', 404)
+  }
+  if (group.status !== 'disabled') {
+    throw new AgentMailAdminError('Forwarding group must be disabled before deletion', 400)
+  }
+  if (!group.wildDuckAddressId) {
+    throw new AgentMailAdminError('Forwarding group is missing its WildDuck address id', 400)
+  }
+
+  const client = createWildDuckClient()
+  await client.deleteForwardedAddress(group.wildDuckAddressId)
+  const deleteResult = await db.models.agentMailForwardingGroup
+    .deleteOne({ _id: group._id, organizationId: context.organizationId, status: 'disabled' })
+    .exec()
+  log('forwarding_group_deleted %o', {
+    address: group.address,
+    deletedCount: deleteResult.deletedCount,
+    domain: mailboxDomain(group.address),
+    forwardingGroupId: String(group._id),
+    organizationId: String(context.organizationId),
+    wildDuckAddressId: group.wildDuckAddressId
+  })
+  await auditAgentMailAdmin(context, 'agent_mail.forwarding_group.deleted', {
+    address: group.address,
+    forwardingGroupId: String(group._id),
+    organizationId: String(context.organizationId),
+    wildDuckAddressId: group.wildDuckAddressId
+  })
+
+  return {
+    groupId,
     success: true
   }
 }
@@ -3028,6 +3183,8 @@ function getAdminAllowedActions(context: AgentMailOrganizationContext): AgentMai
     createAccount: accountWrite,
     createAgent: agentManage,
     createGroup: groupManage,
+    deleteAccount: accountManage,
+    deleteGroup: groupManage,
     disableAccount: accountManage,
     disableGroup: groupManage,
     manageAgentMailboxGrants: agentMailboxGrantManage,

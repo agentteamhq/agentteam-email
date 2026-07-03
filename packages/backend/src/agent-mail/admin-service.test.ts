@@ -29,6 +29,7 @@ const adminServiceTestState = vi.hoisted(() => ({
   agentMailDomainFind: vi.fn(),
   agentMailForwardingGroupFind: vi.fn(),
   agentMailForwardingGroupCreate: vi.fn(),
+  agentMailForwardingGroupDeleteOne: vi.fn(),
   agentMailForwardingGroupFindOne: vi.fn(),
   agentMailForwardingGroupUpdateOne: vi.fn(),
   agentMailDomainFindOne: vi.fn(),
@@ -47,6 +48,8 @@ const adminServiceTestState = vi.hoisted(() => ({
   createForwardedAddress: vi.fn(),
   createUser: vi.fn(),
   createWildDuckClient: vi.fn(),
+  deleteForwardedAddress: vi.fn(),
+  deleteUser: vi.fn(),
   getUser: vi.fn(),
   getAgentMailAccountsForWeb: vi.fn(),
   globals: vi.fn(),
@@ -143,6 +146,7 @@ describe('Agent Mail admin service', () => {
     adminServiceTestState.agentMailDomainFind.mockReset()
     adminServiceTestState.agentMailForwardingGroupFind.mockReset()
     adminServiceTestState.agentMailForwardingGroupCreate.mockReset()
+    adminServiceTestState.agentMailForwardingGroupDeleteOne.mockReset()
     adminServiceTestState.agentMailForwardingGroupFindOne.mockReset()
     adminServiceTestState.agentMailForwardingGroupUpdateOne.mockReset()
     adminServiceTestState.agentMailDomainFindOne.mockReset()
@@ -161,6 +165,8 @@ describe('Agent Mail admin service', () => {
     adminServiceTestState.createForwardedAddress.mockReset()
     adminServiceTestState.createUser.mockReset()
     adminServiceTestState.createWildDuckClient.mockReset()
+    adminServiceTestState.deleteForwardedAddress.mockReset()
+    adminServiceTestState.deleteUser.mockReset()
     adminServiceTestState.getUser.mockReset()
     adminServiceTestState.getAgentMailAccountsForWeb.mockReset()
     adminServiceTestState.globals.mockReset()
@@ -217,6 +223,8 @@ describe('Agent Mail admin service', () => {
     adminServiceTestState.createWildDuckClient.mockReturnValue({
       createForwardedAddress: adminServiceTestState.createForwardedAddress,
       createUser: adminServiceTestState.createUser,
+      deleteForwardedAddress: adminServiceTestState.deleteForwardedAddress,
+      deleteUser: adminServiceTestState.deleteUser,
       getUser: adminServiceTestState.getUser,
       resolveAddress: adminServiceTestState.resolveAddress,
       updateUser: adminServiceTestState.updateUser,
@@ -265,6 +273,7 @@ describe('Agent Mail admin service', () => {
           },
           agentMailForwardingGroup: {
             create: adminServiceTestState.agentMailForwardingGroupCreate,
+            deleteOne: adminServiceTestState.agentMailForwardingGroupDeleteOne,
             find: adminServiceTestState.agentMailForwardingGroupFind,
             findOne: adminServiceTestState.agentMailForwardingGroupFindOne,
             updateOne: adminServiceTestState.agentMailForwardingGroupUpdateOne
@@ -839,7 +848,6 @@ describe('Agent Mail admin service', () => {
     })
     expect(adminServiceTestState.createForwardedAddress).toHaveBeenCalledWith({
       address: 'support@example.test',
-      forwardedDisabled: false,
       name: 'Support queue',
       targets: ['triage@example.test']
     })
@@ -866,6 +874,253 @@ describe('Agent Mail admin service', () => {
       status: 'success',
       userId: 'user-1'
     })
+  })
+
+  it('creates inactive forwarding groups by updating WildDuck after the create payload succeeds', async () => {
+    expect.hasAssertions()
+
+    const groupId = '01960000-0000-7000-8000-000000000004'
+    adminServiceTestState.createForwardedAddress.mockResolvedValue({
+      id: 'wildduck-forwarded-disabled',
+      success: true
+    })
+    adminServiceTestState.updateForwardedAddress.mockResolvedValue({
+      success: true
+    })
+    adminServiceTestState.agentMailForwardingGroupCreate.mockResolvedValue({
+      _id: groupId,
+      address: 'ops@example.test',
+      createdAt: new Date('2026-06-22T10:00:00.000Z'),
+      createdByUserId: 'user-1',
+      description: 'Ops queue',
+      lastDeliveredAt: null,
+      organizationId: 'org-1',
+      recipients: ['triage@example.test'],
+      status: 'disabled',
+      updatedAt: new Date('2026-06-22T10:00:00.000Z'),
+      wildDuckAddressId: 'wildduck-forwarded-disabled'
+    })
+    adminServiceTestState.auditLogCreate.mockResolvedValue({})
+
+    const { createAgentMailForwardingGroupForWeb } = await import('./admin-service')
+
+    await expect(
+      createAgentMailForwardingGroupForWeb({
+        headers: new Headers(),
+        input: {
+          address: 'ops@example.test',
+          description: 'Ops queue',
+          recipients: ['triage@example.test'],
+          status: 'disabled'
+        }
+      })
+    ).resolves.toMatchObject({
+      group: {
+        address: 'ops@example.test',
+        status: 'disabled'
+      },
+      success: true
+    })
+    expect(adminServiceTestState.createForwardedAddress).toHaveBeenCalledWith({
+      address: 'ops@example.test',
+      name: 'Ops queue',
+      targets: ['triage@example.test']
+    })
+    expect(adminServiceTestState.updateForwardedAddress).toHaveBeenCalledWith('wildduck-forwarded-disabled', {
+      forwardedDisabled: true
+    })
+    expect(adminServiceTestState.agentMailForwardingGroupCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        address: 'ops@example.test',
+        status: 'disabled',
+        wildDuckAddressId: 'wildduck-forwarded-disabled'
+      })
+    )
+  })
+
+  it('returns the updated forwarding group when the stored document has a non-enumerable id', async () => {
+    expect.hasAssertions()
+
+    const groupId = '01960000-0000-7000-8000-000000000005'
+    const groupPublicId = publicIdFromUUIDv7(groupId)
+    const storedGroup = {
+      address: 'support@example.test',
+      createdAt: new Date('2026-06-22T10:00:00.000Z'),
+      createdByUserId: 'user-1',
+      description: 'Support queue',
+      lastDeliveredAt: null,
+      organizationId: 'org-1',
+      recipients: [],
+      status: 'active',
+      updatedAt: new Date('2026-06-22T10:00:00.000Z'),
+      wildDuckAddressId: 'wildduck-forwarded-1'
+    }
+    Object.defineProperty(storedGroup, '_id', {
+      enumerable: false,
+      value: groupId
+    })
+    adminServiceTestState.agentMailForwardingGroupFindOne.mockReturnValue({
+      exec: () => Promise.resolve(storedGroup)
+    })
+    adminServiceTestState.updateForwardedAddress.mockResolvedValue({
+      success: true
+    })
+    adminServiceTestState.agentMailForwardingGroupUpdateOne.mockReturnValue({
+      exec: () => Promise.resolve({ matchedCount: 1, modifiedCount: 1 })
+    })
+    adminServiceTestState.auditLogCreate.mockResolvedValue({})
+
+    const { updateAgentMailForwardingGroupForWeb } = await import('./admin-service')
+
+    await expect(
+      updateAgentMailForwardingGroupForWeb({
+        groupId: groupPublicId,
+        headers: new Headers(),
+        input: {
+          address: 'support@example.test',
+          description: 'Support queue',
+          recipients: ['research@example.test'],
+          status: 'active'
+        }
+      })
+    ).resolves.toStrictEqual({
+      group: {
+        address: 'support@example.test',
+        description: 'Support queue',
+        domain: 'example.test',
+        id: groupPublicId,
+        lastDelivered: 'Never',
+        lastUpdated: expect.any(String),
+        recipients: ['research@example.test'],
+        status: 'active'
+      },
+      success: true
+    })
+    expect(adminServiceTestState.updateForwardedAddress).toHaveBeenCalledWith('wildduck-forwarded-1', {
+      address: 'support@example.test',
+      forwardedDisabled: false,
+      name: 'Support queue',
+      targets: ['research@example.test']
+    })
+    expect(adminServiceTestState.agentMailForwardingGroupUpdateOne).toHaveBeenCalledWith(
+      { _id: groupId, organizationId: 'org-1' },
+      {
+        $set: expect.objectContaining({
+          address: 'support@example.test',
+          description: 'Support queue',
+          recipients: ['research@example.test'],
+          status: 'active'
+        })
+      }
+    )
+    expect(adminServiceTestState.auditLogCreate).toHaveBeenCalledWith({
+      action: 'agent_mail.forwarding_group.updated',
+      metadata: {
+        address: 'support@example.test',
+        forwardingGroupId: groupId,
+        organizationId: 'org-1',
+        recipientCount: 1,
+        status: 'active',
+        wildDuckAddressId: 'wildduck-forwarded-1'
+      },
+      severity: 'medium',
+      status: 'success',
+      userId: 'user-1'
+    })
+  })
+
+  it('deletes disabled forwarding groups from WildDuck and the server-owned group record', async () => {
+    expect.hasAssertions()
+
+    const groupId = '01960000-0000-7000-8000-000000000006'
+    const groupPublicId = publicIdFromUUIDv7(groupId)
+    adminServiceTestState.agentMailForwardingGroupFindOne.mockReturnValue({
+      exec: () =>
+        Promise.resolve({
+          _id: groupId,
+          address: 'support@example.test',
+          createdAt: new Date('2026-06-22T10:00:00.000Z'),
+          createdByUserId: 'user-1',
+          description: 'Support queue',
+          lastDeliveredAt: null,
+          organizationId: 'org-1',
+          recipients: ['triage@example.test'],
+          status: 'disabled',
+          updatedAt: new Date('2026-06-22T10:00:00.000Z'),
+          wildDuckAddressId: 'wildduck-forwarded-1'
+        })
+    })
+    adminServiceTestState.deleteForwardedAddress.mockResolvedValue({ success: true })
+    adminServiceTestState.agentMailForwardingGroupDeleteOne.mockReturnValue({
+      exec: () => Promise.resolve({ deletedCount: 1 })
+    })
+    adminServiceTestState.auditLogCreate.mockResolvedValue({})
+
+    const { deleteAgentMailForwardingGroupForWeb } = await import('./admin-service')
+
+    await expect(
+      deleteAgentMailForwardingGroupForWeb({
+        groupId: groupPublicId,
+        headers: new Headers()
+      })
+    ).resolves.toStrictEqual({
+      groupId: groupPublicId,
+      success: true
+    })
+    expect(adminServiceTestState.agentMailForwardingGroupFindOne).toHaveBeenCalledWith({
+      _id: groupId,
+      organizationId: 'org-1'
+    })
+    expect(adminServiceTestState.deleteForwardedAddress).toHaveBeenCalledWith('wildduck-forwarded-1')
+    expect(adminServiceTestState.agentMailForwardingGroupDeleteOne).toHaveBeenCalledWith({
+      _id: groupId,
+      organizationId: 'org-1',
+      status: 'disabled'
+    })
+    expect(adminServiceTestState.auditLogCreate).toHaveBeenCalledWith({
+      action: 'agent_mail.forwarding_group.deleted',
+      metadata: {
+        address: 'support@example.test',
+        forwardingGroupId: groupId,
+        organizationId: 'org-1',
+        wildDuckAddressId: 'wildduck-forwarded-1'
+      },
+      severity: 'medium',
+      status: 'success',
+      userId: 'user-1'
+    })
+  })
+
+  it('requires forwarding groups to be disabled before deletion', async () => {
+    expect.hasAssertions()
+
+    const groupId = '01960000-0000-7000-8000-000000000007'
+    const groupPublicId = publicIdFromUUIDv7(groupId)
+    adminServiceTestState.agentMailForwardingGroupFindOne.mockReturnValue({
+      exec: () =>
+        Promise.resolve({
+          _id: groupId,
+          address: 'support@example.test',
+          organizationId: 'org-1',
+          recipients: [],
+          status: 'active',
+          wildDuckAddressId: 'wildduck-forwarded-1'
+        })
+    })
+
+    const { deleteAgentMailForwardingGroupForWeb } = await import('./admin-service')
+
+    await expect(
+      deleteAgentMailForwardingGroupForWeb({
+        groupId: groupPublicId,
+        headers: new Headers()
+      })
+    ).rejects.toMatchObject({
+      message: 'Forwarding group must be disabled before deletion',
+      status: 400
+    })
+    expect(adminServiceTestState.deleteForwardedAddress).not.toHaveBeenCalled()
+    expect(adminServiceTestState.agentMailForwardingGroupDeleteOne).not.toHaveBeenCalled()
   })
 
   it('creates WildDuck mailbox accounts and initial agent mailbox grants through backend-owned contracts', async () => {
@@ -1089,6 +1344,158 @@ describe('Agent Mail admin service', () => {
       status: 'success',
       userId: 'user-1'
     })
+  })
+
+  it('deletes disabled WildDuck mailbox accounts when no active references remain', async () => {
+    expect.hasAssertions()
+    adminServiceTestState.resolveAddress.mockResolvedValue({ user: 'wildduck-user-1' })
+    adminServiceTestState.getUser.mockResolvedValue({
+      address: 'support@example.test',
+      disabled: true,
+      id: 'wildduck-user-1',
+      name: 'Support Desk'
+    })
+    adminServiceTestState.deleteUser.mockResolvedValue({ success: true })
+    adminServiceTestState.auditLogCreate.mockResolvedValue({})
+
+    const { deleteAgentMailAccountForWeb } = await import('./admin-service')
+    const result = await deleteAgentMailAccountForWeb({
+      accountId: 'Support@Example.Test',
+      headers: new Headers()
+    })
+
+    expect(adminServiceTestState.abilityCan).toHaveBeenCalledWith(
+      'update',
+      expect.objectContaining({
+        mailboxAddress: 'support@example.test',
+        organizationId: 'org-1'
+      })
+    )
+    expect(adminServiceTestState.agentMailMailboxGrantFind).toHaveBeenCalledWith({
+      mailboxAddress: 'support@example.test',
+      organizationId: 'org-1',
+      status: { $in: ['active', 'pending'] }
+    })
+    expect(adminServiceTestState.agentMailForwardingGroupFind).toHaveBeenCalledWith({
+      organizationId: 'org-1',
+      status: { $in: ['active', 'degraded', 'pending'] }
+    })
+    expect(adminServiceTestState.deleteUser).toHaveBeenCalledWith('wildduck-user-1')
+    expect(adminServiceTestState.auditLogCreate).toHaveBeenCalledWith({
+      action: 'agent_mail.account.deleted',
+      metadata: {
+        mailboxAddress: 'support@example.test',
+        organizationId: 'org-1',
+        wildDuckUserId: 'wildduck-user-1'
+      },
+      severity: 'medium',
+      status: 'success',
+      userId: 'user-1'
+    })
+    expect(result).toStrictEqual({
+      accountId: 'support@example.test',
+      success: true
+    })
+    expect(JSON.stringify(result)).not.toContain('password')
+  })
+
+  it('rejects active mailbox account deletion before deleting WildDuck users', async () => {
+    expect.hasAssertions()
+    adminServiceTestState.resolveAddress.mockResolvedValue({ user: 'wildduck-user-1' })
+    adminServiceTestState.getUser.mockResolvedValue({
+      address: 'support@example.test',
+      disabled: false,
+      id: 'wildduck-user-1',
+      name: 'Support Desk'
+    })
+
+    const { deleteAgentMailAccountForWeb } = await import('./admin-service')
+
+    await expect(
+      deleteAgentMailAccountForWeb({
+        accountId: 'support@example.test',
+        headers: new Headers()
+      })
+    ).rejects.toMatchObject({
+      message: 'Mailbox account must be disabled before deletion',
+      status: 400
+    })
+    expect(adminServiceTestState.deleteUser).not.toHaveBeenCalled()
+    expect(adminServiceTestState.auditLogCreate).not.toHaveBeenCalled()
+  })
+
+  it('rejects mailbox account deletion while active mailbox grants reference it', async () => {
+    expect.hasAssertions()
+    adminServiceTestState.resolveAddress.mockResolvedValue({ user: 'wildduck-user-1' })
+    adminServiceTestState.getUser.mockResolvedValue({
+      address: 'support@example.test',
+      disabled: true,
+      id: 'wildduck-user-1',
+      name: 'Support Desk'
+    })
+    adminServiceTestState.agentMailMailboxGrantFind.mockReturnValue({
+      exec: () =>
+        Promise.resolve([
+          {
+            capability: 'readMailbox',
+            mailboxAddress: 'support@example.test',
+            organizationId: 'org-1',
+            principalId: 'agent-1',
+            principalType: 'agent',
+            status: 'active'
+          }
+        ])
+    })
+
+    const { deleteAgentMailAccountForWeb } = await import('./admin-service')
+
+    await expect(
+      deleteAgentMailAccountForWeb({
+        accountId: 'support@example.test',
+        headers: new Headers()
+      })
+    ).rejects.toMatchObject({
+      message: 'Mailbox account has active access grants',
+      status: 400
+    })
+    expect(adminServiceTestState.deleteUser).not.toHaveBeenCalled()
+    expect(adminServiceTestState.auditLogCreate).not.toHaveBeenCalled()
+  })
+
+  it('rejects mailbox account deletion while active forwarding groups reference it', async () => {
+    expect.hasAssertions()
+    adminServiceTestState.resolveAddress.mockResolvedValue({ user: 'wildduck-user-1' })
+    adminServiceTestState.getUser.mockResolvedValue({
+      address: 'support@example.test',
+      disabled: true,
+      id: 'wildduck-user-1',
+      name: 'Support Desk'
+    })
+    adminServiceTestState.agentMailForwardingGroupFind.mockReturnValue({
+      exec: () =>
+        Promise.resolve([
+          {
+            address: 'team@example.test',
+            organizationId: 'org-1',
+            recipients: ['support@example.test'],
+            status: 'active'
+          }
+        ])
+    })
+
+    const { deleteAgentMailAccountForWeb } = await import('./admin-service')
+
+    await expect(
+      deleteAgentMailAccountForWeb({
+        accountId: 'support@example.test',
+        headers: new Headers()
+      })
+    ).rejects.toMatchObject({
+      message: 'Mailbox account is still used by forwarding groups',
+      status: 400
+    })
+    expect(adminServiceTestState.deleteUser).not.toHaveBeenCalled()
+    expect(adminServiceTestState.auditLogCreate).not.toHaveBeenCalled()
   })
 
   it('rejects mailbox account management before WildDuck calls when the principal lacks account write authority', async () => {
@@ -2333,6 +2740,8 @@ describe('Agent Mail admin service', () => {
         createAccount: false,
         createAgent: false,
         createGroup: true,
+        deleteAccount: false,
+        deleteGroup: true,
         disableAccount: false,
         disableGroup: true,
         manageAgentMailboxGrants: false,

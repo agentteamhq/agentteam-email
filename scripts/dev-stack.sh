@@ -67,7 +67,14 @@ default_env() {
   fi
 }
 
+dev_project_network() {
+  printf '%s_agentteam-email-network\n' "${project}"
+}
+
 prepare_compose_env() {
+  # Source-development dependencies use fixed localhost port mappings from
+  # .env. Port conflicts should fail startup; edit the relevant
+  # AT_EMAIL_ADMIN_DEV_*_PORT value instead of allocating implicit ports.
   default_env AT_EMAIL_ADMIN_PULL_POLICY 'missing'
   default_env AT_EMAIL_ADMIN_PUBLIC_HOSTNAME "$(first_env 'http://127.0.0.1:4321' PUBLIC_HOSTNAME AT_EMAIL_ADMIN_PUBLIC_HOSTNAME)"
   default_env AT_EMAIL_ADMIN_BETTER_AUTH_SECRET "$(first_env 'local-dev-better-auth-secret' BETTER_AUTH_SECRET AT_EMAIL_ADMIN_BETTER_AUTH_SECRET)"
@@ -88,7 +95,6 @@ prepare_compose_env() {
   default_env AT_EMAIL_ADMIN_R2_SECRET_ACCESS_KEY 'local-dev-r2-secret-key'
   default_env AT_EMAIL_ADMIN_MONGODB_MAX_INCOMING_CONNECTIONS '256'
 
-  export AT_EMAIL_ADMIN_DEV_NETWORK="${AT_EMAIL_ADMIN_DEV_NETWORK:-${project}-network}"
   export AT_EMAIL_ADMIN_MONGODB_REPLICA_SET_NAME="${AT_EMAIL_ADMIN_MONGODB_REPLICA_SET_NAME:-rs0}"
   export AT_EMAIL_ADMIN_REDIS_URL='redis://redis:6379/3'
   export AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI="mongodb://mongodb:27017/wildduck?replicaSet=${AT_EMAIL_ADMIN_MONGODB_REPLICA_SET_NAME}&maxPoolSize=${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_MAX_POOL_SIZE:-4}&minPoolSize=${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_MIN_POOL_SIZE:-0}&maxIdleTimeMS=${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_MAX_IDLE_TIME_MS:-60000}"
@@ -99,7 +105,7 @@ prepare_compose_env() {
   export AT_EMAIL_ADMIN_HARAKA_SMTP_ADDRESS='haraka:10025'
   export AT_EMAIL_ADMIN_ZONEMTA_DSN_ADDRESS='zonemta:2526'
   export AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_BASE_URL='http://host.containers.internal:4321'
-  export AT_EMAIL_ADMIN_ZONEMTA_RELAY_HOST='host.containers.internal'
+  default_env AT_EMAIL_ADMIN_ZONEMTA_RELAY_HOST 'host.containers.internal'
 }
 
 ensure_runtime_config_env() {
@@ -335,7 +341,7 @@ stop_stack() {
   read_compose_command
   prepare_compose_env
   remove_support_containers
-  "$(container_engine)" network rm "${AT_EMAIL_ADMIN_DEV_NETWORK}" >/dev/null 2>&1 || true
+  "$(container_engine)" network rm "$(dev_project_network)" "${project}-network" >/dev/null 2>&1 || true
 }
 
 status_stack() {

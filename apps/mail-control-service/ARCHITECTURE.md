@@ -22,9 +22,9 @@ The mail runtime consists of:
   control/status APIs, inbound replay/reconciliation, internal ingest enqueue
   handling, the internal SMTP relay listener, outbound provider handling, and
   feedback processing.
-- Internal ZoneMTA-only SMTP relay listener for Cloudflare Email Sending, SES,
-  and active local-domain routing. ZoneMTA reaches this listener through the
-  Mail Control Service endpoint.
+- Internal ZoneMTA-only SMTP relay listener for provider-bound Cloudflare Email
+  Sending and SES handoff. ZoneMTA reaches this listener through the Mail
+  Control Service endpoint.
 - Inbound replay/reconciliation loop for archived inbound replay, recovery, and
   internal ingest enqueue handling. Its queue/state store is the
   `agent_mail_control` MongoDB database on the shared Agent Mail MongoDB server.
@@ -110,13 +110,26 @@ from incomplete provenance.
 web server and trusted internal callers. Callers provide the
 same WildDuck delivery identity used by `agentMail.message.provenance.get`.
 Agent Mail fetches the mailbox-visible WildDuck message source, parses MIME with
-the service parser stack, returns text fallback and a sanitized display HTML fragment, rewrites
-allowed message links to inert link ID markers with separate external-link
-metadata, and blocks remote images by default unless an explicit
-`remoteImages: allow` display request is made. Inline images may render only
-when backed by message-owned attachments. The view response must label the
-WildDuck `.eml` as a mailbox/display source, not as exact Cloudflare-boundary
-raw bytes.
+the service parser stack, and returns text fallback, preserved display HTML, and
+message-view metadata. The view response must label the WildDuck `.eml` as a
+mailbox/display source, not as exact Cloudflare-boundary raw bytes.
+
+## Message Display Safety
+
+Message display HTML must preserve the rendered message body. Message-view code
+may make only documented non-visible safety mutations: remove unsafe executable
+or navigation surfaces, mediate external links through inert Agent Mail link
+markers with separate metadata, and remove caller-supplied Agent Mail data
+attributes before setting owned metadata markers. Message-view code must not
+replace, restructure, or add user-visible Agent Mail content inside the body.
+
+Image and remote resource blocking is currently enforced by the browser renderer
+through iframe sandbox and CSP. Mail-control must not rewrite image elements to
+block image loading.
+
+Any message-body mutation must be documented in this section before it is
+implemented. URL proxying, image source rewriting, and cached remote-image
+storage are not part of the current contract.
 
 `agentMail.message.security.get` is the shared read-only security evidence API.
 It returns the delivery key, WildDuck identity, trusted provenance headers,
@@ -246,27 +259,37 @@ surfaces including the `agent_mail_control` MongoDB database. Desired company
 and runtime mailbox configuration belongs in the web application and, for
 ordinary mailbox primitives, WildDuck.
 
-Every provider-bound outbound submission is bound to the sender domain. The
+Every ordinary user-authored outbound submission is provider-bound. The
 internal SMTP relay must resolve the sender domain from the structured
 message/envelope data, require an active registry entry for that exact domain,
 use that domain's provider identity and feedback address, and write outbound
-archive/results under that sender domain. It must fail clearly when a
-provider-bound sender domain is not active. It must not fall back to the first
-configured domain or any global default domain.
+archive/results under that sender domain. It must fail clearly when the sender
+domain is not active. It must not fall back to the first configured domain or
+any global default domain. It must send through the provider even when all
+recipients belong to active Agent Mail domains, and same-domain recipients are
+not a local-delivery exception.
 
-WildDuck native forwarding can also queue copies whose envelope recipients are
-active local Agent Mail domains while the original visible sender belongs to a
-domain Agent Mail does not own. Those copies are not provider-bound sends. The
-internal SMTP relay must archive the ZoneMTA relay boundary under the relevant
-Agent Mail mailbox domain, classify recipient domains through the active domain
-registry, and hand all-local transactions back to Haraka/WildDuck for local
-delivery. It must not require provider sender-domain policy for local routed
-copies.
+Inbound group forwarding fanout is the only local delivery exception. It is
+receive-side routing for a message already accepted through the inbound
+Cloudflare/Worker archive path, not a new authored outbound send. When the
+fanout target resolves to an Agent Mail mailbox, mail-control may create
+source-side local-route relay boundary records and target-side inbound
+local-route archive/provenance records without requiring provider sender-domain
+policy for that local fanout copy. Fanout records must not be described as
+Cloudflare edge-originated unless the Cloudflare edge actually produced the
+metadata being referenced. Replay-looking message headers are not sufficient
+authority for this exception; the local-route path must bind the fanout copy to
+a matching source Worker inbound `raw.eml` and `edge.json` bundle plus the
+internal receive-side fanout marker stamped during inbound replay. After a
+successful local fanout delivery, mail-control must report the delivery to the
+web server through the internal control-to-web service credential so the
+web-owned forwarding group record can advance `lastDeliveredAt`.
 
 For example, `agent@alpha.example` must use the `alpha.example` registry entry,
 provider identity, return/feedback address, and archive path; `agent@beta.example`
 must use the `beta.example` registry entry. This is required even when both
-domains use the same outbound provider account.
+domains use the same outbound provider account or when a recipient is also on an
+active Agent Mail domain.
 
 ## Cloudflare Boundary
 
@@ -341,8 +364,9 @@ The short form is:
 8. A six-hour sliding-window sweeper backfills Mongo queue items for any bundle
    missed by an earlier pass.
 
-Internal SMTP relay local routing may also create target-side inbound records
-under `orgs/<org_public_id>/domains/<target_domain>/mail/inbound/...` with
+Receive-side inbound group forwarding fanout may create target-side inbound
+records under
+`orgs/<org_public_id>/domains/<target_domain>/mail/inbound/...` with
 `edge.json`. These records must use a local-route edge schema, not the Worker
 edge schema. The reconciler must classify inbound `edge.json` objects by schema
 and enqueue only Worker-origin edges for replay; local-route edges are
@@ -423,47 +447,48 @@ The internal SMTP relay:
 - Requires `X-Agent-Mail-ZoneMTA-Queue-ID`.
 - Archives exact relay-received SMTP DATA as `relay.eml`.
 - Writes relay boundary metadata as `relay.json`.
-- For provider-bound recipients, builds a sanitized provider-bound payload.
-- For provider-bound recipients, writes provider payload as `provider.eml` for
-  SES or `provider.json` for Cloudflare Email Sending.
+- Builds a sanitized provider-bound payload for every ordinary authored send,
+  including sends to active Agent Mail domains.
+- Writes provider payload as `provider.eml` for SES or `provider.json` for
+  Cloudflare Email Sending.
 - For Cloudflare provider-bound recipients, calls the web server's internal
   raw-send endpoint with `AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN`; the web
   server validates the active domain and sends with the connected user's
   Cloudflare OAuth grant.
-- For all-local active Agent Mail recipients, builds a local delivery payload
-  from the relay-received message, stamps internal local-route provenance
-  headers, and delivers those exact local-delivery bytes back to
-  Haraka/WildDuck instead of calling the outbound provider.
-- Writes `result.json` with either provider outcome or local delivery outcome.
+- Does not deliver ordinary authored sends directly to Haraka/WildDuck because
+  recipients are on active Agent Mail domains.
+- Writes `result.json` with the provider outcome.
 
 It does not own mailbox routing, aliases, feedback fanout, original-sender
 inference, or Sent writeback.
 
-## Native Forwarding
+## Inbound Group Forwarding Fanout
 
-WildDuck user `targets`, forwarded addresses, and forwarding filters are
-outbound forwarding surfaces. A message delivered to a forwarding-enabled
-mailbox may retain a local copy, but each forward target must be queued by
-WildDuck/ZoneMTA and sent through the internal SMTP relay. This is intentional
-mail-server behavior, not an internal mailbox-copy optimization.
+Inbound group forwarding fanout is receive-side mail-server routing. It applies
+only after an inbound message has been accepted through Cloudflare Email
+Routing, archived by the Worker, replayed through the normal inbound path, and
+resolved by group mailbox, alias, or forwarding rules to additional Agent Mail
+mailboxes. It is not a new user-authored outbound send.
 
-WildDuck owns the forwarding fanout. If a configured target resolves to an
-active local Agent Mail domain, the internal SMTP relay keeps the ZoneMTA queue
-boundary, archives the route under the relevant Agent Mail mailbox domain, then
-delivers that target locally through Haraka/WildDuck with internal route
-provenance headers. This preserves native WildDuck forwarding while avoiding an
-external provider send and provider sender-domain policy for local routed
-copies.
-When the forwarded source was originally replayed from Cloudflare archive, the
-internal SMTP relay uses the archived original envelope sender for the local
-Haraka `MAIL FROM`; ZoneMTA's SRS-expanded reverse path remains queue transport
-metadata.
+When a fanout target resolves to an Agent Mail mailbox, receive-side routing may
+deliver that copy locally through Haraka/WildDuck, stamp local-route provenance
+headers, write source-side local-route relay boundary records, and write
+target-side inbound local-route archive records. Those records must use the
+local-route schema and must not be described as Worker or Cloudflare edge commit
+metadata unless the Worker produced the specific fields for the original
+inbound bundle. Provider sender-domain policy is not consulted for local fanout
+copies because no provider handoff occurs.
 
-External-domain targets, including personal mailbox destinations such as Gmail,
-are first-class native forwarding targets. They leave through ZoneMTA, the
-internal SMTP relay, and the configured outbound provider. Agent Mail does not
-create a local mailbox copy for those external targets unless mail later
-re-enters through the normal Cloudflare inbound path.
+After a successful local fanout delivery, mail-control reports the group
+delivery to the web server through the internal control-to-web service
+credential. The web server owns the forwarding group record and updates
+`lastDeliveredAt`; mail-control must not mutate the web application database
+directly or derive this UI metadata by scanning mailbox contents.
+
+External targets from group forwarding are provider-bound outbound work through
+ZoneMTA, the internal SMTP relay, and the configured outbound provider.
+User-authored sends, including same-domain or Agent Mail recipient-domain sends,
+must never be converted into local fanout copies.
 
 ZoneMTA is not the final-recipient MX client in this architecture. Its outbound
 zones relay to the internal SMTP relay, so recipient-domain transport policy

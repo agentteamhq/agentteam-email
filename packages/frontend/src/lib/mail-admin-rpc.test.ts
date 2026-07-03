@@ -9,6 +9,7 @@ const mailAdminRpcTestState = vi.hoisted(() => {
   const principalsRoute = vi.fn()
 
   return {
+    accountDelete: vi.fn(),
     accountDisablePost: vi.fn(),
     accountPatch: vi.fn(),
     accountsPost: vi.fn(),
@@ -23,6 +24,7 @@ const mailAdminRpcTestState = vi.hoisted(() => {
     agentRevokePost: vi.fn(),
     agentsPost: vi.fn(),
     agentsRoute,
+    groupDelete: vi.fn(),
     groupDisablePost: vi.fn(),
     groupPatch: vi.fn(),
     groupsPost: vi.fn(),
@@ -60,6 +62,7 @@ vi.mock('./rpc-api-client', () => ({
 
 describe('mail admin RPC adapter', () => {
   beforeEach(() => {
+    mailAdminRpcTestState.accountDelete.mockReset()
     mailAdminRpcTestState.accountDisablePost.mockReset()
     mailAdminRpcTestState.accountPatch.mockReset()
     mailAdminRpcTestState.accountsPost.mockReset()
@@ -74,6 +77,7 @@ describe('mail admin RPC adapter', () => {
     mailAdminRpcTestState.agentRevokePost.mockReset()
     mailAdminRpcTestState.agentsPost.mockReset()
     mailAdminRpcTestState.agentsRoute.mockReset()
+    mailAdminRpcTestState.groupDelete.mockReset()
     mailAdminRpcTestState.groupDisablePost.mockReset()
     mailAdminRpcTestState.groupPatch.mockReset()
     mailAdminRpcTestState.groupsPost.mockReset()
@@ -84,6 +88,7 @@ describe('mail admin RPC adapter', () => {
     mailAdminRpcTestState.principalsRoute.mockReset()
 
     mailAdminRpcTestState.accountsRoute.mockReturnValue({
+      delete: mailAdminRpcTestState.accountDelete,
       disable: { post: mailAdminRpcTestState.accountDisablePost },
       patch: mailAdminRpcTestState.accountPatch
     })
@@ -97,6 +102,7 @@ describe('mail admin RPC adapter', () => {
       revoke: { post: mailAdminRpcTestState.agentEnrollmentRevokePost }
     })
     mailAdminRpcTestState.groupsRoute.mockReturnValue({
+      delete: mailAdminRpcTestState.groupDelete,
       disable: { post: mailAdminRpcTestState.groupDisablePost },
       patch: mailAdminRpcTestState.groupPatch
     })
@@ -134,6 +140,126 @@ describe('mail admin RPC adapter', () => {
         statusFilter: 'active'
       }
     })
+  })
+
+  it('normalizes mailbox admin date objects revived by the RPC client into strings', async () => {
+    expect.hasAssertions()
+    const displayDate = new Date('2026-06-22T00:00:00.000Z')
+    const expiresAt = new Date('2026-07-22T12:30:00.000Z')
+    mailAdminRpcTestState.adminGet.mockResolvedValue({
+      data: {
+        accounts: [
+          {
+            accessCount: 0,
+            address: 'support@example.test',
+            domain: 'example.test',
+            groups: [],
+            id: 'support@example.test',
+            lastActivity: displayDate,
+            name: 'Support',
+            status: 'active',
+            type: 'mailbox'
+          }
+        ],
+        agents: [
+          {
+            grants: [],
+            groups: [],
+            handle: 'agent:00000000',
+            id: 'agent-1',
+            lastSeen: displayDate,
+            name: 'Support Agent',
+            permissions: [],
+            status: 'active'
+          }
+        ],
+        allowedActions: {
+          createAccount: true,
+          createAgent: true,
+          createGroup: true,
+          deleteAccount: true,
+          deleteGroup: true,
+          disableAccount: true,
+          disableGroup: true,
+          manageAgentMailboxGrants: true,
+          manageAgentSystemPermissions: true,
+          provisionAccount: true,
+          revokeAgent: true,
+          updateAccount: true,
+          updateAgent: true,
+          updateGroup: true
+        },
+        allowedSections: ['accounts', 'groups', 'agents'],
+        domain: 'example.test',
+        groups: [
+          {
+            address: 'team@example.test',
+            description: 'Team routing',
+            domain: 'example.test',
+            id: 'group-1',
+            lastDelivered: displayDate,
+            lastUpdated: displayDate,
+            recipients: [],
+            status: 'active'
+          }
+        ],
+        pendingEnrollments: [
+          {
+            canRevoke: true,
+            createdAt: displayDate,
+            grantExpiresAt: expiresAt,
+            grants: [],
+            hostId: 'host-1',
+            id: 'enrollment-1',
+            lastUpdated: displayDate,
+            mailboxGrantCount: 0,
+            name: 'Pending Agent',
+            permissions: [],
+            status: 'pending',
+            systemPermissionCount: 0,
+            tokenExpiresAt: expiresAt
+          }
+        ],
+        permissionCatalog: {
+          defaultMailboxGrants: [],
+          mailboxGrantOptions: [],
+          mailboxGrants: [],
+          systemPermissionOptions: [],
+          systemPermissions: []
+        },
+        principals: [
+          {
+            grants: [],
+            id: 'oauth-client-1',
+            kind: 'oauth_client',
+            lastUsed: displayDate,
+            name: 'OAuth client',
+            permissions: [],
+            scope: 'organization',
+            status: 'active'
+          }
+        ],
+        searchQuery: '',
+        section: 'groups',
+        state: 'ready',
+        statusFilter: 'all'
+      },
+      error: null,
+      status: 200
+    })
+    const { fetchMailboxAdminView } = await import('./mail-admin-rpc')
+
+    const view = await fetchMailboxAdminView({ section: 'groups' })
+
+    expect(view.accounts[0]?.lastActivity).toBe('2026-06-22')
+    expect(view.agents[0]?.lastSeen).toBe('2026-06-22')
+    expect(view.groups[0]?.lastDelivered).toBe('2026-06-22')
+    expect(view.groups[0]?.lastUpdated).toBe('2026-06-22')
+    expect(view.pendingEnrollments[0]?.createdAt).toBe('2026-06-22')
+    expect(view.pendingEnrollments[0]?.grantExpiresAt).toBe('2026-07-22T12:30:00.000Z')
+    expect(view.pendingEnrollments[0]?.lastUpdated).toBe('2026-06-22')
+    expect(view.pendingEnrollments[0]?.tokenExpiresAt).toBe('2026-07-22T12:30:00.000Z')
+    expect(view.principals[0]?.lastUsed).toBe('2026-06-22')
   })
 
   it('loads mailbox admin navigation through the lightweight navigation RPC', async () => {
@@ -226,6 +352,25 @@ describe('mail admin RPC adapter', () => {
       accountId: 'support@example.test'
     })
     expect(mailAdminRpcTestState.accountDisablePost).toHaveBeenCalledWith()
+  })
+
+  it('routes account delete through the selected account RPC path', async () => {
+    expect.hasAssertions()
+    mailAdminRpcTestState.accountDelete.mockResolvedValue({
+      data: { accountId: 'support@example.test', success: true },
+      error: null,
+      status: 200
+    })
+    const { deleteMailboxAdminAccount } = await import('./mail-admin-rpc')
+
+    await expect(deleteMailboxAdminAccount('support@example.test')).resolves.toStrictEqual({
+      accountId: 'support@example.test',
+      success: true
+    })
+    expect(mailAdminRpcTestState.accountsRoute).toHaveBeenCalledWith({
+      accountId: 'support@example.test'
+    })
+    expect(mailAdminRpcTestState.accountDelete).toHaveBeenCalledWith()
   })
 
   it('sends agent creation fields to the agent enrollment RPC', async () => {
@@ -438,7 +583,7 @@ describe('mail admin RPC adapter', () => {
     })
   })
 
-  it('routes forwarding group create, update, and disable mutations', async () => {
+  it('routes forwarding group create, update, disable, and delete mutations', async () => {
     expect.hasAssertions()
     mailAdminRpcTestState.groupsPost.mockResolvedValue({
       data: { success: true },
@@ -455,7 +600,17 @@ describe('mail admin RPC adapter', () => {
       error: null,
       status: 200
     })
-    const { createMailboxAdminGroup, disableMailboxAdminGroup, updateMailboxAdminGroup } =
+    mailAdminRpcTestState.groupDelete.mockResolvedValue({
+      data: { success: true },
+      error: null,
+      status: 200
+    })
+    const {
+      createMailboxAdminGroup,
+      deleteMailboxAdminGroup,
+      disableMailboxAdminGroup,
+      updateMailboxAdminGroup
+    } =
       await import('./mail-admin-rpc')
 
     await createMailboxAdminGroup({
@@ -474,6 +629,7 @@ describe('mail admin RPC adapter', () => {
       }
     })
     await disableMailboxAdminGroup('group-support')
+    await deleteMailboxAdminGroup('group-support')
 
     expect(mailAdminRpcTestState.groupsPost).toHaveBeenCalledWith({
       address: 'support@example.test',
@@ -491,6 +647,7 @@ describe('mail admin RPC adapter', () => {
       status: 'pending'
     })
     expect(mailAdminRpcTestState.groupDisablePost).toHaveBeenCalledWith()
+    expect(mailAdminRpcTestState.groupDelete).toHaveBeenCalledWith()
   })
 
   it('throws typed RPC errors with server-provided messages', async () => {

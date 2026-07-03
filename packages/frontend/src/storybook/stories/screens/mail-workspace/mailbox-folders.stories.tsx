@@ -2,8 +2,8 @@ import {
   MailboxCreateFolder as MailboxCreateFolderStory,
   MailboxCustomFolder as MailboxCustomFolderStory,
   MailboxDeleteFolderConfirm as MailboxDeleteFolderConfirmStory,
-  MailboxFolderActions as MailboxFolderActionsStory,
   MailboxFolderNavigation as MailboxFolderNavigationStory,
+  MailboxFolderOptions as MailboxFolderOptionsStory,
   MailboxJunk as MailboxJunkStory,
   MailboxRenameFolderOpen as MailboxRenameFolderOpenStory,
   MailboxSent as MailboxSentStory,
@@ -51,9 +51,9 @@ export const MailboxCreateFolder: Story = {
   name: 'Create folder open'
 }
 
-export const MailboxFolderActions: Story = {
-  ...MailboxFolderActionsStory,
-  name: 'Folder actions'
+export const MailboxFolderOptions: Story = {
+  ...MailboxFolderOptionsStory,
+  name: 'Folder options'
 }
 
 export const MailboxRenameFolderOpen: Story = {

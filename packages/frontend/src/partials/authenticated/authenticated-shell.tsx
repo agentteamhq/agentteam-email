@@ -95,7 +95,6 @@ import {
   SidebarInput,
   SidebarInset,
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
@@ -103,15 +102,13 @@ import {
   SidebarTrigger,
   useSidebar
 } from '../../components/ui/sidebar'
-import { Switch } from '../../components/ui/switch'
 import { Textarea } from '../../components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip'
 import {
   buildEmailContentSecurityPolicy,
   buildEmailIframeDocument,
   normalizeEmailAttachmentURL,
-  normalizeEmailLink,
-  rewriteEmailHTMLForIframe
+  normalizeEmailLink
 } from '../../lib/email-safety'
 import { cn } from '../../lib/utils'
 import { CloudflareConnectButton, CloudflareLogo } from './cloudflare-brand'
@@ -243,14 +240,12 @@ export function AuthenticatedShell({
   onMailboxFolderRenameOpenChange,
   onMailboxFolderRenameSubmit,
   onMailboxPageChange,
-  onMailboxRefresh,
   onMailboxRetry,
   onMailSelect,
   onSettingsOpenChange,
   onSettingsSectionChange,
   onSidebarItemSelect,
   onSidebarSearchChange,
-  onSidebarUnreadOnlyChange,
   settingsContentState,
   settingsOpen,
   settingsSection,
@@ -287,11 +282,9 @@ export function AuthenticatedShell({
         onFolderRenameSubmit={onMailboxFolderRenameSubmit}
         onMailSelect={onMailSelect}
         onPageChange={onMailboxPageChange}
-        onRefresh={onMailboxRefresh}
         onRetry={onMailboxRetry}
         onSearchChange={onSidebarSearchChange}
         onSelectItem={onSidebarItemSelect}
-        onUnreadOnlyChange={onSidebarUnreadOnlyChange}
         view={sidebarView}
       />
       <SidebarInset>
@@ -731,7 +724,7 @@ function MailActionDialogs({
             <Select
               disabled={!onMoveTargetChange || moveView?.isSubmitting}
               onValueChange={onMoveTargetChange}
-              value={moveView?.selectedFolderId}
+              value={moveView?.selectedFolderId ?? ''}
             >
               <SelectTrigger
                 id='authenticated-mail-move-target'
@@ -1137,11 +1130,9 @@ export interface AuthenticatedSidebarProps {
   onFolderRenameSubmit?: () => void
   onMailSelect?: (mailId: string) => void
   onPageChange?: (pageChange: AuthenticatedMailPageChange) => void
-  onRefresh?: () => void
   onRetry?: () => void
   onSearchChange?: (query: string) => void
   onSelectItem?: (itemId: string) => void
-  onUnreadOnlyChange?: (unreadOnly: boolean) => void
   view: AuthenticatedSidebarView
 }
 
@@ -1159,11 +1150,9 @@ export function AuthenticatedSidebar({
   onFolderRenameSubmit,
   onMailSelect,
   onPageChange,
-  onRefresh,
   onRetry,
   onSearchChange,
   onSelectItem,
-  onUnreadOnlyChange,
   view
 }: AuthenticatedSidebarProps) {
   const { setOpen } = useSidebar()
@@ -1177,6 +1166,8 @@ export function AuthenticatedSidebar({
     view.workspaceSwitcher?.activeWorkspaceId ?? workspaceSwitcherWorkspaces[0]?.id
   const workspaceSwitcherMailboxes = getSidebarWorkspaceSwitcherMailboxes(view.accounts ?? [])
   const workspaceSwitcherState = getSidebarWorkspaceSwitcherState(view)
+  const activeMailNavItem = view.navMain.find((item) => item.id === view.activeItemId)
+  const activeFolderActions = activeMailNavItem?.actions ?? []
 
   return (
     <>
@@ -1211,7 +1202,6 @@ export function AuthenticatedSidebar({
                         <MailNavButton
                           item={item}
                           isActive={item.id === view.activeItemId}
-                          onAction={onFolderAction}
                           onSelect={() => {
                             onSelectItem?.(item.id)
                             setOpen(true)
@@ -1277,50 +1267,67 @@ export function AuthenticatedSidebar({
               <div className='flex w-full items-center justify-between gap-2'>
                 <div className='flex min-w-0 items-center gap-1.5'>
                   <div className='text-foreground truncate text-base font-medium'>{view.paneTitle}</div>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        aria-label={
-                          view.refreshLabel ?? (view.isRefreshing ? 'Refreshing mailbox' : 'Refresh mailbox')
-                        }
-                        className='size-7'
-                        disabled={!onRefresh || view.isRefreshing || view.state === 'loading'}
-                        onClick={onRefresh}
-                        size='icon'
-                        type='button'
-                        variant='ghost'
+                  {activeMailNavItem && activeFolderActions.length ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          aria-label={`${activeMailNavItem.title} folder options`}
+                          className='size-7 shrink-0'
+                          disabled={!onFolderAction}
+                          size='icon'
+                          type='button'
+                          variant='ghost'
+                        >
+                          <DotsThreeIcon data-icon='icon-only' />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align='start'
+                        side='bottom'
                       >
-                        {view.isRefreshing ? (
-                          <Spinner data-icon='icon-only' />
-                        ) : (
-                          <ArrowsClockwiseIcon data-icon='icon-only' />
-                        )}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{view.refreshLabel ?? 'Refresh mailbox'}</TooltipContent>
-                  </Tooltip>
+                        {activeFolderActions.map((action) => {
+                          const ActionIcon = folderActionIcons[action.action]
+
+                          return (
+                            <DropdownMenuItem
+                              disabled={action.disabled || action.pending || !onFolderAction}
+                              key={action.action}
+                              onSelect={() => {
+                                onFolderAction?.(action.action, activeMailNavItem)
+                              }}
+                              variant={action.action === 'delete-folder' ? 'destructive' : 'default'}
+                            >
+                              {action.pending ? (
+                                <Spinner data-icon='inline-start' />
+                              ) : (
+                                <ActionIcon data-icon='inline-start' />
+                              )}
+                              <span className='grid min-w-0 gap-0.5'>
+                                <span className='truncate'>{action.label}</span>
+                                {action.disabledReason ? (
+                                  <span className='text-muted-foreground truncate text-xs'>
+                                    {action.disabledReason}
+                                  </span>
+                                ) : null}
+                              </span>
+                            </DropdownMenuItem>
+                          )
+                        })}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : null}
                 </div>
-                <Label className='flex items-center gap-2 text-sm'>
-                  <span>Unreads</span>
-                  <Switch
-                    aria-label='Show unread messages only'
-                    checked={view.unreadOnly ?? false}
-                    className='shadow-none'
-                    onCheckedChange={onUnreadOnlyChange}
-                  />
-                </Label>
+                <Button
+                  className='shrink-0'
+                  disabled={!onComposeOpen || hasExplicitlyNoAccounts}
+                  onClick={onComposeOpen}
+                  size='sm'
+                  type='button'
+                >
+                  <PencilSimpleIcon data-icon='inline-start' />
+                  Compose
+                </Button>
               </div>
-              <Button
-                className='w-full justify-start'
-                disabled={!onComposeOpen || hasExplicitlyNoAccounts}
-                onClick={onComposeOpen}
-                size='sm'
-                type='button'
-                variant='outline'
-              >
-                <PencilSimpleIcon data-icon='inline-start' />
-                Compose
-              </Button>
               <SidebarInput
                 onChange={(event) => {
                   onSearchChange?.(event.currentTarget.value)
@@ -1391,7 +1398,7 @@ function CreateMailFolderButton({
       }}
     >
       <PlusIcon />
-      <span>{label}</span>
+      <span className='sr-only'>{label}</span>
     </SidebarMenuButton>
   )
 }
@@ -1638,15 +1645,10 @@ const managementNavIcons = {
 function MailNavButton({
   isActive,
   item,
-  onAction,
   onSelect
 }: {
   isActive: boolean
   item: AuthenticatedSidebarView['navMain'][number]
-  onAction?: (
-    action: AuthenticatedMailFolderAction,
-    folder: AuthenticatedSidebarView['navMain'][number]
-  ) => void
   onSelect: () => void
 }) {
   const Icon = mailNavIcons[item.iconKey]
@@ -1680,7 +1682,7 @@ function MailNavButton({
         type='button'
       >
         <Icon />
-        <span>{item.title}</span>
+        <span className='sr-only'>{item.title}</span>
         {item.badgeLabel ? (
           <Badge
             className='ml-auto min-w-5 justify-center px-1 text-[10px]'
@@ -1690,50 +1692,6 @@ function MailNavButton({
           </Badge>
         ) : null}
       </SidebarMenuButton>
-      {item.actions?.length ? (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <SidebarMenuAction
-              aria-label={`${item.title} folder actions`}
-              disabled={!onAction}
-              showOnHover
-            >
-              <DotsThreeIcon />
-            </SidebarMenuAction>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align='start'
-            side='right'
-          >
-            {item.actions.map((action) => {
-              const ActionIcon = folderActionIcons[action.action]
-
-              return (
-                <DropdownMenuItem
-                  disabled={action.disabled || action.pending || !onAction}
-                  key={action.action}
-                  onSelect={() => {
-                    onAction?.(action.action, item)
-                  }}
-                  variant={action.action === 'delete-folder' ? 'destructive' : 'default'}
-                >
-                  {action.pending ? (
-                    <Spinner data-icon='inline-start' />
-                  ) : (
-                    <ActionIcon data-icon='inline-start' />
-                  )}
-                  <span className='grid min-w-0 gap-0.5'>
-                    <span className='truncate'>{action.label}</span>
-                    {action.disabledReason ? (
-                      <span className='text-muted-foreground truncate text-xs'>{action.disabledReason}</span>
-                    ) : null}
-                  </span>
-                </DropdownMenuItem>
-              )
-            })}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ) : null}
     </>
   )
 }
@@ -2241,13 +2199,11 @@ function EmailPreviewPane({
         ) : (
           <EmailMessageBodyFrame
             allowRemoteImages={email.remoteImagesAllowed}
-            attachments={email.attachments ?? []}
             className={getEmailBodyFrameClass(email.bodySize ?? 'fill')}
             externalLinks={email.externalLinks ?? []}
             html={email.html}
             loading='lazy'
             onExternalLinkSelect={setSelectedExternalLink}
-            remoteImages={email.remoteImages ?? []}
             title={`${email.subject} email body`}
           />
         )}
@@ -2336,77 +2292,45 @@ function EmailMessageMeta({
 
 function EmailMessageBodyFrame({
   allowRemoteImages = false,
-  attachments = [],
   className,
   externalLinks = [],
   fitContent = false,
   html,
   loading,
   onExternalLinkSelect,
-  remoteImages = [],
   title
 }: {
   allowRemoteImages?: boolean
-  attachments?: ReadonlyArray<AuthenticatedEmailAttachment>
   className?: string
   externalLinks?: ReadonlyArray<AuthenticatedExternalLink>
   fitContent?: boolean
   html: string
   loading: 'eager' | 'lazy'
   onExternalLinkSelect?: (link: AuthenticatedExternalLink) => void
-  remoteImages?: ReadonlyArray<AuthenticatedRemoteImage>
   title: string
 }) {
   const iframeRef = React.useRef<HTMLIFrameElement>(null)
   const cleanupFrameRef = React.useRef<() => void>(() => {})
   const baseURL = getCurrentBrowserHref()
-  const rewritten = React.useMemo(
-    () =>
-      rewriteEmailHTMLForIframe(html, {
-        allowRemoteImages,
-        baseURL,
-        knownExternalLinks: externalLinks,
-        knownRemoteImages: remoteImages,
-        reservedExternalLinkIds: externalLinks.map((link) => link.id),
-        inlineAttachments: attachments.flatMap((attachment) =>
-          attachment.contentId && attachment.url
-            ? [
-                {
-                  contentId: attachment.contentId,
-                  url: attachment.url
-                }
-              ]
-            : []
-        )
-      }),
-    [allowRemoteImages, attachments, baseURL, externalLinks, html, remoteImages]
-  )
   const externalLinkMap = React.useMemo(() => {
     const map = new Map<string, AuthenticatedExternalLink>()
     for (const link of externalLinks) {
       map.set(link.id, link)
     }
-    for (const link of rewritten.externalLinks) {
-      map.set(link.id, {
-        host: link.host,
-        id: link.id,
-        url: link.url
-      })
-    }
     return map
-  }, [externalLinks, rewritten.externalLinks])
+  }, [externalLinks])
   const emailDocumentThemeMode = useEmailDocumentThemeMode()
   const srcDoc = React.useMemo(
     () =>
       buildEmailIframeDocument({
-        bodyHTML: rewritten.html,
+        bodyHTML: html,
         csp: buildEmailContentSecurityPolicy({
           allowRemoteImages,
           sameOrigin: getCurrentBrowserOrigin()
         }),
         themeMode: emailDocumentThemeMode
       }),
-    [allowRemoteImages, emailDocumentThemeMode, rewritten.html]
+    [allowRemoteImages, emailDocumentThemeMode, html]
   )
   const installFrameHandlers = React.useCallback(() => {
     const iframe = iframeRef.current
@@ -2890,8 +2814,8 @@ function EmailThreadMessageItem({
         </div>
       ) : null}
       <EmailMessageBodyFrame
-        allowRemoteImages={false}
-        attachments={message.attachments ?? []}
+        allowRemoteImages={message.remoteImagesAllowed}
+        externalLinks={message.externalLinks ?? []}
         fitContent
         html={message.html}
         loading={index === 0 ? 'eager' : 'lazy'}
@@ -2920,12 +2844,15 @@ function getThreadMessageActionTarget(
   return {
     attachments: message.attachments,
     bodySize: message.bodySize,
+    externalLinks: message.externalLinks,
     folderId: message.folderId,
     html: message.html,
     id: message.id,
     isDraft: message.isDraft,
     receivedAt: message.receivedAt,
     recipientEmail: message.recipientEmail,
+    remoteImages: message.remoteImages,
+    remoteImagesAllowed: message.remoteImagesAllowed,
     senderEmail: message.senderEmail,
     senderName: message.senderName,
     subject: email.subject,
@@ -3113,7 +3040,6 @@ function getEmailBodyFrameClass(size: AuthenticatedEmailBodySize) {
 const emailActionIcons = {
   archive: ArchiveIcon,
   back: ArrowLeftIcon,
-  close: XIcon,
   'collapse-thread-message': CaretUpIcon,
   delete: TrashIcon,
   'discard-draft': TrashIcon,
@@ -3183,7 +3109,7 @@ function EmailToolbarButton({
       <TooltipTrigger asChild>
         <Button
           aria-label={action.label}
-          className='size-8'
+          className={cn('size-8', action.action === 'back' && 'md:hidden')}
           disabled={disabled}
           onClick={() => {
             onAction(action.action)

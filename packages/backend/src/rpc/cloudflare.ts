@@ -10,6 +10,7 @@ import {
   isCloudflareAccessError,
   listConnectedCloudflareAccounts,
   listConnectedCloudflareZones,
+  removeCloudflareDomain,
   startCloudflareOAuth
 } from '../cloudflare/service'
 import { typedResponseSchema } from './response-schema'
@@ -258,6 +259,28 @@ const cloudflare = new Elysia({
         200: typedResponseSchema<{ connection: CloudflareStatusResult['connections'][number] }>(
           t.Object({ connection: cloudflareConnectionResponseSchema })
         ),
+        ...cloudflareErrorResponseSchemas
+      }
+    }
+  )
+  .delete(
+    '/connections/:connectionPublicId',
+    async ({ params, request, set }) => {
+      try {
+        return await removeCloudflareDomain({
+          connectionPublicId: params.connectionPublicId,
+          headers: request.headers
+        })
+      } catch (error) {
+        return cloudflareErrorResponse(error, set)
+      }
+    },
+    {
+      params: t.Object({
+        connectionPublicId: t.String({ minLength: 1 })
+      }),
+      response: {
+        200: typedResponseSchema<CloudflareStatusResult>(cloudflareStatusResponseSchema),
         ...cloudflareErrorResponseSchemas
       }
     }

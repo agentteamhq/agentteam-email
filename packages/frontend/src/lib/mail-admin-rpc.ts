@@ -1,6 +1,8 @@
 import { rpc } from './rpc-api-client'
 import type {
   AgentMailAdminCreateAgentResult,
+  AgentMailAdminDeleteAccountResult,
+  AgentMailAdminDeleteForwardingGroupResult,
   AgentMailAdminGrantPrincipalTargetInput,
   AgentMailAdminNavigation,
   AgentMailAdminRevokeAgentEnrollmentResult,
@@ -43,7 +45,7 @@ export interface MailboxAdminViewQuery {
 
 export async function fetchMailboxAdminView(query: MailboxAdminViewQuery): Promise<AgentMailAdminView> {
   const result = await rpc.mail.admin.get({ query })
-  return readMailAdminRpcResult<AgentMailAdminView>(result)
+  return normalizeMailboxAdminView(readMailAdminRpcResult<AgentMailAdminView>(result))
 }
 
 export async function fetchMailboxAdminNavigation(): Promise<AgentMailAdminNavigation> {
@@ -88,11 +90,18 @@ export async function disableMailboxAdminAccount(
   return readMailAdminRpcResult<AgentMailAdminSaveAccountResult>(result)
 }
 
+export async function deleteMailboxAdminAccount(
+  accountId: string
+): Promise<AgentMailAdminDeleteAccountResult> {
+  const result = await rpc.mail.admin.accounts({ accountId }).delete()
+  return readMailAdminRpcResult<AgentMailAdminDeleteAccountResult>(result)
+}
+
 export async function createMailboxAdminAgentEnrollment(
   input: MailboxAdminAgentInput
 ): Promise<AgentMailAdminCreateAgentResult> {
   const result = await rpc.mail.admin.agents.post(mailboxAdminAgentBody(input))
-  return readMailAdminRpcResult<AgentMailAdminCreateAgentResult>(result)
+  return normalizeMailboxAdminCreateAgentResult(readMailAdminRpcResult<AgentMailAdminCreateAgentResult>(result))
 }
 
 export async function updateMailboxAdminAgent({
@@ -103,7 +112,7 @@ export async function updateMailboxAdminAgent({
   input: MailboxAdminAgentInput
 }): Promise<AgentMailAdminSaveAgentResult> {
   const result = await rpc.mail.admin.agents({ agentId }).patch(mailboxAdminAgentBody(input))
-  return readMailAdminRpcResult<AgentMailAdminSaveAgentResult>(result)
+  return normalizeMailboxAdminSaveAgentResult(readMailAdminRpcResult<AgentMailAdminSaveAgentResult>(result))
 }
 
 export async function updateMailboxAdminAgentSystemPermissions({
@@ -178,7 +187,9 @@ export async function createMailboxAdminGroup(
   input: MailboxAdminGroupInput
 ): Promise<AgentMailAdminSaveForwardingGroupResult> {
   const result = await rpc.mail.admin.groups.post(mailboxAdminGroupBody(input))
-  return readMailAdminRpcResult<AgentMailAdminSaveForwardingGroupResult>(result)
+  return normalizeMailboxAdminSaveForwardingGroupResult(
+    readMailAdminRpcResult<AgentMailAdminSaveForwardingGroupResult>(result)
+  )
 }
 
 export async function updateMailboxAdminGroup({
@@ -189,7 +200,9 @@ export async function updateMailboxAdminGroup({
   input: MailboxAdminGroupInput
 }): Promise<AgentMailAdminSaveForwardingGroupResult> {
   const result = await rpc.mail.admin.groups({ groupId }).patch(mailboxAdminGroupBody(input))
-  return readMailAdminRpcResult<AgentMailAdminSaveForwardingGroupResult>(result)
+  return normalizeMailboxAdminSaveForwardingGroupResult(
+    readMailAdminRpcResult<AgentMailAdminSaveForwardingGroupResult>(result)
+  )
 }
 
 export async function disableMailboxAdminGroup(
@@ -197,6 +210,13 @@ export async function disableMailboxAdminGroup(
 ): Promise<AgentMailAdminSaveForwardingGroupResult> {
   const result = await rpc.mail.admin.groups({ groupId }).disable.post()
   return readMailAdminRpcResult<AgentMailAdminSaveForwardingGroupResult>(result)
+}
+
+export async function deleteMailboxAdminGroup(
+  groupId: string
+): Promise<AgentMailAdminDeleteForwardingGroupResult> {
+  const result = await rpc.mail.admin.groups({ groupId }).delete()
+  return readMailAdminRpcResult<AgentMailAdminDeleteForwardingGroupResult>(result)
 }
 
 function mailboxAdminAccountCreateBody(input: MailboxAdminAccountInput) {
@@ -238,6 +258,119 @@ function mailboxAdminGroupBody(input: MailboxAdminGroupInput) {
     recipients: input.recipients ? [...input.recipients] : undefined,
     status: input.status
   }
+}
+
+function normalizeMailboxAdminView(view: AgentMailAdminView): AgentMailAdminView {
+  const normalized = { ...view }
+
+  if (Array.isArray(view.accounts)) {
+    normalized.accounts = view.accounts.map((account) => ({
+      ...account,
+      lastActivity: normalizeDateLabelString(account.lastActivity)
+    }))
+  }
+  if (Array.isArray(view.agents)) {
+    normalized.agents = view.agents.map(normalizeMailboxAdminAgent)
+  }
+  if (Array.isArray(view.groups)) {
+    normalized.groups = view.groups.map(normalizeMailboxAdminGroup)
+  }
+  if (Array.isArray(view.pendingEnrollments)) {
+    normalized.pendingEnrollments = view.pendingEnrollments.map((enrollment) => ({
+      ...enrollment,
+      createdAt: normalizeDateLabelString(enrollment.createdAt),
+      grantExpiresAt: normalizeNullableISOString(enrollment.grantExpiresAt),
+      lastUpdated: normalizeDateLabelString(enrollment.lastUpdated),
+      tokenExpiresAt: normalizeNullableISOString(enrollment.tokenExpiresAt)
+    }))
+  }
+  if (Array.isArray(view.principals)) {
+    normalized.principals = view.principals.map((principal) => ({
+      ...principal,
+      lastUsed: normalizeDateLabelString(principal.lastUsed)
+    }))
+  }
+
+  return normalized
+}
+
+function normalizeMailboxAdminSaveAgentResult(
+  result: AgentMailAdminSaveAgentResult
+): AgentMailAdminSaveAgentResult {
+  if (!result.agent) {
+    return result
+  }
+  return {
+    ...result,
+    agent: normalizeMailboxAdminAgent(result.agent)
+  }
+}
+
+function normalizeMailboxAdminCreateAgentResult(
+  result: AgentMailAdminCreateAgentResult
+): AgentMailAdminCreateAgentResult {
+  if (!result.enrollment) {
+    return result
+  }
+  return {
+    ...result,
+    enrollment: {
+      ...result.enrollment,
+      enrollmentTokenExpiresAt: normalizeNullableISOString(result.enrollment.enrollmentTokenExpiresAt),
+      grantExpiresAt: normalizeNullableISOString(result.enrollment.grantExpiresAt)
+    }
+  }
+}
+
+function normalizeMailboxAdminSaveForwardingGroupResult(
+  result: AgentMailAdminSaveForwardingGroupResult
+): AgentMailAdminSaveForwardingGroupResult {
+  if (!result.group) {
+    return result
+  }
+  return {
+    ...result,
+    group: normalizeMailboxAdminGroup(result.group)
+  }
+}
+
+function normalizeMailboxAdminAgent(
+  agent: AgentMailAdminView['agents'][number]
+): AgentMailAdminView['agents'][number] {
+  return {
+    ...agent,
+    lastSeen: normalizeDateLabelString(agent.lastSeen)
+  }
+}
+
+function normalizeMailboxAdminGroup(
+  group: AgentMailAdminView['groups'][number]
+): AgentMailAdminView['groups'][number] {
+  return {
+    ...group,
+    lastDelivered: normalizeDateLabelString(group.lastDelivered),
+    lastUpdated: normalizeDateLabelString(group.lastUpdated)
+  }
+}
+
+function normalizeDateLabelString(value: unknown): string {
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10)
+  }
+  if (typeof value === 'string') {
+    return value
+  }
+  return value == null ? '' : String(value)
+}
+
+function normalizeNullableISOString(value: unknown): string | null {
+  if (value instanceof Date) {
+    return value.toISOString()
+  }
+  if (typeof value === 'string') {
+    return value
+  }
+  return value == null ? null : String(value)
 }
 
 function readMailAdminRpcResult<TResult>(

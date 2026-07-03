@@ -18,6 +18,8 @@ const noAllowedActions = {
   createAccount: false,
   createAgent: false,
   createGroup: false,
+  deleteAccount: false,
+  deleteGroup: false,
   disableAccount: false,
   disableGroup: false,
   manageAgentMailboxGrants: false,
@@ -60,6 +62,7 @@ function mailboxAdminActions() {
     onCopyAgentEnrollmentCommand: vi.fn(),
     onCreateAgent: vi.fn(),
     onDialogChange: vi.fn(),
+    onDeleteGroup: vi.fn(),
     onDisableAccount: vi.fn(),
     onDisableGroup: vi.fn(),
     onOpenMailbox: vi.fn(),
@@ -169,6 +172,7 @@ describe('mailbox admin controller view mapping', () => {
     expect(view.onCopyAgentEnrollmentCommand).toBe(actions.onCopyAgentEnrollmentCommand)
     expect(view.onOpenMailbox).toBe(actions.onOpenMailbox)
     expect(view.onCreateAgent).toBeUndefined()
+    expect(view.onDeleteGroup).toBeUndefined()
     expect(view.onDisableAccount).toBeUndefined()
     expect(view.onDisableGroup).toBeUndefined()
     expect(view.onRevokeAgent).toBeUndefined()
@@ -193,6 +197,7 @@ describe('mailbox admin controller view mapping', () => {
         allowedActions: {
           ...noAllowedActions,
           createAccount: true,
+          deleteGroup: true,
           manageAgentMailboxGrants: true,
           updateGroup: true
         }
@@ -202,6 +207,7 @@ describe('mailbox admin controller view mapping', () => {
     )
 
     expect(view.onSaveAccount).toBe(actions.onSaveAccount)
+    expect(view.onDeleteGroup).toBe(actions.onDeleteGroup)
     expect(view.onSaveAgentMailboxGrants).toBe(actions.onSaveAgentMailboxGrants)
     expect(view.onSavePrincipalMailboxGrants).toBe(actions.onSavePrincipalMailboxGrants)
     expect(view.onSaveGroup).toBe(actions.onSaveGroup)

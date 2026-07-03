@@ -113,10 +113,10 @@ the R2 `raw.eml` object and its recorded `raw_sha256`.
 The Control API message view/security surfaces build on the same WildDuck
 delivery identity as `agentMail.message.provenance.get`:
 
-- `agentMail.message.view.get`: returns plain text, a sanitized display HTML fragment,
+- `agentMail.message.view.get`: returns plain text, preserved display HTML,
   inert external-link markers plus external-link metadata, remote image
-  metadata, and attachment-backed inline image metadata for authenticated
-  frontend and operator display.
+  metadata, and attachment metadata for authenticated frontend and operator
+  display.
 - `agentMail.message.security.get`: returns structured security evidence with
   explicit source labels and unavailable statuses.
 
@@ -124,11 +124,10 @@ These operations are read-only. They do not create a new canonical delivery key
 and must use the same delivery key logic as `agentMail.message.provenance.get`.
 They are authenticated Control API surfaces. Control API tokens must not be
 projected to agent runtimes.
-The view operation must block active remote image sources by default. Browser
-renderers that request `remoteImages: allow` still must block those loads until
-explicit user action. Links allowed for display must be rewritten to inert link
-ID markers rather than returning original external `href` values inside
-`displayHtml`.
+The view operation must not rewrite image elements to block image loads. Browser
+renderers own blocked or allowed resource loading through iframe sandbox and
+CSP. `remoteImages: allow` is a display policy input only; it must not cause
+mail-control to fetch, proxy, cache, or rewrite remote images.
 
 Replay code must preserve every deactivated Cloudflare boundary authentication
 or trace header as an inactive `X-ATMCF-Cloudflare-<Original-Header-Name>`
@@ -204,19 +203,16 @@ Outbound mail flows through the canonical mail-server path:
 
 - WildDuck `/users/:user/submit` is the authenticated agent/user submission
   surface.
-- WildDuck native forwarding surfaces, including user `targets`, forwarded
-  addresses, and forwarding filters, are outbound mail. They use the same
-  ZoneMTA, internal SMTP relay, archive, and result provenance surfaces as other
-  outbound messages.
+- Ordinary user/agent submissions and outbound forwarding surfaces are
+  provider-bound mail. They use the same ZoneMTA, internal SMTP relay, archive,
+  provider payload, and result provenance surfaces as other outbound messages.
 - WildDuck writes the user-visible Sent copy through its normal submit path.
 - ZoneMTA owns queueing, retry, bounce generation, and the SMTP handoff to the
   internal SMTP relay.
 - The internal SMTP relay is a ZoneMTA-only SMTP hop. It archives the exact raw
-  bytes received from ZoneMTA. For provider-bound recipients, it separately
-  archives the sanitized provider-bound payload. For active local Agent Mail
-  recipient domains, it records a local delivery result, stamps internal
-  local-route provenance headers, and hands the exact local-delivery bytes back
-  to Haraka/WildDuck without creating a provider payload.
+  bytes received from ZoneMTA and separately archives the sanitized
+  provider-bound payload. It must send through the provider even when
+  recipients belong to Agent Mail domains.
 
 The internal SMTP relay has two durable outbound copies for provider-bound
 sends:
@@ -226,15 +222,28 @@ sends:
   is never written back over the relay-received raw copy or the WildDuck Sent
   copy.
 
-Local active-domain routing has a source-side outbound archive and a target-side
-inbound archive linked by `local_route_id`. The source-side outbound archive
-stores the relay-received raw copy and records `provider: "local"` with
-`local_routed` or `local_route_failed`. The target-side inbound archive stores
-the delivered local mailbox copy after internal route headers are stamped, with
-a local-route `edge.json`, and records `local_routed_delivered` or
-`local_route_failed`. These records intentionally omit provider payload keys,
-provider raw hashes, provider boundary sender, and provider message IDs because
-no external provider handoff occurred.
+Inbound group forwarding fanout is the only local delivery exception. It is
+receive-side routing for a message already accepted through the
+Cloudflare/Worker inbound archive path, not a new authored outbound send.
+Fanout local copies create source-side local-route relay boundary records and
+target-side inbound archive records linked by `local_route_id`. The source-side
+record stores the exact ZoneMTA relay bytes and local route result; it is not an
+authored outbound send and does not include a provider payload. The target-side
+inbound archive stores the delivered fanout copy after internal route headers
+are stamped, with a local-route `edge.json`, and links it to the source inbound
+bundle through `local_route_id`, `source_ingest_id`, and the source Worker
+archive keys. Replay-looking `X-ATM*` or `X-ATMCF*` headers alone are not
+authority for local fanout; the local-route path must bind the copy to a
+matching source Worker inbound `raw.eml` and `edge.json` bundle plus the
+internal receive-side fanout marker stamped during inbound replay. These records
+omit provider payload keys, provider raw hashes, provider boundary sender, and
+provider message IDs because no external provider handoff occurred for the
+local fanout copy.
+
+Successful local fanout delivery also produces an internal control-to-web
+writeback so the web-owned forwarding group record can advance
+`lastDeliveredAt`. That writeback is operational group metadata; it does not
+create Cloudflare edge evidence or provider-bound delivery evidence.
 
 Outbound surfaces:
 
@@ -296,34 +305,32 @@ sender use the provider raw-send `from` address and record the provider-specific
 mode. Cloudflare Email Sending records
 `provider_reverse_path_mode: "cloudflare_send_raw_from"`.
 
-For forwarded copies to active local Agent Mail domains, the visible `From`
-domain may belong to a domain Agent Mail does not own. That visible sender
-domain is metadata only and must not be the outbound archive path. The outbound
-archive path for a local routed copy uses the source mailbox domain, and the
-target-side inbound archive path uses the target mailbox domain. Provider
-sender-domain policy is not consulted for these local deliveries;
-recipient-domain active state decides whether the relay should deliver locally.
-If the relay-received message carries `X-ATMCF-Edge-Envelope-From`, local
-delivery to Haraka uses that original replay envelope sender as SMTP
-`MAIL FROM`. ZoneMTA's SRS-expanded reverse path is preserved in relay
-metadata, but it is not the local target-mailbox delivery envelope.
+For inbound group forwarding fanout copies, the visible `From` domain may belong
+to a domain Agent Mail does not own. That visible sender domain is metadata only
+and must not define an outbound archive path. The target-side inbound archive
+path uses the target mailbox domain. Provider sender-domain policy is not
+consulted for these local fanout copies; the source inbound bundle and target
+mailbox identity decide the local-route record. Local delivery to Haraka uses
+the original inbound envelope sender when available.
 
-Target-side local routed inbound records use `edge.json` explicitly with
+Target-side local-route inbound records use `edge.json` explicitly with
 `schema: "agent-mail.inbound.local-route.edge.v1"`. This edge is not a
 Cloudflare Worker commit marker and must not be replayed by the reconciler. It
-is the local routing boundary record that links the target mailbox copy to
-`local_route_id`, the source mailbox, the ZoneMTA queue ID, and the source
-inbound archive when a source ingest ID is available.
+is the receive-side local routing boundary record that links the target mailbox
+copy to `local_route_id`, the source mailbox, and the source inbound archive.
+It must not be described as Cloudflare edge-originated metadata unless it
+explicitly references metadata produced by the Cloudflare edge for the source
+inbound bundle.
 
-The internal SMTP relay must stamp local routed deliveries with
+The receive-side fanout path must stamp local-route deliveries with
 `X-Agent-Mail-Local-Route-ID`, `X-Agent-Mail-Source-Mailbox`,
 `X-Agent-Mail-Target-Mailbox`, and `X-Agent-Mail-Source-Ingest-ID` when a source
 ingest ID is available. Target-side WildDuck proof must be queryable by
 `X-Agent-Mail-Local-Route-ID` and target mailbox identity.
 
-If ZoneMTA retries after a local mailbox delivery succeeded but route result
-persistence failed, the internal SMTP relay must recover the target mailbox
-copy by ZoneMTA queue ID, source ingest ID when available, parsed `Message-ID`,
-and target mailbox identity. When the stored copy has
-`X-Agent-Mail-Local-Route-ID`, the internal SMTP relay must reuse that route ID
-and finish the missing R2 records instead of delivering another mailbox copy.
+If receive-side fanout retries after a local mailbox delivery succeeded but
+route result persistence failed, it must recover the target mailbox copy by
+source ingest ID, parsed `Message-ID`, and target mailbox identity. When the
+stored copy has `X-Agent-Mail-Local-Route-ID`, the fanout path must reuse that
+route ID and finish the missing R2 records instead of delivering another
+mailbox copy.

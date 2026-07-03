@@ -2,7 +2,11 @@ package smtprelay
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -13,6 +17,16 @@ type noopLocalDeliverer struct{}
 
 func (noopLocalDeliverer) Deliver(context.Context, string, []string, []byte) error {
 	return nil
+}
+
+type staticActiveDomainResolver map[string]ActiveDomainContext
+
+func (r staticActiveDomainResolver) ActiveDomain(_ context.Context, domain string) (ActiveDomainContext, error) {
+	activeDomain, ok := r[domain]
+	if !ok {
+		return ActiveDomainContext{}, errors.New("active domain not found")
+	}
+	return activeDomain, nil
 }
 
 func TestUniqueStrings(t *testing.T) {
@@ -41,45 +55,101 @@ func TestSanitizeRelayLogErrorRedactsMailbox(t *testing.T) {
 	}
 }
 
-func TestLocalDeliveryDispositionClassifiesActiveLocalRecipients(t *testing.T) {
+func TestLocalDeliveryDispositionTreatsOrdinaryActiveLocalRecipientsAsProviderBound(t *testing.T) {
 	server := &Server{
 		cfg: runtimeConfig{LocalDelivery: localDeliveryRuntimeConfig{Enabled: true}},
 		localDomainResolver: staticLocalDomainResolver{
 			"example.com": {},
 		},
 		localDeliverer: noopLocalDeliverer{},
+		localProof:     &localDeliveryProof{},
 	}
 
-	got, err := server.localDeliveryDisposition(context.Background(), []string{
+	got, err := server.localDeliveryDisposition(context.Background(), rfc822.Submission{}, []string{
 		"SEO-Researcher@Example.com",
 		"seo-researcher@example.com",
 	})
 	if err != nil {
 		t.Fatalf("localDeliveryDisposition returned error: %v", err)
 	}
-	if got != localDeliveryAll {
-		t.Fatalf("localDeliveryDisposition = %q, want %q", got, localDeliveryAll)
+	if got != localDeliveryExternal {
+		t.Fatalf("localDeliveryDisposition = %q, want %q", got, localDeliveryExternal)
 	}
 }
 
-func TestLocalDeliveryDispositionRejectsMixedLocalAndExternalRecipients(t *testing.T) {
+func TestLocalDeliveryDispositionTreatsMixedRecipientsAsProviderBound(t *testing.T) {
 	server := &Server{
 		cfg: runtimeConfig{LocalDelivery: localDeliveryRuntimeConfig{Enabled: true}},
 		localDomainResolver: staticLocalDomainResolver{
 			"example.com": {},
 		},
 		localDeliverer: noopLocalDeliverer{},
+		localProof:     &localDeliveryProof{},
 	}
 
-	got, err := server.localDeliveryDisposition(context.Background(), []string{
+	submission := rfc822.Submission{
+		ReplayIngestID:     "018f1f77-40e0-7cc3-98f5-5b03f9f13f42",
+		ReplayEnvelopeFrom: "sender@example.net",
+		ReplayEnvelopeTo:   "source@example.com",
+	}
+	got, err := server.localDeliveryDisposition(context.Background(), submission, []string{
 		"seo-researcher@example.com",
 		"someone@example.net",
 	})
 	if err != nil {
 		t.Fatalf("localDeliveryDisposition returned error: %v", err)
 	}
-	if got != localDeliveryMixed {
-		t.Fatalf("localDeliveryDisposition = %q, want %q", got, localDeliveryMixed)
+	if got != localDeliveryExternal {
+		t.Fatalf("localDeliveryDisposition = %q, want %q", got, localDeliveryExternal)
+	}
+}
+
+func TestLocalDeliveryDispositionTreatsReplayProvenanceWithoutFanoutMarkerAsProviderBound(t *testing.T) {
+	server := &Server{
+		cfg: runtimeConfig{LocalDelivery: localDeliveryRuntimeConfig{Enabled: true}},
+		localDomainResolver: staticLocalDomainResolver{
+			"example.com": {},
+		},
+		localDeliverer: noopLocalDeliverer{},
+		localProof:     &localDeliveryProof{},
+	}
+
+	submission := rfc822.Submission{
+		ReplayIngestID:     "018f1f77-40e0-7cc3-98f5-5b03f9f13f42",
+		ReplayEnvelopeFrom: "sender@example.net",
+		ReplayEnvelopeTo:   "source@example.com",
+	}
+	got, err := server.localDeliveryDisposition(context.Background(), submission, []string{"seo-researcher@example.com"})
+	if err != nil {
+		t.Fatalf("localDeliveryDisposition returned error: %v", err)
+	}
+	if got != localDeliveryExternal {
+		t.Fatalf("localDeliveryDisposition = %q, want %q", got, localDeliveryExternal)
+	}
+}
+
+func TestLocalDeliveryDispositionAllowsExplicitReplayFanoutToSingleLocalRecipient(t *testing.T) {
+	server := &Server{
+		cfg: runtimeConfig{LocalDelivery: localDeliveryRuntimeConfig{Enabled: true}},
+		localDomainResolver: staticLocalDomainResolver{
+			"example.com": {},
+		},
+		localDeliverer: noopLocalDeliverer{},
+		localProof:     &localDeliveryProof{},
+	}
+
+	submission := rfc822.Submission{
+		ReplayIngestID:     "018f1f77-40e0-7cc3-98f5-5b03f9f13f42",
+		ReplayEnvelopeFrom: "sender@example.net",
+		ReplayEnvelopeTo:   "source@example.com",
+		LocalFanout:        rfc822.LocalFanoutInboundReplayValue,
+	}
+	got, err := server.localDeliveryDisposition(context.Background(), submission, []string{"seo-researcher@example.com"})
+	if err != nil {
+		t.Fatalf("localDeliveryDisposition returned error: %v", err)
+	}
+	if got != localDeliveryAll {
+		t.Fatalf("localDeliveryDisposition = %q, want %q", got, localDeliveryAll)
 	}
 }
 
@@ -91,7 +161,13 @@ func TestLocalDeliveryDispositionDisabledWithoutConfiguredDeliverer(t *testing.T
 		},
 	}
 
-	got, err := server.localDeliveryDisposition(context.Background(), []string{"seo-researcher@example.com"})
+	submission := rfc822.Submission{
+		ReplayIngestID:     "018f1f77-40e0-7cc3-98f5-5b03f9f13f42",
+		ReplayEnvelopeFrom: "sender@example.net",
+		ReplayEnvelopeTo:   "source@example.com",
+		LocalFanout:        rfc822.LocalFanoutInboundReplayValue,
+	}
+	got, err := server.localDeliveryDisposition(context.Background(), submission, []string{"seo-researcher@example.com"})
 	if err != nil {
 		t.Fatalf("localDeliveryDisposition returned error: %v", err)
 	}
@@ -294,6 +370,74 @@ func TestCloudflareAllowsDsnWithoutTextOrHTML(t *testing.T) {
 	err := validateSubmissionForProvider(outboundProviderCloudflare, rfc822.Submission{IsDSN: true})
 	if err != nil {
 		t.Fatalf("validateSubmissionForProvider rejected DSN: %v", err)
+	}
+}
+
+func TestWebCloudflareSenderPreservesProviderMessageID(t *testing.T) {
+	var requestBody webCloudflareSendRequest
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/rpc/internal/agent-mail/cloudflare/send-raw" {
+			t.Fatalf("request path = %q", request.URL.Path)
+		}
+		if request.Header.Get("X-Agent-Mail-Control-Web-Token") != "control-token" {
+			t.Fatalf("missing control token")
+		}
+		if err := json.NewDecoder(request.Body).Decode(&requestBody); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"delivered":[],"message_id":"<cloudflare-message-id@example.net>","permanent_bounces":[],"queued":["recipient@example.net"]}`))
+	}))
+	defer server.Close()
+	baseURL, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatalf("parse test server URL: %v", err)
+	}
+	raw := []byte(strings.Join([]string{
+		"X-Agent-Mail-ZoneMTA-Queue-ID: zone-queue-123",
+		"From: Agent <agent@example.com>",
+		"To: Recipient <recipient@example.net>",
+		"Subject: Cloudflare Raw",
+		"Message-ID: <message-id@example.com>",
+		"",
+		"body",
+		"",
+	}, "\r\n"))
+	submission, err := rfc822.BuildProviderRelaySubmission(raw, "agent@example.com", []string{"recipient@example.net"})
+	if err != nil {
+		t.Fatalf("BuildProviderRelaySubmission returned error: %v", err)
+	}
+	sender := webCloudflareSender{
+		baseURL:      baseURL,
+		controlToken: "control-token",
+		domainResolver: staticActiveDomainResolver{
+			"example.com": {
+				OrganizationID:       "org-id",
+				OrganizationPublicID: "org-public-id",
+				Domain:               "example.com",
+			},
+		},
+		httpClient: server.Client(),
+	}
+
+	result, err := sender.Send(context.Background(), submission, []string{"recipient@example.net"}, "send-id-123")
+	if err != nil {
+		t.Fatalf("Send returned error: %v", err)
+	}
+	if result.ProviderMessageID != "<cloudflare-message-id@example.net>" {
+		t.Fatalf("ProviderMessageID = %q", result.ProviderMessageID)
+	}
+	if len(result.Queued) != 1 || result.Queued[0] != "recipient@example.net" {
+		t.Fatalf("Queued = %#v", result.Queued)
+	}
+	if requestBody.OrganizationID != "org-id" || requestBody.OrganizationPublicID != "org-public-id" {
+		t.Fatalf("request organization fields = %#v", requestBody)
+	}
+	if requestBody.ZoneMTAQueueID != "zone-queue-123" {
+		t.Fatalf("request ZoneMTA queue id = %q", requestBody.ZoneMTAQueueID)
+	}
+	if requestBody.SendID != "send-id-123" {
+		t.Fatalf("request send id = %q", requestBody.SendID)
 	}
 }
 

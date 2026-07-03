@@ -13,6 +13,16 @@ import {
 import { Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from '../../components/ui/alert-dialog'
+import {
   Card,
   CardAction,
   CardContent,
@@ -565,10 +575,16 @@ function AccountTable({
                   account.status === 'disabled' ||
                   view.pendingAccountDisableId === account.id
                     ? ['Disable account']
+                    : []),
+                  ...(!view.allowedActions.deleteAccount ||
+                  !view.onDeleteAccount ||
+                  account.status !== 'disabled' ||
+                  view.pendingAccountDeleteId === account.id
+                    ? ['Delete account']
                     : [])
                 ]}
-                items={['Edit account', 'Open mailbox', 'Disable account']}
-                destructiveItem='Disable account'
+                items={['Edit account', 'Open mailbox', 'Disable account', 'Delete account']}
+                destructiveItem='Delete account'
                 label={`Open actions for ${account.address}`}
                 onItemSelect={(item) => {
                   if (item === 'Edit account') {
@@ -577,6 +593,8 @@ function AccountTable({
                     view.onOpenMailbox?.(account.id)
                   } else if (item === 'Disable account') {
                     view.onDisableAccount?.(account.id)
+                  } else if (item === 'Delete account') {
+                    view.onDialogChange?.({ accountId: account.id, type: 'accountDelete' })
                   }
                 }}
               />
@@ -652,10 +670,16 @@ function GroupCards({ groups, view }: { groups: MailboxAdminView['groups']; view
                   group.status === 'disabled' ||
                   view.pendingGroupDisableId === group.id
                     ? ['Disable group']
+                    : []),
+                  ...(!view.allowedActions.deleteGroup ||
+                  !view.onDeleteGroup ||
+                  group.status !== 'disabled' ||
+                  view.pendingGroupDeleteId === group.id
+                    ? ['Delete group']
                     : [])
                 ]}
-                items={['Edit group', 'Manage recipients', 'Disable group']}
-                destructiveItem='Disable group'
+                items={['Edit group', 'Manage recipients', 'Disable group', 'Delete group']}
+                destructiveItem={group.status === 'disabled' ? 'Delete group' : 'Disable group'}
                 label={`Open actions for ${group.address}`}
                 onItemSelect={(item) => {
                   if (item === 'Edit group') {
@@ -664,6 +688,8 @@ function GroupCards({ groups, view }: { groups: MailboxAdminView['groups']; view
                     view.onDialogChange?.({ groupId: group.id, type: 'groupRecipients' })
                   } else if (item === 'Disable group') {
                     view.onDisableGroup?.(group.id)
+                  } else if (item === 'Delete group') {
+                    view.onDialogChange?.({ groupId: group.id, type: 'groupDelete' })
                   }
                 }}
               />
@@ -1178,7 +1204,9 @@ function MailboxAdminDialogs({ view }: { view: MailboxAdminView }) {
   return (
     <>
       <AccountEditorDialog view={view} />
+      <AccountDeleteDialog view={view} />
       <GroupEditorDialog view={view} />
+      <GroupDeleteDialog view={view} />
       <GroupRecipientsSheet view={view} />
       <AgentEditorDialog view={view} />
       <AgentAccountsSheet view={view} />
@@ -1189,6 +1217,104 @@ function MailboxAdminDialogs({ view }: { view: MailboxAdminView }) {
   )
 }
 
+function AccountDeleteDialog({ view }: { view: MailboxAdminView }) {
+  const dialog = view.activeDialog?.type === 'accountDelete' ? view.activeDialog : null
+  const account = dialog ? view.accounts.find((candidate) => candidate.id === dialog.accountId) : null
+  const isDeleting = Boolean(account && view.pendingAccountDeleteId === account.id)
+  const canDelete =
+    Boolean(account) &&
+    account?.status === 'disabled' &&
+    Boolean(view.allowedActions.deleteAccount && view.onDeleteAccount) &&
+    !isDeleting
+
+  return (
+    <AlertDialog
+      onOpenChange={(open) => {
+        if (!open && !isDeleting) {
+          view.onDialogChange?.(null)
+        }
+      }}
+      open={Boolean(dialog)}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete mailbox account?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {account
+              ? `Delete ${account.address} from WildDuck. This is only available after the account is disabled and no grants or forwarding groups still reference it.`
+              : 'Delete this disabled mailbox account from WildDuck.'}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={!canDelete}
+            onClick={(event) => {
+              event.preventDefault()
+              if (!account || !canDelete) {
+                return
+              }
+              view.onDeleteAccount?.(account.id)
+            }}
+            variant='destructive'
+          >
+            {isDeleting ? 'Deleting account' : 'Delete account'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
+function GroupDeleteDialog({ view }: { view: MailboxAdminView }) {
+  const dialog = view.activeDialog?.type === 'groupDelete' ? view.activeDialog : null
+  const group = dialog ? view.groups.find((candidate) => candidate.id === dialog.groupId) : null
+  const isDeleting = Boolean(group && view.pendingGroupDeleteId === group.id)
+  const canDelete =
+    Boolean(group) &&
+    group?.status === 'disabled' &&
+    Boolean(view.allowedActions.deleteGroup && view.onDeleteGroup) &&
+    !isDeleting
+
+  return (
+    <AlertDialog
+      onOpenChange={(open) => {
+        if (!open && !isDeleting) {
+          view.onDialogChange?.(null)
+        }
+      }}
+      open={Boolean(dialog)}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete forwarding group?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {group
+              ? `Delete ${group.address} from WildDuck and mailbox administration. This is only available after the group is disabled.`
+              : 'Delete this disabled forwarding group from WildDuck and mailbox administration.'}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={!canDelete}
+            onClick={(event) => {
+              event.preventDefault()
+              if (!group || !canDelete) {
+                return
+              }
+              view.onDeleteGroup?.(group.id)
+            }}
+            variant='destructive'
+          >
+            {isDeleting ? 'Deleting group' : 'Delete group'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
 function AccountEditorDialog({ view }: { view: MailboxAdminView }) {
   const dialog = view.activeDialog?.type === 'accountEditor' ? view.activeDialog : null
   const account = dialog?.accountId
@@ -1196,7 +1322,7 @@ function AccountEditorDialog({ view }: { view: MailboxAdminView }) {
     : null
   const agent = dialog?.agentId ? view.agents.find((candidate) => candidate.id === dialog.agentId) : null
   const title = account ? 'Edit account' : agent ? 'Provision account' : 'Create account'
-  const defaultAddress = agent ? defaultProvisionedMailboxAddress(agent, view.domain) : `research@${view.domain}`
+  const defaultAddress = agent ? defaultProvisionedMailboxAddress(agent, view.domain) : ''
   const canAssignAgent = view.allowedActions.manageAgentMailboxGrants
   const canSubmit =
     !!view.onSaveAccount &&
@@ -1252,6 +1378,7 @@ function AccountEditorDialog({ view }: { view: MailboxAdminView }) {
                 id='mailbox-account-address'
                 name='address'
                 defaultValue={account?.address ?? defaultAddress}
+                placeholder={`support@${view.domain}`}
                 readOnly={Boolean(account)}
               />
             </Field>

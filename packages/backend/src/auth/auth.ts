@@ -55,6 +55,7 @@ import { apiKeyConfigurations } from './api-key-config'
 import { canManageOAuthClientsForSession } from './oauth-client-privileges'
 import { createMongoSecondaryStorage } from './secondary-storage'
 import type { AgentSession } from '@better-auth/agent-auth'
+import type { refreshToken as betterAuthRefreshToken } from 'better-auth/api'
 import type { BetterAuthOptions } from 'better-auth/minimal'
 import type { OrganizationId, UserId } from '@main/db'
 import type { Database } from '../db/db'
@@ -276,6 +277,7 @@ export type GlobalAuth = {
       }
       headers?: Headers
     }) => Promise<OAuthAccessTokenResult>
+    refreshToken: typeof betterAuthRefreshToken
     approveCapability: AgentAuthEndpoints['approveCapability']
     createHost: AgentAuthEndpoints['createHost']
     adminCreateOAuthClient: OAuthProviderEndpoints['adminCreateOAuthClient']

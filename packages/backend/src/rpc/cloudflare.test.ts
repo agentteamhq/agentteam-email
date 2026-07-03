@@ -8,6 +8,7 @@ type CloudflareStartMock = (input: {
 }) => Promise<unknown>
 type CloudflareConnectionMock = (input: { headers: Headers; input: unknown }) => Promise<unknown>
 type CloudflareProvisionMock = (input: { connectionPublicId: string; headers: Headers }) => Promise<unknown>
+type CloudflareRemoveDomainMock = (input: { connectionPublicId: string; headers: Headers }) => Promise<unknown>
 type CloudflareDisconnectMock = (input: { grantPublicId: string; headers: Headers }) => Promise<unknown>
 type CloudflareFinalizeMock = (input: { headers: Headers; intentPublicId: string }) => Promise<unknown>
 type CloudflareZonesMock = (input: {
@@ -26,6 +27,7 @@ const cloudflareRpcTestState = vi.hoisted(() => ({
   isCloudflareAccessError: vi.fn<IsCloudflareAccessErrorMock>(),
   listConnectedCloudflareAccounts: vi.fn<CloudflareHeadersMock>(),
   listConnectedCloudflareZones: vi.fn<CloudflareZonesMock>(),
+  removeCloudflareDomain: vi.fn<CloudflareRemoveDomainMock>(),
   startCloudflareOAuth: vi.fn<CloudflareStartMock>()
 }))
 
@@ -43,6 +45,7 @@ vi.mock('../cloudflare/service', () => ({
   isCloudflareAccessError: cloudflareRpcTestState.isCloudflareAccessError,
   listConnectedCloudflareAccounts: cloudflareRpcTestState.listConnectedCloudflareAccounts,
   listConnectedCloudflareZones: cloudflareRpcTestState.listConnectedCloudflareZones,
+  removeCloudflareDomain: cloudflareRpcTestState.removeCloudflareDomain,
   startCloudflareOAuth: cloudflareRpcTestState.startCloudflareOAuth
 }))
 
@@ -57,6 +60,7 @@ describe('Cloudflare RPC routes', () => {
     cloudflareRpcTestState.isCloudflareAccessError.mockReset()
     cloudflareRpcTestState.listConnectedCloudflareAccounts.mockReset()
     cloudflareRpcTestState.listConnectedCloudflareZones.mockReset()
+    cloudflareRpcTestState.removeCloudflareDomain.mockReset()
     cloudflareRpcTestState.startCloudflareOAuth.mockReset()
     cloudflareRpcTestState.isCloudflareAccessError.mockImplementation(
       (error: unknown): error is Error & { status: 401 | 403 } =>
@@ -443,6 +447,52 @@ describe('Cloudflare RPC routes', () => {
     expect(cloudflareRpcTestState.disconnectCloudflare.mock.calls[0][0].headers.get('authorization')).toBe(
       'Bearer user-token'
     )
+  })
+
+  it('removes a selected Cloudflare domain through the service boundary', async () => {
+    expect.hasAssertions()
+
+    cloudflareRpcTestState.removeCloudflareDomain.mockResolvedValue({
+      connections: [],
+      grants: [
+        {
+          isUsable: true,
+          missingRequiredScopeCount: 0,
+          publicId: 'grant-public-1',
+          requiresReconnect: false,
+          status: 'active'
+        }
+      ]
+    })
+
+    const { default: cloudflare } = await import('./cloudflare')
+    const response = await cloudflare.handle(
+      new Request('https://mail.example.com/cloudflare/connections/connection-public-1', {
+        headers: {
+          authorization: 'Bearer user-token'
+        },
+        method: 'DELETE'
+      })
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toStrictEqual({
+      connections: [],
+      grants: [
+        {
+          isUsable: true,
+          missingRequiredScopeCount: 0,
+          publicId: 'grant-public-1',
+          requiresReconnect: false,
+          status: 'active'
+        }
+      ]
+    })
+    expect(cloudflareRpcTestState.removeCloudflareDomain).toHaveBeenCalledWith({
+      connectionPublicId: 'connection-public-1',
+      headers: expect.any(Headers)
+    })
+    expect(cloudflareRpcTestState.disconnectCloudflare).not.toHaveBeenCalled()
   })
 
   it('rejects missing disconnect grant public ids before reaching the Cloudflare service', async () => {

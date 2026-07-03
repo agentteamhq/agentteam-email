@@ -88,6 +88,9 @@ paths:
   /rpc/internal/agent-mail/cloudflare/send-raw:
     post:
       operationId: postRpcInternalAgent-mailCloudflareSend-raw
+  /rpc/internal/agent-mail/forwarding-groups/deliveries:
+    post:
+      operationId: postRpcInternalAgent-mailForwarding-groupsDeliveries
   /rpc/admin/dashboard:
     get:
       responses:
@@ -6203,6 +6206,133 @@ paths:
                   error:
                     type: string
       operationId: postRpcCloudflareConnectionsByConnectionPublicIdProvision
+  /rpc/cloudflare/connections/{connectionPublicId}:
+    delete:
+      parameters:
+        - name: connectionPublicId
+          in: path
+          required: true
+          schema:
+            minLength: 1
+            type: string
+      responses:
+        "200":
+          description: Response for status 200
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - connections
+                  - grants
+                properties:
+                  connections:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - cloudflareAccountId
+                        - cloudflareZoneId
+                        - domain
+                        - provisioningStatus
+                        - publicId
+                        - status
+                      properties:
+                        cloudflareAccountId:
+                          type: string
+                        cloudflareAccountName:
+                          nullable: true
+                          anyOf:
+                            - type: string
+                            - type: "null"
+                        cloudflareZoneId:
+                          type: string
+                        cloudflareZoneName:
+                          nullable: true
+                          anyOf:
+                            - type: string
+                            - type: "null"
+                        createdAt: {}
+                        domain:
+                          type: string
+                        lastErrorCode:
+                          nullable: true
+                          anyOf:
+                            - type: string
+                            - type: "null"
+                        lastErrorMessage:
+                          nullable: true
+                          anyOf:
+                            - type: string
+                            - type: "null"
+                        lastProvisionedAt: {}
+                        provisioningStatus:
+                          type: string
+                        publicId:
+                          type: string
+                        status:
+                          type: string
+                        updatedAt: {}
+                        workerScriptName:
+                          nullable: true
+                          anyOf:
+                            - type: string
+                            - type: "null"
+                  grants:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - isUsable
+                        - missingRequiredScopeCount
+                        - publicId
+                        - requiresReconnect
+                        - status
+                      properties:
+                        cloudflareEmail:
+                          nullable: true
+                          anyOf:
+                            - type: string
+                            - type: "null"
+                        isUsable:
+                          type: boolean
+                        lastErrorMessage:
+                          nullable: true
+                          anyOf:
+                            - type: string
+                            - type: "null"
+                        missingRequiredScopeCount:
+                          minimum: 0
+                          type: number
+                        publicId:
+                          type: string
+                        requiresReconnect:
+                          type: boolean
+                        status:
+                          type: string
+        "401":
+          description: Response for status 401
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+        "403":
+          description: Response for status 403
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+      operationId: deleteRpcCloudflareConnectionsByConnectionPublicId
   /rpc/cloudflare/status:
     get:
       responses:
@@ -6941,6 +7071,8 @@ paths:
                       - createAccount
                       - createAgent
                       - createGroup
+                      - deleteAccount
+                      - deleteGroup
                       - disableAccount
                       - disableGroup
                       - manageAgentMailboxGrants
@@ -6956,6 +7088,10 @@ paths:
                       createAgent:
                         type: boolean
                       createGroup:
+                        type: boolean
+                      deleteAccount:
+                        type: boolean
+                      deleteGroup:
                         type: boolean
                       disableAccount:
                         type: boolean
@@ -7804,6 +7940,86 @@ paths:
                   error:
                     type: string
       operationId: patchRpcMailAdminAccountsByAccountId
+    delete:
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            minLength: 3
+            type: string
+      responses:
+        "200":
+          description: Response for status 200
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - accountId
+                  - success
+                properties:
+                  accountId:
+                    type: string
+                  success:
+                    const: true
+                    type: boolean
+        "400":
+          description: Response for status 400
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+        "401":
+          description: Response for status 401
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+        "403":
+          description: Response for status 403
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+        "404":
+          description: Response for status 404
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+        "502":
+          description: Response for status 502
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+      operationId: deleteRpcMailAdminAccountsByAccountId
   /rpc/mail/admin/accounts/{accountId}/disable:
     post:
       parameters:
@@ -9870,6 +10086,86 @@ paths:
                   error:
                     type: string
       operationId: patchRpcMailAdminGroupsByGroupId
+    delete:
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            minLength: 1
+            type: string
+      responses:
+        "200":
+          description: Response for status 200
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - groupId
+                  - success
+                properties:
+                  groupId:
+                    type: string
+                  success:
+                    const: true
+                    type: boolean
+        "400":
+          description: Response for status 400
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+        "401":
+          description: Response for status 401
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+        "403":
+          description: Response for status 403
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+        "404":
+          description: Response for status 404
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+        "502":
+          description: Response for status 502
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+      operationId: deleteRpcMailAdminGroupsByGroupId
   /rpc/mail/admin/groups/{groupId}/disable:
     post:
       parameters:
@@ -10306,9 +10602,12 @@ paths:
                                 required:
                                   - attachments
                                   - cc
+                                  - externalLinks
                                   - html
                                   - plainText
                                   - replyTo
+                                  - remoteImages
+                                  - remoteImagesAllowed
                                   - sourceUrl
                                   - to
                                 properties:
@@ -10339,6 +10638,24 @@ paths:
                                     type: array
                                     items:
                                       type: string
+                                  externalLinks:
+                                    type: array
+                                    items:
+                                      type: object
+                                      required:
+                                        - id
+                                        - url
+                                      properties:
+                                        host:
+                                          type: string
+                                        id:
+                                          type: string
+                                        scheme:
+                                          type: string
+                                        text:
+                                          type: string
+                                        url:
+                                          type: string
                                   html:
                                     type: string
                                   messageId:
@@ -10349,6 +10666,26 @@ paths:
                                     type: array
                                     items:
                                       type: string
+                                  remoteImages:
+                                    type: array
+                                    items:
+                                      type: object
+                                      required:
+                                        - id
+                                        - url
+                                      properties:
+                                        alt:
+                                          type: string
+                                        host:
+                                          type: string
+                                        id:
+                                          type: string
+                                        scheme:
+                                          type: string
+                                        url:
+                                          type: string
+                                  remoteImagesAllowed:
+                                    type: boolean
                                   sourceUrl:
                                     type: string
                                   to:
@@ -10400,9 +10737,12 @@ paths:
                                       required:
                                         - attachments
                                         - cc
+                                        - externalLinks
                                         - html
                                         - plainText
                                         - replyTo
+                                        - remoteImages
+                                        - remoteImagesAllowed
                                         - sourceUrl
                                         - to
                                       properties:
@@ -10433,6 +10773,24 @@ paths:
                                           type: array
                                           items:
                                             type: string
+                                        externalLinks:
+                                          type: array
+                                          items:
+                                            type: object
+                                            required:
+                                              - id
+                                              - url
+                                            properties:
+                                              host:
+                                                type: string
+                                              id:
+                                                type: string
+                                              scheme:
+                                                type: string
+                                              text:
+                                                type: string
+                                              url:
+                                                type: string
                                         html:
                                           type: string
                                         messageId:
@@ -10443,6 +10801,26 @@ paths:
                                           type: array
                                           items:
                                             type: string
+                                        remoteImages:
+                                          type: array
+                                          items:
+                                            type: object
+                                            required:
+                                              - id
+                                              - url
+                                            properties:
+                                              alt:
+                                                type: string
+                                              host:
+                                                type: string
+                                              id:
+                                                type: string
+                                              scheme:
+                                                type: string
+                                              url:
+                                                type: string
+                                        remoteImagesAllowed:
+                                          type: boolean
                                         sourceUrl:
                                           type: string
                                         to:

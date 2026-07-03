@@ -20,6 +20,7 @@ import (
 	"mail-control-service/internal/control/controlapi"
 	"mail-control-service/internal/control/controlstate"
 	"mail-control-service/internal/modules/poller"
+	"mail-control-service/internal/provisioning/wildduckprovisioner"
 
 	gosasl "github.com/emersion/go-sasl"
 	gosmtp "github.com/emersion/go-smtp"
@@ -100,6 +101,21 @@ func TestWorkerArchiveCredentialIssuerSignsScopedR2TemporaryCredentialsLocally(t
 	signedJWT := strings.TrimPrefix(string(decodedSessionToken), "jwt/")
 	if signedJWT == string(decodedSessionToken) {
 		t.Fatalf("session token does not use Cloudflare R2 jwt/ prefix")
+	}
+	signedJWTSegments := strings.Split(signedJWT, ".")
+	if len(signedJWTSegments) != 3 {
+		t.Fatalf("signed JWT segment count = %d, want 3", len(signedJWTSegments))
+	}
+	claimPayload, err := base64.RawURLEncoding.DecodeString(signedJWTSegments[1])
+	if err != nil {
+		t.Fatalf("decode signed JWT payload: %v", err)
+	}
+	var rawClaims map[string]any
+	if err := json.Unmarshal(claimPayload, &rawClaims); err != nil {
+		t.Fatalf("unmarshal signed JWT payload: %v", err)
+	}
+	if rawClaims["aud"] != issuer.endpointAudience {
+		t.Fatalf("raw aud claim = %#v, want string %q", rawClaims["aud"], issuer.endpointAudience)
 	}
 	temporarySecret := sha256.Sum256([]byte(signedJWT))
 	if result.SecretAccessKey != hex.EncodeToString(temporarySecret[:]) {
@@ -216,14 +232,51 @@ func TestRuntimeEndpointsFromEnvRequiresExplicitWildDuckAPI(t *testing.T) {
 	}
 }
 
+func TestRuntimeEndpointsFromEnvReadsProviderRelayListenAddress(t *testing.T) {
+	t.Setenv("AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_BASE_URL", "http://atemail-web-server:4321")
+	t.Setenv("AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN", "control-to-web-token")
+	t.Setenv("AT_EMAIL_ADMIN_HARAKA_SMTP_ADDRESS", "haraka:25")
+	t.Setenv("AT_EMAIL_ADMIN_PROVIDER_RELAY_LISTEN_ADDRESS", "10.89.3.1:2587")
+	t.Setenv("AT_EMAIL_ADMIN_ZONEMTA_DSN_ADDRESS", "zonemta-dsn:2526")
+	t.Setenv("AT_EMAIL_ADMIN_WILDDUCK_API_BASE_URL", "http://wildduck-api:8080")
+	t.Setenv("AT_EMAIL_ADMIN_WILDDUCK_IMAP_ADDRESS", "wildduck-imap:143")
+
+	endpoints, err := runtimeEndpointsFromEnv()
+	if err != nil {
+		t.Fatalf("runtimeEndpointsFromEnv returned error: %v", err)
+	}
+	if endpoints.ProviderRelayListenAddress != "10.89.3.1:2587" {
+		t.Fatalf("provider relay listen address = %q, want private dev gateway bind", endpoints.ProviderRelayListenAddress)
+	}
+}
+
+func TestRuntimeEndpointsFromEnvDefaultsProviderRelayListenAddress(t *testing.T) {
+	t.Setenv("AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_BASE_URL", "http://atemail-web-server:4321")
+	t.Setenv("AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN", "control-to-web-token")
+	t.Setenv("AT_EMAIL_ADMIN_HARAKA_SMTP_ADDRESS", "haraka:25")
+	t.Setenv("AT_EMAIL_ADMIN_PROVIDER_RELAY_LISTEN_ADDRESS", "")
+	t.Setenv("AT_EMAIL_ADMIN_ZONEMTA_DSN_ADDRESS", "zonemta-dsn:2526")
+	t.Setenv("AT_EMAIL_ADMIN_WILDDUCK_API_BASE_URL", "http://wildduck-api:8080")
+	t.Setenv("AT_EMAIL_ADMIN_WILDDUCK_IMAP_ADDRESS", "wildduck-imap:143")
+
+	endpoints, err := runtimeEndpointsFromEnv()
+	if err != nil {
+		t.Fatalf("runtimeEndpointsFromEnv returned error: %v", err)
+	}
+	if endpoints.ProviderRelayListenAddress != ":2587" {
+		t.Fatalf("provider relay listen address = %q, want default", endpoints.ProviderRelayListenAddress)
+	}
+}
+
 func TestCanonicalModuleConfigUsesRuntimeEndpoints(t *testing.T) {
 	endpoints := runtimeEndpoints{
-		ControlToWebBaseURL: "http://web-service:4321",
-		ControlToWebToken:   "control-to-web-token",
-		HarakaSMTPAddress:   "haraka-service:25",
-		ZoneMTADSNAddress:   "zonemta-dsn-service:2526",
-		WildDuckAPIBaseURL:  "http://wildduck-api-service:8080",
-		WildDuckIMAPAddress: "wildduck-imap-service:143",
+		ControlToWebBaseURL:        "http://web-service:4321",
+		ControlToWebToken:          "control-to-web-token",
+		HarakaSMTPAddress:          "haraka-service:25",
+		ProviderRelayListenAddress: "10.89.3.1:2587",
+		ZoneMTADSNAddress:          "zonemta-dsn-service:2526",
+		WildDuckAPIBaseURL:         "http://wildduck-api-service:8080",
+		WildDuckIMAPAddress:        "wildduck-imap-service:143",
 	}
 	config := canonicalModuleConfig(runtimeSecrets{
 		ZoneMTARelayPassword:    "relay-password",
@@ -247,6 +300,9 @@ func TestCanonicalModuleConfigUsesRuntimeEndpoints(t *testing.T) {
 	if config.ProviderRelay.LocalDelivery.SMTPAddress != endpoints.HarakaSMTPAddress {
 		t.Fatalf("relay local delivery SMTP = %q, want runtime endpoint", config.ProviderRelay.LocalDelivery.SMTPAddress)
 	}
+	if config.ProviderRelay.ListenAddress != endpoints.ProviderRelayListenAddress {
+		t.Fatalf("provider relay listen address = %q, want runtime endpoint", config.ProviderRelay.ListenAddress)
+	}
 	if config.ProviderRelay.LocalDelivery.APIBaseURL != endpoints.WildDuckAPIBaseURL {
 		t.Fatalf("relay WildDuck API URL = %q, want runtime endpoint", config.ProviderRelay.LocalDelivery.APIBaseURL)
 	}
@@ -265,6 +321,76 @@ func TestCanonicalModuleConfigUsesRuntimeEndpoints(t *testing.T) {
 	if config.FeedbackRouter.Haraka.Address != endpoints.HarakaSMTPAddress {
 		t.Fatalf("feedback Haraka address = %q, want runtime endpoint", config.FeedbackRouter.Haraka.Address)
 	}
+}
+
+func TestApplyPollerRuntimeEnvOverridesUsesExplicitDurations(t *testing.T) {
+	clearPollerRuntimeEnvOverrides(t)
+	t.Setenv("AT_EMAIL_ADMIN_POLLER_SWEEP_INTERVAL", "30s")
+	t.Setenv("AT_EMAIL_ADMIN_POLLER_RETRY_DELAY", "10s")
+	t.Setenv("AT_EMAIL_ADMIN_POLLER_SWEEP_SAFETY_LAG", "0s")
+	t.Setenv("AT_EMAIL_ADMIN_POLLER_SWEEP_OVERLAP", "2h")
+
+	cfg := poller.Config{
+		SweepInterval:  "6h",
+		RetryDelay:     "1h",
+		SweepSafetyLag: "1h",
+		SweepOverlap:   "24h",
+	}
+	if err := applyPollerRuntimeEnvOverrides(&cfg); err != nil {
+		t.Fatalf("applyPollerRuntimeEnvOverrides returned error: %v", err)
+	}
+
+	if cfg.SweepInterval != "30s" {
+		t.Fatalf("sweep interval = %q, want env override", cfg.SweepInterval)
+	}
+	if cfg.RetryDelay != "10s" {
+		t.Fatalf("retry delay = %q, want env override", cfg.RetryDelay)
+	}
+	if cfg.SweepSafetyLag != "0s" {
+		t.Fatalf("sweep safety lag = %q, want env override", cfg.SweepSafetyLag)
+	}
+	if cfg.SweepOverlap != "2h0m0s" {
+		t.Fatalf("sweep overlap = %q, want normalized env override", cfg.SweepOverlap)
+	}
+}
+
+func TestApplyPollerRuntimeEnvOverridesKeepsCanonicalDefaultsWhenUnset(t *testing.T) {
+	clearPollerRuntimeEnvOverrides(t)
+	cfg := poller.Config{
+		SweepInterval:  "6h",
+		RetryDelay:     "1h",
+		SweepSafetyLag: "1h",
+		SweepOverlap:   "24h",
+	}
+	if err := applyPollerRuntimeEnvOverrides(&cfg); err != nil {
+		t.Fatalf("applyPollerRuntimeEnvOverrides returned error: %v", err)
+	}
+
+	if cfg.SweepInterval != "6h" || cfg.RetryDelay != "1h" || cfg.SweepSafetyLag != "1h" || cfg.SweepOverlap != "24h" {
+		t.Fatalf("poller config changed without env override: %#v", cfg)
+	}
+}
+
+func TestApplyPollerRuntimeEnvOverridesRejectsInvalidDurations(t *testing.T) {
+	clearPollerRuntimeEnvOverrides(t)
+	t.Setenv("AT_EMAIL_ADMIN_POLLER_SWEEP_INTERVAL", "soon")
+
+	cfg := poller.Config{SweepInterval: "6h"}
+	err := applyPollerRuntimeEnvOverrides(&cfg)
+	if err == nil {
+		t.Fatal("applyPollerRuntimeEnvOverrides succeeded with invalid duration")
+	}
+	if !strings.Contains(err.Error(), "AT_EMAIL_ADMIN_POLLER_SWEEP_INTERVAL") {
+		t.Fatalf("error = %q, want env var name", err)
+	}
+}
+
+func clearPollerRuntimeEnvOverrides(t *testing.T) {
+	t.Helper()
+	t.Setenv("AT_EMAIL_ADMIN_POLLER_SWEEP_INTERVAL", "")
+	t.Setenv("AT_EMAIL_ADMIN_POLLER_RETRY_DELAY", "")
+	t.Setenv("AT_EMAIL_ADMIN_POLLER_SWEEP_SAFETY_LAG", "")
+	t.Setenv("AT_EMAIL_ADMIN_POLLER_SWEEP_OVERLAP", "")
 }
 
 func TestMongoDatabaseFromURI(t *testing.T) {
@@ -295,12 +421,13 @@ func TestMongoDatabaseFromURI(t *testing.T) {
 
 func testRuntimeEndpoints() runtimeEndpoints {
 	return runtimeEndpoints{
-		ControlToWebBaseURL: "http://atemail-web-server:4321",
-		ControlToWebToken:   "control-to-web-token",
-		HarakaSMTPAddress:   "haraka:25",
-		ZoneMTADSNAddress:   "zonemta-dsn:2526",
-		WildDuckAPIBaseURL:  "http://wildduck-api:8080",
-		WildDuckIMAPAddress: "wildduck-imap:143",
+		ControlToWebBaseURL:        "http://atemail-web-server:4321",
+		ControlToWebToken:          "control-to-web-token",
+		HarakaSMTPAddress:          "haraka:25",
+		ProviderRelayListenAddress: ":2587",
+		ZoneMTADSNAddress:          "zonemta-dsn:2526",
+		WildDuckAPIBaseURL:         "http://wildduck-api:8080",
+		WildDuckIMAPAddress:        "wildduck-imap:143",
 	}
 }
 
@@ -373,6 +500,64 @@ func TestRuntimeSyncPersistsOrganizationArchiveAndWorkerIdentity(t *testing.T) {
 	}
 }
 
+func TestRuntimeSyncEnsuresFeedbackForActiveDomains(t *testing.T) {
+	ctx := context.Background()
+	store := controlstate.NewMemoryStore()
+	provisioner := &fakeFeedbackProvisioner{}
+	api := &controlRuntimeAPI{
+		stateStore:          store,
+		feedbackProvisioner: provisioner,
+	}
+
+	result, err := api.SyncRuntime(ctx, controlapi.RuntimeSyncParams{
+		Domains: []controlstate.DomainConfigParams{testControlServiceDomainConfig("Example.com", true)},
+	}, time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("SyncRuntime returned error: %v", err)
+	}
+	if !result.Changed {
+		t.Fatal("SyncRuntime changed = false, want true")
+	}
+	if provisioner.calls != 1 {
+		t.Fatalf("feedback provisioner calls = %d, want 1", provisioner.calls)
+	}
+	if len(provisioner.records) != 1 {
+		t.Fatalf("feedback records = %#v, want one active domain", provisioner.records)
+	}
+	record := provisioner.records[0]
+	if record.Domain != "example.com" {
+		t.Fatalf("feedback domain = %q, want example.com", record.Domain)
+	}
+	if record.FeedbackAddress != "bounces@example.com" {
+		t.Fatalf("feedback address = %q, want bounces@example.com", record.FeedbackAddress)
+	}
+}
+
+func TestRuntimeSyncFailsWhenFeedbackProvisioningFails(t *testing.T) {
+	ctx := context.Background()
+	store := controlstate.NewMemoryStore()
+	provisioner := &fakeFeedbackProvisioner{
+		result: wildduckprovisioner.Result{
+			OK:     false,
+			Issues: []string{"feedback_address_failed"},
+		},
+	}
+	api := &controlRuntimeAPI{
+		stateStore:          store,
+		feedbackProvisioner: provisioner,
+	}
+
+	_, err := api.SyncRuntime(ctx, controlapi.RuntimeSyncParams{
+		Domains: []controlstate.DomainConfigParams{testControlServiceDomainConfig("Example.com", true)},
+	}, time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC))
+	if err == nil {
+		t.Fatal("SyncRuntime succeeded despite feedback provisioning failure")
+	}
+	if !strings.Contains(err.Error(), "ensure feedback addresses") {
+		t.Fatalf("error = %q, want feedback provisioning context", err)
+	}
+}
+
 func TestRuntimeSyncDisablesDomainsMissingFromAuthoritativeSnapshot(t *testing.T) {
 	ctx := context.Background()
 	store := controlstate.NewMemoryStore()
@@ -440,12 +625,17 @@ func TestRuntimeBootstrapFetchesWebSnapshotWithScopedToken(t *testing.T) {
 	}))
 	defer server.Close()
 
+	provisioner := &fakeFeedbackProvisioner{}
+	api := &controlRuntimeAPI{
+		stateStore:          store,
+		feedbackProvisioner: provisioner,
+	}
 	snapshot, err := fetchRuntimeProjectionSnapshot(ctx, server.URL, "test-control-to-web-token")
 	if err != nil {
 		t.Fatalf("fetchRuntimeProjectionSnapshot: %v", err)
 	}
-	if _, _, err := controlstate.SyncRuntimeDomains(ctx, store, controlstate.ProviderCloudflare, snapshot.Domains, time.Now().UTC()); err != nil {
-		t.Fatalf("SyncRuntimeDomains: %v", err)
+	if _, err := api.SyncRuntime(ctx, controlapi.RuntimeSyncParams{Domains: snapshot.Domains}, time.Now().UTC()); err != nil {
+		t.Fatalf("SyncRuntime: %v", err)
 	}
 	active, err := controlstate.ActiveDomainRecords(ctx, store, nil)
 	if err != nil {
@@ -453,6 +643,9 @@ func TestRuntimeBootstrapFetchesWebSnapshotWithScopedToken(t *testing.T) {
 	}
 	if len(active) != 1 || active[0].Domain != "example.com" {
 		t.Fatalf("active domains = %#v, want bootstrapped example.com", active)
+	}
+	if provisioner.calls != 1 {
+		t.Fatalf("feedback provisioner calls = %d, want 1", provisioner.calls)
 	}
 }
 
@@ -484,7 +677,8 @@ func TestRuntimeBootstrapRetriesUntilWebSnapshotSucceeds(t *testing.T) {
 	}))
 	defer server.Close()
 
-	bootstrapRuntimeProjectionFromWebWithRetryPolicy(ctx, store, controlstate.ProviderCloudflare, runtimeBootstrapConfig{
+	api := &controlRuntimeAPI{stateStore: store}
+	bootstrapRuntimeProjectionFromWebWithRetryPolicy(ctx, api, runtimeBootstrapConfig{
 		BaseURL: server.URL,
 		Token:   "test-control-to-web-token",
 	}, testRuntimeBootstrapRetryPolicy(false))
@@ -519,7 +713,8 @@ func TestRuntimeBootstrapRetryStopsAfterDeadline(t *testing.T) {
 	}))
 	defer server.Close()
 
-	bootstrapRuntimeProjectionFromWebWithRetryPolicy(ctx, store, controlstate.ProviderCloudflare, runtimeBootstrapConfig{
+	api := &controlRuntimeAPI{stateStore: store}
+	bootstrapRuntimeProjectionFromWebWithRetryPolicy(ctx, api, runtimeBootstrapConfig{
 		BaseURL: server.URL,
 		Token:   "test-control-to-web-token",
 	}, testRuntimeBootstrapRetryPolicy(false))
@@ -545,6 +740,25 @@ func testRuntimeBootstrapRetryPolicy(background bool) runtimeBootstrapRetryPolic
 		RetryWindow:    40 * time.Millisecond,
 		Background:     background,
 	}
+}
+
+type fakeFeedbackProvisioner struct {
+	calls   int
+	records []controlstate.DomainRecord
+	result  wildduckprovisioner.Result
+	err     error
+}
+
+func (p *fakeFeedbackProvisioner) EnsureFeedback(_ context.Context, records []controlstate.DomainRecord, _ time.Time) (wildduckprovisioner.Result, error) {
+	p.calls++
+	p.records = append([]controlstate.DomainRecord(nil), records...)
+	if p.err != nil {
+		return wildduckprovisioner.Result{}, p.err
+	}
+	if p.result.OK || len(p.result.Issues) > 0 || len(p.result.Domains) > 0 {
+		return p.result, nil
+	}
+	return wildduckprovisioner.Result{OK: true}, nil
 }
 
 func TestRuntimeSyncRejectsMismatchedArchivePrefix(t *testing.T) {

@@ -3,7 +3,6 @@ import {
   defaultAuthenticatedEmailToolbarActions,
   defaultAuthenticatedSidebarView
 } from '../partials/authenticated/authenticated-shell-models'
-import allowedRemoteImagesHtml from './fixtures/emails/allowed-remote-images.fixture?raw'
 import appointmentAlertEmailHtml from './fixtures/emails/appointment-alert.fixture?raw'
 import blockedRemoteImagesHtml from './fixtures/emails/blocked-remote-images.fixture?raw'
 import conversationLatestHtml from './fixtures/emails/conversation-latest.fixture?raw'
@@ -231,6 +230,15 @@ export const domainSettingsAddDomainSelectZoneState = {
     grants: [activeCloudflareGrant, secondaryCloudflareGrant]
   },
   zones: connectedCloudflareZones
+} satisfies DomainSettingsState
+
+export const domainSettingsDomainRemovedState = {
+  ...domainSettingsAddDomainSelectZoneState,
+  message: 'Domain removed',
+  status: {
+    connections: [disconnectedCloudflareConnection],
+    grants: [activeCloudflareGrant, secondaryCloudflareGrant]
+  }
 } satisfies DomainSettingsState
 
 export const domainSettingsDomainLiveState = {
@@ -642,7 +650,6 @@ export const emailPreviewsById = {
     subject: 'Deployment checklist and routing review',
     receivedAt: 'May 30, 9:22 AM',
     html: blockedRemoteImagesHtml,
-    htmlWithRemoteImages: allowedRemoteImagesHtml,
     remoteImagesAllowed: false,
     remoteImages: [
       {
@@ -858,7 +865,15 @@ export const mailtoLinkEmailPreviewsById = {
     recipientEmail: 'support@agentteam.test',
     subject: 'Contact support by email',
     receivedAt: 'Today at 11:08 AM',
-    html: '<p>Need follow-up?</p><p><a href="mailto:support@example.test?subject=Routing%20review">Email support</a></p>'
+    html: '<p>Need follow-up?</p><p><a href="#agent-mail-external-link-1" data-agent-mail-external-link-id="link-1" rel="noopener noreferrer">Email support</a></p>',
+    externalLinks: [
+      {
+        id: 'link-1',
+        host: 'support@example.test',
+        text: 'Email support',
+        url: 'mailto:support@example.test?subject=Routing%20review'
+      }
+    ]
   }
 } satisfies Readonly<Record<string, AuthenticatedEmailPreview>>
 
@@ -877,8 +892,8 @@ export const externalLinkCollisionEmailPreviewsById = {
     subject: 'External link collision handling',
     receivedAt: 'Today at 11:16 AM',
     html: [
-      '<p><a href="https://docs.example.test/path">Generated docs link</a></p>',
-      '<p><a href="#agent-mail-external-link-1" data-agent-mail-external-link-id="link-1">Controller link</a></p>'
+      '<p><a href="#agent-mail-external-generated-link-1" data-agent-mail-external-link-id="generated-link-1" rel="noopener noreferrer">Generated docs link</a></p>',
+      '<p><a href="#agent-mail-external-link-1" data-agent-mail-external-link-id="link-1" rel="noopener noreferrer">Controller link</a></p>'
     ].join(''),
     externalLinks: [
       {
@@ -911,13 +926,7 @@ export const formEmailPreviewsById = {
     recipientEmail: 'support@agentteam.test',
     subject: 'Form in email body',
     receivedAt: 'Today at 11:22 AM',
-    html: [
-      '<p>Please do not submit credentials from an email.</p>',
-      '<form action="https://phish.example.test/login" method="post" target="_blank">',
-      '<label>Email <input name="email" required autofocus></label>',
-      '<button formaction="https://phish.example.test/pay">Submit</button>',
-      '</form>'
-    ].join('')
+    html: '<p>Please do not submit credentials from an email.</p>'
   }
 } satisfies Readonly<Record<string, AuthenticatedEmailPreview>>
 
@@ -935,13 +944,7 @@ export const remoteBackgroundImagesEmailPreviewsById = {
     recipientEmail: 'support@agentteam.test',
     subject: 'Background image tracking',
     receivedAt: 'Today at 11:38 AM',
-    html: [
-      '<table background="https://assets.provider.example/tracker-table.png">',
-      '<tr><td style="background-image: url(https://assets.provider.example/tracker-cell.png); color: #111827">',
-      'Background image content',
-      '</td></tr>',
-      '</table>'
-    ].join(''),
+    html: '<table><tr><td>Background image content</td></tr></table>',
     remoteImages: [
       {
         id: 'background-table',
@@ -971,16 +974,7 @@ export const documentResourceEmailPreviewsById = {
     recipientEmail: 'support@agentteam.test',
     subject: 'Document resource controls',
     receivedAt: 'Today at 11:44 AM',
-    html: [
-      '<base href="https://wildduck.example.test/">',
-      '<meta http-equiv="refresh" content="0; url=https://wildduck.example.test/session">',
-      '<link rel="stylesheet" href="https://wildduck.example.test/email.css">',
-      '<p>Document resource content</p>',
-      '<script><img src="https://wildduck.example.test/script-pixel.png"></script>',
-      '<iframe src="https://wildduck.example.test/frame">iframe fallback</iframe>',
-      '<object data="https://wildduck.example.test/object">object fallback</object>',
-      '<embed src="https://wildduck.example.test/embed">'
-    ].join('')
+    html: '<p>Document resource content</p>'
   }
 } satisfies Readonly<Record<string, AuthenticatedEmailPreview>>
 

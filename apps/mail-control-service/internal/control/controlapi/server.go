@@ -224,7 +224,7 @@ func (s *Server) register(mux *http.ServeMux) huma.API {
 		Method:      http.MethodPost,
 		Path:        "/rpc/agentMail.message.view.get",
 		Summary:     "Get Agent Mail message view metadata",
-		Description: "JSON-RPC-style read-only view query for one delivered WildDuck message. The response exposes a sanitized display HTML fragment plus inert link and remote image metadata.",
+		Description: "JSON-RPC-style read-only view query for one delivered WildDuck message. The response exposes preserved display HTML plus inert link and remote image metadata.",
 		Tags:        []string{"messages"},
 	}, s.handleMessageView)
 

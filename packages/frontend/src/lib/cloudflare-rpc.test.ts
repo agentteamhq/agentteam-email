@@ -15,6 +15,7 @@ const validCloudflareOAuthReturnTargets = [
 
 const cloudflareRpcTestState = vi.hoisted(() => ({
   accountsGet: vi.fn(),
+  connectionsDelete: vi.fn(),
   connectionsPost: vi.fn(),
   disconnectPost: vi.fn(),
   oauthStartPost: vi.fn(),
@@ -22,36 +23,46 @@ const cloudflareRpcTestState = vi.hoisted(() => ({
   zonesGet: vi.fn()
 }))
 
-vi.mock('./rpc-api-client', () => ({
-  rpc: {
-    cloudflare: {
-      accounts: {
-        get: cloudflareRpcTestState.accountsGet
-      },
-      connections: {
-        post: cloudflareRpcTestState.connectionsPost
-      },
-      disconnect: {
-        post: cloudflareRpcTestState.disconnectPost
-      },
-      oauth: {
-        start: {
-          post: cloudflareRpcTestState.oauthStartPost
+vi.mock('./rpc-api-client', () => {
+  const connections = Object.assign(
+    vi.fn(() => ({
+      delete: cloudflareRpcTestState.connectionsDelete
+    })),
+    {
+      post: cloudflareRpcTestState.connectionsPost
+    }
+  )
+
+  return {
+    rpc: {
+      cloudflare: {
+        accounts: {
+          get: cloudflareRpcTestState.accountsGet
+        },
+        connections,
+        disconnect: {
+          post: cloudflareRpcTestState.disconnectPost
+        },
+        oauth: {
+          start: {
+            post: cloudflareRpcTestState.oauthStartPost
+          }
+        },
+        status: {
+          get: cloudflareRpcTestState.statusGet
+        },
+        zones: {
+          get: cloudflareRpcTestState.zonesGet
         }
-      },
-      status: {
-        get: cloudflareRpcTestState.statusGet
-      },
-      zones: {
-        get: cloudflareRpcTestState.zonesGet
       }
     }
   }
-}))
+})
 
 describe('Cloudflare RPC adapter', () => {
   beforeEach(() => {
     cloudflareRpcTestState.accountsGet.mockReset()
+    cloudflareRpcTestState.connectionsDelete.mockReset()
     cloudflareRpcTestState.connectionsPost.mockReset()
     cloudflareRpcTestState.disconnectPost.mockReset()
     cloudflareRpcTestState.oauthStartPost.mockReset()
@@ -227,6 +238,24 @@ describe('Cloudflare RPC adapter', () => {
     expect(cloudflareRpcTestState.disconnectPost).toHaveBeenCalledWith({
       grantPublicId: 'grant-public-id'
     })
+  })
+
+  it('removes a Cloudflare domain by connection public id without disconnecting the grant', async () => {
+    expect.hasAssertions()
+    const status = {
+      connections: [],
+      grants: []
+    }
+    cloudflareRpcTestState.connectionsDelete.mockResolvedValue({
+      data: status,
+      error: null,
+      status: 200
+    })
+    const { removeCloudflareDomain } = await import('./cloudflare-rpc')
+
+    await expect(removeCloudflareDomain('connection-public-id')).resolves.toStrictEqual(status)
+    expect(cloudflareRpcTestState.connectionsDelete).toHaveBeenCalledWith()
+    expect(cloudflareRpcTestState.disconnectPost).not.toHaveBeenCalled()
   })
 })
 

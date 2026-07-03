@@ -52,7 +52,7 @@ func testArchiveResolver() testArchivePrefixResolver {
 	}
 }
 
-func TestMessageViewBlocksRemoteImagesAndMarksExternalLinks(t *testing.T) {
+func TestMessageViewReportsRemoteImagesAndMarksExternalLinks(t *testing.T) {
 	t.Parallel()
 
 	raw := []byte(strings.Join([]string{
@@ -94,16 +94,16 @@ func TestMessageViewBlocksRemoteImagesAndMarksExternalLinks(t *testing.T) {
 		t.Fatalf("remote images = %#v", view.RemoteImages)
 	}
 	if len(view.InlineImages) != 0 {
-		t.Fatalf("unowned inline images should be blocked: %#v", view.InlineImages)
+		t.Fatalf("unowned inline images should not be reported as owned: %#v", view.InlineImages)
 	}
 	for _, forbidden := range []string{
-		`<img src="https://tracker.example/pixel.png"`,
-		`src="cid:inline-image@example.net"`,
 		`alert(1)`,
 		`javascript:alert`,
 		`attacker-id`,
 		`target="_self"`,
 		`href="/internal/admin/path"`,
+		`data-agent-mail-remote-image-id=`,
+		`data-agent-mail-remote-image-src=`,
 	} {
 		if strings.Contains(view.DisplayHTML, forbidden) {
 			t.Fatalf("display HTML still contains %q: %s", forbidden, view.DisplayHTML)
@@ -112,7 +112,8 @@ func TestMessageViewBlocksRemoteImagesAndMarksExternalLinks(t *testing.T) {
 	for _, required := range []string{
 		`href="#agent-mail-external-link-1"`,
 		`data-agent-mail-external-link-id="link-1"`,
-		`data-agent-mail-remote-image-id="image-1"`,
+		`src="https://tracker.example/pixel.png"`,
+		`src="cid:inline-image@example.net"`,
 	} {
 		if !strings.Contains(view.DisplayHTML, required) {
 			t.Fatalf("display HTML missing %q: %s", required, view.DisplayHTML)
@@ -202,9 +203,6 @@ func TestMessageViewSanitizesHTMLAfterStructuredTransform(t *testing.T) {
 	}
 	if !strings.Contains(view.DisplayHTML, `box`) {
 		t.Fatalf("display HTML removed safe body text: %s", view.DisplayHTML)
-	}
-	if strings.Contains(view.DisplayHTML, `<img src="https://`) {
-		t.Fatalf("display HTML still contains active remote image src: %s", view.DisplayHTML)
 	}
 }
 

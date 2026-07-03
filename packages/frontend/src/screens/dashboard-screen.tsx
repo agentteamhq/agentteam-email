@@ -3,9 +3,7 @@ import {
   AuthenticatedDashboardContent,
   AuthenticatedShell
 } from '../partials/authenticated/authenticated-shell'
-import {
-  withActiveSidebarItem
-} from '../partials/authenticated/authenticated-shell-models'
+import { withActiveSidebarItem } from '../partials/authenticated/authenticated-shell-models'
 import {
   getMailboxAdminSectionTitle,
   isMailboxAdminSectionId
@@ -192,9 +190,7 @@ export function DashboardScreen({
   const [remoteImagesAllowedByMessageScope, setRemoteImagesAllowedByMessageScope] = React.useState<
     ReadonlySet<string>
   >(() => new Set())
-  const [uncontrolledSettingsOpen, setUncontrolledSettingsOpen] = React.useState(
-    defaultSettingsOpen ?? false
-  )
+  const [uncontrolledSettingsOpen, setUncontrolledSettingsOpen] = React.useState(defaultSettingsOpen ?? false)
   const [uncontrolledSettingsSection, setUncontrolledSettingsSection] = React.useState<SettingsSectionId>(
     defaultSettingsSection ?? 'account'
   )
@@ -228,7 +224,6 @@ export function DashboardScreen({
 
     return {
       ...preview,
-      html: preview.htmlWithRemoteImages ?? preview.html,
       remoteImagesAllowed: true
     } satisfies AuthenticatedEmailPreview
   }, [

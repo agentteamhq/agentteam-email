@@ -8,12 +8,20 @@ import {
 } from '../authenticated-section-fixtures'
 import {
   mailboxAdminAgentsNoGrantManagementView,
+  mailboxAdminCreateAccountView,
+  mailboxAdminDeleteAccountSavingView,
+  mailboxAdminDeleteAccountView,
+  mailboxAdminDeleteGroupSavingView,
+  mailboxAdminDeleteGroupView,
+  mailboxAdminDisabledGroupsView,
+  mailboxAdminEditAccountView,
   mailboxAdminEmptyView,
   mailboxAdminExternalPrincipalsOnlyView,
   mailboxAdminGroupsEmptyView,
   mailboxAdminGroupsOnlyView,
   mailboxAdminPaginatedAccountsView,
   mailboxAdminPendingAgentEnrollmentsView,
+  mailboxAdminProvisionAccountView,
   mailboxAdminReadOnlyAccountsView,
   mailboxAdminReadyView
 } from '../mailbox-admin-fixtures'
@@ -263,9 +271,14 @@ export const MailboxAdminAccounts: Story = {
     }),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement.ownerDocument.body)
+    const switcher = await canvas.findByRole('button', { name: /^open workspace and mailbox switcher$/i })
 
     await expect(await canvas.findByRole('heading', { name: 'Accounts' })).toBeInTheDocument()
-    await expect(await canvas.findByText('research@agentteam.example')).toBeInTheDocument()
+    await expect(
+      await canvas.findByRole('row', { name: /research@agentteam\.example/u })
+    ).toBeInTheDocument()
+    await expect(await within(switcher).findByText('Research')).toBeInTheDocument()
+    await expect(await within(switcher).findByText('research@agentteam.example')).toBeInTheDocument()
     await expect(await canvas.findByRole('button', { name: 'New account' })).toBeEnabled()
   }
 }
@@ -304,10 +317,12 @@ export const MailboxAdminAccountsSearch: Story = {
 
     await userEvent.type(searchInput, 'ops')
 
-    await expect(await canvas.findByText('ops@agentteam.example')).toBeInTheDocument()
+    await expect(await canvas.findByRole('row', { name: /ops@agentteam\.example/u })).toBeInTheDocument()
     await expect(await canvas.findByText('1 of 5 records')).toBeInTheDocument()
     await waitFor(async () => {
-      await expect(canvas.queryByText('research@agentteam.example')).not.toBeInTheDocument()
+      await expect(
+        canvas.queryByRole('row', { name: /research@agentteam\.example/u })
+      ).not.toBeInTheDocument()
     })
   }
 }
@@ -322,10 +337,14 @@ export const MailboxAdminAccountsPendingStatusFilter: Story = {
 
     await selectMailboxAdminStatus(canvasElement, 'Pending')
 
-    await expect(await canvas.findByText('triage@agentteam.example')).toBeInTheDocument()
+    await expect(
+      await canvas.findByRole('row', { name: /triage@agentteam\.example/u })
+    ).toBeInTheDocument()
     await expect(await canvas.findByText('1 of 5 records')).toBeInTheDocument()
     await waitFor(async () => {
-      await expect(canvas.queryByText('research@agentteam.example')).not.toBeInTheDocument()
+      await expect(
+        canvas.queryByRole('row', { name: /research@agentteam\.example/u })
+      ).not.toBeInTheDocument()
     })
   }
 }
@@ -343,6 +362,93 @@ export const MailboxAdminAccountsSearchNoResults: Story = {
 
     await expect(await canvas.findByText('No matching records')).toBeInTheDocument()
     await expect(await canvas.findByText('No accounts match "not-found".')).toBeInTheDocument()
+  }
+}
+
+export const MailboxAdminAccountCreateDialog: Story = {
+  render: (args) =>
+    renderMailboxAdminControllerStory(args, {
+      view: mailboxAdminCreateAccountView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+    const dialog = await canvas.findByRole('dialog', { name: 'Create account' })
+    const addressInput = await within(dialog).findByLabelText('Address')
+    const displayNameInput = await within(dialog).findByLabelText('Display name')
+
+    await expect(addressInput).toHaveValue('')
+    await expect(addressInput).toHaveAttribute('placeholder', 'support@agentteam.example')
+    await expect(addressInput).not.toHaveAttribute('readonly')
+    await expect(displayNameInput).toHaveValue('')
+    await expect(await within(dialog).findByRole('button', { name: 'Create account' })).toBeEnabled()
+  }
+}
+
+export const MailboxAdminAccountEditDialog: Story = {
+  render: (args) =>
+    renderMailboxAdminControllerStory(args, {
+      view: mailboxAdminEditAccountView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+    const dialog = await canvas.findByRole('dialog', { name: 'Edit account' })
+    const addressInput = await within(dialog).findByLabelText('Address')
+    const displayNameInput = await within(dialog).findByLabelText('Display name')
+
+    await expect(addressInput).toHaveValue('research@agentteam.example')
+    await expect(addressInput).toHaveAttribute('readonly')
+    await expect(displayNameInput).toHaveValue('Research')
+    await expect(await within(dialog).findByRole('button', { name: 'Save account' })).toBeEnabled()
+  }
+}
+
+export const MailboxAdminAccountProvisionDialog: Story = {
+  args: {
+    routeSearch: { mailboxAdmin: 'agents' }
+  },
+  render: (args) =>
+    renderMailboxAdminControllerStory(args, {
+      view: mailboxAdminProvisionAccountView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+    const dialog = await canvas.findByRole('dialog', { name: 'Provision account' })
+    const addressInput = await within(dialog).findByLabelText('Address')
+    const displayNameInput = await within(dialog).findByLabelText('Display name')
+
+    await expect(addressInput).toHaveValue('ops-bot@agentteam.example')
+    await expect(addressInput).not.toHaveAttribute('readonly')
+    await expect(displayNameInput).toHaveValue('Operations Agent')
+    await expect(await within(dialog).findByRole('button', { name: 'Provision account' })).toBeEnabled()
+  }
+}
+
+export const MailboxAdminAccountDeleteConfirmation: Story = {
+  render: (args) =>
+    renderMailboxAdminControllerStory(args, {
+      view: mailboxAdminDeleteAccountView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+    const dialog = await canvas.findByRole('alertdialog')
+
+    await expect(dialog).toBeInTheDocument()
+    await expect(await within(dialog).findByText('Delete mailbox account?')).toBeInTheDocument()
+    await expect(await within(dialog).findByText(/handoff@agentteam\.example/u)).toBeInTheDocument()
+    await expect(await within(dialog).findByRole('button', { name: 'Delete account' })).toBeEnabled()
+  }
+}
+
+export const MailboxAdminAccountDeleting: Story = {
+  render: (args) =>
+    renderMailboxAdminControllerStory(args, {
+      view: mailboxAdminDeleteAccountSavingView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+
+    await expect(await canvas.findByRole('alertdialog')).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: 'Deleting account' })).toBeDisabled()
   }
 }
 
@@ -384,6 +490,24 @@ export const MailboxAdminGroupsPendingStatusFilter: Story = {
   }
 }
 
+export const MailboxAdminGroupsDisabledStatusFilter: Story = {
+  args: {
+    routeSearch: { mailboxAdmin: 'groups' }
+  },
+  render: (args) =>
+    renderMailboxAdminControllerStory(args, {
+      view: mailboxAdminDisabledGroupsView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+
+    await selectMailboxAdminStatus(canvasElement, 'Disabled')
+
+    await expect(await canvas.findByText('legacy-routing@agentteam.example')).toBeInTheDocument()
+    await expect(await canvas.findByText('1 of 1 records')).toBeInTheDocument()
+  }
+}
+
 export const MailboxAdminGroupsStatusNoResults: Story = {
   args: {
     routeSearch: { mailboxAdmin: 'groups' }
@@ -399,6 +523,41 @@ export const MailboxAdminGroupsStatusNoResults: Story = {
 
     await expect(await canvas.findByText('No matching records')).toBeInTheDocument()
     await expect(await canvas.findByText('No forwarding groups have disabled status.')).toBeInTheDocument()
+  }
+}
+
+export const MailboxAdminGroupDeleteConfirmation: Story = {
+  args: {
+    routeSearch: { mailboxAdmin: 'groups' }
+  },
+  render: (args) =>
+    renderMailboxAdminControllerStory(args, {
+      view: mailboxAdminDeleteGroupView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+    const dialog = await canvas.findByRole('alertdialog')
+
+    await expect(dialog).toBeInTheDocument()
+    await expect(await within(dialog).findByText('Delete forwarding group?')).toBeInTheDocument()
+    await expect(await within(dialog).findByText(/legacy-routing@agentteam\.example/u)).toBeInTheDocument()
+    await expect(await within(dialog).findByRole('button', { name: 'Delete group' })).toBeEnabled()
+  }
+}
+
+export const MailboxAdminGroupDeleting: Story = {
+  args: {
+    routeSearch: { mailboxAdmin: 'groups' }
+  },
+  render: (args) =>
+    renderMailboxAdminControllerStory(args, {
+      view: mailboxAdminDeleteGroupSavingView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+
+    await expect(await canvas.findByRole('alertdialog')).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: 'Deleting group' })).toBeDisabled()
   }
 }
 
@@ -645,19 +804,47 @@ function renderMailboxAdminControllerStory(
     error?: Error
     navigation?: AgentMailAdminNavigation
     pending?: boolean
-    view: AgentMailAdminView
+    view: MailboxAdminView
+    workspace?: AgentMailWebWorkspace
   }
 ) {
   return (
     <DashboardMailControllerStoryFrame
       {...args}
       agentAccessView={agentAccessActionableState.view}
+      initialMailboxAdminControllerState={mailboxAdminControllerStateFromView(options.view)}
       mailboxAdminNavigationLoader={createStoryMailboxAdminNavigationLoader(
         options.navigation ?? { allowedSections: options.view.allowedSections }
       )}
       mailboxAdminViewLoader={createStoryMailboxAdminViewLoader(options)}
+      mailWorkspaceLoader={createStoryMailWorkspaceLoader({
+        view: options.workspace ?? mailWorkspaceReadyView
+      })}
     />
   )
+}
+
+function mailboxAdminControllerStateFromView(
+  view: MailboxAdminView
+): ComponentProps<typeof DashboardMailController>['initialMailboxAdminControllerState'] {
+  return {
+    activeDialog: view.activeDialog,
+    createdAgentEnrollment: view.createdAgentEnrollment,
+    pendingAccountDeleteId: view.pendingAccountDeleteId,
+    pendingAccountDisableId: view.pendingAccountDisableId,
+    pendingAccountSave: view.pendingAccountSave,
+    pendingAgentCreate: view.pendingAgentCreate,
+    pendingAgentEnrollmentRevokeId: view.pendingAgentEnrollmentRevokeId,
+    pendingAgentMailboxGrantsSaveId: view.pendingAgentMailboxGrantsSaveId,
+    pendingAgentRevokeId: view.pendingAgentRevokeId,
+    pendingAgentSaveId: view.pendingAgentSaveId,
+    pendingAgentSystemPermissionsSaveId: view.pendingAgentSystemPermissionsSaveId,
+    pendingGroupDeleteId: view.pendingGroupDeleteId,
+    pendingGroupDisableId: view.pendingGroupDisableId,
+    pendingGroupSave: view.pendingGroupSave,
+    pendingPrincipalMailboxGrantsSaveId: view.pendingPrincipalMailboxGrantsSaveId,
+    pendingPrincipalSystemPermissionsSaveId: view.pendingPrincipalSystemPermissionsSaveId
+  }
 }
 
 function createStoryMailWorkspaceLoader({
@@ -693,7 +880,7 @@ function createStoryMailboxAdminViewLoader({
 }: {
   error?: Error
   pending?: boolean
-  view: AgentMailAdminView
+  view: MailboxAdminView
 }) {
   return async (query: MailboxAdminViewQuery) => {
     if (pending) {
@@ -704,11 +891,11 @@ function createStoryMailboxAdminViewLoader({
       throw error
     }
 
-    return mailboxAdminViewForQuery(view, query)
+    return mailboxAdminViewForQuery(view, query) as AgentMailAdminView
   }
 }
 
-function countMailboxAdminRecords(view: AgentMailAdminView, section: MailboxAdminSectionId) {
+function countMailboxAdminRecords(view: MailboxAdminView, section: MailboxAdminSectionId) {
   if (section === 'accounts') {
     return view.accounts.length
   }
@@ -721,9 +908,9 @@ function countMailboxAdminRecords(view: AgentMailAdminView, section: MailboxAdmi
 }
 
 function mailboxAdminViewForQuery(
-  view: AgentMailAdminView,
+  view: MailboxAdminView,
   query: MailboxAdminViewQuery
-): AgentMailAdminView {
+): MailboxAdminView {
   const section = query.section ?? view.section
   const searchQuery = query.searchQuery ?? ''
   const statusFilter = query.statusFilter ?? view.statusFilter ?? 'all'
@@ -761,7 +948,7 @@ function mailboxAdminViewForQuery(
 }
 
 function countMailboxAdminRecordSet(
-  records: Pick<AgentMailAdminView, 'accounts' | 'agents' | 'groups' | 'pendingEnrollments' | 'principals'>,
+  records: Pick<MailboxAdminView, 'accounts' | 'agents' | 'groups' | 'pendingEnrollments' | 'principals'>,
   section: MailboxAdminSectionId
 ) {
   if (section === 'accounts') {
@@ -776,11 +963,11 @@ function countMailboxAdminRecordSet(
 }
 
 function paginateMailboxAdminRecords(
-  records: Pick<AgentMailAdminView, 'accounts' | 'agents' | 'groups' | 'pendingEnrollments' | 'principals'>,
+  records: Pick<MailboxAdminView, 'accounts' | 'agents' | 'groups' | 'pendingEnrollments' | 'principals'>,
   section: MailboxAdminSectionId,
   page: number,
   pageSize: number
-): Pick<AgentMailAdminView, 'accounts' | 'agents' | 'groups' | 'pendingEnrollments' | 'principals'> {
+): Pick<MailboxAdminView, 'accounts' | 'agents' | 'groups' | 'pendingEnrollments' | 'principals'> {
   const startIndex = (page - 1) * pageSize
 
   if (section === 'accounts') {

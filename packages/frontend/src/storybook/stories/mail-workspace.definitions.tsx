@@ -314,11 +314,10 @@ export const MessageInlineAttachments: Story = {
       'inline attachment email body'
     )
 
-    await expect(iframeSource).toContain(
-      '/rpc/mail/accounts/agent-support/mailboxes/inbox/messages/attachment-message/attachments/inline-provider-logo'
-    )
-    await expect(iframeSource).toContain('Inline image unavailable')
-    await expect(iframeSource).not.toContain('cid:provider-logo')
+    await expect(iframeSource).toContain('src="cid:provider-logo%40provider.example"')
+    await expect(iframeSource).toContain('src="cid:unsafe-inline@provider.example"')
+    await expect(iframeSource).toContain("img-src 'none'")
+    await expect(iframeSource).not.toContain('Inline image unavailable')
     await expect(iframeSource).not.toContain('wildduck.example.test')
   }
 }
@@ -470,7 +469,7 @@ export const MailboxCreateFolder: Story = {
   }
 }
 
-export const MailboxFolderActions: Story = {
+export const MailboxFolderOptions: Story = {
   args: {
     routeSearch: { folderId: mailWorkspaceScreenFolderIds.archive }
   },
@@ -482,13 +481,13 @@ export const MailboxFolderActions: Story = {
     const canvas = within(canvasElement)
     const body = within(canvasElement.ownerDocument.body)
 
-    await userEvent.click(await canvas.findByRole('button', { name: /^archive folder actions$/i }))
+    await userEvent.click(await canvas.findByRole('button', { name: /^archive folder options$/i }))
     await userEvent.click(await body.findByRole('menuitem', { name: /^rename folder$/i }))
     await expect(await body.findByRole('dialog', { name: /^rename archive$/i })).toBeInTheDocument()
   }
 }
 
-export const MailboxRenameFolderOpen: Story = MailboxFolderActions
+export const MailboxRenameFolderOpen: Story = MailboxFolderOptions
 
 export const MailboxDeleteFolderConfirm: Story = {
   args: {
@@ -502,7 +501,7 @@ export const MailboxDeleteFolderConfirm: Story = {
     const canvas = within(canvasElement)
     const body = within(canvasElement.ownerDocument.body)
 
-    await userEvent.click(await canvas.findByRole('button', { name: /^archive folder actions$/i }))
+    await userEvent.click(await canvas.findByRole('button', { name: /^archive folder options$/i }))
     await userEvent.click(await body.findByRole('menuitem', { name: /^delete folder$/i }))
     await expect(await body.findByRole('alertdialog')).toHaveTextContent(/delete archive/i)
   }
@@ -689,8 +688,9 @@ export const SecurityRemoteContentBlocked: Story = {
       'email body'
     )
 
-    await expect(iframeSource).toContain('Remote image blocked')
-    await expect(iframeSource).not.toContain('assets.provider.example/launch-banner.png')
+    await expect(iframeSource).toContain('assets.provider.example/launch-banner.png')
+    await expect(iframeSource).toContain("img-src 'none'")
+    await expect(iframeSource).not.toContain('Remote image blocked')
   }
 }
 

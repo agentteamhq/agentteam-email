@@ -45,6 +45,7 @@ type Submission struct {
 	ReplayIngestID         string
 	ReplayEnvelopeFrom     string
 	ReplayEnvelopeTo       string
+	LocalFanout            string
 	IsDSN                  bool
 	InternalDSNID          string
 	InternalSourceIngestID string
@@ -53,6 +54,11 @@ type Submission struct {
 type ProviderRawOptions struct {
 	ReturnPath string
 }
+
+const (
+	LocalFanoutHeader             = "X-Agent-Mail-Local-Fanout"
+	LocalFanoutInboundReplayValue = "inbound-replay"
+)
 
 var allowedCloudflareHeaders = map[string]struct{}{
 	"In-Reply-To":              {},
@@ -78,6 +84,7 @@ var forbiddenProviderHeaders = map[string]struct{}{
 	"x-atm-ingest-id":                   {},
 	"x-agent-mail-dsn-id":               {},
 	"x-agent-mail-dsn-source-ingest-id": {},
+	"x-agent-mail-local-fanout":         {},
 	"x-agent-mail-local-route-id":       {},
 	"x-agent-mail-source-mailbox":       {},
 	"x-agent-mail-target-mailbox":       {},
@@ -521,6 +528,7 @@ func BuildProviderRelaySubmission(raw []byte, envelopeFrom string, envelopeRecip
 		ReplayIngestID:         strings.TrimSpace(root.Get("X-ATM-Ingest-ID")),
 		ReplayEnvelopeFrom:     strings.TrimSpace(root.Get("X-ATMCF-Edge-Envelope-From")),
 		ReplayEnvelopeTo:       strings.TrimSpace(root.Get("X-ATMCF-Edge-Envelope-To")),
+		LocalFanout:            strings.TrimSpace(root.Get(LocalFanoutHeader)),
 		IsDSN:                  isDSN,
 		InternalDSNID:          strings.TrimSpace(root.Get(dsn.InternalDSNIDHeader)),
 		InternalSourceIngestID: strings.TrimSpace(root.Get(dsn.InternalSourceIngestIDHeader)),
@@ -839,7 +847,9 @@ func deliveryStatusNotificationFromHeader(header message.Header) bool {
 
 func isReplayHeaderName(name string) bool {
 	normalized := strings.ToLower(strings.TrimSpace(name))
-	return strings.HasPrefix(normalized, "x-atmcf-") || normalized == "x-atm-ingest-id"
+	return strings.HasPrefix(normalized, "x-atmcf-") ||
+		normalized == "x-atm-ingest-id" ||
+		normalized == strings.ToLower(LocalFanoutHeader)
 }
 
 func isLocalRouteHeaderName(name string) bool {

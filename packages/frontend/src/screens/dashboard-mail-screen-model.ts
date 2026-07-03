@@ -1,9 +1,5 @@
 import { mailboxAddressOrRaw, mailboxDisplayName } from '../lib/mail-addresses'
-import {
-  actionsForMessage,
-  threadActionsForMessage,
-  toSidebarView
-} from './dashboard-mail-sidebar-view'
+import { actionsForMessage, threadActionsForMessage, toSidebarView } from './dashboard-mail-sidebar-view'
 import { toDashboardView } from './dashboard-mail-dashboard-view'
 import type { DashboardSearch } from '../lib/dashboard-search'
 import type {
@@ -108,6 +104,7 @@ export function toEmailPreview(
   return {
     actions: actionsForMessage(message, folders),
     attachments: message.attachments.map(toEmailAttachment),
+    externalLinks: message.externalLinks,
     folderId: message.mailboxId,
     html: message.html,
     id: message.id,
@@ -116,6 +113,8 @@ export function toEmailPreview(
     isUnread: message.unread,
     receivedAt: message.receivedAt ?? '',
     recipientEmail: message.to.join(', '),
+    remoteImages: message.remoteImages,
+    remoteImagesAllowed: message.remoteImagesAllowed,
     senderEmail: mailboxAddressOrRaw(message.from),
     senderName: mailboxDisplayName(message.from),
     subject: message.subject,
@@ -140,12 +139,15 @@ function toEmailThreadMessage(
   return {
     actions: threadActionsForMessage(message, folders),
     attachments: message.attachments.map(toEmailAttachment),
+    externalLinks: message.externalLinks,
     folderId: message.mailboxId,
     html: message.html,
     id: message.id,
     isDraft: message.isDraft,
     receivedAt: message.receivedAt ?? '',
     recipientEmail: message.to.join(', '),
+    remoteImages: message.remoteImages,
+    remoteImagesAllowed: message.remoteImagesAllowed,
     senderEmail: mailboxAddressOrRaw(message.from),
     senderName: mailboxDisplayName(message.from),
     state,

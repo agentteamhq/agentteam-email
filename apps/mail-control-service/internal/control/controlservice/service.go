@@ -50,12 +50,13 @@ type runtimeDatabases struct {
 }
 
 type runtimeEndpoints struct {
-	ControlToWebBaseURL string
-	ControlToWebToken   string
-	HarakaSMTPAddress   string
-	ZoneMTADSNAddress   string
-	WildDuckAPIBaseURL  string
-	WildDuckIMAPAddress string
+	ControlToWebBaseURL        string
+	ControlToWebToken          string
+	HarakaSMTPAddress          string
+	ProviderRelayListenAddress string
+	ZoneMTADSNAddress          string
+	WildDuckAPIBaseURL         string
+	WildDuckIMAPAddress        string
 }
 
 type Service struct {
@@ -66,11 +67,16 @@ type Service struct {
 }
 
 type controlRuntimeAPI struct {
-	poller        *poller.Poller
-	stateStore    controlstate.Store
-	relayAddress  string
-	relayUsername string
-	relayPassword string
+	poller              *poller.Poller
+	stateStore          controlstate.Store
+	feedbackProvisioner feedbackProvisioner
+	relayAddress        string
+	relayUsername       string
+	relayPassword       string
+}
+
+type feedbackProvisioner interface {
+	EnsureFeedback(context.Context, []controlstate.DomainRecord, time.Time) (wildduckprovisioner.Result, error)
 }
 
 const workerArchiveCredentialTTL = 7 * 24 * time.Hour
@@ -255,20 +261,18 @@ func (i *cloudflareWorkerArchiveCredentialIssuer) IssueWorkerArchiveCredentials(
 	}
 
 	tokenExpiresAt := now.UTC().Add(workerArchiveCredentialTTL)
-	claims := r2TemporaryCredentialClaims{
-		Bucket: i.bucket,
-		Scope:  "object-read-write",
-		Paths: r2TemporaryCredentialPaths{
+	claims := jwt.MapClaims{
+		"aud":    i.endpointAudience,
+		"bucket": i.bucket,
+		"exp":    tokenExpiresAt.Unix(),
+		"iat":    now.UTC().Unix(),
+		"iss":    i.parentAccessKeyID,
+		"paths": r2TemporaryCredentialPaths{
 			PrefixPaths: []string{archivePrefix.ArchivePrefix + "/"},
 			ObjectPaths: []string{},
 		},
-		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   i.accountID,
-			Issuer:    i.parentAccessKeyID,
-			Audience:  jwt.ClaimStrings{i.endpointAudience},
-			IssuedAt:  jwt.NewNumericDate(now.UTC()),
-			ExpiresAt: jwt.NewNumericDate(tokenExpiresAt),
-		},
+		"scope": "object-read-write",
+		"sub":   i.accountID,
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	token.Header["typ"] = "JWT"
@@ -412,6 +416,21 @@ func (a *controlRuntimeAPI) SyncRuntime(ctx context.Context, params controlapi.R
 	if err != nil {
 		return controlapi.RuntimeSyncResult{}, err
 	}
+	if a.feedbackProvisioner != nil {
+		active, err := controlstate.ActiveDomainRecords(ctx, a.stateStore, nil)
+		if err != nil {
+			return controlapi.RuntimeSyncResult{}, fmt.Errorf("load active runtime domains for feedback provisioning: %w", err)
+		}
+		result, err := a.feedbackProvisioner.EnsureFeedback(ctx, active, now)
+		if err != nil {
+			log.Printf("agent-mail-runtime-sync event=feedback_provision_failed active_domains=%d changed=%t error=%q", len(active), changed, err)
+			return controlapi.RuntimeSyncResult{}, fmt.Errorf("ensure feedback addresses: %w", err)
+		}
+		if !result.OK {
+			log.Printf("agent-mail-runtime-sync event=feedback_provision_failed active_domains=%d changed=%t issues=%q", len(active), changed, result.Issues)
+			return controlapi.RuntimeSyncResult{}, fmt.Errorf("ensure feedback addresses: %s", strings.Join(result.Issues, ","))
+		}
+	}
 	return controlapi.RuntimeSyncResult{Domains: domains, Changed: changed}, nil
 }
 
@@ -456,12 +475,11 @@ func New(ctx context.Context, cfg Config) (*Service, error) {
 		return nil, err
 	}
 	stateStore := controlstate.NewMemoryStore()
-	bootstrapRuntimeProjectionFromWeb(ctx, stateStore, selectedProvider, runtimeBootstrapConfig{
-		BaseURL: endpoints.ControlToWebBaseURL,
-		Token:   endpoints.ControlToWebToken,
-	})
 	runtimeSource := controlStateRuntimeSource{store: stateStore}
 	moduleConfig := canonicalModuleConfig(secrets, databases, endpoints)
+	if err := applyPollerRuntimeEnvOverrides(&moduleConfig.Poller); err != nil {
+		return nil, err
+	}
 	pollerModule, err := poller.NewWithDomainSourceConfig(ctx, moduleConfig.Poller, runtimeSource)
 	if err != nil {
 		return nil, fmt.Errorf("initialize poller module: %w", err)
@@ -522,12 +540,17 @@ func New(ctx context.Context, cfg Config) (*Service, error) {
 		feedbackIMAP:     moduleConfig.FeedbackRouter.IMAP.Address,
 	}
 	runtimeAPI := &controlRuntimeAPI{
-		poller:        pollerModule,
-		stateStore:    stateStore,
-		relayAddress:  moduleConfig.ProviderRelay.ListenAddress,
-		relayUsername: moduleConfig.ProviderRelay.RelayAuth.Username,
-		relayPassword: moduleConfig.ProviderRelay.RelayAuth.Password,
+		poller:              pollerModule,
+		stateStore:          stateStore,
+		feedbackProvisioner: wildduckProvisioner,
+		relayAddress:        moduleConfig.ProviderRelay.ListenAddress,
+		relayUsername:       moduleConfig.ProviderRelay.RelayAuth.Username,
+		relayPassword:       moduleConfig.ProviderRelay.RelayAuth.Password,
 	}
+	bootstrapRuntimeProjectionFromWeb(ctx, runtimeAPI, runtimeBootstrapConfig{
+		BaseURL: endpoints.ControlToWebBaseURL,
+		Token:   endpoints.ControlToWebToken,
+	})
 	workerArchiveCredentialIssuer, err := newCloudflareWorkerArchiveCredentialIssuer()
 	if err != nil {
 		_ = providerRelayModule.Close(context.Background())
@@ -661,6 +684,10 @@ func runtimeEndpointsFromEnv() (runtimeEndpoints, error) {
 	if err != nil {
 		return runtimeEndpoints{}, err
 	}
+	providerRelayListenAddress := strings.TrimSpace(os.Getenv("AT_EMAIL_ADMIN_PROVIDER_RELAY_LISTEN_ADDRESS"))
+	if providerRelayListenAddress == "" {
+		providerRelayListenAddress = ":2587"
+	}
 	zoneMTADSNAddress, err := configfile.RequireEnv("AT_EMAIL_ADMIN_ZONEMTA_DSN_ADDRESS")
 	if err != nil {
 		return runtimeEndpoints{}, err
@@ -674,13 +701,46 @@ func runtimeEndpointsFromEnv() (runtimeEndpoints, error) {
 		return runtimeEndpoints{}, err
 	}
 	return runtimeEndpoints{
-		ControlToWebBaseURL: controlToWebBaseURL,
-		ControlToWebToken:   controlToWebToken,
-		HarakaSMTPAddress:   harakaSMTPAddress,
-		ZoneMTADSNAddress:   zoneMTADSNAddress,
-		WildDuckAPIBaseURL:  wildDuckAPIBaseURL,
-		WildDuckIMAPAddress: wildDuckIMAPAddress,
+		ControlToWebBaseURL:        controlToWebBaseURL,
+		ControlToWebToken:          controlToWebToken,
+		HarakaSMTPAddress:          harakaSMTPAddress,
+		ProviderRelayListenAddress: providerRelayListenAddress,
+		ZoneMTADSNAddress:          zoneMTADSNAddress,
+		WildDuckAPIBaseURL:         wildDuckAPIBaseURL,
+		WildDuckIMAPAddress:        wildDuckIMAPAddress,
 	}, nil
+}
+
+func applyPollerRuntimeEnvOverrides(cfg *poller.Config) error {
+	if cfg == nil {
+		return fmt.Errorf("missing poller config")
+	}
+	if err := applyDurationEnvOverride("AT_EMAIL_ADMIN_POLLER_SWEEP_INTERVAL", &cfg.SweepInterval); err != nil {
+		return err
+	}
+	if err := applyDurationEnvOverride("AT_EMAIL_ADMIN_POLLER_RETRY_DELAY", &cfg.RetryDelay); err != nil {
+		return err
+	}
+	if err := applyDurationEnvOverride("AT_EMAIL_ADMIN_POLLER_SWEEP_SAFETY_LAG", &cfg.SweepSafetyLag); err != nil {
+		return err
+	}
+	if err := applyDurationEnvOverride("AT_EMAIL_ADMIN_POLLER_SWEEP_OVERLAP", &cfg.SweepOverlap); err != nil {
+		return err
+	}
+	return nil
+}
+
+func applyDurationEnvOverride(key string, target *string) error {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return nil
+	}
+	duration, err := time.ParseDuration(value)
+	if err != nil {
+		return fmt.Errorf("%s: parse duration: %w", key, err)
+	}
+	*target = duration.String()
+	return nil
 }
 
 func mongoDatabaseFromURI(value string) (string, error) {
@@ -716,7 +776,7 @@ func canonicalModuleConfig(secrets runtimeSecrets, databases runtimeDatabases, e
 	pollerCfg.WildDuck.MongoDatabase = databases.WildDuckMongoDatabase
 
 	var relayCfg smtprelay.Config
-	relayCfg.ListenAddress = ":2587"
+	relayCfg.ListenAddress = endpoints.ProviderRelayListenAddress
 	relayCfg.Hostname = helloName
 	relayCfg.RelayAuth.Username = "zonemta"
 	relayCfg.RelayAuth.Password = secrets.ZoneMTARelayPassword

@@ -25,6 +25,8 @@ export const mailboxAdminAllowedActions = {
   createAccount: true,
   createAgent: true,
   createGroup: true,
+  deleteAccount: true,
+  deleteGroup: true,
   disableAccount: true,
   disableGroup: true,
   manageAgentMailboxGrants: true,
@@ -40,6 +42,8 @@ const mailboxAdminNoAllowedActions = {
   createAccount: false,
   createAgent: false,
   createGroup: false,
+  deleteAccount: false,
+  deleteGroup: false,
   disableAccount: false,
   disableGroup: false,
   manageAgentMailboxGrants: false,
@@ -362,6 +366,23 @@ export const mailboxAdminPendingAccountsView = mailboxAdminFilteredView('account
 
 export const mailboxAdminPendingGroupsView = mailboxAdminFilteredView('groups', 'pending')
 
+export const mailboxAdminDisabledGroupsView = {
+  ...mailboxAdminReadyView,
+  groups: [
+    {
+      address: 'legacy-routing@agentteam.example',
+      description: 'Disabled forwarding group awaiting cleanup.',
+      domain: mailboxAdminDomain,
+      id: 'group-legacy-routing',
+      lastDelivered: 'Jun 12, 2026',
+      lastUpdated: 'Jun 18, 2026',
+      recipients: ['ops@agentteam.example'],
+      status: 'disabled'
+    }
+  ],
+  section: 'groups'
+} satisfies MailboxAdminView
+
 export const mailboxAdminDisabledAgentsView = mailboxAdminFilteredView('agents', 'disabled')
 
 export const mailboxAdminNoStatusResultsView = mailboxAdminFilteredView('groups', 'disabled')
@@ -418,6 +439,7 @@ export const mailboxAdminGroupsOnlyView = {
   allowedActions: {
     ...mailboxAdminNoAllowedActions,
     createGroup: true,
+    deleteGroup: true,
     disableGroup: true,
     updateGroup: true
   },
@@ -498,6 +520,18 @@ export const mailboxAdminDisableAccountSavingView = {
   pendingAccountDisableId: 'research@agentteam.example'
 } satisfies MailboxAdminView
 
+export const mailboxAdminDeleteAccountView = {
+  ...mailboxAdminReadyView,
+  activeDialog: { accountId: 'handoff@agentteam.example', type: 'accountDelete' },
+  onDeleteAccount: ignoreMailboxAdminAction,
+  onDialogChange: ignoreMailboxAdminAction
+} satisfies MailboxAdminView
+
+export const mailboxAdminDeleteAccountSavingView = {
+  ...mailboxAdminDeleteAccountView,
+  pendingAccountDeleteId: 'handoff@agentteam.example'
+} satisfies MailboxAdminView
+
 export const mailboxAdminProvisionAccountView = {
   ...mailboxAdminReadyView,
   activeDialog: { agentId: 'agent-ops', type: 'accountEditor' },
@@ -528,6 +562,18 @@ export const mailboxAdminGroupRecipientsView = {
 export const mailboxAdminGroupRecipientsSavingView = {
   ...mailboxAdminGroupRecipientsView,
   pendingGroupSave: true
+} satisfies MailboxAdminView
+
+export const mailboxAdminDeleteGroupView = {
+  ...mailboxAdminDisabledGroupsView,
+  activeDialog: { groupId: 'group-legacy-routing', type: 'groupDelete' },
+  onDeleteGroup: ignoreMailboxAdminAction,
+  onDialogChange: ignoreMailboxAdminAction
+} satisfies MailboxAdminView
+
+export const mailboxAdminDeleteGroupSavingView = {
+  ...mailboxAdminDeleteGroupView,
+  pendingGroupDeleteId: 'group-legacy-routing'
 } satisfies MailboxAdminView
 
 export const mailboxAdminCreateAgentView = {

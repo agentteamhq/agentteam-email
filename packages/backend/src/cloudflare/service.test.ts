@@ -1,9 +1,14 @@
 import { publicIdFromUUIDv7 } from '@main/db'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { getCloudflareRequiredOAuthScopes } from './config'
 import type { Database } from '../db/db'
 
 const EXISTING_WORKER_WEBHOOK_SIGNING_SECRET = 'whsec_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+
+function currentCloudflareScopes(): string[] {
+  return getCloudflareRequiredOAuthScopes()
+}
 
 const cloudflareServiceTestState = vi.hoisted(() => ({
   applyCloudflareProvisioning: vi.fn(),
@@ -13,6 +18,7 @@ const cloudflareServiceTestState = vi.hoisted(() => ({
   globals: vi.fn(),
   listCloudflareAccounts: vi.fn(),
   listCloudflareZones: vi.fn(),
+  removeCloudflareProvisioning: vi.fn(),
   requireAgentMailOrganizationContext: vi.fn(),
   sanitizeCloudflareError: vi.fn((error: unknown) => ({
     code:
@@ -29,6 +35,7 @@ vi.mock('./client', () => ({
   applyCloudflareProvisioning: cloudflareServiceTestState.applyCloudflareProvisioning,
   listCloudflareAccounts: cloudflareServiceTestState.listCloudflareAccounts,
   listCloudflareZones: cloudflareServiceTestState.listCloudflareZones,
+  removeCloudflareProvisioning: cloudflareServiceTestState.removeCloudflareProvisioning,
   sanitizeCloudflareError: cloudflareServiceTestState.sanitizeCloudflareError,
   sendCloudflareRawEmail: cloudflareServiceTestState.sendCloudflareRawEmail
 }))
@@ -99,13 +106,13 @@ describe('Cloudflare public views', () => {
       cloudflareEmail: 'admin@example.test',
       cloudflareUserId: 'cloudflare-user-1',
       createdAt: new Date('2026-06-23T10:00:00.000Z'),
-      grantedScopes: ['zone:read'],
+      grantedScopes: currentCloudflareScopes(),
       lastErrorCode: null,
       lastErrorMessage: null,
       lastRefreshAt: null,
       lastTokenCheckAt: new Date('2026-06-23T11:00:00.000Z'),
       organizationId: '01960000-0000-7000-8000-000000000005',
-      requiredScopes: ['zone:read'],
+      requiredScopes: currentCloudflareScopes(),
       status: 'active',
       updatedAt: new Date('2026-06-23T11:00:00.000Z'),
       userId: '01960000-0000-7000-8000-000000000006'
@@ -173,10 +180,10 @@ describe('Cloudflare public views', () => {
     const grantView = cloudflareOAuthGrantPublicView({
       _id: '01960000-0000-7000-8000-000000000007',
       cloudflareUserId: 'cloudflare-user-1',
-      grantedScopes: ['zone:read'],
+      grantedScopes: currentCloudflareScopes(),
       lastErrorCode: 'AT_EMAIL_ADMIN_CONTROL_SYNC_FAILED',
       lastErrorMessage: 'control payload included token control_secret_456',
-      requiredScopes: ['zone:read'],
+      requiredScopes: currentCloudflareScopes(),
       status: 'degraded'
     } as never)
     const serialized = JSON.stringify({ connectionView, grantView })
@@ -334,12 +341,12 @@ describe('Cloudflare OAuth finalize service', () => {
     })
 
     expect(result.grant).toMatchObject({
-      isUsable: false,
+      isUsable: true,
       publicId: TEST_CURRENT_USER_GRANT_PUBLIC_ID,
-      requiresReconnect: true,
+      requiresReconnect: false,
       status: 'active'
     })
-    expect(result.grant.missingRequiredScopeCount).toBeGreaterThan(0)
+    expect(result.grant.missingRequiredScopeCount).toBe(0)
     expect(result.missingRequiredScopeCount).toBe(result.grant.missingRequiredScopeCount)
     expect(grants).toHaveLength(2)
     expect(grants.find((grant) => grant._id === TEST_OTHER_USER_GRANT_ID)).toMatchObject({
@@ -412,12 +419,12 @@ describe('Cloudflare domain authorization', () => {
           cloudflareEmail: 'admin@example.test',
           cloudflareUserId: 'cloudflare-user-1',
           createdAt: new Date('2026-06-23T10:00:00.000Z'),
-          grantedScopes: ['zone:read'],
+          grantedScopes: currentCloudflareScopes(),
           lastErrorCode: null,
           lastErrorMessage: null,
           lastRefreshAt: null,
           lastTokenCheckAt: null,
-          requiredScopes: ['zone:read'],
+          requiredScopes: currentCloudflareScopes(),
           status: 'active',
           updatedAt: new Date('2026-06-23T10:00:00.000Z')
         }
@@ -879,6 +886,188 @@ describe('Cloudflare disconnect service', () => {
   })
 })
 
+describe('Cloudflare domain removal service', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.stubEnv('DATABASE_URL', 'mongodb://localhost:27017/app')
+    vi.stubEnv('ENCRYPT_SECRET_KEY', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
+    vi.stubEnv('PUBLIC_HOSTNAME', 'https://mail.example.test')
+    cloudflareServiceTestState.globals.mockReset()
+    cloudflareServiceTestState.removeCloudflareProvisioning.mockReset()
+    cloudflareServiceTestState.requireAgentMailOrganizationContext.mockReset()
+    cloudflareServiceTestState.syncAgentMailRuntimeProjection.mockReset()
+  })
+
+  it('removes one Cloudflare domain while preserving the OAuth grant', async () => {
+    expect.hasAssertions()
+    const { connection, deployment, globals, grant, mocks } = cloudflareDomainRemovalGlobals()
+    const headers = new Headers({ authorization: 'Bearer user-token' })
+    const connectionPublicId = publicIdFromUUIDv7(connection._id)
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    cloudflareServiceTestState.requireAgentMailOrganizationContext.mockResolvedValue({
+      ability: { cannot: vi.fn(() => false) },
+      organizationId: TEST_ORGANIZATION_ID
+    })
+    cloudflareServiceTestState.removeCloudflareProvisioning.mockResolvedValue(undefined)
+    const { removeCloudflareDomain } = await import('./service')
+
+    await expect(
+      removeCloudflareDomain({
+        connectionPublicId,
+        headers
+      })
+    ).resolves.toMatchObject({
+      grants: [
+        expect.objectContaining({
+          publicId: TEST_OLDER_GRANT_PUBLIC_ID,
+          status: 'active'
+        })
+      ],
+      connections: [
+        expect.objectContaining({
+          publicId: connectionPublicId,
+          status: 'disconnected'
+        })
+      ]
+    })
+
+    expect(mocks.authGetAccessToken).toHaveBeenCalledWith({
+      body: {
+        accountId: grant.cloudflareUserId,
+        providerId: 'cloudflare'
+      },
+      headers
+    })
+    expect(cloudflareServiceTestState.removeCloudflareProvisioning).toHaveBeenCalledWith({
+      accessToken: 'better-auth-cloudflare-access-token',
+      cloudflareAccountId: connection.cloudflareAccountId,
+      cloudflareZoneId: connection.cloudflareZoneId,
+      workerScriptName: deployment.workerScriptName
+    })
+    expect(mocks.connectionUpdateOne).toHaveBeenCalledWith(
+      { _id: connection._id, organizationId: TEST_ORGANIZATION_ID },
+      {
+        $set: {
+          encryptedWorkerHmacSecret: null,
+          hmacSecretReference: null,
+          lastErrorCode: null,
+          lastErrorMessage: null,
+          provisioningStatus: 'not_started',
+          status: 'disconnected'
+        }
+      }
+    )
+    expect(mocks.domainUpdateMany).toHaveBeenCalledWith(
+      {
+        organizationId: TEST_ORGANIZATION_ID,
+        cloudflareConnectionId: connection._id
+      },
+      {
+        $set: {
+          lastErrorCode: null,
+          lastErrorMessage: null,
+          status: 'disconnected'
+        }
+      }
+    )
+    expect(mocks.deploymentUpdateMany).toHaveBeenCalledWith(
+      {
+        organizationId: TEST_ORGANIZATION_ID,
+        cloudflareConnectionId: connection._id
+      },
+      {
+        $set: {
+          encryptedWorkerHmacSecret: null,
+          hmacSecretReference: null,
+          lastErrorCode: null,
+          lastErrorMessage: null,
+          status: 'disconnected'
+        }
+      }
+    )
+    expect(cloudflareServiceTestState.syncAgentMailRuntimeProjection).toHaveBeenCalledWith(
+      expect.any(Object),
+      { reason: 'cloudflare-domain-remove' }
+    )
+    expect(mocks.authUnlinkAccount).not.toHaveBeenCalled()
+    expect(mocks.grantUpdateOne).not.toHaveBeenCalledWith(
+      { _id: grant._id },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          status: 'revoked'
+        })
+      })
+    )
+  })
+
+  it('treats already disconnected domain removal as idempotent when no provider resources remain', async () => {
+    expect.hasAssertions()
+    const { connection, globals, mocks } = cloudflareDomainRemovalGlobals()
+    connection.agentMailWorkerDeploymentId = null
+    connection.encryptedWorkerHmacSecret = null
+    connection.hmacSecretReference = null
+    connection.provisioningStatus = 'not_started'
+    connection.status = 'disconnected'
+    connection.workerScriptName = null
+    mocks.deploymentFindOne.mockReturnValue(execQuery(null))
+    const headers = new Headers({ authorization: 'Bearer user-token' })
+    const connectionPublicId = publicIdFromUUIDv7(connection._id)
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    cloudflareServiceTestState.requireAgentMailOrganizationContext.mockResolvedValue({
+      ability: { cannot: vi.fn(() => false) },
+      organizationId: TEST_ORGANIZATION_ID
+    })
+    const { removeCloudflareDomain } = await import('./service')
+
+    await expect(
+      removeCloudflareDomain({
+        connectionPublicId,
+        headers
+      })
+    ).resolves.toMatchObject({
+      grants: [
+        expect.objectContaining({
+          publicId: TEST_OLDER_GRANT_PUBLIC_ID,
+          status: 'active'
+        })
+      ],
+      connections: [
+        expect.objectContaining({
+          publicId: connectionPublicId,
+          status: 'disconnected'
+        })
+      ]
+    })
+
+    expect(mocks.authGetAccessToken).not.toHaveBeenCalled()
+    expect(cloudflareServiceTestState.removeCloudflareProvisioning).not.toHaveBeenCalled()
+    expect(mocks.connectionUpdateOne).toHaveBeenCalledWith(
+      { _id: connection._id, organizationId: TEST_ORGANIZATION_ID },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          provisioningStatus: 'not_started',
+          status: 'disconnected'
+        })
+      })
+    )
+    expect(mocks.domainUpdateMany).toHaveBeenCalledWith(
+      {
+        organizationId: TEST_ORGANIZATION_ID,
+        cloudflareConnectionId: connection._id
+      },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          status: 'disconnected'
+        })
+      })
+    )
+    expect(cloudflareServiceTestState.syncAgentMailRuntimeProjection).toHaveBeenCalledWith(
+      expect.any(Object),
+      { reason: 'cloudflare-domain-remove' }
+    )
+  })
+})
+
 describe('Cloudflare worker credential refresh service', () => {
   beforeEach(() => {
     vi.resetModules()
@@ -1049,10 +1238,17 @@ describe('Cloudflare control raw sending', () => {
 
   it('sends raw mail through the connected user Cloudflare OAuth grant', async () => {
     expect.hasAssertions()
-    const { globals, mocks } = cloudflareControlSendGlobals()
+    const grantUserId = { toString: () => TEST_USER_ID }
+    const { globals, mocks } = cloudflareControlSendGlobals({
+      grant: {
+        ...controlSendGrant(),
+        userId: grantUserId
+      }
+    })
     cloudflareServiceTestState.globals.mockResolvedValue(globals)
     cloudflareServiceTestState.sendCloudflareRawEmail.mockResolvedValue({
       delivered: ['recipient@example.net'],
+      messageId: '<cloudflare-message-id@example.net>',
       permanentBounces: [],
       queued: []
     })
@@ -1069,6 +1265,7 @@ describe('Cloudflare control raw sending', () => {
       })
     ).resolves.toStrictEqual({
       delivered: ['recipient@example.net'],
+      message_id: '<cloudflare-message-id@example.net>',
       permanent_bounces: [],
       queued: []
     })
@@ -1095,6 +1292,105 @@ describe('Cloudflare control raw sending', () => {
           lastErrorMessage: null,
           status: 'active'
         })
+      }
+    )
+    expect(mocks.connectionUpdateOne).toHaveBeenCalledWith(
+      { _id: 'connection-1' },
+      {
+        $set: {
+          lastErrorCode: null,
+          lastErrorMessage: null,
+          status: 'active'
+        }
+      }
+    )
+  })
+
+  it('force-refreshes the stored OAuth token and retries once when Cloudflare rejects raw send authentication', async () => {
+    expect.hasAssertions()
+    const grantUserId = { toString: () => TEST_USER_ID }
+    const { globals, mocks } = cloudflareControlSendGlobals({
+      connection: {
+        ...controlSendConnection(),
+        lastErrorCode: 'CLOUDFLARE_401',
+        lastErrorMessage: 'Cloudflare authorization failed. Reconnect Cloudflare and try again.',
+        status: 'degraded'
+      },
+      grant: {
+        ...controlSendGrant(),
+        userId: grantUserId
+      }
+    })
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    cloudflareServiceTestState.sendCloudflareRawEmail
+      .mockRejectedValueOnce(Object.assign(new Error('Cloudflare raw email send failed'), { status: 401 }))
+      .mockResolvedValueOnce({
+        delivered: [],
+        messageId: '<cloudflare-message-id@example.net>',
+        permanentBounces: [],
+        queued: ['recipient@example.net']
+      })
+    const { sendCloudflareRawEmailForControl } = await import('./service')
+
+    await expect(
+      sendCloudflareRawEmailForControl({
+        domain: 'example.com',
+        from: 'agent@example.com',
+        mimeMessage: 'From: agent@example.com\r\n\r\nbody',
+        organizationId: TEST_ORGANIZATION_ID,
+        organizationPublicId: 'org_public_test',
+        recipients: ['recipient@example.net'],
+        sendId: 'send-1',
+        zoneMtaQueueId: 'queue-1'
+      })
+    ).resolves.toStrictEqual({
+      delivered: [],
+      message_id: '<cloudflare-message-id@example.net>',
+      permanent_bounces: [],
+      queued: ['recipient@example.net']
+    })
+
+    expect(mocks.authGetAccessToken).toHaveBeenCalledOnce()
+    expect(mocks.authRefreshToken).toHaveBeenCalledWith({
+      body: {
+        accountId: 'cloudflare-user-1',
+        providerId: 'cloudflare',
+        userId: TEST_USER_ID
+      }
+    })
+    expect(cloudflareServiceTestState.sendCloudflareRawEmail).toHaveBeenNthCalledWith(1, {
+      accessToken: 'user-cloudflare-access-token',
+      cloudflareAccountId: 'cf-account-1',
+      from: 'agent@example.com',
+      mimeMessage: 'From: agent@example.com\r\n\r\nbody',
+      recipients: ['recipient@example.net']
+    })
+    expect(cloudflareServiceTestState.sendCloudflareRawEmail).toHaveBeenNthCalledWith(2, {
+      accessToken: 'refreshed-user-cloudflare-access-token',
+      cloudflareAccountId: 'cf-account-1',
+      from: 'agent@example.com',
+      mimeMessage: 'From: agent@example.com\r\n\r\nbody',
+      recipients: ['recipient@example.net']
+    })
+    expect(mocks.grantUpdateOne).toHaveBeenLastCalledWith(
+      { _id: 'grant-1' },
+      {
+        $set: expect.objectContaining({
+          grantedScopes: ['email-sending.write', 'offline_access'],
+          lastErrorCode: null,
+          lastErrorMessage: null,
+          status: 'active'
+        })
+      }
+    )
+    expect(mocks.connectionUpdateOne).toHaveBeenCalledWith(
+      { _id: 'connection-1' },
+      {
+        $set: {
+          lastErrorCode: null,
+          lastErrorMessage: null,
+          status: 'active'
+        }
       }
     )
   })
@@ -1217,13 +1513,13 @@ function cloudflareOAuthFinalizeGlobals() {
       cloudflareEmail: null,
       cloudflareUserId: 'cloudflare-user-shared',
       createdAt: now,
-      grantedScopes: ['zone:read'],
+      grantedScopes: currentCloudflareScopes(),
       lastErrorCode: null,
       lastErrorMessage: null,
       lastRefreshAt: null,
       lastTokenCheckAt: null,
       organizationId: TEST_ORGANIZATION_ID,
-      requiredScopes: ['zone:read'],
+      requiredScopes: currentCloudflareScopes(),
       status: 'active',
       updatedAt: now,
       userId: TEST_OTHER_USER_ID
@@ -1235,7 +1531,7 @@ function cloudflareOAuthFinalizeGlobals() {
         _id: '01960000-0000-7000-8000-000000000044',
         accountId: 'cloudflare-user-shared',
         providerId: 'cloudflare',
-        scope: 'zone:read',
+        scope: currentCloudflareScopes().join(' '),
         userId: TEST_USER_ID
       })
     ),
@@ -1337,6 +1633,12 @@ function cloudflareControlSendGlobals({
         accessToken: 'user-cloudflare-access-token'
       })
     ),
+    authRefreshToken: vi.fn(() =>
+      Promise.resolve({
+        accessToken: 'refreshed-user-cloudflare-access-token',
+        scope: 'email-sending.write,offline_access'
+      })
+    ),
     connectionFindOne: vi.fn(() => execQuery(connection)),
     connectionUpdateOne: vi.fn(() => execQuery({ modifiedCount: 1 })),
     domainFindOne: vi.fn(() => execQuery(domain)),
@@ -1347,7 +1649,8 @@ function cloudflareControlSendGlobals({
     globals: {
       auth: {
         api: {
-          getAccessToken: mocks.authGetAccessToken
+          getAccessToken: mocks.authGetAccessToken,
+          refreshToken: mocks.authRefreshToken
         }
       },
       db: {
@@ -1548,6 +1851,118 @@ function cloudflareDisconnectGlobals() {
   }
 }
 
+function cloudflareDomainRemovalGlobals() {
+  const grant = cloudflareSelectionGrant('older')
+  const connection = {
+    ...cloudflareSelectionConnection(),
+    _id: '01960000-0000-7000-8000-000000000031',
+    agentMailDomainId: '01960000-0000-7000-8000-000000000032',
+    agentMailWorkerDeploymentId: '01960000-0000-7000-8000-000000000033' as string | null,
+    archivePrefix: 'orgs/org_public_test/domains/example.com/mail/inbound',
+    encryptedWorkerHmacSecret: 'encrypted:worker-secret' as string | null,
+    hmacSecretReference:
+      'cloudflare-worker:agentteam-email-example:AGENTTEAM_WORKER_HMAC_SECRET' as string | null,
+    provisioningStatus: 'succeeded',
+    status: 'active',
+    workerScriptName: 'agentteam-email-example' as string | null
+  }
+  const deployment = {
+    _id: connection.agentMailWorkerDeploymentId,
+    cloudflareConnectionId: connection._id,
+    organizationId: TEST_ORGANIZATION_ID,
+    status: 'active',
+    workerScriptName: connection.workerScriptName
+  }
+  const connections = [connection]
+  const grants = [grant]
+  const mocks = {
+    authGetAccessToken: vi.fn(() =>
+      Promise.resolve({
+        accessToken: 'better-auth-cloudflare-access-token'
+      })
+    ),
+    authGetSession: vi.fn(() =>
+      Promise.resolve({
+        session: {
+          activeOrganizationId: TEST_ORGANIZATION_ID,
+          id: 'session-1'
+        },
+        user: {
+          id: TEST_USER_ID
+        }
+      })
+    ),
+    authUnlinkAccount: vi.fn(() => Promise.resolve({})),
+    connectionFind: vi.fn(() => sortedQuery(connections)),
+    connectionFindOne: vi.fn((query: Record<string, unknown>) =>
+      execQuery(
+        recordMatchesQuery(connection, { _id: query._id, organizationId: query.organizationId })
+          ? connection
+          : null
+      )
+    ),
+    connectionUpdateOne: vi.fn((query: Record<string, unknown>, update: { $set: Record<string, unknown> }) => {
+      if (recordMatchesQuery(connection, query)) {
+        Object.assign(connection, update.$set)
+      }
+      return execQuery({ modifiedCount: 1 })
+    }),
+    deploymentFindOne: vi.fn(() => execQuery(deployment)),
+    deploymentUpdateMany: vi.fn(() => execQuery({ modifiedCount: 1 })),
+    domainUpdateMany: vi.fn(() => execQuery({ modifiedCount: 1 })),
+    grantFind: vi.fn(() => sortedQuery(grants)),
+    grantFindOne: vi.fn((query: Record<string, unknown>) =>
+      execQuery(grants.find((candidate) => recordMatchesQuery(candidate, query)) ?? null)
+    ),
+    grantUpdateOne: vi.fn(() => execQuery({ modifiedCount: 1 })),
+    memberFindOne: vi.fn(() => execQuery({ role: 'member' })),
+    organizationFindById: vi.fn(() => execQuery({ _id: TEST_ORGANIZATION_ID }))
+  }
+
+  return {
+    connection,
+    deployment,
+    globals: {
+      auth: {
+        api: {
+          getAccessToken: mocks.authGetAccessToken,
+          getSession: mocks.authGetSession,
+          unlinkAccount: mocks.authUnlinkAccount
+        }
+      },
+      db: {
+        models: {
+          agentMailDomain: {
+            updateMany: mocks.domainUpdateMany
+          },
+          agentMailWorkerDeployment: {
+            findOne: mocks.deploymentFindOne,
+            updateMany: mocks.deploymentUpdateMany
+          },
+          cloudflareConnection: {
+            find: mocks.connectionFind,
+            findOne: mocks.connectionFindOne,
+            updateOne: mocks.connectionUpdateOne
+          },
+          cloudflareOAuthGrant: {
+            find: mocks.grantFind,
+            findOne: mocks.grantFindOne,
+            updateOne: mocks.grantUpdateOne
+          },
+          member: {
+            findOne: mocks.memberFindOne
+          },
+          organization: {
+            findById: mocks.organizationFindById
+          }
+        }
+      }
+    },
+    grant,
+    mocks
+  }
+}
+
 function cloudflareGrantSelectionGlobals() {
   const grants = [cloudflareSelectionGrant('older'), cloudflareSelectionGrant('newer')]
   const connection = cloudflareSelectionConnection()
@@ -1742,9 +2157,9 @@ function cloudflareSelectionGrant(kind: 'older' | 'newer') {
       ? '01960000-0000-7000-8000-000000000041'
       : '01960000-0000-7000-8000-000000000042',
     cloudflareUserId: isOlder ? 'cloudflare-user-old' : 'cloudflare-user-new',
-    grantedScopes: ['zone:read'],
+    grantedScopes: currentCloudflareScopes(),
     organizationId: TEST_ORGANIZATION_ID,
-    requiredScopes: ['zone:read'],
+    requiredScopes: currentCloudflareScopes(),
     status: 'active',
     updatedAt: isOlder ? new Date('2026-06-23T10:00:00.000Z') : new Date('2026-06-24T10:00:00.000Z'),
     userId: TEST_USER_ID
@@ -1873,7 +2288,7 @@ function workerDeployment() {
     encryptedWorkerHmacSecret: `encrypted:${EXISTING_WORKER_WEBHOOK_SIGNING_SECRET}`,
     organizationId: '01960000-0000-7000-8000-000000000001',
     organizationPublicId: 'org_public_test',
-    userId: 'user-1',
+    userId: TEST_USER_ID,
     workerConnectionId: 'conn_public_test'
   }
 }
@@ -1892,9 +2307,11 @@ function cloudflareGrant() {
     _id: 'grant-1',
     betterAuthAccountId: 'account-1',
     cloudflareUserId: 'cloudflare-user-1',
+    grantedScopes: currentCloudflareScopes(),
     organizationId: '01960000-0000-7000-8000-000000000001',
+    requiredScopes: currentCloudflareScopes(),
     status: 'active',
-    userId: 'user-1'
+    userId: TEST_USER_ID
   }
 }
 

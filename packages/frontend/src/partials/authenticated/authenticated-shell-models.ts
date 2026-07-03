@@ -108,7 +108,6 @@ export interface AuthenticatedEmailPreview {
   externalLinks?: ReadonlyArray<AuthenticatedExternalLink>
   folderId?: string
   html: string
-  htmlWithRemoteImages?: string
   id: string
   isDraft?: boolean
   isStarred?: boolean
@@ -129,12 +128,15 @@ export interface AuthenticatedEmailThreadMessage {
   attachments?: ReadonlyArray<AuthenticatedEmailAttachment>
   bodySize?: Exclude<AuthenticatedEmailBodySize, 'fill'>
   collapsedQuotes?: ReadonlyArray<AuthenticatedEmailCollapsedQuote>
+  externalLinks?: ReadonlyArray<AuthenticatedExternalLink>
   folderId?: string
   html: string
   id: string
   isDraft?: boolean
   receivedAt: string
   recipientEmail: string
+  remoteImages?: ReadonlyArray<AuthenticatedRemoteImage>
+  remoteImagesAllowed?: boolean
   senderEmail: string
   senderName: string
   state?: 'expanded' | 'collapsed'
@@ -219,7 +221,6 @@ export interface AuthenticatedMailDeleteFolderView {
 export type AuthenticatedEmailAction =
   | 'archive'
   | 'back'
-  | 'close'
   | 'collapse-thread-message'
   | 'delete'
   | 'discard-draft'
@@ -552,13 +553,6 @@ export const defaultAuthenticatedEmailToolbarActions = [
     group: 'utility',
     iconKey: 'delete',
     label: 'Delete',
-    section: 'end'
-  },
-  {
-    action: 'close',
-    group: 'utility',
-    iconKey: 'close',
-    label: 'Close',
     section: 'end'
   }
 ] satisfies ReadonlyArray<AuthenticatedEmailToolbarAction>
