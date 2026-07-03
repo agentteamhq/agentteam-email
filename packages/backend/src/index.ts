@@ -110,9 +110,11 @@ export type {
   AgentMailMessageActionInput,
   AgentMailWebAccount,
   AgentMailWebAttachment,
+  AgentMailWebExternalLink,
   AgentMailWebFolder,
   AgentMailWebMessageDetail,
   AgentMailWebMessageSummary,
+  AgentMailWebRemoteImage,
   AgentMailWebThreadMessage,
   AgentMailWebWorkspace,
   AgentMailWorkspaceInput

@@ -1,10 +1,15 @@
 import { rpc } from './rpc-api-client'
 import type {
+  AgentMailAdminAccount,
+  AgentMailAdminAgent,
   AgentMailAdminCreateAgentResult,
   AgentMailAdminDeleteAccountResult,
   AgentMailAdminDeleteForwardingGroupResult,
+  AgentMailAdminExternalPrincipal,
   AgentMailAdminGrantPrincipalTargetInput,
+  AgentMailAdminGroup,
   AgentMailAdminNavigation,
+  AgentMailAdminPendingAgentEnrollment,
   AgentMailAdminRevokeAgentEnrollmentResult,
   AgentMailAdminRevokeAgentResult,
   AgentMailAdminSaveAccountResult,
@@ -264,7 +269,7 @@ function normalizeMailboxAdminView(view: AgentMailAdminView): AgentMailAdminView
   const normalized = { ...view }
 
   if (Array.isArray(view.accounts)) {
-    normalized.accounts = view.accounts.map((account) => ({
+    normalized.accounts = view.accounts.map((account: AgentMailAdminAccount) => ({
       ...account,
       lastActivity: normalizeDateLabelString(account.lastActivity)
     }))
@@ -276,7 +281,7 @@ function normalizeMailboxAdminView(view: AgentMailAdminView): AgentMailAdminView
     normalized.groups = view.groups.map(normalizeMailboxAdminGroup)
   }
   if (Array.isArray(view.pendingEnrollments)) {
-    normalized.pendingEnrollments = view.pendingEnrollments.map((enrollment) => ({
+    normalized.pendingEnrollments = view.pendingEnrollments.map((enrollment: AgentMailAdminPendingAgentEnrollment) => ({
       ...enrollment,
       createdAt: normalizeDateLabelString(enrollment.createdAt),
       grantExpiresAt: normalizeNullableISOString(enrollment.grantExpiresAt),
@@ -285,7 +290,7 @@ function normalizeMailboxAdminView(view: AgentMailAdminView): AgentMailAdminView
     }))
   }
   if (Array.isArray(view.principals)) {
-    normalized.principals = view.principals.map((principal) => ({
+    normalized.principals = view.principals.map((principal: AgentMailAdminExternalPrincipal) => ({
       ...principal,
       lastUsed: normalizeDateLabelString(principal.lastUsed)
     }))
@@ -334,18 +339,14 @@ function normalizeMailboxAdminSaveForwardingGroupResult(
   }
 }
 
-function normalizeMailboxAdminAgent(
-  agent: AgentMailAdminView['agents'][number]
-): AgentMailAdminView['agents'][number] {
+function normalizeMailboxAdminAgent(agent: AgentMailAdminAgent): AgentMailAdminAgent {
   return {
     ...agent,
     lastSeen: normalizeDateLabelString(agent.lastSeen)
   }
 }
 
-function normalizeMailboxAdminGroup(
-  group: AgentMailAdminView['groups'][number]
-): AgentMailAdminView['groups'][number] {
+function normalizeMailboxAdminGroup(group: AgentMailAdminGroup): AgentMailAdminGroup {
   return {
     ...group,
     lastDelivered: normalizeDateLabelString(group.lastDelivered),
@@ -360,7 +361,7 @@ function normalizeDateLabelString(value: unknown): string {
   if (typeof value === 'string') {
     return value
   }
-  return value == null ? '' : String(value)
+  return ''
 }
 
 function normalizeNullableISOString(value: unknown): string | null {
@@ -370,7 +371,7 @@ function normalizeNullableISOString(value: unknown): string | null {
   if (typeof value === 'string') {
     return value
   }
-  return value == null ? null : String(value)
+  return null
 }
 
 function readMailAdminRpcResult<TResult>(

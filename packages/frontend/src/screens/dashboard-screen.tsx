@@ -232,12 +232,13 @@ export function DashboardScreen({
     }
 
     if (resolvedPreview?.thread?.length) {
-      let threadChanged = false
-      const resolvedThread = resolvedPreview.thread.map((threadMessage) => {
+      const previewWithThread = resolvedPreview
+      const resolvedThreadSource = previewWithThread.thread ?? []
+      const resolvedThread = resolvedThreadSource.map((threadMessage) => {
         const state = threadMessageStateByScope.get(
           getThreadMessageStateKey(
             resolvedSidebarView.activeAccountId,
-            resolvedPreview.threadId ?? resolvedPreview.id,
+            previewWithThread.threadId ?? previewWithThread.id,
             threadMessage.id,
             threadMessage.folderId
           )
@@ -247,16 +248,15 @@ export function DashboardScreen({
           return threadMessage
         }
 
-        threadChanged = true
         return {
           ...threadMessage,
           state
         } satisfies AuthenticatedEmailThreadMessage
       })
 
-      if (threadChanged) {
+      if (resolvedThread.some((threadMessage, index) => threadMessage !== resolvedThreadSource[index])) {
         resolvedPreview = {
-          ...resolvedPreview,
+          ...previewWithThread,
           thread: resolvedThread
         } satisfies AuthenticatedEmailPreview
       }

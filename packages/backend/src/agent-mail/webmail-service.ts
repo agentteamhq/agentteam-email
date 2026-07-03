@@ -1141,8 +1141,10 @@ function messageEnvelopeAddresses(message: WildDuckMessage, options: MessageOwne
       addNormalizedMailbox(addresses, recipient.value)
     }
   }
-  if (options.includeLocalRouteTarget && localRouteHeaderValue(message, 'x-agent-mail-local-route-id')) {
-    addNormalizedMailbox(addresses, localRouteHeaderValue(message, 'x-agent-mail-target-mailbox'))
+  const localRouteId = localRouteHeaderValue(message, 'x-agent-mail-local-route-id')
+  const localRouteTargetMailbox = localRouteHeaderValue(message, 'x-agent-mail-target-mailbox')
+  if (options.includeLocalRouteTarget && localRouteId) {
+    addNormalizedMailbox(addresses, localRouteTargetMailbox)
   }
   addMessageAddressValues(addresses, message.to)
   addMessageAddressValues(addresses, message.cc)
@@ -1195,20 +1197,24 @@ function addMessageAddressValues(
   addNormalizedMailbox(addresses, value.address)
 }
 
-function localRouteHeaderValue(message: WildDuckMessage, name: string) {
+function localRouteHeaderValue(message: WildDuckMessage, name: string): string | undefined {
   const headers = message.headers
   if (!headers) {
     return undefined
   }
   const normalizedName = name.toLowerCase()
-  for (const [key, value] of Object.entries(headers)) {
+  for (const key of Object.keys(headers)) {
     if (key.toLowerCase() !== normalizedName) {
       continue
     }
-    if (Array.isArray(value)) {
-      return value.find((candidate) => candidate.trim())
+    const value = headers[key]
+    if (!value) {
+      return undefined
     }
-    return value
+    if (typeof value === 'string') {
+      return value.trim().length > 0 ? value : undefined
+    }
+    return value.find((candidate) => candidate.trim().length > 0)
   }
   return undefined
 }

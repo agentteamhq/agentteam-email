@@ -1,4 +1,4 @@
-import type { AgentMailWebWorkspace } from '@main/backend'
+import type { AgentMailWebMessageDetail, AgentMailWebWorkspace } from '@main/backend'
 
 const inboxFolder = {
   id: 'inbox-id',
@@ -51,6 +51,11 @@ const sentFolder = {
 } satisfies AgentMailWebWorkspace['folders'][number]
 
 const folders = [inboxFolder, archiveFolder, draftsFolder, junkFolder, sentFolder]
+const defaultMessageSafety = {
+  externalLinks: [],
+  remoteImages: [],
+  remoteImagesAllowed: false
+} satisfies Pick<AgentMailWebMessageDetail, 'externalLinks' | 'remoteImages' | 'remoteImagesAllowed'>
 
 export const mailWorkspaceReadyView = {
   accounts: [
@@ -119,6 +124,7 @@ export const mailWorkspaceReadyView = {
       }
     ],
     cc: [],
+    ...defaultMessageSafety,
     from: 'Avery Stone <avery@example.net>',
     html: '<p>The dataset and notes are attached for review.</p>',
     id: '100',
@@ -137,6 +143,7 @@ export const mailWorkspaceReadyView = {
         attachmentCount: 0,
         attachments: [],
         cc: [],
+        ...defaultMessageSafety,
         from: 'Research <research@agentteam.example>',
         html: '<p>Can you send over the latest research packet?</p>',
         id: '99',
@@ -167,6 +174,7 @@ export const mailWorkspaceReadyView = {
           }
         ],
         cc: [],
+        ...defaultMessageSafety,
         from: 'Avery Stone <avery@example.net>',
         html: '<p>The dataset and notes are attached for review.</p>',
         id: '100',
@@ -231,6 +239,7 @@ export const mailWorkspaceJunkView = {
     attachmentCount: 0,
     attachments: [],
     cc: [],
+    ...defaultMessageSafety,
     from: 'Suspicious Sender <sender@example.net>',
     html: '<p>This message was routed to Junk but should be restored.</p>',
     id: '140',
@@ -278,6 +287,7 @@ export const mailWorkspaceAssistantAccountView = {
     attachmentCount: 0,
     attachments: [],
     cc: [],
+    ...defaultMessageSafety,
     from: 'Scheduler <scheduler@example.net>',
     html: '<p>This mailbox is loaded after switching accounts.</p>',
     id: '220',
