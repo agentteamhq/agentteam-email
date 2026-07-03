@@ -2,6 +2,7 @@ import {
   ConversationThreadAttachments as ConversationThreadAttachmentsStory,
   ConversationThreadCollapsedMiddle as ConversationThreadCollapsedMiddleStory,
   ConversationThreadLong as ConversationThreadLongStory,
+  ConversationThreadRowToggle as ConversationThreadRowToggleStory,
   ConversationThread as ConversationThreadStory,
   mailWorkspaceControllerStoryMeta
 } from '../../mail-workspace.definitions'
@@ -24,6 +25,11 @@ export const ConversationThread: Story = {
 export const ConversationThreadCollapsedMiddle: Story = {
   ...ConversationThreadCollapsedMiddleStory,
   name: 'Collapsed middle message'
+}
+
+export const ConversationThreadRowToggle: Story = {
+  ...ConversationThreadRowToggleStory,
+  name: 'Row toggle interaction'
 }
 
 export const ConversationThreadLong: Story = {

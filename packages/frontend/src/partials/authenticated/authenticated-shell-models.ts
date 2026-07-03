@@ -133,6 +133,8 @@ export interface AuthenticatedEmailThreadMessage {
   html: string
   id: string
   isDraft?: boolean
+  isStarred?: boolean
+  isUnread?: boolean
   receivedAt: string
   recipientEmail: string
   remoteImages?: ReadonlyArray<AuthenticatedRemoteImage>

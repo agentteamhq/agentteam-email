@@ -369,6 +369,7 @@ export function actionsForMessage(
   const inboxFolder = findSystemFolder(folders, { path: 'INBOX', specialUse: '\\Inbox' })
   const junkFolder = findSystemFolder(folders, { path: 'Junk', specialUse: '\\Junk' })
   const isJunk = currentFolder?.specialUse?.toLowerCase() === '\\junk'
+  const isSent = currentFolder?.specialUse?.toLowerCase() === '\\sent'
   const baseActions = archiveFolder
     ? defaultAuthenticatedEmailToolbarActions.flatMap((action) =>
         action.action === 'move'
@@ -377,41 +378,50 @@ export function actionsForMessage(
       )
     : defaultAuthenticatedEmailToolbarActions
 
-  return baseActions.map((action) => {
+  return baseActions.flatMap((action) => {
+    if (action.action === 'mark-spam' && isSent) {
+      return []
+    }
     if (action.action === 'star' && message.isStarred) {
-      return { ...action, action: 'unstar', iconKey: 'unstar', label: 'Unstar' }
+      return [{ ...action, action: 'unstar', iconKey: 'unstar', label: 'Unstar' }]
     }
     if (action.action === 'mark-unread' && message.unread) {
-      return { ...action, action: 'mark-read', iconKey: 'mark-read', label: 'Mark as read' }
+      return [{ ...action, action: 'mark-read', iconKey: 'mark-read', label: 'Mark as read' }]
     }
     if (action.action === 'archive' && archiveFolder?.id === message.mailboxId) {
-      return {
-        ...action,
-        disabled: true,
-        disabledReason: 'Message is already in Archive',
-        label: 'Archived'
-      }
+      return [
+        {
+          ...action,
+          disabled: true,
+          disabledReason: 'Message is already in Archive',
+          label: 'Archived'
+        }
+      ]
     }
     if (action.action === 'mark-spam' && isJunk) {
       return inboxFolder
-        ? { ...action, action: 'mark-not-spam', iconKey: 'mark-not-spam', label: 'Not spam' }
-        : {
-            ...action,
-            action: 'mark-not-spam',
-            disabled: true,
-            disabledReason: 'Inbox folder is not available',
-            iconKey: 'mark-not-spam',
-            label: 'Not spam'
-          }
+        ? [{ ...action, action: 'mark-not-spam', iconKey: 'mark-not-spam', label: 'Not spam' }]
+        : [
+            {
+              ...action,
+              action: 'mark-not-spam',
+              disabled: true,
+              disabledReason: 'Inbox folder is not available',
+              iconKey: 'mark-not-spam',
+              label: 'Not spam'
+            }
+          ]
     }
     if (action.action === 'mark-spam' && !junkFolder) {
-      return {
-        ...action,
-        disabled: true,
-        disabledReason: 'Junk folder is not available'
-      }
+      return [
+        {
+          ...action,
+          disabled: true,
+          disabledReason: 'Junk folder is not available'
+        }
+      ]
     }
-    return action
+    return [action]
   })
 }
 

@@ -68,6 +68,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '../../components/ui/dropdown-menu'
 import { Input } from '../../components/ui/input'
@@ -2261,58 +2262,79 @@ function EmailPreviewHeader({
   const selectedThreadMessageAction: AuthenticatedEmailAction = selectedThreadMessageIsCollapsed
     ? 'expand-thread-message'
     : 'collapse-thread-message'
-
-  return (
-    <header className='border-b px-4 py-3'>
-      <div className='flex min-w-0 flex-wrap items-center gap-2'>
-        <h1 className='text-foreground min-w-0 truncate text-sm leading-5 font-semibold'>
-          {email.subject}
-        </h1>
-        <EmailStateBadges email={email} />
-      </div>
-      <div className='mt-2 flex min-w-0 items-center justify-between gap-3'>
+  const headerContent = (
+    <div className='flex min-w-0 flex-1 items-center gap-3'>
+      <div className='min-w-0 flex-1'>
+        <div className='flex min-w-0 flex-wrap items-center gap-2'>
+          <h1 className='text-foreground min-w-0 truncate text-sm leading-5 font-semibold'>
+            {email.subject}
+          </h1>
+          <EmailStateBadges email={email} />
+        </div>
         <EmailMessageMeta
-          className='min-w-0 flex-1'
+          className='mt-2 min-w-0'
           receivedAt={email.receivedAt}
           recipientEmail={email.recipientEmail}
           senderEmail={email.senderEmail}
           senderName={email.senderName}
           showDate={false}
         />
-        <div className='flex shrink-0 items-center gap-1.5'>
-          <LocalDateTime
-            className='text-muted-foreground shrink-0 text-xs whitespace-nowrap'
-            value={email.receivedAt}
-          />
-          {selectedThreadActionTarget ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  aria-label={`${
-                    selectedThreadMessageIsCollapsed ? 'Expand' : 'Collapse'
-                  } ${selectedThreadMessage.senderName} message`}
-                  className='size-8 shrink-0'
-                  onClick={() => {
-                    onEmailAction?.(selectedThreadMessageAction, selectedThreadActionTarget)
-                  }}
-                  size='icon'
-                  type='button'
-                  variant='ghost'
-                >
-                  {selectedThreadMessageIsCollapsed ? (
-                    <CaretDownIcon data-icon='icon-only' />
-                  ) : (
-                    <CaretUpIcon data-icon='icon-only' />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {selectedThreadMessageIsCollapsed ? 'Expand message' : 'Collapse message'}
-              </TooltipContent>
-            </Tooltip>
-          ) : null}
-        </div>
       </div>
+    </div>
+  )
+
+  return (
+    <header className='border-b'>
+      {selectedThreadMessage && selectedThreadActionTarget ? (
+        <div
+          className={cn(
+            'group/thread-row flex min-w-0 items-stretch transition-colors duration-150 ease-out',
+            'hover:bg-muted/25 focus-within:bg-muted/25 active:bg-muted/30 motion-reduce:transition-none',
+            'dark:hover:bg-muted/25 dark:focus-within:bg-muted/25 dark:active:bg-muted/30',
+            !selectedThreadMessageIsCollapsed && 'bg-muted/15 dark:bg-muted/20'
+          )}
+        >
+          <Button
+            aria-label={`${
+              selectedThreadMessageIsCollapsed ? 'Expand' : 'Collapse'
+            } ${selectedThreadMessage.senderName} message`}
+            aria-expanded={!selectedThreadMessageIsCollapsed}
+            className='h-auto min-w-0 flex-1 shrink justify-start whitespace-normal rounded-none !bg-transparent
+              px-4 py-3 text-left hover:!bg-transparent hover:text-inherit active:!bg-transparent
+              focus-visible:!bg-transparent focus-visible:border-transparent focus-visible:ring-0'
+            onClick={() => {
+              onEmailAction?.(selectedThreadMessageAction, selectedThreadActionTarget)
+            }}
+            type='button'
+            variant='ghost'
+          >
+            {headerContent}
+          </Button>
+          <EmailThreadRowActions
+            actions={selectedThreadActionTarget.actions ?? []}
+            cluster='selected'
+            isStarred={selectedThreadActionTarget.isStarred}
+            onAction={(action) => {
+              onEmailAction?.(action, selectedThreadActionTarget)
+            }}
+            receivedAt={selectedThreadActionTarget.receivedAt}
+            senderName={selectedThreadActionTarget.senderName}
+          />
+        </div>
+      ) : (
+        <div className='flex min-w-0 items-center justify-between gap-3 px-4 py-3'>
+          {headerContent}
+          <div
+            className='flex shrink-0 items-center gap-1.5'
+            data-email-thread-date-cluster='selected'
+          >
+            <LocalDateTime
+              className='text-muted-foreground shrink-0 text-xs whitespace-nowrap'
+              value={email.receivedAt}
+            />
+          </div>
+        </div>
+      )}
     </header>
   )
 }
@@ -2329,6 +2351,139 @@ function EmailStateBadges({ email }: { email: AuthenticatedEmailPreview }) {
       {email.isUnread ? <Badge variant='outline'>Unread</Badge> : null}
     </span>
   )
+}
+
+function EmailThreadRowActions({
+  actions,
+  cluster,
+  isStarred,
+  onAction,
+  receivedAt,
+  senderName
+}: {
+  actions: ReadonlyArray<AuthenticatedEmailToolbarAction>
+  cluster: 'selected' | 'message' | 'collapsed'
+  isStarred?: boolean
+  onAction: (action: AuthenticatedEmailAction) => void
+  receivedAt: string
+  senderName: string
+}) {
+  const starAction = actions.find((action) => action.action === 'star' || action.action === 'unstar')
+  const starIsActive = starAction?.action === 'unstar' || Boolean(isStarred)
+  const menuActions = actions.filter(isThreadOverflowAction)
+
+  return (
+    <div
+      className='flex shrink-0 items-center gap-1.5 py-3 pr-3 pl-1'
+      data-email-thread-date-cluster={cluster}
+    >
+      {starAction ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              aria-label={`${starAction.label} ${senderName} message`}
+              aria-pressed={starIsActive}
+              className={cn(
+                'size-8 shrink-0 text-muted-foreground opacity-70 transition-opacity',
+                'hover:text-foreground hover:opacity-100 focus-visible:opacity-100',
+                'group-hover/thread-row:opacity-100 motion-reduce:transition-none',
+                starIsActive && 'text-foreground opacity-100'
+              )}
+              disabled={starAction.disabled || starAction.pending}
+              onClick={() => {
+                onAction(starAction.action)
+              }}
+              size='icon'
+              title={actionTitle(starAction)}
+              type='button'
+              variant='ghost'
+            >
+              {starAction.pending ? (
+                <Spinner data-icon='icon-only' />
+              ) : (
+                <StarIcon
+                  data-icon='icon-only'
+                  weight={starIsActive ? 'fill' : 'regular'}
+                />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{actionTitle(starAction)}</TooltipContent>
+        </Tooltip>
+      ) : null}
+      <LocalDateTime
+        className='text-muted-foreground shrink-0 text-xs whitespace-nowrap'
+        value={receivedAt}
+      />
+      {menuActions.length ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              aria-label={`More actions for ${senderName} message`}
+              className='size-8 shrink-0 text-muted-foreground opacity-70 transition-opacity
+                hover:text-foreground hover:opacity-100 focus-visible:opacity-100
+                group-hover/thread-row:opacity-100 motion-reduce:transition-none'
+              size='icon'
+              title={`More actions for ${senderName} message`}
+              type='button'
+              variant='ghost'
+            >
+              <DotsThreeIcon data-icon='icon-only' />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align='end'
+            side='bottom'
+          >
+            {menuActions.map((action, index) => {
+              const Icon = emailActionIcons[action.iconKey]
+
+              return (
+                <React.Fragment key={action.action}>
+                  {index > 0 && action.group !== menuActions[index - 1]?.group ? (
+                    <DropdownMenuSeparator />
+                  ) : null}
+                  <DropdownMenuItem
+                    disabled={action.disabled || action.pending}
+                    onSelect={() => {
+                      onAction(action.action)
+                    }}
+                    title={actionTitle(action)}
+                    variant={isDestructiveEmailAction(action.action) ? 'destructive' : 'default'}
+                  >
+                    {action.pending ? <Spinner data-icon='inline-start' /> : <Icon data-icon='inline-start' />}
+                    {action.label}
+                  </DropdownMenuItem>
+                </React.Fragment>
+              )
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+    </div>
+  )
+}
+
+function isThreadOverflowAction(action: AuthenticatedEmailToolbarAction) {
+  switch (action.action) {
+    case 'back':
+    case 'collapse-thread-message':
+    case 'expand-thread-message':
+    case 'show-remote-images':
+    case 'star':
+    case 'unstar':
+      return false
+    default:
+      return true
+  }
+}
+
+function isDestructiveEmailAction(action: AuthenticatedEmailAction) {
+  return action === 'delete' || action === 'discard-draft'
+}
+
+function actionTitle(action: AuthenticatedEmailToolbarAction) {
+  return action.disabledReason ? `${action.label}: ${action.disabledReason}` : action.label
 }
 
 function EmailMessageMeta({
@@ -2923,6 +3078,7 @@ function EmailThreadMessageItem({
     return (
       <EmailCollapsedThreadMessage
         message={message}
+        onAction={triggerMessageAction}
         onExpand={() => {
           triggerMessageAction('expand-thread-message')
         }}
@@ -2935,39 +3091,41 @@ function EmailThreadMessageItem({
       className='border-b last:border-b-0'
       data-email-message-state='expanded'
     >
-      <div className='flex items-center gap-2 px-4 py-3'>
-        <EmailMessageMeta
-          className='flex-1'
-          isDraft={message.isDraft}
-          receivedAt={message.receivedAt}
-          recipientEmail={message.recipientEmail}
-          senderEmail={message.senderEmail}
-          senderName={message.senderName}
-          showDate={false}
-        />
-        <div className='flex shrink-0 items-center gap-1.5'>
-          <LocalDateTime
-            className='text-muted-foreground shrink-0 text-xs whitespace-nowrap'
-            value={message.receivedAt}
+      <div
+        className='group/thread-row bg-muted/15 flex min-w-0 items-stretch transition-colors duration-150 ease-out
+          hover:bg-muted/25 focus-within:bg-muted/25 active:bg-muted/30 motion-reduce:transition-none
+          dark:bg-muted/20 dark:hover:bg-muted/25 dark:focus-within:bg-muted/25 dark:active:bg-muted/30'
+      >
+        <Button
+          aria-label={`Collapse ${message.senderName} message`}
+          aria-expanded
+          className='h-auto min-w-0 flex-1 shrink justify-start whitespace-normal rounded-none !bg-transparent
+            px-4 py-3 text-left hover:!bg-transparent hover:text-inherit active:!bg-transparent
+            focus-visible:!bg-transparent focus-visible:border-transparent focus-visible:ring-0'
+          onClick={() => {
+            triggerMessageAction('collapse-thread-message')
+          }}
+          type='button'
+          variant='ghost'
+        >
+          <EmailMessageMeta
+            className='min-w-0 flex-1'
+            isDraft={message.isDraft}
+            receivedAt={message.receivedAt}
+            recipientEmail={message.recipientEmail}
+            senderEmail={message.senderEmail}
+            senderName={message.senderName}
+            showDate={false}
           />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                aria-label={`Collapse ${message.senderName} message`}
-                className='size-8 shrink-0'
-                onClick={() => {
-                  triggerMessageAction('collapse-thread-message')
-                }}
-                size='icon'
-                type='button'
-                variant='ghost'
-              >
-                <CaretUpIcon data-icon='icon-only' />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Collapse message</TooltipContent>
-          </Tooltip>
-        </div>
+        </Button>
+        <EmailThreadRowActions
+          actions={message.actions ?? []}
+          cluster='message'
+          isStarred={message.isStarred}
+          onAction={triggerMessageAction}
+          receivedAt={message.receivedAt}
+          senderName={message.senderName}
+        />
       </div>
       <EmailMessageBodyFrame
         allowRemoteImages={message.remoteImagesAllowed}
@@ -2998,6 +3156,7 @@ function getThreadMessageActionTarget(
   message: AuthenticatedEmailThreadMessage
 ) {
   return {
+    actions: message.actions,
     attachments: message.attachments,
     bodySize: message.bodySize,
     externalLinks: message.externalLinks,
@@ -3005,6 +3164,8 @@ function getThreadMessageActionTarget(
     html: message.html,
     id: message.id,
     isDraft: message.isDraft,
+    isStarred: message.isStarred,
+    isUnread: message.isUnread,
     receivedAt: message.receivedAt,
     recipientEmail: message.recipientEmail,
     remoteImages: message.remoteImages,
@@ -3018,9 +3179,11 @@ function getThreadMessageActionTarget(
 
 function EmailCollapsedThreadMessage({
   message,
+  onAction,
   onExpand
 }: {
   message: NonNullable<AuthenticatedEmailPreview['thread']>[number]
+  onAction: (action: AuthenticatedEmailAction) => void
   onExpand: () => void
 }) {
   return (
@@ -3028,61 +3191,62 @@ function EmailCollapsedThreadMessage({
       className='border-b last:border-b-0'
       data-email-message-state='collapsed'
     >
-      <Button
-        aria-label={`Expand ${message.senderName} message`}
-        className='hover:bg-muted/25 h-auto min-w-0 w-full shrink justify-start whitespace-normal rounded-none px-4
-          py-3 text-left'
-        onClick={onExpand}
-        type='button'
-        variant='ghost'
+      <div
+        className='group/thread-row flex min-w-0 items-stretch transition-colors duration-150 ease-out
+          hover:bg-muted/25 focus-within:bg-muted/25 active:bg-muted/30 motion-reduce:transition-none
+          dark:hover:bg-muted/25 dark:focus-within:bg-muted/25 dark:active:bg-muted/30'
       >
-        <span className='flex min-w-0 flex-1 items-center gap-2.5'>
-          <span
-            className='bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center
-              rounded-full text-xs font-semibold'
-            aria-hidden='true'
-          >
-            {getSenderInitial(message.senderName)}
-          </span>
-          <span className='flex min-w-0 flex-1 flex-col gap-1'>
-            <span className='flex min-w-0 items-center gap-1.5'>
-              <span className='flex min-w-0 items-center gap-1.5'>
-                <span className='text-foreground min-w-0 truncate text-xs font-medium'>
-                  {message.senderName}{' '}
-                  <span className='text-muted-foreground font-normal'>{message.senderEmail}</span>
-                </span>
-                {message.isDraft ? (
-                  <Badge
-                    className='shrink-0'
-                    variant='secondary'
-                  >
-                    Draft
-                  </Badge>
-                ) : null}
-              </span>
-            </span>
-            <span className='text-muted-foreground truncate text-xs'>To: {message.recipientEmail}</span>
-            {message.teaser ? (
-              <span className='text-muted-foreground mt-1 line-clamp-1 text-xs'>{message.teaser}</span>
-            ) : null}
-          </span>
-          <span className='flex shrink-0 items-center gap-1.5'>
-            <LocalDateTime
-              className='text-muted-foreground shrink-0 text-xs whitespace-nowrap'
-              value={message.receivedAt}
-            />
+        <Button
+          aria-label={`Expand ${message.senderName} message`}
+          aria-expanded={false}
+          className='h-auto min-w-0 flex-1 shrink justify-start whitespace-normal rounded-none !bg-transparent
+            px-4 py-3 text-left hover:!bg-transparent hover:text-inherit active:!bg-transparent
+            focus-visible:!bg-transparent focus-visible:border-transparent focus-visible:ring-0'
+          onClick={onExpand}
+          type='button'
+          variant='ghost'
+        >
+          <span className='flex min-w-0 flex-1 items-center gap-2.5'>
             <span
-              className='text-muted-foreground flex size-8 shrink-0 items-center justify-center'
+              className='bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center
+                rounded-full text-xs font-semibold'
               aria-hidden='true'
             >
-              <CaretDownIcon
-                className='size-4'
-                data-icon='icon-only'
-              />
+              {getSenderInitial(message.senderName)}
+            </span>
+            <span className='flex min-w-0 flex-1 flex-col gap-1'>
+              <span className='flex min-w-0 items-center gap-1.5'>
+                <span className='flex min-w-0 items-center gap-1.5'>
+                  <span className='text-foreground min-w-0 truncate text-xs font-medium'>
+                    {message.senderName}{' '}
+                    <span className='text-muted-foreground font-normal'>{message.senderEmail}</span>
+                  </span>
+                  {message.isDraft ? (
+                    <Badge
+                      className='shrink-0'
+                      variant='secondary'
+                    >
+                      Draft
+                    </Badge>
+                  ) : null}
+                </span>
+              </span>
+              <span className='text-muted-foreground truncate text-xs'>To: {message.recipientEmail}</span>
+              {message.teaser ? (
+                <span className='text-muted-foreground mt-1 line-clamp-1 text-xs'>{message.teaser}</span>
+              ) : null}
             </span>
           </span>
-        </span>
-      </Button>
+        </Button>
+        <EmailThreadRowActions
+          actions={message.actions ?? []}
+          cluster='collapsed'
+          isStarred={message.isStarred}
+          onAction={onAction}
+          receivedAt={message.receivedAt}
+          senderName={message.senderName}
+        />
+      </div>
     </article>
   )
 }

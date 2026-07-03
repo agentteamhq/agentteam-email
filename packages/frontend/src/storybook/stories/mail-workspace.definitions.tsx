@@ -339,6 +339,7 @@ export const ConversationThread: Story = {
     }),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
+    const body = within(canvasElement.ownerDocument.body)
 
     await expect(await canvas.findByRole('heading', { name: /agent mail smoke/i })).toBeInTheDocument()
     await expect(
@@ -346,8 +347,18 @@ export const ConversationThread: Story = {
     ).toBeInTheDocument()
     await expect(await canvas.findByRole('button', { name: /collapse testing message/i })).toBeInTheDocument()
     await expect(await canvas.findByRole('button', { name: /collapse support agent message/i })).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /star testing message/i })).toBeInTheDocument()
+    await expect(
+      await canvas.findByRole('button', { name: /more actions for testing message/i })
+    ).toBeInTheDocument()
+    await userEvent.click(await canvas.findByRole('button', { name: /more actions for agentteam email message/i }))
+    await expect(await body.findByRole('menuitem', { name: /^view original$/i })).toBeInTheDocument()
+    expect(body.queryByRole('menuitem', { name: /^mark as spam$/i })).not.toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
     await expect(await canvas.findByText('Draft')).toBeInTheDocument()
+    expectSelectedThreadHeaderActionCentered(canvasElement, 'conversation thread')
     await expectThreadScrollRegionNotOverflowing(canvasElement, 'conversation thread')
+    await expect(await canvas.findByTitle(/testing message body/i)).toBeInTheDocument()
     const draftFrameSource = await findEmailFrameSource(
       canvasElement,
       /support agent message body/i,
@@ -355,6 +366,31 @@ export const ConversationThread: Story = {
     )
 
     await expect(draftFrameSource).toContain('Drafting reply from the selected WildDuck Drafts folder.')
+  }
+}
+
+export const ConversationThreadRowToggle: Story = {
+  args: {
+    routeSearch: { messageId: 'conversation-thread' }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenConversationView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    const selectedMessageToggle = await canvas.findByRole('button', {
+      name: /collapse testing message/i
+    })
+
+    await expect(await canvas.findByTitle(/testing message body/i)).toBeInTheDocument()
+    await userEvent.click(selectedMessageToggle)
+    const selectedMessageExpand = await canvas.findByRole('button', { name: /expand testing message/i })
+    await expect(selectedMessageExpand).toBeInTheDocument()
+    await expect(canvas.queryByTitle(/testing message body/i)).not.toBeInTheDocument()
+    await userEvent.click(selectedMessageExpand)
+    await expect(await canvas.findByRole('button', { name: /collapse testing message/i })).toBeInTheDocument()
+    await expect(await canvas.findByTitle(/testing message body/i)).toBeInTheDocument()
   }
 }
 
@@ -375,6 +411,7 @@ export const ConversationThreadCollapsedMiddle: Story = {
     ).toBeInTheDocument()
     await expect(await canvas.findByRole('button', { name: /expand testing message/i })).toBeInTheDocument()
     await expect(await canvas.findByRole('button', { name: /collapse support agent message/i })).toBeInTheDocument()
+    expectSelectedThreadHeaderActionCentered(canvasElement, 'collapsed middle thread')
     expectCollapsedThreadRowsNotOverflowing(canvasElement, 'collapsed middle thread')
     expectThreadBodyFramesFitContent(canvasElement, 'collapsed middle thread')
     await expectThreadScrollRegionNotOverflowing(canvasElement, 'collapsed middle thread')
@@ -1084,6 +1121,27 @@ function expectCollapsedThreadRowsNotOverflowing(canvasElement: HTMLElement, des
     expect(row.scrollHeight).toBeLessThanOrEqual(row.clientHeight + 1)
     expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth + 1)
   }
+}
+
+function expectSelectedThreadHeaderActionCentered(canvasElement: HTMLElement, description: string) {
+  const header = canvasElement
+    .querySelector('[data-email-thread-scroll-region="thread"]')
+    ?.querySelector('header')
+  if (!(header instanceof HTMLElement)) {
+    throw new TypeError(`Expected ${description} to render a selected thread header`)
+  }
+
+  const dateCluster = header.querySelector('[data-email-thread-date-cluster="selected"]')
+  if (!(dateCluster instanceof HTMLElement)) {
+    throw new TypeError(`Expected ${description} selected thread header to render a date cluster`)
+  }
+
+  const headerRect = header.getBoundingClientRect()
+  const actionRect = dateCluster.getBoundingClientRect()
+  const headerCenter = headerRect.top + headerRect.height / 2
+  const actionCenter = actionRect.top + actionRect.height / 2
+
+  expect(Math.abs(headerCenter - actionCenter)).toBeLessThanOrEqual(1)
 }
 
 function expectThreadBodyFramesFitContent(canvasElement: HTMLElement, description: string) {

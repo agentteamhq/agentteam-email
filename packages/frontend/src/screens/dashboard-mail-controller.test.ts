@@ -751,6 +751,37 @@ describe('mail client controller view mapping', () => {
     expect(actions.some((action) => action.action === 'mark-not-spam')).toBe(true)
     expect(actions.find((action) => action.action === 'mark-spam')).toBeUndefined()
   })
+
+  it('does not offer spam actions for messages in Sent', () => {
+    expect.hasAssertions()
+    const actions = actionsForMessage(
+      {
+        isDraft: false,
+        isStarred: false,
+        mailboxId: 'sent-id',
+        unread: false
+      },
+      [
+        {
+          id: 'sent-id',
+          name: 'Sent',
+          path: 'Sent',
+          protected: true,
+          specialUse: '\\Sent'
+        },
+        {
+          id: 'junk-id',
+          name: 'Junk',
+          path: 'Junk',
+          protected: true,
+          specialUse: '\\Junk'
+        }
+      ]
+    )
+
+    expect(actions.find((action) => action.action === 'mark-spam')).toBeUndefined()
+    expect(actions.find((action) => action.action === 'mark-not-spam')).toBeUndefined()
+  })
 })
 
 function mailWorkspace(overrides: Partial<AgentMailWebWorkspace> = {}): AgentMailWebWorkspace {

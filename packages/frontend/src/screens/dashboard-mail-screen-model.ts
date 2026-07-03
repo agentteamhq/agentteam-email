@@ -124,7 +124,8 @@ export function toEmailPreview(
         threadMessage.isDraft ||
           (threadMessage.id === message.id && threadMessage.mailboxId === message.mailboxId)
           ? 'expanded'
-          : 'collapsed'
+          : 'collapsed',
+        folders
       )
     ),
     threadId: message.threadId
@@ -133,15 +134,19 @@ export function toEmailPreview(
 
 function toEmailThreadMessage(
   message: AgentMailWebThreadMessage,
-  state: 'collapsed' | 'expanded'
+  state: 'collapsed' | 'expanded',
+  folders: ReadonlyArray<AgentMailWebFolder>
 ): NonNullable<AuthenticatedEmailPreview['thread']>[number] {
   return {
+    actions: actionsForMessage(message, folders),
     attachments: message.attachments.map(toEmailAttachment),
     externalLinks: message.externalLinks,
     folderId: message.mailboxId,
     html: message.html,
     id: message.id,
     isDraft: message.isDraft,
+    isStarred: message.isStarred,
+    isUnread: message.unread,
     receivedAt: message.receivedAt ?? '',
     recipientEmail: message.to.join(', '),
     remoteImages: message.remoteImages,
