@@ -22,6 +22,8 @@ const cloudflareOAuthScopes = [
   'zone-dns-settings.read',
   'zone-dns-settings.write',
   'zone.read',
+  'zone-settings.read',
+  'zone-settings.write',
   'cloud-email-security.read',
   'email-routing-address.read',
   'email-routing-address.write',

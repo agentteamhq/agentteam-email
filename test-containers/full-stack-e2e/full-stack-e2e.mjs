@@ -76,7 +76,8 @@ const runtime = {
   cloudflareAccount: null,
   cloudflareZones: new Map(),
   connections: new Map(),
-  workers: new Map()
+  workers: new Map(),
+  expectedOutboundProviderSendCount: 0
 }
 const dynamicRedactions = new Map()
 
@@ -1073,7 +1074,6 @@ async function checkFakeCloudflareProvisioningOperations() {
   const requiredFragments = [
     '/client/v4/accounts',
     '/client/v4/zones',
-    '/r2/temp-access-credentials',
     '/workers/scripts',
     '/email/routing'
   ]
@@ -1082,7 +1082,7 @@ async function checkFakeCloudflareProvisioningOperations() {
     missing.length === 0,
     `fake Cloudflare did not observe required provisioning operations: ${missing.join(', ')}; saw ${paths.join(', ')}`
   )
-  return 'fake Cloudflare observed account, zone, R2 temporary credentials, Worker, and Email Routing operations'
+  return 'fake Cloudflare observed account, zone, Worker, and Email Routing operations'
 }
 
 async function checkInboundArchiveObjects() {
@@ -1366,12 +1366,14 @@ async function checkWebmailClientThroughWebServer() {
     'POST',
     `/rpc/mail/accounts/${accountPath}/mailboxes/${encodeURIComponent(replacedDraft.mailboxId)}/messages/${encodeURIComponent(replacedDraft.draftId)}/send-draft`
   )
+  runtime.expectedOutboundProviderSendCount += 1
 
   await webMailJson('POST', `/rpc/mail/accounts/${accountPath}/messages`, {
     body: 'Standalone message from the full-stack webmail E2E.',
     subject: `Webmail E2E Send ${runId}`,
     to: 'recipient@example.net'
   })
+  runtime.expectedOutboundProviderSendCount += 1
   await webMailJson('POST', `/rpc/mail/accounts/${accountPath}/messages`, {
     body: 'Reply message from the full-stack webmail E2E.',
     reference: {
@@ -1382,6 +1384,7 @@ async function checkWebmailClientThroughWebServer() {
     subject: `Re: ${selected.subject}`,
     to: 'sender@example.net'
   })
+  runtime.expectedOutboundProviderSendCount += 1
 
   const switchedAccount = await webMailJson(
     'GET',
@@ -1497,6 +1500,7 @@ async function checkAtEmailAgentEnrollmentGrantAuthorizesMailOperation() {
     sendResult.message && typeof sendResult.message === 'object',
     'at-email send did not return a message result'
   )
+  runtime.expectedOutboundProviderSendCount += 1
 
   await writeJson(path.join(scenariosDir, 'phase-3-inbound-mail', 'agent-enrollment-mail-summary.json'), {
     accountId,
@@ -1570,7 +1574,9 @@ async function checkAtEmailAgentEnrollmentDeniesUngrantedMailOperation() {
   const enrollResult = parseJson(enrollStdout)
   assert(enrollResult.agent_id, 'read-only at-email agent enroll did not return an agent id')
   const deniedSubject = `Read Only Agent Send Denial ${runId}`
-  const beforeProviderRequests = await waitForOutboundProviderRequestsToSettle()
+  const beforeProviderRequests = await waitForOutboundProviderRequestsToSettle({
+    minCount: runtime.expectedOutboundProviderSendCount
+  })
   const beforeWildDuckMatches = await wildDuckMessageCountBySubject(accountId, deniedSubject)
 
   const sendResult = await runCommand(
@@ -1998,21 +2004,23 @@ async function fetchOutboundProviderRequests() {
     ...(fakeProvider.requests || []).map((request) => ({ ...request, provider: 'fake-provider' })),
     ...(fakeCloudflare.requests || []).map((request) => ({ ...request, provider: 'fake-cloudflare' }))
   ]
-  return observedRequests.filter(
-    (request) =>
-      request.path.includes('/email/sending/send') ||
-      request.path.includes('/email/sending/send_raw') ||
-      request.path.includes('/send')
-  )
+  return observedRequests.filter(isOutboundProviderSendRequest)
 }
 
-async function waitForOutboundProviderRequestsToSettle() {
+function isOutboundProviderSendRequest(request) {
+  if (request.provider === 'fake-cloudflare') {
+    return /^\/client\/v4\/accounts\/[^/]+\/email\/sending\/(?:send|send_raw)$/u.test(request.path)
+  }
+  return request.provider === 'fake-provider' && request.method === 'POST' && request.path === '/send'
+}
+
+async function waitForOutboundProviderRequestsToSettle({ minCount = 0 } = {}) {
   let previousCount = null
   let stableSamples = 0
   let latest = []
   for (let attempt = 0; attempt < 20; attempt += 1) {
     latest = await fetchOutboundProviderRequests()
-    if (latest.length === previousCount) {
+    if (latest.length >= minCount && latest.length === previousCount) {
       stableSamples += 1
       if (stableSamples >= 3) {
         return latest
@@ -2023,6 +2031,10 @@ async function waitForOutboundProviderRequestsToSettle() {
     }
     await delay(1000)
   }
+  assert(
+    latest.length >= minCount,
+    `outbound provider sends did not reach expected baseline: expected at least ${minCount}, saw ${latest.length}`
+  )
   return latest
 }
 

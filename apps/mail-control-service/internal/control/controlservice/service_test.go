@@ -468,6 +468,30 @@ func TestControlStateRuntimeSourceClassifiesOnlyActiveOwnedDomainsAsLocal(t *tes
 	}
 }
 
+func TestControlStateRuntimeSourceResolvesSelectedActiveDomain(t *testing.T) {
+	ctx := context.Background()
+	store := controlstate.NewMemoryStore()
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	if _, _, err := controlstate.SyncRuntimeDomains(ctx, store, controlstate.ProviderCloudflare, []controlstate.DomainConfigParams{
+		testControlServiceDomainConfig("example.com", true),
+		testControlServiceDomainConfig("second.example.com", true),
+	}, now); err != nil {
+		t.Fatalf("seed active domains: %v", err)
+	}
+
+	source := controlStateRuntimeSource{store: store}
+	active, err := source.ActiveDomain(ctx, "EXAMPLE.com")
+	if err != nil {
+		t.Fatalf("ActiveDomain returned error: %v", err)
+	}
+	if active.Domain != "example.com" {
+		t.Fatalf("active domain = %q, want example.com", active.Domain)
+	}
+	if active.ArchivePrefix != "orgs/org_pub_123/domains/example.com/mail/inbound" {
+		t.Fatalf("active archive prefix = %q, want example.com archive prefix", active.ArchivePrefix)
+	}
+}
+
 func TestRuntimeSyncPersistsOrganizationArchiveAndWorkerIdentity(t *testing.T) {
 	ctx := context.Background()
 	store := controlstate.NewMemoryStore()
