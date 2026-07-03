@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -137,6 +139,135 @@ func TestSMTPRelayProviderContracts(t *testing.T) {
 			t.Fatalf("provider_failed delivered recipients = %#v, want none", receipt.Delivered)
 		}
 	})
+
+	t.Run("ordinary same-domain active recipient uses provider", func(t *testing.T) {
+		local := suite.newLocalRouteFixture(t, "same-domain-provider")
+		server := suite.startRelay(t, relayScenarioConfig{
+			WebURL: fakeWeb.URL(),
+			Local:  local,
+		})
+		queueID := "same-domain-provider-queue"
+		sender := "agent@" + local.targetDomain
+		raw := providerRelayMessage(queueID, sender, local.targetMailbox, "Same Domain Provider", nil)
+
+		beforeWebCalls := len(fakeWeb.Calls())
+		if err := smtpSubmit(server.addr, relayUsername, relayPassword, sender, []string{local.targetMailbox}, raw); err != nil {
+			t.Fatalf("same-domain provider SMTP submit returned error: %v", err)
+		}
+
+		calls := fakeWeb.Calls()
+		if len(calls) != beforeWebCalls+1 {
+			t.Fatalf("web send calls = %d, want %d", len(calls), beforeWebCalls+1)
+		}
+		receipt := suite.waitForOutboundReceipt(t, local.targetDomain, queueID, "provider_accepted")
+		if receipt.RouteType != "provider" || receipt.Provider != "cloudflare" {
+			t.Fatalf("same-domain receipt has route/provider %#v", receipt)
+		}
+		if receipt.ProviderPayloadKey == "" {
+			t.Fatalf("same-domain provider receipt missing provider payload key: %#v", receipt)
+		}
+
+		payload := decodeFakeWebSendPayload(t, calls[len(calls)-1].Body)
+		if payload.Domain != local.targetDomain {
+			t.Fatalf("provider domain = %q, want %s", payload.Domain, local.targetDomain)
+		}
+		if len(payload.Recipients) != 1 || payload.Recipients[0] != local.targetMailbox {
+			t.Fatalf("provider recipients = %#v, want %s", payload.Recipients, local.targetMailbox)
+		}
+	})
+
+	t.Run("mixed active local and external recipients use provider", func(t *testing.T) {
+		local := suite.newLocalRouteFixture(t, "mixed-provider")
+		server := suite.startRelay(t, relayScenarioConfig{
+			WebURL: fakeWeb.URL(),
+			Local:  local,
+		})
+		queueID := "mixed-provider-queue"
+		sender := "agent@" + local.targetDomain
+		externalRecipient := "outside@example.net"
+		raw := providerRelayMessage(queueID, sender, local.targetMailbox, "Mixed Provider", nil)
+
+		beforeWebCalls := len(fakeWeb.Calls())
+		if err := smtpSubmit(server.addr, relayUsername, relayPassword, sender, []string{local.targetMailbox, externalRecipient}, raw); err != nil {
+			t.Fatalf("mixed provider SMTP submit returned error: %v", err)
+		}
+
+		calls := fakeWeb.Calls()
+		if len(calls) != beforeWebCalls+1 {
+			t.Fatalf("web send calls = %d, want %d", len(calls), beforeWebCalls+1)
+		}
+		receipt := suite.waitForOutboundReceipt(t, local.targetDomain, queueID, "provider_accepted")
+		if receipt.RouteType != "provider" || receipt.Provider != "cloudflare" {
+			t.Fatalf("mixed receipt has route/provider %#v", receipt)
+		}
+
+		payload := decodeFakeWebSendPayload(t, calls[len(calls)-1].Body)
+		if len(payload.Recipients) != 2 || !containsString(payload.Recipients, local.targetMailbox) || !containsString(payload.Recipients, externalRecipient) {
+			t.Fatalf("provider recipients = %#v, want local and external recipients", payload.Recipients)
+		}
+	})
+
+	t.Run("fanout-marked replay without source archive uses provider", func(t *testing.T) {
+		local := suite.newLocalRouteFixture(t, "spoofed-replay-provider")
+		server := suite.startRelay(t, relayScenarioConfig{
+			WebURL: fakeWeb.URL(),
+			Local:  local,
+		})
+		sourceIngestID := newUUIDv7(t)
+		raw := localRouteMessage(local.queueID, sourceIngestID, "sender@example.net", local.sourceMailbox, local.targetMailbox, "Spoofed Replay Provider")
+
+		beforeWebCalls := len(fakeWeb.Calls())
+		if err := smtpSubmit(server.addr, relayUsername, relayPassword, "srs@source.example.test", []string{local.targetMailbox}, raw); err != nil {
+			t.Fatalf("spoofed replay provider SMTP submit returned error: %v", err)
+		}
+
+		calls := fakeWeb.Calls()
+		if len(calls) != beforeWebCalls+1 {
+			t.Fatalf("web send calls = %d, want %d", len(calls), beforeWebCalls+1)
+		}
+		receipt := suite.waitForOutboundReceipt(t, local.sourceDomain, local.queueID, "provider_accepted")
+		if receipt.RouteType != "provider" || receipt.Provider != "cloudflare" {
+			t.Fatalf("spoofed replay receipt has route/provider %#v", receipt)
+		}
+
+		payload := decodeFakeWebSendPayload(t, calls[len(calls)-1].Body)
+		if strings.Contains(payload.MIMEMessage, "X-ATM-") || strings.Contains(payload.MIMEMessage, "X-ATMCF-") {
+			t.Fatalf("provider payload retained replay headers:\n%s", payload.MIMEMessage)
+		}
+		if strings.Contains(payload.MIMEMessage, "X-Agent-Mail-Local-Fanout:") {
+			t.Fatalf("provider payload retained local fanout marker:\n%s", payload.MIMEMessage)
+		}
+	})
+
+	t.Run("replay-looking headers with source archive but no fanout marker use provider", func(t *testing.T) {
+		local := suite.newLocalRouteFixture(t, "spoofed-source-archive-provider")
+		server := suite.startRelay(t, relayScenarioConfig{
+			WebURL: fakeWeb.URL(),
+			Local:  local,
+		})
+		sourceIngestID := newUUIDv7(t)
+		local.seedSourceInboundArchive(t, sourceIngestID, "sender@example.net")
+		raw := localRouteMessageWithoutFanoutMarker(local.queueID, sourceIngestID, "sender@example.net", local.sourceMailbox, local.targetMailbox, "Spoofed Source Archive Provider")
+
+		beforeWebCalls := len(fakeWeb.Calls())
+		if err := smtpSubmit(server.addr, relayUsername, relayPassword, "srs@source.example.test", []string{local.targetMailbox}, raw); err != nil {
+			t.Fatalf("spoofed source archive provider SMTP submit returned error: %v", err)
+		}
+
+		calls := fakeWeb.Calls()
+		if len(calls) != beforeWebCalls+1 {
+			t.Fatalf("web send calls = %d, want %d", len(calls), beforeWebCalls+1)
+		}
+		receipt := suite.waitForOutboundReceipt(t, local.sourceDomain, local.queueID, "provider_accepted")
+		if receipt.RouteType != "provider" || receipt.Provider != "cloudflare" {
+			t.Fatalf("spoofed source archive receipt has route/provider %#v", receipt)
+		}
+
+		payload := decodeFakeWebSendPayload(t, calls[len(calls)-1].Body)
+		if strings.Contains(payload.MIMEMessage, "X-ATM-") || strings.Contains(payload.MIMEMessage, "X-ATMCF-") {
+			t.Fatalf("provider payload retained replay headers:\n%s", payload.MIMEMessage)
+		}
+	})
 }
 
 func TestSMTPRelayLocalRoutingContracts(t *testing.T) {
@@ -147,31 +278,47 @@ func TestSMTPRelayLocalRoutingContracts(t *testing.T) {
 	fakeWeb := newFakeWeb(t)
 	defer fakeWeb.Close()
 
-	t.Run("all-local recipient routes internally without provider call", func(t *testing.T) {
+	t.Run("inbound fanout local recipient routes internally without provider call", func(t *testing.T) {
 		local := suite.newLocalRouteFixture(t, "local-route-delivered")
 		server := suite.startRelay(t, relayScenarioConfig{
 			WebURL: fakeWeb.URL(),
 			Local:  local,
 		})
 		sourceIngestID := newUUIDv7(t)
+		local.seedSourceInboundArchive(t, sourceIngestID, "sender@example.net")
 		raw := localRouteMessage(local.queueID, sourceIngestID, "sender@example.net", local.sourceMailbox, local.targetMailbox, "Local Route Delivered")
 
-		beforeWebCalls := len(fakeWeb.Calls())
+		beforeSendCalls := len(fakeWeb.CallsByPath(fakeWebSendRawPath))
+		beforeDeliveryReports := len(fakeWeb.CallsByPath(fakeWebForwardingGroupDeliveryPath))
 		if err := smtpSubmit(server.addr, relayUsername, relayPassword, "srs@source.example.test", []string{local.targetMailbox}, raw); err != nil {
 			t.Fatalf("local route SMTP submit returned error: %v", err)
 		}
 
-		if calls := fakeWeb.Calls(); len(calls) != beforeWebCalls {
-			t.Fatalf("web send calls = %d, want unchanged %d for local route", len(calls), beforeWebCalls)
+		if calls := fakeWeb.CallsByPath(fakeWebSendRawPath); len(calls) != beforeSendCalls {
+			t.Fatalf("web send calls = %d, want unchanged %d for local route", len(calls), beforeSendCalls)
 		}
 		receipt := suite.waitForOutboundReceipt(t, local.sourceDomain, local.queueID, "local_routed")
+		deliveryReports := fakeWeb.CallsByPath(fakeWebForwardingGroupDeliveryPath)
+		if len(deliveryReports) != beforeDeliveryReports+1 {
+			t.Fatalf("forwarding group delivery reports = %d, want %d", len(deliveryReports), beforeDeliveryReports+1)
+		}
+		report := decodeFakeWebDeliveryReport(t, deliveryReports[len(deliveryReports)-1].Body)
+		if report.OrganizationID != "org-source" || report.GroupAddress != local.sourceMailbox || report.TargetMailbox != local.targetMailbox {
+			t.Fatalf("forwarding group delivery report addressed wrong group/target: %#v", report)
+		}
+		if report.LocalRouteID != receipt.LocalRouteID || report.SourceIngestID != sourceIngestID {
+			t.Fatalf("forwarding group delivery report ids = %#v, want route %s source ingest %s", report, receipt.LocalRouteID, sourceIngestID)
+		}
+		if report.DeliveredAt.IsZero() {
+			t.Fatalf("forwarding group delivery report missing delivered_at: %#v", report)
+		}
 		if receipt.RouteType != "local" || receipt.Provider != "local" {
 			t.Fatalf("local route receipt has route/provider %#v", receipt)
 		}
 		if receipt.ArchiveDomain != local.sourceDomain || receipt.TargetDomain != local.targetDomain {
 			t.Fatalf("local route receipt wrong source/target domains: %#v", receipt)
 		}
-		if receipt.SourceInboundRawKey == "" || receipt.TargetInboundRawKey == "" || receipt.TargetInboundResultKey == "" {
+		if receipt.SourceInboundRawKey == "" || receipt.SourceInboundEdgeKey == "" || receipt.TargetInboundRawKey == "" || receipt.TargetInboundResultKey == "" {
 			t.Fatalf("local route receipt missing inbound linkage keys: %#v", receipt)
 		}
 
@@ -197,6 +344,12 @@ func TestSMTPRelayLocalRoutingContracts(t *testing.T) {
 		if targetEdge["schema"] != r2archive.InboundLocalRouteEdgeSchema {
 			t.Fatalf("target edge schema = %#v, want %s", targetEdge["schema"], r2archive.InboundLocalRouteEdgeSchema)
 		}
+		if targetEdge["source_inbound_edge_key"] != receipt.SourceInboundEdgeKey {
+			t.Fatalf("target edge source_inbound_edge_key = %#v, want %s", targetEdge["source_inbound_edge_key"], receipt.SourceInboundEdgeKey)
+		}
+		if targetEdge["group_mailbox"] != local.sourceMailbox {
+			t.Fatalf("target edge group_mailbox = %#v, want %s", targetEdge["group_mailbox"], local.sourceMailbox)
+		}
 		targetResult := suite.objectMap(t, receipt.TargetInboundResultKey)
 		if targetResult["status"] != "local_routed_delivered" || targetResult["delivery_source"] != "local_route" {
 			t.Fatalf("target result did not record local route delivery: %#v", targetResult)
@@ -210,6 +363,7 @@ func TestSMTPRelayLocalRoutingContracts(t *testing.T) {
 			Local:  local,
 		})
 		sourceIngestID := newUUIDv7(t)
+		local.seedSourceInboundArchive(t, sourceIngestID, "")
 		raw := localRouteMessage(local.queueID, sourceIngestID, "<>", local.sourceMailbox, local.targetMailbox, "Local Route Null Sender")
 
 		if err := smtpSubmit(server.addr, relayUsername, relayPassword, "srs@source.example.test", []string{local.targetMailbox}, raw); err != nil {
@@ -238,6 +392,7 @@ func TestSMTPRelayLocalRoutingContracts(t *testing.T) {
 		sourceIngestID := newUUIDv7(t)
 		messageID := "<existing-local-route@" + local.sourceDomain + ">"
 		existingRouteID := newUUIDv7(t)
+		local.seedSourceInboundArchive(t, sourceIngestID, "sender@example.net")
 		local.seedExistingRouteProof(t, existingRouteID, local.queueID, sourceIngestID, messageID)
 		raw := localRouteMessageWithMessageID(local.queueID, sourceIngestID, "sender@example.net", local.sourceMailbox, local.targetMailbox, "Existing Local Route", messageID)
 
@@ -263,6 +418,9 @@ const (
 	relayUsername     = "zonemta"
 	relayPassword     = "agent-mail-zonemta-relay"
 	controlToWebToken = "relay-control-to-web-token"
+
+	fakeWebSendRawPath                 = "/rpc/internal/agent-mail/cloudflare/send-raw"
+	fakeWebForwardingGroupDeliveryPath = "/rpc/internal/agent-mail/forwarding-groups/deliveries"
 )
 
 type relaySuite struct {
@@ -540,6 +698,64 @@ type localRouteFixture struct {
 	mailboxID     bson.ObjectID
 }
 
+func (f *localRouteFixture) seedSourceInboundArchive(t *testing.T, sourceIngestID string, envelopeFrom string) {
+	t.Helper()
+	createdAt, err := r2archive.UUIDv7Time(sourceIngestID)
+	if err != nil {
+		t.Fatalf("decode source ingest id: %v", err)
+	}
+	bundle, err := r2archive.InboundBundleKeysFromArchivePrefix("orgs/org_pub_source/domains/"+f.sourceDomain+"/mail/inbound", createdAt, sourceIngestID)
+	if err != nil {
+		t.Fatalf("build source inbound keys: %v", err)
+	}
+
+	raw := []byte(strings.Join([]string{
+		"From: Sender <sender@example.net>",
+		"To: Source <" + f.sourceMailbox + ">",
+		"Subject: Source Inbound",
+		"Message-ID: <source-" + relaySlug(sourceIngestID) + "@" + f.sourceDomain + ">",
+		"",
+		"source inbound body",
+		"",
+	}, "\r\n"))
+	sum := sha256.Sum256(raw)
+	if err := f.suite.archive.PutBytes(f.suite.ctx, bundle.RawKey, "message/rfc822", raw); err != nil {
+		t.Fatalf("seed source inbound raw: %v", err)
+	}
+	if err := f.suite.archive.PutJSON(f.suite.ctx, bundle.EdgeKey, map[string]any{
+		"schema":               r2archive.InboundEdgeSchema,
+		"ingest_id":            sourceIngestID,
+		"raw_key":              bundle.RawKey,
+		"edge_key":             bundle.EdgeKey,
+		"result_key":           bundle.ResultKey,
+		"mailbox":              f.sourceMailbox,
+		"envelope_from":        envelopeFrom,
+		"envelope_to":          f.sourceMailbox,
+		"recipient_domain":     f.sourceDomain,
+		"cloudflare_zone_name": f.sourceDomain,
+		"worker_name":          "agent-mail-worker",
+		"received_at":          time.Now().UTC(),
+		"raw_sha256":           hex.EncodeToString(sum[:]),
+		"atmcf_headers":        map[string]string{"X-ATMCF-Edge-Envelope-To": f.sourceMailbox},
+		"cloudflare_edge_evidence": map[string]any{
+			"schema": "agent-mail.cloudflare-edge-evidence.v1",
+		},
+	}); err != nil {
+		t.Fatalf("seed source inbound edge: %v", err)
+	}
+	if err := f.suite.archive.PutJSON(f.suite.ctx, bundle.ResultKey, map[string]any{
+		"schema":          r2archive.InboundResultSchema,
+		"ingest_id":       sourceIngestID,
+		"status":          "delivered",
+		"raw_key":         bundle.RawKey,
+		"edge_key":        bundle.EdgeKey,
+		"delivery_source": "forwarded",
+		"processed_at":    time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("seed source inbound result: %v", err)
+	}
+}
+
 func (f *localRouteFixture) seedExistingRouteProof(t *testing.T, routeID string, queueID string, sourceIngestID string, messageID string) {
 	t.Helper()
 	messageObjectID := bson.NewObjectID()
@@ -601,6 +817,48 @@ type fakeWebCall struct {
 	Body []byte
 }
 
+type fakeWebSendPayload struct {
+	Domain      string   `json:"domain"`
+	Recipients  []string `json:"recipients"`
+	MIMEMessage string   `json:"mime_message"`
+}
+
+type fakeWebDeliveryReport struct {
+	OrganizationID string    `json:"organization_id"`
+	GroupAddress   string    `json:"group_address"`
+	TargetMailbox  string    `json:"target_mailbox"`
+	LocalRouteID   string    `json:"local_route_id"`
+	SourceIngestID string    `json:"source_ingest_id"`
+	DeliveredAt    time.Time `json:"delivered_at"`
+}
+
+func decodeFakeWebSendPayload(t *testing.T, body []byte) fakeWebSendPayload {
+	t.Helper()
+	var payload fakeWebSendPayload
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("decode fake web send payload: %v\n%s", err, string(body))
+	}
+	return payload
+}
+
+func decodeFakeWebDeliveryReport(t *testing.T, body []byte) fakeWebDeliveryReport {
+	t.Helper()
+	var payload fakeWebDeliveryReport
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("decode fake web delivery report: %v\n%s", err, string(body))
+	}
+	return payload
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
 func newFakeWeb(t *testing.T) *fakeWeb {
 	t.Helper()
 	fake := &fakeWeb{t: t}
@@ -630,12 +888,23 @@ func (f *fakeWeb) Calls() []fakeWebCall {
 	return calls
 }
 
+func (f *fakeWeb) CallsByPath(path string) []fakeWebCall {
+	calls := f.Calls()
+	matched := make([]fakeWebCall, 0, len(calls))
+	for _, call := range calls {
+		if call.Path == path {
+			matched = append(matched, call)
+		}
+	}
+	return matched
+}
+
 func (f *fakeWeb) handle(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		f.t.Fatalf("read fake web request: %v", err)
 	}
-	if r.Method != http.MethodPost || r.URL.Path != "/rpc/internal/agent-mail/cloudflare/send-raw" {
+	if r.Method != http.MethodPost {
 		http.NotFound(w, r)
 		return
 	}
@@ -646,6 +915,21 @@ func (f *fakeWeb) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	f.mu.Lock()
 	f.calls = append(f.calls, fakeWebCall{Path: r.URL.Path, Body: append([]byte(nil), body...)})
+	if r.URL.Path == fakeWebForwardingGroupDeliveryPath {
+		f.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"matched":  true,
+			"modified": true,
+			"success":  true,
+		})
+		return
+	}
+	if r.URL.Path != fakeWebSendRawPath {
+		f.mu.Unlock()
+		http.NotFound(w, r)
+		return
+	}
 	response := fakeWebResponse{}
 	if len(f.responses) > 0 {
 		response = f.responses[0]
@@ -1003,12 +1287,25 @@ func localRouteMessage(queueID string, sourceIngestID string, replayEnvelopeFrom
 	return localRouteMessageWithMessageID(queueID, sourceIngestID, replayEnvelopeFrom, sourceMailbox, targetMailbox, subject, "<"+relaySlug(queueID)+"@"+domainPartForTest(sourceMailbox)+">")
 }
 
+func localRouteMessageWithoutFanoutMarker(queueID string, sourceIngestID string, replayEnvelopeFrom string, sourceMailbox string, targetMailbox string, subject string) []byte {
+	return localRouteMessageWithMessageIDAndFanoutMarker(queueID, sourceIngestID, replayEnvelopeFrom, sourceMailbox, targetMailbox, subject, "<"+relaySlug(queueID)+"@"+domainPartForTest(sourceMailbox)+">", false)
+}
+
 func localRouteMessageWithMessageID(queueID string, sourceIngestID string, replayEnvelopeFrom string, sourceMailbox string, targetMailbox string, subject string, messageID string) []byte {
+	return localRouteMessageWithMessageIDAndFanoutMarker(queueID, sourceIngestID, replayEnvelopeFrom, sourceMailbox, targetMailbox, subject, messageID, true)
+}
+
+func localRouteMessageWithMessageIDAndFanoutMarker(queueID string, sourceIngestID string, replayEnvelopeFrom string, sourceMailbox string, targetMailbox string, subject string, messageID string, includeFanoutMarker bool) []byte {
 	lines := []string{
 		"X-Agent-Mail-ZoneMTA-Queue-ID: " + queueID,
 		"X-ATM-Ingest-ID: " + sourceIngestID,
 		"X-ATMCF-Edge-Envelope-From: " + replayEnvelopeFrom,
 		"X-ATMCF-Edge-Envelope-To: " + sourceMailbox,
+	}
+	if includeFanoutMarker {
+		lines = append(lines, "X-Agent-Mail-Local-Fanout: inbound-replay")
+	}
+	lines = append(lines, []string{
 		"From: Media <" + sourceMailbox + ">",
 		"To: Target <" + targetMailbox + ">",
 		"Subject: " + subject,
@@ -1018,7 +1315,7 @@ func localRouteMessageWithMessageID(queueID string, sourceIngestID string, repla
 		"",
 		"hello from local route contract",
 		"",
-	}
+	}...)
 	return []byte(strings.Join(lines, "\r\n"))
 }
 

@@ -2,6 +2,14 @@
 
 These rules apply to `packages/backend`.
 
+## Message View Boundary
+
+Backend mailbox code must not parse, sanitize, rewrite, or classify message body
+HTML for display. It must authorize mailbox access, call the mail-control
+message-view/security APIs for display state, and pass the returned view
+contract to frontend controllers. WildDuck HTML is not a frontend display
+contract.
+
 Before changing backend behavior for existing product concepts, route surfaces,
 credentials, account/provider/integration/domain state, or browser-consumed
 settings DTOs, read [../../ARCHITECTURE.md](../../ARCHITECTURE.md) and preserve

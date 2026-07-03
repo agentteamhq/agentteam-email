@@ -215,6 +215,11 @@ services:
       APPCONF_api_port: '8080'
       APPCONF_dbs_mongo: '${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_URI:-mongodb://mongodb:27017/wildduck?replicaSet=${AT_EMAIL_ADMIN_MONGODB_REPLICA_SET_NAME:-rs0}&maxPoolSize=${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_MAX_POOL_SIZE:-4}&minPoolSize=${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_MIN_POOL_SIZE:-0}&maxIdleTimeMS=${AT_EMAIL_ADMIN_WILDDUCK_MONGODB_MAX_IDLE_TIME_MS:-60000}}'
       APPCONF_dbs_redis: '${AT_EMAIL_ADMIN_REDIS_URL:-redis://redis:6379/3}'
+      APPCONF_dbs_sender: wildduck
+      APPCONF_sender_zone: default
+      APPCONF_sender_collection: zone-queue
+      APPCONF_sender_gfs: mail
+      APPCONF_sender_loopSecret: '${AT_EMAIL_ADMIN_MAIL_LOOP_SECRET:?missing AT_EMAIL_ADMIN_MAIL_LOOP_SECRET}'
       APPCONF_imap_host: 0.0.0.0
       APPCONF_imap_port: '10143'
       APPCONF_imap_secure: 'false'

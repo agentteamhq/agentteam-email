@@ -54,7 +54,7 @@ export function RootDocument({ children }: { children: ReactNode }) {
   const publicEnv = router.options.context.publicEnv
 
   return (
-    <html lang='en'>
+    <html lang='en' suppressHydrationWarning>
       <head>
         <HeadContent />
         <SiteMeta publicEnv={publicEnv} />

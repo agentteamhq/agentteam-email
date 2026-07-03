@@ -231,16 +231,22 @@ The test must assert:
 - `result.json` has schema `agent-mail.outbound.result.v1` and records the
   expected provider or local-route terminal status for the same `send_id`.
 
-### Local Route Assertions
+### Inbound Group Fanout Local-Route Assertions
 
-For active local-domain routing, the test must assert:
+For inbound group forwarding fanout local-route delivery, the test must assert:
 
 - No external provider request is made.
-- The local route stamps `X-Agent-Mail-Local-Route-ID`,
+- The local route is entered only from an already accepted Worker inbound bundle;
+  ordinary user-authored sends to active AgentTeam Email domains remain
+  provider-bound.
+- The local route also requires the internal receive-side fanout marker stamped
+  by inbound replay; replay-looking headers plus a source archive are not
+  sufficient on their own.
+- The fanout copy stamps `X-Agent-Mail-Local-Route-ID`,
   `X-Agent-Mail-Source-Mailbox`, `X-Agent-Mail-Target-Mailbox`, and
   `X-Agent-Mail-Source-Ingest-ID` when a source ingest ID is available.
-- The source-side outbound archive and target-side inbound archive are linked
-  by the same `local_route_id`.
+- The source-side local-route relay archive and target-side inbound archive are
+  linked by the same `local_route_id` and to the source Worker inbound bundle.
 - The target-side inbound `edge.json` uses
   `agent-mail.inbound.local-route.edge.v1`.
 - The target-side result records local-route delivery and the correct target

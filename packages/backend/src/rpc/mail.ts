@@ -1,10 +1,13 @@
 import { Elysia, t } from 'elysia'
 import { AgentMailMailboxGrantValues, AgentMailSystemPermissionValues } from '@main/db'
+import debug from 'debug'
 
 import {
   createAgentMailAccountForWeb,
   createAgentMailAgentEnrollmentForWeb,
   createAgentMailForwardingGroupForWeb,
+  deleteAgentMailAccountForWeb,
+  deleteAgentMailForwardingGroupForWeb,
   disableAgentMailAccountForWeb,
   disableAgentMailForwardingGroupForWeb,
   getAgentMailAdminNavigationForWeb,
@@ -42,6 +45,8 @@ import { typedResponseSchema } from './response-schema'
 import type { TSchema } from '@sinclair/typebox'
 import type {
   AgentMailAdminCreateAgentResult,
+  AgentMailAdminDeleteAccountResult,
+  AgentMailAdminDeleteForwardingGroupResult,
   AgentMailAdminNavigation,
   AgentMailAdminRevokeAgentEnrollmentResult,
   AgentMailAdminRevokeAgentResult,
@@ -55,6 +60,8 @@ import type {
   AgentMailAdminView
 } from '../agent-mail/admin-service'
 import type { AgentMailWebFolder, AgentMailWebWorkspace } from '../agent-mail/webmail-service'
+
+const log = debug('app:rpc:mail')
 
 const accountParamsSchema = t.Object({
   accountId: t.String({ minLength: 3 })
@@ -273,6 +280,8 @@ const adminAllowedActionsResponseSchema = t.Object({
   createAccount: t.Boolean(),
   createAgent: t.Boolean(),
   createGroup: t.Boolean(),
+  deleteAccount: t.Boolean(),
+  deleteGroup: t.Boolean(),
   disableAccount: t.Boolean(),
   disableGroup: t.Boolean(),
   manageAgentMailboxGrants: t.Boolean(),
@@ -317,6 +326,14 @@ const adminNavigationResponseSchema = t.Object({
 })
 const adminSaveAccountResponseSchema = t.Object({
   account: adminAccountResponseSchema,
+  success: t.Literal(true)
+})
+const adminDeleteAccountResponseSchema = t.Object({
+  accountId: t.String(),
+  success: t.Literal(true)
+})
+const adminDeleteGroupResponseSchema = t.Object({
+  groupId: t.String(),
   success: t.Literal(true)
 })
 const adminSaveAgentResponseSchema = t.Object({
@@ -401,15 +418,32 @@ const mailWebAttachmentResponseSchema = t.Object({
   size: optionalNumberResponseSchema,
   url: t.String()
 })
+const mailWebExternalLinkResponseSchema = t.Object({
+  host: optionalStringResponseSchema,
+  id: t.String(),
+  scheme: optionalStringResponseSchema,
+  text: optionalStringResponseSchema,
+  url: t.String()
+})
+const mailWebRemoteImageResponseSchema = t.Object({
+  alt: optionalStringResponseSchema,
+  host: optionalStringResponseSchema,
+  id: t.String(),
+  scheme: optionalStringResponseSchema,
+  url: t.String()
+})
 const mailWebThreadMessageResponseSchema = t.Intersect([
   mailWebMessageSummaryResponseSchema,
   t.Object({
     attachments: t.Array(mailWebAttachmentResponseSchema),
     cc: stringArrayResponseSchema,
+    externalLinks: t.Array(mailWebExternalLinkResponseSchema),
     html: t.String(),
     messageId: optionalStringResponseSchema,
     plainText: t.String(),
     replyTo: stringArrayResponseSchema,
+    remoteImages: t.Array(mailWebRemoteImageResponseSchema),
+    remoteImagesAllowed: t.Boolean(),
     sourceUrl: t.String(),
     to: stringArrayResponseSchema
   })
@@ -558,6 +592,26 @@ export function createMailHttpRoutes() {
       params: accountParamsSchema,
       response: {
         200: typedResponseSchema<AgentMailAdminSaveAccountResult>(adminSaveAccountResponseSchema),
+        ...mailErrorResponseSchemas
+      }
+    }
+  )
+  .delete(
+    '/admin/accounts/:accountId',
+    async ({ params, request, set }) => {
+      try {
+        return await deleteAgentMailAccountForWeb({
+          accountId: params.accountId,
+          headers: mailAuthHeaders(request)
+        })
+      } catch (error) {
+        return mailErrorResponse(error, set)
+      }
+    },
+    {
+      params: accountParamsSchema,
+      response: {
+        200: typedResponseSchema<AgentMailAdminDeleteAccountResult>(adminDeleteAccountResponseSchema),
         ...mailErrorResponseSchemas
       }
     }
@@ -813,6 +867,30 @@ export function createMailHttpRoutes() {
       }),
       response: {
         200: typedResponseSchema<AgentMailAdminSaveForwardingGroupResult>(adminSaveGroupResponseSchema),
+        ...mailErrorResponseSchemas
+      }
+    }
+  )
+  .delete(
+    '/admin/groups/:groupId',
+    async ({ params, request, set }) => {
+      try {
+        return await deleteAgentMailForwardingGroupForWeb({
+          groupId: params.groupId,
+          headers: mailAuthHeaders(request)
+        })
+      } catch (error) {
+        return mailErrorResponse(error, set)
+      }
+    },
+    {
+      params: t.Object({
+        groupId: t.String({ minLength: 1 })
+      }),
+      response: {
+        200: typedResponseSchema<AgentMailAdminDeleteForwardingGroupResult>(
+          adminDeleteGroupResponseSchema
+        ),
         ...mailErrorResponseSchemas
       }
     }
@@ -1263,6 +1341,11 @@ function mailErrorResponse(error: unknown, set: MailResponseSet): MailErrorBody 
     }
   }
 
+  log('mail_rpc_unhandled_error %o', {
+    errorMessage: error instanceof Error ? error.message : String(error),
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorStack: error instanceof Error ? error.stack : undefined
+  })
   throw error
 }
 

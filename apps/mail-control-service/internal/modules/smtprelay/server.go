@@ -124,6 +124,7 @@ type Server struct {
 	activeDomainResolver ActiveDomainResolver
 	localDeliverer       localDeliverer
 	localProof           *localDeliveryProof
+	webDeliveryReporter  *webDeliveryReporter
 	mongo                *mongo.Client
 }
 
@@ -176,6 +177,7 @@ type OutboundReceipt struct {
 	RelayRawKey             string    `json:"relay_raw_key"`
 	RawKey                  string    `json:"raw_key"`
 	SourceInboundRawKey     string    `json:"source_inbound_raw_key,omitempty"`
+	SourceInboundEdgeKey    string    `json:"source_inbound_edge_key,omitempty"`
 	SourceInboundResultKey  string    `json:"source_inbound_result_key,omitempty"`
 	TargetInboundRawKey     string    `json:"target_inbound_raw_key,omitempty"`
 	TargetInboundEdgeKey    string    `json:"target_inbound_edge_key,omitempty"`
@@ -214,6 +216,7 @@ type OutboundRelayMetadata struct {
 	DSNID                  string    `json:"dsn_id,omitempty"`
 	SourceIngestID         string    `json:"source_ingest_id,omitempty"`
 	SourceInboundRawKey    string    `json:"source_inbound_raw_key,omitempty"`
+	SourceInboundEdgeKey   string    `json:"source_inbound_edge_key,omitempty"`
 	SourceInboundResultKey string    `json:"source_inbound_result_key,omitempty"`
 	TargetInboundRawKey    string    `json:"target_inbound_raw_key,omitempty"`
 	TargetInboundEdgeKey   string    `json:"target_inbound_edge_key,omitempty"`
@@ -232,6 +235,7 @@ type outboundArchive struct {
 
 type localRouteContext struct {
 	LocalRouteID           string
+	OrganizationID         string
 	SourceMailbox          string
 	SourceDomain           string
 	TargetMailbox          string
@@ -240,6 +244,7 @@ type localRouteContext struct {
 	VisibleSenderDomain    string
 	SourceIngestID         string
 	SourceInboundRawKey    string
+	SourceInboundEdgeKey   string
 	SourceInboundResultKey string
 	TargetInboundRawKey    string
 	TargetInboundEdgeKey   string
@@ -260,6 +265,11 @@ type localInboundEdge struct {
 	LocalRouteID            string    `json:"local_route_id"`
 	RawKey                  string    `json:"raw_key"`
 	RawSHA256               string    `json:"raw_sha256"`
+	SourceIngestID          string    `json:"source_ingest_id,omitempty"`
+	SourceInboundRawKey     string    `json:"source_inbound_raw_key,omitempty"`
+	SourceInboundEdgeKey    string    `json:"source_inbound_edge_key,omitempty"`
+	SourceInboundResultKey  string    `json:"source_inbound_result_key,omitempty"`
+	GroupMailbox            string    `json:"group_mailbox"`
 	SourceMailbox           string    `json:"source_mailbox"`
 	SourceDomain            string    `json:"source_domain"`
 	TargetMailbox           string    `json:"target_mailbox"`
@@ -267,7 +277,6 @@ type localInboundEdge struct {
 	VisibleFrom             string    `json:"visible_from,omitempty"`
 	VisibleSenderDomain     string    `json:"visible_sender_domain,omitempty"`
 	ZoneMTAQueueID          string    `json:"zonemta_queue_id"`
-	SourceIngestID          string    `json:"source_ingest_id,omitempty"`
 	SourceOutboundRelayKey  string    `json:"source_outbound_relay_key"`
 	SourceOutboundResultKey string    `json:"source_outbound_result_key"`
 	RoutedAt                time.Time `json:"routed_at"`
@@ -292,6 +301,17 @@ type localInboundResult struct {
 	Error                   string    `json:"error,omitempty"`
 }
 
+type sourceInboundEdgeManifest struct {
+	Schema          string `json:"schema"`
+	IngestID        string `json:"ingest_id"`
+	RawKey          string `json:"raw_key"`
+	EdgeKey         string `json:"edge_key"`
+	ResultKey       string `json:"result_key,omitempty"`
+	Mailbox         string `json:"mailbox"`
+	EnvelopeTo      string `json:"envelope_to"`
+	RecipientDomain string `json:"recipient_domain"`
+}
+
 type outboundSendResult struct {
 	Provider                string
 	ProviderMessageID       string
@@ -305,7 +325,7 @@ type outboundSendResult struct {
 }
 
 type outboundSender interface {
-	Send(ctx context.Context, submission rfc822.Submission, envelopeRecipients []string) (outboundSendResult, error)
+	Send(ctx context.Context, submission rfc822.Submission, envelopeRecipients []string, sendID string) (outboundSendResult, error)
 }
 
 type ActiveDomainContext struct {
@@ -361,6 +381,12 @@ type webCloudflareSender struct {
 	httpClient     *http.Client
 }
 
+type webDeliveryReporter struct {
+	baseURL      *url.URL
+	controlToken string
+	httpClient   *http.Client
+}
+
 type webCloudflareSendRequest struct {
 	OrganizationID       string   `json:"organization_id"`
 	OrganizationPublicID string   `json:"organization_public_id"`
@@ -368,13 +394,30 @@ type webCloudflareSendRequest struct {
 	From                 string   `json:"from"`
 	Recipients           []string `json:"recipients"`
 	MIMEMessage          string   `json:"mime_message"`
+	SendID               string   `json:"send_id,omitempty"`
 	ZoneMTAQueueID       string   `json:"zonemta_queue_id,omitempty"`
 }
 
 type webCloudflareSendResult struct {
 	Delivered        []string `json:"delivered"`
+	MessageID        string   `json:"message_id"`
 	PermanentBounces []string `json:"permanent_bounces"`
 	Queued           []string `json:"queued"`
+}
+
+type webForwardingGroupDeliveryReport struct {
+	OrganizationID string    `json:"organization_id"`
+	GroupAddress   string    `json:"group_address"`
+	TargetMailbox  string    `json:"target_mailbox"`
+	LocalRouteID   string    `json:"local_route_id"`
+	SourceIngestID string    `json:"source_ingest_id,omitempty"`
+	DeliveredAt    time.Time `json:"delivered_at"`
+}
+
+type webForwardingGroupDeliveryResult struct {
+	Success  bool `json:"success"`
+	Matched  bool `json:"matched"`
+	Modified bool `json:"modified"`
 }
 
 type sesSender struct {
@@ -503,6 +546,7 @@ func newServer(ctx context.Context, cfg Config, resolver SESReturnPathResolver) 
 		activeDomainResolver: activeDomainResolver,
 		localDeliverer:       newLocalDeliverer(runtimeCfg.LocalDelivery),
 		localProof:           localProof,
+		webDeliveryReporter:  newWebDeliveryReporter(runtimeCfg.WebServer),
 		mongo:                mongoClient,
 	}, nil
 }
@@ -653,31 +697,30 @@ func (s *Session) Data(reader io.Reader) error {
 		return fmt.Errorf("sender address %q does not contain a canonical domain", submission.From.Address)
 	}
 
-	localDisposition, err := s.server.localDeliveryDisposition(context.Background(), s.recipients)
+	localDisposition, err := s.server.localDeliveryDisposition(context.Background(), submission, s.recipients)
 	if err != nil {
 		return err
-	}
-
-	if localDisposition == localDeliveryMixed {
-		return fmt.Errorf("provider relay transaction mixes active local and external recipient domains; ZoneMTA must split local and provider delivery")
-	}
-
-	if localDisposition != localDeliveryAll {
-		if err := validateSubmissionForProvider(s.server.cfg.Provider, submission); err != nil {
-			return err
-		}
 	}
 
 	var localRoute *localRouteContext
 	archiveDomain := senderDomain
 	relayProvider := s.server.cfg.Provider
 	if localDisposition == localDeliveryAll {
-		relayProvider = "local"
 		localRoute, err = s.prepareLocalRoute(context.Background(), submission)
 		if err != nil {
 			return err
 		}
-		archiveDomain = localRoute.SourceDomain
+		if localRoute != nil {
+			relayProvider = "local"
+			archiveDomain = localRoute.SourceDomain
+		} else {
+			localDisposition = localDeliveryExternal
+		}
+	}
+	if localDisposition != localDeliveryAll {
+		if err := validateSubmissionForProvider(s.server.cfg.Provider, submission); err != nil {
+			return err
+		}
 	}
 	archive, err := s.writeRelayArchive(context.Background(), submission, archiveDomain, relayProvider, localRoute)
 	if err != nil {
@@ -751,6 +794,7 @@ func (s *Session) writeRelayArchive(ctx context.Context, submission rfc822.Submi
 		relayMeta.VisibleSenderDomain = localRoute.VisibleSenderDomain
 		relayMeta.SourceIngestID = localRoute.SourceIngestID
 		relayMeta.SourceInboundRawKey = localRoute.SourceInboundRawKey
+		relayMeta.SourceInboundEdgeKey = localRoute.SourceInboundEdgeKey
 		relayMeta.SourceInboundResultKey = localRoute.SourceInboundResultKey
 		relayMeta.TargetInboundRawKey = localRoute.TargetInboundRawKey
 		relayMeta.TargetInboundEdgeKey = localRoute.TargetInboundEdgeKey
@@ -770,7 +814,7 @@ func (s *Session) writeRelayArchive(ctx context.Context, submission rfc822.Submi
 }
 
 func (s *Session) deliverProvider(ctx context.Context, archive outboundArchive, submission rfc822.Submission) error {
-	result, sendErr := s.server.sender.Send(ctx, submission, s.recipients)
+	result, sendErr := s.server.sender.Send(ctx, submission, s.recipients, archive.SendID)
 
 	providerRawKey := ""
 	if len(result.ProviderRaw) > 0 {
@@ -859,26 +903,12 @@ func (s *Session) prepareLocalRoute(ctx context.Context, submission rfc822.Submi
 		return nil, fmt.Errorf("local route target mailbox %q does not contain a canonical domain", targetMailbox)
 	}
 	sourceIngestID := strings.TrimSpace(submission.ReplayIngestID)
-	sourceRawKey := ""
-	sourceResultKey := ""
-	if sourceIngestID != "" {
-		if s.server.activeDomainResolver == nil {
-			return nil, fmt.Errorf("local route source archive prefix resolver is not configured")
-		}
-		sourceCreatedAt, err := r2archive.UUIDv7Time(sourceIngestID)
-		if err != nil {
-			return nil, fmt.Errorf("local route source ingest id is invalid: %w", err)
-		}
-		sourceActiveDomain, err := s.server.activeDomainResolver.ActiveDomain(ctx, sourceDomain)
-		if err != nil {
-			return nil, fmt.Errorf("resolve source archive prefix: %w", err)
-		}
-		sourceBundle, err := r2archive.InboundBundleKeysFromArchivePrefix(sourceActiveDomain.ArchivePrefix, sourceCreatedAt, sourceIngestID)
-		if err != nil {
-			return nil, fmt.Errorf("build source inbound keys: %w", err)
-		}
-		sourceRawKey = sourceBundle.RawKey
-		sourceResultKey = sourceBundle.ResultKey
+	sourceBundle, sourceActiveDomain, sourceMatched, err := s.sourceInboundFanoutBundle(ctx, sourceDomain, sourceMailbox, sourceIngestID)
+	if err != nil {
+		return nil, err
+	}
+	if !sourceMatched {
+		return nil, nil
 	}
 
 	existing, found, err := s.server.localProof.FindExisting(ctx, targetMailbox, localRouteProofQuery{
@@ -918,6 +948,7 @@ func (s *Session) prepareLocalRoute(ctx context.Context, submission rfc822.Submi
 
 	return &localRouteContext{
 		LocalRouteID:           localRouteID,
+		OrganizationID:         sourceActiveDomain.OrganizationID,
 		SourceMailbox:          sourceMailbox,
 		SourceDomain:           sourceDomain,
 		TargetMailbox:          targetMailbox,
@@ -925,13 +956,75 @@ func (s *Session) prepareLocalRoute(ctx context.Context, submission rfc822.Submi
 		VisibleFrom:            rfc822.FormatAddress(submission.From),
 		VisibleSenderDomain:    domainPart(submission.From.Address),
 		SourceIngestID:         sourceIngestID,
-		SourceInboundRawKey:    sourceRawKey,
-		SourceInboundResultKey: sourceResultKey,
+		SourceInboundRawKey:    sourceBundle.RawKey,
+		SourceInboundEdgeKey:   sourceBundle.EdgeKey,
+		SourceInboundResultKey: sourceBundle.ResultKey,
 		TargetInboundRawKey:    targetBundle.RawKey,
 		TargetInboundEdgeKey:   targetBundle.EdgeKey,
 		TargetInboundResultKey: targetBundle.ResultKey,
 		ExistingDelivery:       existing,
 	}, nil
+}
+
+func (s *Session) sourceInboundFanoutBundle(ctx context.Context, sourceDomain string, sourceMailbox string, sourceIngestID string) (r2archive.InboundBundle, ActiveDomainContext, bool, error) {
+	if sourceIngestID == "" {
+		return r2archive.InboundBundle{}, ActiveDomainContext{}, false, nil
+	}
+	if s.server.activeDomainResolver == nil {
+		return r2archive.InboundBundle{}, ActiveDomainContext{}, false, fmt.Errorf("local route source archive prefix resolver is not configured")
+	}
+	if s.server.r2 == nil {
+		return r2archive.InboundBundle{}, ActiveDomainContext{}, false, fmt.Errorf("local route source archive client is not configured")
+	}
+
+	sourceCreatedAt, err := r2archive.UUIDv7Time(sourceIngestID)
+	if err != nil {
+		return r2archive.InboundBundle{}, ActiveDomainContext{}, false, nil
+	}
+	sourceActiveDomain, err := s.server.activeDomainResolver.ActiveDomain(ctx, sourceDomain)
+	if err != nil {
+		return r2archive.InboundBundle{}, ActiveDomainContext{}, false, err
+	}
+	sourceBundle, err := r2archive.InboundBundleKeysFromArchivePrefix(sourceActiveDomain.ArchivePrefix, sourceCreatedAt, sourceIngestID)
+	if err != nil {
+		return r2archive.InboundBundle{}, ActiveDomainContext{}, false, fmt.Errorf("build source inbound keys: %w", err)
+	}
+
+	rawExists, err := s.server.r2.Exists(ctx, sourceBundle.RawKey)
+	if err != nil {
+		return r2archive.InboundBundle{}, ActiveDomainContext{}, false, fmt.Errorf("verify source inbound raw archive: %w", err)
+	}
+	if !rawExists {
+		return r2archive.InboundBundle{}, ActiveDomainContext{}, false, nil
+	}
+
+	edgeExists, err := s.server.r2.Exists(ctx, sourceBundle.EdgeKey)
+	if err != nil {
+		return r2archive.InboundBundle{}, ActiveDomainContext{}, false, fmt.Errorf("verify source inbound edge archive: %w", err)
+	}
+	if !edgeExists {
+		return r2archive.InboundBundle{}, ActiveDomainContext{}, false, nil
+	}
+	edgeBytes, err := s.server.r2.GetBytes(ctx, sourceBundle.EdgeKey)
+	if err != nil {
+		return r2archive.InboundBundle{}, ActiveDomainContext{}, false, fmt.Errorf("read source inbound edge archive: %w", err)
+	}
+	var manifest sourceInboundEdgeManifest
+	if err := json.Unmarshal(edgeBytes, &manifest); err != nil {
+		return r2archive.InboundBundle{}, ActiveDomainContext{}, false, fmt.Errorf("decode source inbound edge archive: %w", err)
+	}
+	if manifest.Schema != r2archive.InboundEdgeSchema ||
+		manifest.IngestID != sourceIngestID ||
+		manifest.RawKey != sourceBundle.RawKey ||
+		manifest.EdgeKey != sourceBundle.EdgeKey ||
+		(manifest.ResultKey != "" && manifest.ResultKey != sourceBundle.ResultKey) ||
+		normalizeAddress(manifest.EnvelopeTo) != sourceMailbox ||
+		normalizeAddress(manifest.Mailbox) != sourceMailbox ||
+		!strings.EqualFold(strings.TrimSpace(manifest.RecipientDomain), sourceDomain) {
+		return r2archive.InboundBundle{}, ActiveDomainContext{}, false, nil
+	}
+
+	return sourceBundle, sourceActiveDomain, true, nil
 }
 
 func (s *Session) deliverLocal(ctx context.Context, archive outboundArchive, submission rfc822.Submission, route *localRouteContext) error {
@@ -984,6 +1077,11 @@ func (s *Session) deliverLocal(ctx context.Context, archive outboundArchive, sub
 		LocalRouteID:            route.LocalRouteID,
 		RawKey:                  route.TargetInboundRawKey,
 		RawSHA256:               sha256Hex(localRaw),
+		SourceIngestID:          route.SourceIngestID,
+		SourceInboundRawKey:     route.SourceInboundRawKey,
+		SourceInboundEdgeKey:    route.SourceInboundEdgeKey,
+		SourceInboundResultKey:  route.SourceInboundResultKey,
+		GroupMailbox:            route.SourceMailbox,
 		SourceMailbox:           route.SourceMailbox,
 		SourceDomain:            route.SourceDomain,
 		TargetMailbox:           route.TargetMailbox,
@@ -991,7 +1089,6 @@ func (s *Session) deliverLocal(ctx context.Context, archive outboundArchive, sub
 		VisibleFrom:             route.VisibleFrom,
 		VisibleSenderDomain:     route.VisibleSenderDomain,
 		ZoneMTAQueueID:          submission.ZoneMTAQueueID,
-		SourceIngestID:          route.SourceIngestID,
 		SourceOutboundRelayKey:  archive.Bundle.RelayKey,
 		SourceOutboundResultKey: archive.Bundle.ResultKey,
 		RoutedAt:                routedAt,
@@ -999,6 +1096,7 @@ func (s *Session) deliverLocal(ctx context.Context, archive outboundArchive, sub
 	if err := s.server.r2.PutJSON(ctx, route.TargetInboundEdgeKey, targetEdge); err != nil {
 		return err
 	}
+	completedAt := time.Now().UTC()
 	targetResult := localInboundResult{
 		Schema:                  r2archive.InboundLocalRouteResultSchema,
 		LocalRouteID:            route.LocalRouteID,
@@ -1014,7 +1112,7 @@ func (s *Session) deliverLocal(ctx context.Context, archive outboundArchive, sub
 		WildDuckUserID:          delivery.UserID,
 		WildDuckMailboxID:       delivery.MailboxID,
 		WildDuckMessageID:       delivery.MessageID,
-		CompletedAt:             time.Now().UTC(),
+		CompletedAt:             completedAt,
 		Error:                   errorMessage,
 	}
 	if err := s.server.r2.PutJSON(ctx, route.TargetInboundResultKey, targetResult); err != nil {
@@ -1046,12 +1144,13 @@ func (s *Session) deliverLocal(ctx context.Context, archive outboundArchive, sub
 		RelayRawKey:            archive.Bundle.RelayKey,
 		RawKey:                 archive.Bundle.RelayKey,
 		SourceInboundRawKey:    route.SourceInboundRawKey,
+		SourceInboundEdgeKey:   route.SourceInboundEdgeKey,
 		SourceInboundResultKey: route.SourceInboundResultKey,
 		TargetInboundRawKey:    route.TargetInboundRawKey,
 		TargetInboundEdgeKey:   route.TargetInboundEdgeKey,
 		TargetInboundResultKey: route.TargetInboundResultKey,
 		SubmittedAt:            archive.SubmittedAt,
-		CompletedAt:            time.Now().UTC(),
+		CompletedAt:            completedAt,
 		To:                     submission.To,
 		CC:                     submission.CC,
 		BCC:                    submission.BCC,
@@ -1065,8 +1164,28 @@ func (s *Session) deliverLocal(ctx context.Context, archive outboundArchive, sub
 		log.Printf("agent-mail-provider-relay event=local_route_failed send_id=%s local_route_id=%s zonemta_queue_id=%s source_domain=%s target_domain=%s has_result_key=%t error=%q", archive.SendID, route.LocalRouteID, submission.ZoneMTAQueueID, route.SourceDomain, mailboxDomain(route.TargetMailbox), archive.Bundle.ResultKey != "", sanitizeRelayLogError(deliverErr))
 		return deliverErr
 	}
+	reportResult, reportErr := s.server.reportForwardingGroupDelivery(ctx, route, completedAt)
+	if reportErr != nil {
+		log.Printf("agent-mail-provider-relay event=forwarding_group_delivery_report_failed local_route_id=%s zonemta_queue_id=%s source_domain=%s target_domain=%s error=%q", route.LocalRouteID, submission.ZoneMTAQueueID, route.SourceDomain, mailboxDomain(route.TargetMailbox), sanitizeRelayLogError(reportErr))
+		return reportErr
+	}
+	log.Printf("agent-mail-provider-relay event=forwarding_group_delivery_reported local_route_id=%s zonemta_queue_id=%s source_domain=%s target_domain=%s group_matched=%t group_modified=%t", route.LocalRouteID, submission.ZoneMTAQueueID, route.SourceDomain, mailboxDomain(route.TargetMailbox), reportResult.Matched, reportResult.Modified)
 	log.Printf("agent-mail-provider-relay event=local_routed send_id=%s local_route_id=%s zonemta_queue_id=%s source_domain=%s target_domain=%s has_result_key=%t has_target_result_key=%t delivery_source=%s", archive.SendID, route.LocalRouteID, submission.ZoneMTAQueueID, route.SourceDomain, mailboxDomain(route.TargetMailbox), archive.Bundle.ResultKey != "", route.TargetInboundResultKey != "", deliverySource)
 	return nil
+}
+
+func (s *Server) reportForwardingGroupDelivery(ctx context.Context, route *localRouteContext, deliveredAt time.Time) (webForwardingGroupDeliveryResult, error) {
+	if s == nil || s.webDeliveryReporter == nil {
+		return webForwardingGroupDeliveryResult{}, fmt.Errorf("forwarding group delivery reporter is not configured")
+	}
+	return s.webDeliveryReporter.reportForwardingGroupDelivery(ctx, webForwardingGroupDeliveryReport{
+		OrganizationID: route.OrganizationID,
+		GroupAddress:   route.SourceMailbox,
+		TargetMailbox:  route.TargetMailbox,
+		LocalRouteID:   route.LocalRouteID,
+		SourceIngestID: route.SourceIngestID,
+		DeliveredAt:    deliveredAt,
+	})
 }
 
 func mailboxDomain(address string) string {
@@ -1199,7 +1318,7 @@ func (s *Session) Logout() error {
 	return nil
 }
 
-func (s webCloudflareSender) Send(ctx context.Context, submission rfc822.Submission, envelopeRecipients []string) (outboundSendResult, error) {
+func (s webCloudflareSender) Send(ctx context.Context, submission rfc822.Submission, envelopeRecipients []string, sendID string) (outboundSendResult, error) {
 	recipients := uniqueStrings(envelopeRecipients)
 	providerRawMessage, err := rfc822.BuildProviderRaw(submission.RawMessage, rfc822.ProviderRawOptions{})
 	if err != nil {
@@ -1229,27 +1348,30 @@ func (s webCloudflareSender) Send(ctx context.Context, submission rfc822.Submiss
 	if err != nil {
 		return baseResult, err
 	}
-	result, err := s.sendRawThroughWeb(ctx, activeDomain, submission, recipients, string(providerRawMessage))
+	result, err := s.sendRawThroughWeb(ctx, activeDomain, submission, recipients, string(providerRawMessage), sendID)
 	if err != nil {
 		return baseResult, err
 	}
 	if len(result.PermanentBounces) > 0 {
+		baseResult.ProviderMessageID = result.MessageID
 		baseResult.Delivered = result.Delivered
 		baseResult.Queued = result.Queued
 		return baseResult, fmt.Errorf("cloudflare permanently bounced recipients: %s", strings.Join(result.PermanentBounces, ", "))
 	}
 	if len(result.Delivered)+len(result.Queued) != len(recipients) {
+		baseResult.ProviderMessageID = result.MessageID
 		baseResult.Delivered = result.Delivered
 		baseResult.Queued = result.Queued
 		return baseResult, fmt.Errorf("cloudflare accepted %d recipients but smtp envelope contained %d recipients", len(result.Delivered)+len(result.Queued), len(recipients))
 	}
 
+	baseResult.ProviderMessageID = result.MessageID
 	baseResult.Delivered = result.Delivered
 	baseResult.Queued = result.Queued
 	return baseResult, nil
 }
 
-func (s webCloudflareSender) sendRawThroughWeb(ctx context.Context, activeDomain ActiveDomainContext, submission rfc822.Submission, recipients []string, mimeMessage string) (webCloudflareSendResult, error) {
+func (s webCloudflareSender) sendRawThroughWeb(ctx context.Context, activeDomain ActiveDomainContext, submission rfc822.Submission, recipients []string, mimeMessage string, sendID string) (webCloudflareSendResult, error) {
 	requestBody, err := json.Marshal(webCloudflareSendRequest{
 		OrganizationID:       activeDomain.OrganizationID,
 		OrganizationPublicID: activeDomain.OrganizationPublicID,
@@ -1257,6 +1379,7 @@ func (s webCloudflareSender) sendRawThroughWeb(ctx context.Context, activeDomain
 		From:                 submission.From.Address,
 		Recipients:           recipients,
 		MIMEMessage:          mimeMessage,
+		SendID:               sendID,
 		ZoneMTAQueueID:       submission.ZoneMTAQueueID,
 	})
 	if err != nil {
@@ -1293,7 +1416,7 @@ func (s webCloudflareSender) sendRawThroughWeb(ctx context.Context, activeDomain
 	return webCloudflareSendResult{}, fmt.Errorf("web Cloudflare send failed with HTTP %d", response.StatusCode)
 }
 
-func (s sesSender) Send(ctx context.Context, submission rfc822.Submission, envelopeRecipients []string) (outboundSendResult, error) {
+func (s sesSender) Send(ctx context.Context, submission rfc822.Submission, envelopeRecipients []string, _ string) (outboundSendResult, error) {
 	recipients := uniqueStrings(envelopeRecipients)
 	returnPath, err := s.feedbackReturnPath(ctx, submission.From.Address)
 	if err != nil {
@@ -1426,41 +1549,39 @@ type localDeliveryDisposition string
 const (
 	localDeliveryExternal localDeliveryDisposition = "external"
 	localDeliveryAll      localDeliveryDisposition = "all_local"
-	localDeliveryMixed    localDeliveryDisposition = "mixed"
 )
 
-func (s *Server) localDeliveryDisposition(ctx context.Context, recipients []string) (localDeliveryDisposition, error) {
-	if !s.cfg.LocalDelivery.Enabled || s.localDomainResolver == nil || s.localDeliverer == nil {
+func (s *Server) localDeliveryDisposition(ctx context.Context, submission rfc822.Submission, recipients []string) (localDeliveryDisposition, error) {
+	if !s.cfg.LocalDelivery.Enabled || s.localDomainResolver == nil || s.localDeliverer == nil || s.localProof == nil {
+		return localDeliveryExternal, nil
+	}
+	if !isLocalFanoutSubmission(submission) {
 		return localDeliveryExternal, nil
 	}
 	uniqueRecipients := uniqueStrings(recipients)
-	if len(uniqueRecipients) == 0 {
+	if len(uniqueRecipients) != 1 {
 		return localDeliveryExternal, nil
 	}
 
-	localCount := 0
-	for _, recipient := range uniqueRecipients {
-		domain := domainPart(recipient)
-		if domain == "" {
-			return "", fmt.Errorf("recipient address %q does not contain a canonical domain", recipient)
-		}
-		local, err := s.localDomainResolver.LocalRecipientDomain(ctx, domain)
-		if err != nil {
-			return "", fmt.Errorf("classify local recipient domain %q: %w", domain, err)
-		}
-		if local {
-			localCount++
-		}
+	domain := domainPart(uniqueRecipients[0])
+	if domain == "" {
+		return "", fmt.Errorf("recipient address %q does not contain a canonical domain", uniqueRecipients[0])
 	}
-
-	switch localCount {
-	case 0:
-		return localDeliveryExternal, nil
-	case len(uniqueRecipients):
+	local, err := s.localDomainResolver.LocalRecipientDomain(ctx, domain)
+	if err != nil {
+		return "", fmt.Errorf("classify local recipient domain %q: %w", domain, err)
+	}
+	if local {
 		return localDeliveryAll, nil
-	default:
-		return localDeliveryMixed, nil
 	}
+	return localDeliveryExternal, nil
+}
+
+func isLocalFanoutSubmission(submission rfc822.Submission) bool {
+	return strings.EqualFold(strings.TrimSpace(submission.LocalFanout), rfc822.LocalFanoutInboundReplayValue) &&
+		strings.TrimSpace(submission.ReplayIngestID) != "" &&
+		strings.TrimSpace(submission.ReplayEnvelopeFrom) != "" &&
+		normalizeAddress(submission.ReplayEnvelopeTo) != ""
 }
 
 func newLocalDeliverer(cfg localDeliveryRuntimeConfig) localDeliverer {
@@ -1513,6 +1634,57 @@ func (d smtpLocalDeliverer) Deliver(ctx context.Context, envelopeFrom string, re
 		return fmt.Errorf("local smtp QUIT: %w", err)
 	}
 	return nil
+}
+
+func newWebDeliveryReporter(webServer webServerRuntimeConfig) *webDeliveryReporter {
+	baseURL, err := url.Parse(webServer.APIBaseURL)
+	if err != nil || baseURL.Scheme == "" || baseURL.Host == "" {
+		return nil
+	}
+	return &webDeliveryReporter{
+		baseURL:      baseURL,
+		controlToken: webServer.ControlToWebToken,
+		httpClient:   &http.Client{Timeout: 10 * time.Second},
+	}
+}
+
+func (r *webDeliveryReporter) reportForwardingGroupDelivery(ctx context.Context, report webForwardingGroupDeliveryReport) (webForwardingGroupDeliveryResult, error) {
+	if r == nil || r.baseURL == nil || r.controlToken == "" {
+		return webForwardingGroupDeliveryResult{}, fmt.Errorf("forwarding group delivery reporter is not configured")
+	}
+	requestBody, err := json.Marshal(report)
+	if err != nil {
+		return webForwardingGroupDeliveryResult{}, fmt.Errorf("marshal forwarding group delivery report: %w", err)
+	}
+
+	reportURL := *r.baseURL
+	reportURL.Path = strings.TrimRight(reportURL.Path, "/") + "/rpc/internal/agent-mail/forwarding-groups/deliveries"
+	reportURL.RawQuery = ""
+	reportURL.Fragment = ""
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, reportURL.String(), bytes.NewReader(requestBody))
+	if err != nil {
+		return webForwardingGroupDeliveryResult{}, fmt.Errorf("build forwarding group delivery report request: %w", err)
+	}
+	request.Header.Set("Accept", "application/json")
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Agent-Mail-Control-Web-Token", r.controlToken)
+
+	response, err := r.httpClient.Do(request)
+	if err != nil {
+		return webForwardingGroupDeliveryResult{}, fmt.Errorf("forwarding group delivery report request: %w", err)
+	}
+	defer response.Body.Close()
+
+	var result webForwardingGroupDeliveryResult
+	if response.StatusCode >= 200 && response.StatusCode < 300 {
+		if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+			return webForwardingGroupDeliveryResult{}, fmt.Errorf("decode forwarding group delivery report response: %w", err)
+		}
+		return result, nil
+	}
+
+	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
+	return webForwardingGroupDeliveryResult{}, fmt.Errorf("forwarding group delivery report failed with HTTP %d", response.StatusCode)
 }
 
 func localRouteEnvelopeFrom(submission rfc822.Submission, fallback string) string {

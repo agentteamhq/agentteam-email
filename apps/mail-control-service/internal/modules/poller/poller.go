@@ -737,11 +737,12 @@ func (p *Poller) processItem(ctx context.Context, item workItem, attempt int) er
 		return p.writeReceipt(ctx, item, manifest, duplicateDelivery, attempt, deliveryExisting)
 	}
 
-	replayHeaders := make(map[string]string, len(manifest.ATMCFHeaders)+1)
+	replayHeaders := make(map[string]string, len(manifest.ATMCFHeaders)+2)
 	for key, value := range manifest.ATMCFHeaders {
 		replayHeaders[key] = value
 	}
 	replayHeaders["X-ATM-Ingest-ID"] = manifest.IngestID
+	replayHeaders[rfc822.LocalFanoutHeader] = rfc822.LocalFanoutInboundReplayValue
 
 	projected, err := rfc822.ProjectReplayHeaders(rawMessage, replayHeaders)
 	if err != nil {

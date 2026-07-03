@@ -17,6 +17,7 @@ func TestBuildProviderRawSanitizesHeadersInjectsReturnPathAndPreservesBody(t *te
 		"X-ATMCF-Edge-Message-ID: cf-123",
 		"X-ATM-Ingest-ID: ing-123",
 		"X-Agent-Mail-ZoneMTA-Queue-ID: zone-123",
+		"X-Agent-Mail-Local-Fanout: inbound-replay",
 		"X-Agent-Mail-DSN-ID: 018f1f77-40e0-7cc3-98f5-5b03f9f13f40",
 		"X-Agent-Mail-DSN-Source-Ingest-ID: 018f1f77-40e0-7cc3-98f5-5b03f9f13f41",
 		"X-Agent-Mail-Local-Route-ID: 018f1f77-40e0-7cc3-98f5-5b03f9f13f42",
@@ -73,6 +74,7 @@ func TestBuildProviderRawSanitizesHeadersInjectsReturnPathAndPreservesBody(t *te
 		"X-ATMCF-Edge-Message-ID:",
 		"X-ATM-Ingest-ID:",
 		"X-Agent-Mail-ZoneMTA-Queue-ID:",
+		"X-Agent-Mail-Local-Fanout:",
 		"X-Agent-Mail-DSN-ID:",
 		"X-Agent-Mail-DSN-Source-Ingest-ID:",
 		"X-Agent-Mail-Local-Route-ID:",
@@ -207,6 +209,7 @@ func TestProjectReplayHeadersNamespacesCloudflareBoundaryAuthHeaders(t *testing.
 		"Authentication-Results: mx.cloudflare.net; dkim=pass header.d=example.net; dmarc=pass header.from=example.net; spf=pass smtp.mailfrom=sender@example.net; arc=pass smtp.remote-ip=203.0.113.7",
 		"Received: by mail.example.net with SMTP id upstream for <agent@example.com>; Thu, 18 Jun 2026 06:56:10 +0000",
 		"Authentication-Results: upstream.example; spf=fail smtp.mailfrom=attacker.example",
+		"X-Agent-Mail-Local-Fanout: stale-spoof",
 		"From: Sender <sender@example.net>",
 		"To: Agent <agent@example.com>",
 		"Subject: Replay",
@@ -220,6 +223,7 @@ func TestProjectReplayHeadersNamespacesCloudflareBoundaryAuthHeaders(t *testing.
 		"X-ATMCF-Edge-Status":        "received",
 		"X-ATMCF-Edge-Envelope-To":   "agent@example.com",
 		"X-ATMCF-Edge-Envelope-From": "sender@example.net",
+		LocalFanoutHeader:            LocalFanoutInboundReplayValue,
 	})
 	if err != nil {
 		t.Fatalf("ProjectReplayHeaders returned error: %v", err)
@@ -259,6 +263,12 @@ func TestProjectReplayHeadersNamespacesCloudflareBoundaryAuthHeaders(t *testing.
 	}
 	if !strings.Contains(lowerHeaderText, "authentication-results: upstream.example; spf=fail") {
 		t.Fatalf("projected replay should retain non-Cloudflare Authentication-Results:\n%s", headerText)
+	}
+	if !strings.Contains(headerText, "X-Agent-Mail-Local-Fanout: inbound-replay") {
+		t.Fatalf("projected replay missing local fanout marker:\n%s", headerText)
+	}
+	if strings.Contains(headerText, "stale-spoof") {
+		t.Fatalf("projected replay kept stale local fanout marker:\n%s", headerText)
 	}
 }
 
@@ -315,6 +325,7 @@ func TestBuildProviderRelaySubmissionRequiresAndPreservesZoneMTAQueueID(t *testi
 		"X-ATM-Ingest-ID: 018f1f77-40e0-7cc3-98f5-5b03f9f13f40",
 		"X-ATMCF-Edge-Envelope-From: 0100019e8a955335-38ce59a1-8306-4e1c-8634-2f91c322f76f-000000@amazonses.com",
 		"X-ATMCF-Edge-Envelope-To: media@example.com",
+		"X-Agent-Mail-Local-Fanout: inbound-replay",
 		"From: Agent <agent@example.com>",
 		"To: Recipient <recipient@example.net>",
 		"Subject: Provider Relay",
@@ -341,6 +352,9 @@ func TestBuildProviderRelaySubmissionRequiresAndPreservesZoneMTAQueueID(t *testi
 	}
 	if submission.ReplayEnvelopeTo != "media@example.com" {
 		t.Fatalf("unexpected replay envelope-to: %q", submission.ReplayEnvelopeTo)
+	}
+	if submission.LocalFanout != LocalFanoutInboundReplayValue {
+		t.Fatalf("unexpected local fanout marker: %q", submission.LocalFanout)
 	}
 	if !bytes.Equal(submission.RawMessage, raw) {
 		t.Fatalf("provider relay submission changed raw bytes")

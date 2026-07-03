@@ -43,7 +43,6 @@ export function createWebRequest(req: IncomingMessage, origin: string): Request 
 
 export async function sendWebResponse(response: Response, res: ServerResponse): Promise<void> {
   res.statusCode = response.status
-  res.statusMessage = response.statusText
 
   const headers = response.headers as HeadersWithSetCookie
   const setCookie = headers.getSetCookie?.()

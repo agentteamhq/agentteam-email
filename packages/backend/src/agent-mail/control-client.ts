@@ -61,6 +61,30 @@ const agentMailSendSubmitResultSchema = z.looseObject({
   idempotency_key: z.string().min(1).optional()
 })
 
+const agentMailMessageViewLinkSchema = z.looseObject({
+  id: z.string().min(1),
+  url: z.string().min(1),
+  scheme: z.string().min(1).optional(),
+  host: z.string().min(1).optional(),
+  text: z.string().optional()
+})
+
+const agentMailMessageViewRemoteImageSchema = z.looseObject({
+  id: z.string().min(1),
+  url: z.string().min(1),
+  scheme: z.string().min(1).optional(),
+  host: z.string().min(1).optional(),
+  alt: z.string().optional()
+})
+
+const agentMailMessageViewResultSchema = z.looseObject({
+  displayHtml: z.string(),
+  plainText: z.string().optional(),
+  externalLinks: z.array(agentMailMessageViewLinkSchema),
+  remoteImages: z.array(agentMailMessageViewRemoteImageSchema),
+  remoteImagesAllowed: z.boolean()
+})
+
 export interface AgentMailIngestEnqueueResult {
   status: 'enqueued'
   ingest_id: string
@@ -119,6 +143,38 @@ export interface AgentMailSendSubmitResult {
   idempotency_key?: string
 }
 
+export interface AgentMailMessageViewInput {
+  wildDuckUserId: string
+  wildDuckMailboxId: string
+  wildDuckUid: number
+  wildDuckMessageId?: string
+  remoteImages?: 'allow' | 'block'
+}
+
+export interface AgentMailMessageViewLink {
+  host?: string
+  id: string
+  scheme?: string
+  text?: string
+  url: string
+}
+
+export interface AgentMailMessageViewRemoteImage {
+  alt?: string
+  host?: string
+  id: string
+  scheme?: string
+  url: string
+}
+
+export interface AgentMailMessageViewResult {
+  displayHtml: string
+  plainText?: string
+  externalLinks: AgentMailMessageViewLink[]
+  remoteImages: AgentMailMessageViewRemoteImage[]
+  remoteImagesAllowed: boolean
+}
+
 export async function enqueueAgentMailIngest(
   notification: AgentMailIngestNotification
 ): Promise<AgentMailIngestEnqueueResult> {
@@ -153,6 +209,16 @@ export async function submitAgentMailSend(
   input: AgentMailSendSubmitInput
 ): Promise<AgentMailSendSubmitResult> {
   return callControlRPC('agentMail.send.submit', input, parseControlResult(agentMailSendSubmitResultSchema))
+}
+
+export async function getAgentMailMessageView(
+  input: AgentMailMessageViewInput
+): Promise<AgentMailMessageViewResult> {
+  return callControlRPC(
+    'agentMail.message.view.get',
+    input,
+    parseControlResult(agentMailMessageViewResultSchema)
+  )
 }
 
 async function callControlRPC<TResult>(

@@ -18,11 +18,12 @@ store, or delivery database.
   `orgs/<org_public_id>/domains/<recipient_domain>/mail/inbound/...`. Do not
   reintroduce top-level `queue/`, `receipt/`, or `deadletter/` prefixes.
 - Domain and subdomain path segments are parser-derived canonical Agent Mail
-  mailbox domains. Inbound uses the recipient mailbox domain. Provider-bound
-  outbound uses the active provider sender domain. Local routed outbound uses
-  the source mailbox domain. A visible `From` domain that Agent Mail does not
-  own is metadata only and must never be the archive root for a local routed
-  copy.
+  mailbox domains. Inbound uses the recipient mailbox domain. Outbound uses the
+  active provider sender domain. Receive-side group forwarding fanout
+  source-side relay records use the source mailbox domain, and target-side
+  inbound records use the target mailbox domain. A visible `From` domain that
+  Agent Mail does not own is metadata only and must never be the archive root
+  for a fanout copy.
 - The concrete routed or sender address and the selected domain must also be
   recorded in metadata. The path is an index for listing and reconciliation; it
   is not the only source of domain truth.
@@ -99,11 +100,16 @@ Cloudflare auth verdict evidence is parsed downstream from the verified R2
 envelope, timestamp, and raw SHA-256. The Worker does not query Cloudflare
 Analytics or GraphQL during the receive path.
 
-Local routed inbound records also use `edge.json`, but with a different schema.
-They are explicit archive/provenance markers for mail already delivered locally
-by the internal SMTP relay, not Worker replay work.
+Inbound group forwarding fanout records also use `edge.json`, but with a
+different schema. They are explicit receive-side archive/provenance markers for
+mail already accepted through the Worker inbound archive path and delivered
+locally by fanout. They are not Worker replay work and are not authored
+outbound send bundles. A local-route marker must link to a matching source
+Worker inbound `raw.eml` and `edge.json` bundle, and the relay must only enter
+this path from the internal receive-side fanout marker stamped during inbound
+replay; replay-looking headers alone must not create a local-route archive.
 
-Required local routed inbound bundle path:
+Required local-route inbound bundle path:
 
 ```text
 orgs/<org_public_id>/domains/<target_domain>/mail/inbound/YYYY/MM/DD/<local_route_id>/
@@ -112,7 +118,7 @@ orgs/<org_public_id>/domains/<target_domain>/mail/inbound/YYYY/MM/DD/<local_rout
   result.json
 ```
 
-Required local routed `edge.json` fields:
+Required local-route `edge.json` fields:
 
 ```json
 {
@@ -120,14 +126,17 @@ Required local routed `edge.json` fields:
   "local_route_id": "018f0000-0000-7000-8000-000000000000",
   "raw_key": "orgs/<org_public_id>/domains/<target_domain>/mail/inbound/YYYY/MM/DD/<local_route_id>/raw.eml",
   "raw_sha256": "<sha256-of-raw-eml>",
-  "source_mailbox": "media@example.com",
+  "source_ingest_id": "018f0000-0000-7000-8000-000000000001",
+  "source_inbound_raw_key": "orgs/<org_public_id>/domains/<source_domain>/mail/inbound/YYYY/MM/DD/<source_ingest_id>/raw.eml",
+  "source_inbound_edge_key": "orgs/<org_public_id>/domains/<source_domain>/mail/inbound/YYYY/MM/DD/<source_ingest_id>/edge.json",
+  "group_mailbox": "team@example.com",
+  "source_mailbox": "team@example.com",
   "source_domain": "example.com",
   "target_mailbox": "agent@example.com",
   "target_domain": "example.com",
   "visible_from": "Sender <sender@example.net>",
   "visible_sender_domain": "example.net",
   "zonemta_queue_id": "...",
-  "source_ingest_id": "...",
   "source_outbound_relay_key": "mail/outbound/<source_domain>/YYYY/MM/DD/<local_route_id>/relay.eml",
   "source_outbound_result_key": "mail/outbound/<source_domain>/YYYY/MM/DD/<local_route_id>/result.json",
   "routed_at": "YYYY-MM-DDTHH:MM:SSZ"
@@ -136,8 +145,13 @@ Required local routed `edge.json` fields:
 
 The reconciler must enqueue only `schema: "agent-mail.inbound.edge.v1"` Worker
 edges into the Mongo-backed queue. It must recognize
-`schema: "agent-mail.inbound.local-route.edge.v1"` as local routed archive state
+`schema: "agent-mail.inbound.local-route.edge.v1"` as local-route archive state
 and must not replay or enqueue it.
+
+Local-route edge files must not include Worker-only fields such as
+`cloudflare_zone_name`, `worker_name`, or `cloudflare_edge_evidence` unless the
+Cloudflare edge actually produced that metadata for the source inbound bundle
+and the field is clearly a reference to that source bundle.
 
 `envelope_from` is an empty string for DSNs with a null envelope sender. Replay
 must project `X-ATMCF-Edge-Envelope-From: <>`, but the raw archive remains
@@ -231,10 +245,12 @@ mail/outbound/<source_domain>/YYYY/MM/DD/<send_id>/
   result.json
 ```
 
-`provider.eml` or `provider.json` is required only for provider-bound
-deliveries. Local active-domain deliveries do not create a provider payload
-object because the exact local-delivery payload is archived as the target-side
-inbound `raw.eml`.
+Every ordinary user-authored outbound send and Agent Mail-generated DSN is
+provider-bound. `provider.eml` or `provider.json` is required once the relay
+builds the provider payload. Receive-side group forwarding fanout local copies
+may create source-side local-route relay boundary bundles, but those bundles
+are fanout routing records, not authored outbound sends, and they do not include
+provider payload objects.
 
 `relay.eml` is the exact SMTP DATA bytes accepted from ZoneMTA. It preserves the
 internal `X-Agent-Mail-ZoneMTA-Queue-ID` header.
@@ -264,9 +280,10 @@ Required `relay.json` fields:
 }
 ```
 
-For provider-bound deliveries, `provider` is the selected outbound provider.
-For active local-domain deliveries, `route_type` is `local`, `provider` is
-`local`, and `send_id` is the same value as `local_route_id`.
+For outbound deliveries, `route_type` is `provider` and `provider` is the
+selected outbound provider. The relay must not use `route_type: "local"` for
+ordinary authored sends, including sends whose recipients are on Agent Mail
+domains.
 
 Exactly one provider-bound payload object is required once a provider payload is
 built:
@@ -312,26 +329,20 @@ For Cloudflare Email Sending, `provider_reverse_path_mode` is
 `cloudflare_send_raw_from` and `provider_boundary_sender` is the raw-send
 `from` address.
 
-Valid outbound terminal statuses are `provider_accepted`,
-`provider_rejected`, `provider_failed`, `local_routed`, and
-`local_route_failed`. ZoneMTA retry state remains ZoneMTA state; Agent Mail
-records every outbound relay bundle it accepts. Local routing results use
-`provider: "local"`, link to the target-side inbound route result, and omit
-provider payload fields.
+Valid outbound terminal statuses for ordinary provider-bound sends are
+`provider_accepted`, `provider_rejected`, and `provider_failed`. Source-side
+local-route relay boundary bundles for inbound group forwarding fanout use
+`local_routed` or `local_route_failed`. ZoneMTA retry state remains ZoneMTA
+state; Agent Mail records every outbound relay bundle it accepts.
 
-For local routing, the internal SMTP relay must stamp the local delivery
-payload with `X-Agent-Mail-Local-Route-ID`, `X-Agent-Mail-Source-Mailbox`,
-`X-Agent-Mail-Target-Mailbox`, and `X-Agent-Mail-Source-Ingest-ID` when a
-source ingest ID is available. The target-side inbound `raw.eml` stores those
-exact local-delivery bytes. Source-side outbound `relay.eml` remains the exact
-ZoneMTA-to-relay bytes.
-When `relay.eml` contains `X-ATMCF-Edge-Envelope-From`, the internal SMTP relay
-must use that original replay envelope sender for the local Haraka `MAIL FROM`.
-ZoneMTA's SRS-expanded reverse path remains in relay/result metadata but must
-not be used as the local target-mailbox delivery envelope.
+For inbound group forwarding fanout, the receive-side fanout path must stamp the
+local delivery payload with `X-Agent-Mail-Local-Route-ID`,
+`X-Agent-Mail-Source-Mailbox`, `X-Agent-Mail-Target-Mailbox`, and
+`X-Agent-Mail-Source-Ingest-ID`. The target-side inbound `raw.eml` stores those
+exact local-delivery bytes.
 
 If a retry finds a previously delivered target mailbox copy with
-`X-Agent-Mail-Local-Route-ID`, the internal SMTP relay must reuse that
+`X-Agent-Mail-Local-Route-ID`, the receive-side fanout path must reuse that
 `local_route_id` for any missing local-route R2 records rather than creating a
 new route ID.
 
@@ -385,29 +396,37 @@ Inbound retry:
    objects, classifying schema, and checking for sibling `result.json`.
 4. The sweeper does not need to read `raw.eml` for bundles that already have
    `result.json`. It may need to read `edge.json` metadata to distinguish
-   Worker replay work from local routed archive state.
+   Worker replay work from local-route archive state.
+
+Receive-side group forwarding fanout:
+
+1. A Worker-origin inbound bundle is replayed through Haraka/WildDuck.
+2. Group mailbox, alias, or forwarding rules resolve additional Agent Mail
+   target mailboxes on the receive side.
+3. For each local fanout target, the fanout path writes source-side local-route
+   relay metadata, stamps local-route provenance headers, writes target-side
+   inbound `raw.eml`, local-route `edge.json`, and `result.json`, and links the
+   records to the verified source Worker inbound bundle.
+4. Source-side fanout relay bundles must not include provider payload objects.
+5. Local-route edge metadata must not be treated as Cloudflare edge metadata
+   unless it is an explicit reference to fields produced by the source Worker
+   inbound bundle.
 
 Outbound:
 
-1. WildDuck accepts user submission or native forwarding and ZoneMTA queues the
-   message.
+1. WildDuck accepts user-authored submission, or Agent Mail submits generated
+   DSN work to the dedicated ZoneMTA interface. ZoneMTA queues the message.
 2. ZoneMTA submits to the internal SMTP relay with
    `X-Agent-Mail-ZoneMTA-Queue-ID`.
 3. Provider-bound outbound derives canonical `sender_domain` from active
-   provider policy. Local routed outbound derives the archive domain from the
-   source mailbox domain, not the visible `From` domain.
+   provider policy. Same-domain and other Agent Mail-domain recipients remain
+   provider-bound.
 4. The internal SMTP relay generates UUIDv7 `send_id` and writes `relay.eml`.
 5. The internal SMTP relay writes `relay.json`.
-6. If every envelope recipient belongs to an active local Agent Mail domain,
-   the internal SMTP relay writes source-side outbound local-route metadata,
-   stamps internal local-route provenance headers, delivers those exact
-   local-delivery bytes to Haraka/WildDuck, writes target-side inbound
-   `raw.eml`, local-route `edge.json`, and `result.json`, then writes the
-   source-side outbound `result.json`.
-7. Otherwise, the internal SMTP relay builds and writes the provider-bound
-   payload as `provider.eml` or `provider.json`.
-8. The internal SMTP relay sends the payload to the provider.
-9. The internal SMTP relay writes `result.json` with the provider outcome.
+6. The internal SMTP relay builds and writes the provider-bound payload as
+   `provider.eml` or `provider.json`.
+7. The internal SMTP relay sends the payload to the provider.
+8. The internal SMTP relay writes `result.json` with the provider outcome.
 
 Outbound retry:
 

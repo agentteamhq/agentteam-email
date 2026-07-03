@@ -23,6 +23,7 @@ const webmailTestState = vi.hoisted(() => ({
   agentUpdateOne: vi.fn(),
   fetchAttachment: vi.fn(),
   fetchMessageSource: vi.fn(),
+  getAgentMailMessageView: vi.fn(),
   getMessage: vi.fn(),
   getUser: vi.fn(),
   listMailboxes: vi.fn(),
@@ -62,6 +63,15 @@ class TestWildDuckAPIError extends Error {
     public readonly code?: string
   ) {
     super(message)
+  }
+}
+
+class TestAgentMailControlAPIError extends Error {
+  constructor(
+    public readonly method: string,
+    public readonly status: number
+  ) {
+    super(`Agent Mail control API request failed with HTTP ${status}`)
   }
 }
 
@@ -230,6 +240,8 @@ vi.mock('./wildduck-client', () => ({
 }))
 
 vi.mock('./control-client', () => ({
+  AgentMailControlAPIError: TestAgentMailControlAPIError,
+  getAgentMailMessageView: webmailTestState.getAgentMailMessageView,
   submitAgentMailSend: webmailTestState.submitAgentMailSend
 }))
 
@@ -255,6 +267,7 @@ describe('Agent Mail WildDuck webmail service', () => {
     webmailTestState.agentUpdateOne.mockReset()
     webmailTestState.fetchAttachment.mockReset()
     webmailTestState.fetchMessageSource.mockReset()
+    webmailTestState.getAgentMailMessageView.mockReset()
     webmailTestState.getMessage.mockReset()
     webmailTestState.getUser.mockReset()
     webmailTestState.listMailboxes.mockReset()
@@ -514,6 +527,13 @@ describe('Agent Mail WildDuck webmail service', () => {
         }
       })
     )
+    webmailTestState.getAgentMailMessageView.mockResolvedValue({
+      displayHtml: '<p>Hello</p>',
+      externalLinks: [],
+      plainText: 'Hello',
+      remoteImages: [],
+      remoteImagesAllowed: false
+    })
     webmailTestState.submitDraft.mockResolvedValue({ success: true })
     webmailTestState.submitAgentMailSend.mockResolvedValue({ queued: true })
     webmailTestState.submitMessage.mockResolvedValue({ success: true })
@@ -1510,6 +1530,28 @@ describe('Agent Mail WildDuck webmail service', () => {
 
   it('returns only active-organization domain accounts and same-origin message resource URLs', async () => {
     expect.hasAssertions()
+    webmailTestState.getAgentMailMessageView.mockResolvedValueOnce({
+      displayHtml:
+        '<p>Control display</p><img src="https://assets.example.test/pixel.png" alt="Tracking pixel">',
+      externalLinks: [
+        {
+          host: 'docs.example.test',
+          id: 'link-1',
+          text: 'Docs',
+          url: 'https://docs.example.test'
+        }
+      ],
+      plainText: 'Control display',
+      remoteImages: [
+        {
+          alt: 'Tracking pixel',
+          host: 'assets.example.test',
+          id: 'image-1',
+          url: 'https://assets.example.test/pixel.png'
+        }
+      ],
+      remoteImagesAllowed: false
+    })
     const { getAgentMailWorkspaceForWeb } = await import('./webmail-service')
 
     const workspace = await getAgentMailWorkspaceForWeb({
@@ -1530,11 +1572,34 @@ describe('Agent Mail WildDuck webmail service', () => {
       '/rpc/mail/accounts/support%40example.test/mailboxes/inbox-id/messages/12/attachments/attachment-1'
     )
     expect(workspace.selectedMessage?.attachments[0]?.contentId).toBe('unsafe@example.test')
-    expect(workspace.selectedMessage?.plainText).toBe('Hello')
+    expect(workspace.selectedMessage?.html).toContain('https://assets.example.test/pixel.png')
+    expect(workspace.selectedMessage?.externalLinks).toStrictEqual([
+      {
+        host: 'docs.example.test',
+        id: 'link-1',
+        text: 'Docs',
+        url: 'https://docs.example.test'
+      }
+    ])
+    expect(workspace.selectedMessage?.plainText).toBe('Control display')
+    expect(workspace.selectedMessage?.remoteImages).toStrictEqual([
+      {
+        alt: 'Tracking pixel',
+        host: 'assets.example.test',
+        id: 'image-1',
+        url: 'https://assets.example.test/pixel.png'
+      }
+    ])
     expect(workspace.selectedMessage?.replyTo).toStrictEqual(['Reply <reply@example.net>'])
     expect(workspace.selectedMessage?.sourceUrl).toBe(
       '/rpc/mail/accounts/support%40example.test/mailboxes/inbox-id/messages/12/source'
     )
+    expect(webmailTestState.getAgentMailMessageView).toHaveBeenCalledWith({
+      remoteImages: 'block',
+      wildDuckMailboxId: 'inbox-id',
+      wildDuckUid: 12,
+      wildDuckUserId: 'wildduck-user-1'
+    })
     expect(workspace.messages[0]?.attachmentCount).toBe(1)
     expect(workspace.pagination.nextCursor).toBe('next-page')
     expect(workspace.pagination.previousCursor).toBeNull()
@@ -1595,6 +1660,77 @@ describe('Agent Mail WildDuck webmail service', () => {
       previousCursor: 'older-page',
       total: 57
     })
+  }, 15_000)
+
+  it('shows receive-side local-route group fanout messages for the target mailbox account', async () => {
+    expect.hasAssertions()
+    webmailTestState.listMessages.mockResolvedValueOnce({
+      nextCursor: false,
+      previousCursor: false,
+      results: [
+        {
+          date: '2026-07-02T15:27:02.000Z',
+          from: {
+            address: 'khk@example.test',
+            name: 'KHK'
+          },
+          headers: {
+            'x-agent-mail-local-route-id': '019f2371-3bbb-7497-8acc-f9ee5ac4c97a',
+            'x-agent-mail-target-mailbox': 'support@example.test'
+          },
+          id: 12,
+          mailbox: 'inbox-id',
+          seen: false,
+          subject: 'Lifecycle group fanout',
+          text: 'Delivered through receive-side group fanout',
+          to: [
+            {
+              address: 'qa@example.test',
+              name: 'QA'
+            }
+          ]
+        }
+      ],
+      total: 1
+    })
+    webmailTestState.getMessage.mockResolvedValueOnce({
+      date: '2026-07-02T15:27:02.000Z',
+      envelope: {
+        from: 'bounces@cf-bounce.example.test',
+        rcpt: [
+          {
+            formatted: 'support@example.test',
+            value: 'support@example.test'
+          }
+        ]
+      },
+      from: {
+        address: 'khk@example.test',
+        name: 'KHK'
+      },
+      id: 12,
+      mailbox: 'inbox-id',
+      seen: false,
+      subject: 'Lifecycle group fanout',
+      text: 'Delivered through receive-side group fanout',
+      to: [
+        {
+          address: 'qa@example.test',
+          name: 'QA'
+        }
+      ]
+    })
+    const { getAgentMailWorkspaceForWeb } = await import('./webmail-service')
+
+    const workspace = await getAgentMailWorkspaceForWeb({
+      headers: new Headers(),
+      input: {}
+    })
+
+    expect(workspace.messages.map((message) => message.subject)).toStrictEqual(['Lifecycle group fanout'])
+    expect(workspace.selectedMessage?.subject).toBe('Lifecycle group fanout')
+    expect(workspace.selectedMessage?.to).toStrictEqual(['QA <qa@example.test>'])
+    expect(webmailTestState.getMessage).toHaveBeenCalledWith('wildduck-user-1', 'inbox-id', '12')
   }, 15_000)
 
   it('preserves account and folder context when a paginated WildDuck message page is exhausted', async () => {

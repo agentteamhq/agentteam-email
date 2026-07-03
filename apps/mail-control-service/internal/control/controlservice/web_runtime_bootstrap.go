@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"time"
 
+	"mail-control-service/internal/control/controlapi"
 	"mail-control-service/internal/control/controlstate"
 )
 
@@ -41,8 +42,12 @@ type runtimeBootstrapResult struct {
 	Changed bool
 }
 
-func bootstrapRuntimeProjectionFromWeb(ctx context.Context, store controlstate.Store, selectedProvider string, cfg runtimeBootstrapConfig) {
-	bootstrapRuntimeProjectionFromWebWithRetryPolicy(ctx, store, selectedProvider, cfg, runtimeBootstrapRetryPolicy{
+type runtimeProjectionSyncer interface {
+	SyncRuntime(context.Context, controlapi.RuntimeSyncParams, time.Time) (controlapi.RuntimeSyncResult, error)
+}
+
+func bootstrapRuntimeProjectionFromWeb(ctx context.Context, syncer runtimeProjectionSyncer, cfg runtimeBootstrapConfig) {
+	bootstrapRuntimeProjectionFromWebWithRetryPolicy(ctx, syncer, cfg, runtimeBootstrapRetryPolicy{
 		AttemptTimeout: runtimeBootstrapAttemptTimeout,
 		RetryInterval:  runtimeBootstrapRetryInterval,
 		RetryWindow:    runtimeBootstrapRetryWindow,
@@ -50,9 +55,9 @@ func bootstrapRuntimeProjectionFromWeb(ctx context.Context, store controlstate.S
 	})
 }
 
-func bootstrapRuntimeProjectionFromWebWithRetryPolicy(ctx context.Context, store controlstate.Store, selectedProvider string, cfg runtimeBootstrapConfig, policy runtimeBootstrapRetryPolicy) {
+func bootstrapRuntimeProjectionFromWebWithRetryPolicy(ctx context.Context, syncer runtimeProjectionSyncer, cfg runtimeBootstrapConfig, policy runtimeBootstrapRetryPolicy) {
 	startedAt := time.Now()
-	result, err := applyRuntimeProjectionSnapshotFromWeb(ctx, store, selectedProvider, cfg, policy.AttemptTimeout)
+	result, err := applyRuntimeProjectionSnapshotFromWeb(ctx, syncer, cfg, policy.AttemptTimeout)
 	if err == nil {
 		logRuntimeBootstrapApplied(result)
 		return
@@ -69,7 +74,7 @@ func bootstrapRuntimeProjectionFromWebWithRetryPolicy(ctx context.Context, store
 	}
 
 	retry := func() {
-		retryRuntimeProjectionBootstrap(ctx, store, selectedProvider, cfg, policy, remainingWindow)
+		retryRuntimeProjectionBootstrap(ctx, syncer, cfg, policy, remainingWindow)
 	}
 	if policy.Background {
 		go retry()
@@ -78,7 +83,7 @@ func bootstrapRuntimeProjectionFromWebWithRetryPolicy(ctx context.Context, store
 	retry()
 }
 
-func retryRuntimeProjectionBootstrap(ctx context.Context, store controlstate.Store, selectedProvider string, cfg runtimeBootstrapConfig, policy runtimeBootstrapRetryPolicy, retryWindow time.Duration) {
+func retryRuntimeProjectionBootstrap(ctx context.Context, syncer runtimeProjectionSyncer, cfg runtimeBootstrapConfig, policy runtimeBootstrapRetryPolicy, retryWindow time.Duration) {
 	retryCtx, cancel := context.WithTimeout(ctx, retryWindow)
 	defer cancel()
 	ticker := time.NewTicker(policy.RetryInterval)
@@ -92,7 +97,7 @@ func retryRuntimeProjectionBootstrap(ctx context.Context, store controlstate.Sto
 			return
 		case <-ticker.C:
 			attempts++
-			result, err := applyRuntimeProjectionSnapshotFromWeb(retryCtx, store, selectedProvider, cfg, policy.AttemptTimeout)
+			result, err := applyRuntimeProjectionSnapshotFromWeb(retryCtx, syncer, cfg, policy.AttemptTimeout)
 			if err != nil {
 				log.Printf("agent-mail-control-service event=runtime_bootstrap_retry_failed attempt=%d error=%q", attempts, err)
 				continue
@@ -103,7 +108,7 @@ func retryRuntimeProjectionBootstrap(ctx context.Context, store controlstate.Sto
 	}
 }
 
-func applyRuntimeProjectionSnapshotFromWeb(ctx context.Context, store controlstate.Store, selectedProvider string, cfg runtimeBootstrapConfig, attemptTimeout time.Duration) (runtimeBootstrapResult, error) {
+func applyRuntimeProjectionSnapshotFromWeb(ctx context.Context, syncer runtimeProjectionSyncer, cfg runtimeBootstrapConfig, attemptTimeout time.Duration) (runtimeBootstrapResult, error) {
 	if attemptTimeout <= 0 {
 		attemptTimeout = runtimeBootstrapAttemptTimeout
 	}
@@ -114,13 +119,13 @@ func applyRuntimeProjectionSnapshotFromWeb(ctx context.Context, store controlsta
 	if err != nil {
 		return runtimeBootstrapResult{}, err
 	}
-	_, changed, err := controlstate.SyncRuntimeDomains(bootstrapCtx, store, selectedProvider, snapshot.Domains, time.Now().UTC())
+	result, err := syncer.SyncRuntime(bootstrapCtx, controlapi.RuntimeSyncParams{Domains: snapshot.Domains}, time.Now().UTC())
 	if err != nil {
 		return runtimeBootstrapResult{}, fmt.Errorf("apply web runtime snapshot: %w", err)
 	}
 	return runtimeBootstrapResult{
 		Domains: len(snapshot.Domains),
-		Changed: changed,
+		Changed: result.Changed,
 	}, nil
 }
 

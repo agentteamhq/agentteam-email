@@ -139,4 +139,84 @@ describe('Agent Mail control client', () => {
       }
     })
   })
+
+  it('requests the mail-control message view contract', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          result: {
+            displayHtml:
+              '<p>Read <a href="#agent-mail-external-link-1" data-agent-mail-external-link-id="link-1">docs</a></p>',
+            plainText: 'Read docs',
+            externalLinks: [
+              {
+                host: 'docs.example.test',
+                id: 'link-1',
+                scheme: 'https',
+                text: 'docs',
+                url: 'https://docs.example.test'
+              }
+            ],
+            remoteImages: [
+              {
+                alt: 'Tracking pixel',
+                host: 'assets.example.test',
+                id: 'image-1',
+                scheme: 'https',
+                url: 'https://assets.example.test/pixel.png'
+              }
+            ],
+            remoteImagesAllowed: false
+          }
+        }),
+        {
+          headers: { 'content-type': 'application/json' },
+          status: 200
+        }
+      )
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const { getAgentMailMessageView } = await import('./control-client')
+
+    await expect(
+      getAgentMailMessageView({
+        remoteImages: 'block',
+        wildDuckMailboxId: 'mailbox-1',
+        wildDuckMessageId: 'message-1',
+        wildDuckUid: 42,
+        wildDuckUserId: 'user-1'
+      })
+    ).resolves.toMatchObject({
+      displayHtml: expect.stringContaining('data-agent-mail-external-link-id="link-1"'),
+      externalLinks: [
+        {
+          host: 'docs.example.test',
+          id: 'link-1',
+          scheme: 'https',
+          text: 'docs',
+          url: 'https://docs.example.test'
+        }
+      ],
+      remoteImagesAllowed: false
+    })
+
+    const requestInit = fetchMock.mock.calls[0]?.[1]
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL('/rpc/agentMail.message.view.get', 'https://control.example.test'),
+      expect.objectContaining({ method: 'POST' })
+    )
+    expect(JSON.parse(String(requestInit?.body))).toStrictEqual({
+      jsonrpc: '2.0',
+      id: expect.any(String),
+      method: 'agentMail.message.view.get',
+      params: {
+        remoteImages: 'block',
+        wildDuckMailboxId: 'mailbox-1',
+        wildDuckMessageId: 'message-1',
+        wildDuckUid: 42,
+        wildDuckUserId: 'user-1'
+      }
+    })
+  })
 })

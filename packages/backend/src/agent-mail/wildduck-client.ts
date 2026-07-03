@@ -79,6 +79,16 @@ export interface WildDuckMessageAddress {
   name?: string
 }
 
+export interface WildDuckMessageEnvelopeRecipient {
+  formatted?: string
+  value?: string
+}
+
+export interface WildDuckMessageEnvelope {
+  from?: string
+  rcpt?: ReadonlyArray<WildDuckMessageEnvelopeRecipient>
+}
+
 export interface WildDuckAddressInput {
   address: string
   name?: string
@@ -102,9 +112,11 @@ export interface WildDuckMessage {
   cc?: ReadonlyArray<WildDuckMessageAddress> | string
   date?: string
   draft?: boolean
+  envelope?: WildDuckMessageEnvelope
   flagged?: boolean
   flags?: string[]
   from?: ReadonlyArray<WildDuckMessageAddress> | WildDuckMessageAddress | string
+  headers?: Record<string, ReadonlyArray<string> | string>
   html?: string | string[]
   id?: number | string
   inReplyTo?: string
@@ -229,6 +241,14 @@ const wildDuckMessageAddressSchema: z.ZodType<WildDuckMessageAddress> = z.looseO
   address: z.string().optional(),
   name: z.string().optional()
 })
+const wildDuckMessageEnvelopeRecipientSchema: z.ZodType<WildDuckMessageEnvelopeRecipient> = z.looseObject({
+  formatted: z.string().optional(),
+  value: z.string().optional()
+})
+const wildDuckMessageEnvelopeSchema: z.ZodType<WildDuckMessageEnvelope> = z.looseObject({
+  from: z.string().optional(),
+  rcpt: z.array(wildDuckMessageEnvelopeRecipientSchema).optional()
+})
 const wildDuckMessageAttachmentSchema: z.ZodType<WildDuckMessageAttachment> = z.looseObject({
   cid: z.string().nullable().optional(),
   contentId: z.string().nullable().optional(),
@@ -246,9 +266,11 @@ const wildDuckMessageSchema: z.ZodType<WildDuckMessage> = z.looseObject({
   cc: z.union([z.array(wildDuckMessageAddressSchema), z.string()]).optional(),
   date: z.string().optional(),
   draft: z.boolean().optional(),
+  envelope: wildDuckMessageEnvelopeSchema.optional(),
   flagged: z.boolean().optional(),
   flags: z.array(z.string()).optional(),
   from: z.union([z.array(wildDuckMessageAddressSchema), wildDuckMessageAddressSchema, z.string()]).optional(),
+  headers: z.record(z.string(), z.union([z.array(z.string()), z.string()])).optional(),
   html: z.union([z.string(), z.array(z.string())]).optional(),
   id: z.union([z.number(), z.string()]).optional(),
   inReplyTo: z.string().optional(),
@@ -304,6 +326,11 @@ const wildDuckCreateMailboxResponseSchema: z.ZodType<{
 const wildDuckUserListResponseSchema = wildDuckListResponseSchema(wildDuckUserSchema)
 const wildDuckMailboxListResponseSchema = wildDuckListResponseSchema(wildDuckMailboxSchema)
 const wildDuckMessageListResponseSchema = wildDuckListResponseSchema(wildDuckMessageSchema)
+
+const WILDDUCK_MESSAGE_OWNERSHIP_HEADERS = [
+  'X-Agent-Mail-Local-Route-ID',
+  'X-Agent-Mail-Target-Mailbox'
+].join(',')
 
 function wildDuckListResponseSchema<T>(itemSchema: z.ZodType<T>): z.ZodType<WildDuckListResponse<T>> {
   return z.looseObject({
@@ -398,7 +425,18 @@ export class WildDuckClient {
   }
 
   createForwardedAddress(input: WildDuckForwardedAddressInput): Promise<WildDuckSuccessResponse> {
-    return this.requestJSON('POST', '/addresses/forwarded', { body: input }, wildDuckSuccessResponseSchema)
+    return this.requestJSON(
+      'POST',
+      '/addresses/forwarded',
+      {
+        body: {
+          address: input.address,
+          name: input.name,
+          targets: input.targets
+        }
+      },
+      wildDuckSuccessResponseSchema
+    )
   }
 
   updateForwardedAddress(
@@ -447,6 +485,7 @@ export class WildDuckClient {
       {
         searchParams: {
           limit: String(options.limit ?? 25),
+          includeHeaders: WILDDUCK_MESSAGE_OWNERSHIP_HEADERS,
           next: options.next ?? undefined,
           order: 'desc',
           previous: options.previous ?? undefined,
@@ -468,6 +507,7 @@ export class WildDuckClient {
       {
         searchParams: {
           limit: String(options.limit ?? 25),
+          includeHeaders: WILDDUCK_MESSAGE_OWNERSHIP_HEADERS,
           next: options.next ?? undefined,
           order: 'desc',
           previous: options.previous ?? undefined,

@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import Cloudflare from 'cloudflare'
 import { toFile } from 'cloudflare/uploads'
+import debug from 'debug'
 import { Webhook } from 'standardwebhooks'
 
 import { PUBLIC_VARS } from '../vars.public'
@@ -8,6 +9,62 @@ import { PUBLIC_VARS } from '../vars.public'
 import { getCloudflareApiBaseUrl } from './config'
 
 const WORKER_WEBHOOK_SECRET_PREFIX = 'whsec_'
+const SAFE_ERROR_MESSAGE_MAX_LENGTH = 240
+const log = debug('app:cloudflare:client')
+
+type CloudflareProvisioningOperation =
+  | 'workers-script-update'
+  | 'workers-script-delete'
+  | 'email-sending-subdomain-list'
+  | 'email-sending-subdomain-create'
+  | 'email-routing-dns-create'
+  | 'email-routing-dns-delete'
+  | 'email-routing-catch-all-update'
+  | 'email-routing-catch-all-disable'
+
+export interface CloudflareProviderErrorSummary {
+  code?: string | number
+  message?: string
+}
+
+export class CloudflareProvisioningOperationError extends Error {
+  readonly cause: unknown
+  readonly cloudflareProviderErrors: CloudflareProviderErrorSummary[]
+  readonly cloudflareProvisioningOperation: CloudflareProvisioningOperation
+  readonly status: number | null
+
+  constructor(operation: CloudflareProvisioningOperation, cause: unknown) {
+    super(`Cloudflare provisioning operation failed: ${operation}`)
+    this.name = 'CloudflareProvisioningOperationError'
+    Object.defineProperty(this, 'cause', {
+      configurable: true,
+      enumerable: false,
+      value: cause
+    })
+    this.cloudflareProvisioningOperation = operation
+    this.cloudflareProviderErrors = readCloudflareProviderErrors(cause)
+    this.status = readErrorNumber(cause, 'status')
+  }
+}
+
+export class CloudflareRawEmailSendError extends Error {
+  readonly cause: unknown
+  readonly cloudflareEmailSendOperation = 'email-sending-send-raw'
+  readonly cloudflareProviderErrors: CloudflareProviderErrorSummary[]
+  readonly status: number
+
+  constructor(status: number, payload: unknown) {
+    super('Cloudflare raw email send failed')
+    this.name = 'CloudflareRawEmailSendError'
+    Object.defineProperty(this, 'cause', {
+      configurable: true,
+      enumerable: false,
+      value: payload
+    })
+    this.cloudflareProviderErrors = readCloudflareProviderErrors(payload)
+    this.status = status
+  }
+}
 
 export interface CloudflareAccountSummary {
   id: string
@@ -53,6 +110,7 @@ export interface CloudflareRawEmailInput {
 
 export interface CloudflareEmailSendResult {
   delivered: string[]
+  messageId: string | null
   permanentBounces: string[]
   queued: string[]
 }
@@ -69,6 +127,13 @@ export interface CloudflareProvisioningInput {
   organizationPublicId: string
   webhookSigningSecret?: string
   workerCredentials: CloudflareWorkerArchiveCredentials
+}
+
+export interface CloudflareProvisioningRemovalInput {
+  accessToken: string
+  cloudflareAccountId: string
+  cloudflareZoneId: string
+  workerScriptName?: string | null
 }
 
 export function createCloudflareClient(accessToken: string): Cloudflare {
@@ -142,27 +207,38 @@ export async function applyCloudflareProvisioning({
     : createStandardWebhookSecret()
   const webhookSigningSecretReference = `cloudflare-worker:${workerScriptName}:AGENTTEAM_WORKER_HMAC_SECRET`
 
-  await upsertEmailWorker({
-    archivePrefix,
+  await runCloudflareProvisioningOperation('workers-script-update', () =>
+    upsertEmailWorker({
+      archivePrefix,
+      client,
+      cloudflareAccountId,
+      connectionPublicId,
+      domainPublicId,
+      domain,
+      organizationId,
+      organizationPublicId,
+      webhookSigningSecret,
+      workerCredentials,
+      workerScriptName
+    })
+  )
+  await ensureEmailSendingEnabled({
     client,
-    cloudflareAccountId,
-    connectionPublicId,
-    domainPublicId,
-    domain,
-    organizationId,
-    organizationPublicId,
-    webhookSigningSecret,
-    workerCredentials,
-    workerScriptName
+    cloudflareZoneId,
+    domain
   })
-  await client.emailRouting.dns.create({ zone_id: cloudflareZoneId })
-  await client.emailRouting.rules.catchAlls.update({
-    zone_id: cloudflareZoneId,
-    actions: [{ type: 'worker', value: [workerScriptName] }],
-    enabled: true,
-    matchers: [{ type: 'all' }],
-    name: 'AgentTeam Email catch-all'
-  })
+  await runCloudflareProvisioningOperation('email-routing-dns-create', () =>
+    client.emailRouting.dns.create({ zone_id: cloudflareZoneId })
+  )
+  await runCloudflareProvisioningOperation('email-routing-catch-all-update', () =>
+    client.emailRouting.rules.catchAlls.update({
+      zone_id: cloudflareZoneId,
+      actions: [{ type: 'worker', value: [workerScriptName] }],
+      enabled: true,
+      matchers: [{ type: 'all' }],
+      name: 'AgentTeam Email catch-all'
+    })
+  )
 
   return {
     r2Endpoint: workerCredentials.endpoint,
@@ -171,6 +247,58 @@ export async function applyCloudflareProvisioning({
     webhookSigningSecret,
     webhookSigningSecretReference,
     workerScriptName
+  }
+}
+
+export async function removeCloudflareProvisioning({
+  accessToken,
+  cloudflareAccountId,
+  cloudflareZoneId,
+  workerScriptName
+}: CloudflareProvisioningRemovalInput): Promise<void> {
+  const client = createCloudflareClient(accessToken)
+
+  await runCloudflareProvisioningOperation('email-routing-catch-all-disable', () =>
+    client.emailRouting.rules.catchAlls.update({
+      zone_id: cloudflareZoneId,
+      actions: [{ type: 'drop' }],
+      enabled: false,
+      matchers: [{ type: 'all' }],
+      name: 'AgentTeam Email catch-all disabled'
+    })
+  )
+
+  if (workerScriptName) {
+    await runCloudflareProvisioningOperation('workers-script-delete', async () => {
+      try {
+        await client.workers.scripts.delete(workerScriptName, {
+          account_id: cloudflareAccountId,
+          force: true
+        })
+      } catch (error) {
+        if (readErrorNumber(error, 'status') === 404) {
+          log('Cloudflare worker script already absent during teardown', {
+            cloudflareAccountId,
+            workerScriptName
+          })
+          return
+        }
+        throw error
+      }
+    })
+  }
+
+  try {
+    await runCloudflareProvisioningOperation('email-routing-dns-delete', async () => {
+      for await (const _record of client.emailRouting.dns.delete({ zone_id: cloudflareZoneId })) {
+        // The Cloudflare SDK returns deleted DNS records as a page stream; consuming it completes the request.
+      }
+    })
+  } catch (error) {
+    log('Cloudflare Email Routing DNS disable failed during teardown', {
+      cloudflareZoneId,
+      error: cloudflareOperationErrorLogFields(error)
+    })
   }
 }
 
@@ -211,12 +339,63 @@ export async function sendCloudflareRawEmail({
   const parsed = parseCloudflareEmailSendEnvelope(payload)
 
   if (!response.ok || !parsed.success) {
-    const error = new Error('Cloudflare raw email send failed') as Error & { status?: number }
-    error.status = response.status
-    throw error
+    throw new CloudflareRawEmailSendError(response.status, payload)
   }
 
-  return parsed.result
+  const normalized = normalizeSuccessfulCloudflareEmailSendResult(parsed.result, recipients)
+  log('Cloudflare Email Sending raw send completed', {
+    cloudflareAccountId,
+    deliveredCount: normalized.delivered.length,
+    messageIdPresent: normalized.messageId !== null,
+    permanentBounceCount: normalized.permanentBounces.length,
+    queuedCount: normalized.queued.length,
+    resultKeys: parsed.resultKeys
+  })
+  return normalized
+}
+
+async function ensureEmailSendingEnabled({
+  client,
+  cloudflareZoneId,
+  domain
+}: {
+  client: Cloudflare
+  cloudflareZoneId: string
+  domain: string
+}): Promise<void> {
+  const normalizedDomain = domain.trim().toLowerCase()
+  const sendingSubdomains = await runCloudflareProvisioningOperation('email-sending-subdomain-list', async () => {
+    const results: Array<{ enabled?: boolean; name: string }> = []
+    for await (const subdomain of client.emailSending.subdomains.list({ zone_id: cloudflareZoneId })) {
+      results.push(subdomain)
+    }
+    return results
+  })
+  const existing = sendingSubdomains.find((subdomain) => subdomain.name.trim().toLowerCase() === normalizedDomain)
+  log('Cloudflare Email Sending domain lookup completed', {
+    cloudflareZoneId,
+    domain: normalizedDomain,
+    enabled: existing?.enabled,
+    found: existing !== undefined
+  })
+
+  if (existing?.enabled === true) {
+    return
+  }
+
+  const created = await runCloudflareProvisioningOperation('email-sending-subdomain-create', () =>
+    client.emailSending.subdomains.create({
+      name: normalizedDomain,
+      zone_id: cloudflareZoneId
+    })
+  )
+  log('Cloudflare Email Sending domain create completed', {
+    cloudflareZoneId,
+    domain: normalizedDomain,
+    enabled: created.enabled,
+    name: created.name,
+    tag: created.tag
+  })
 }
 
 export function sanitizeCloudflareError(error: unknown): { code: string; message: string } {
@@ -229,27 +408,60 @@ export function sanitizeCloudflareError(error: unknown): { code: string; message
   }
 }
 
+async function runCloudflareProvisioningOperation<TResult>(
+  operation: CloudflareProvisioningOperation,
+  action: () => Promise<TResult>
+): Promise<TResult> {
+  try {
+    return await action()
+  } catch (error) {
+    throw new CloudflareProvisioningOperationError(operation, error)
+  }
+}
+
 function parseCloudflareEmailSendEnvelope(payload: unknown): {
+  resultKeys: string[]
   success: boolean
   result: CloudflareEmailSendResult
 } {
   if (!payload || typeof payload !== 'object') {
     return {
+      resultKeys: [],
       success: false,
-      result: { delivered: [], permanentBounces: [], queued: [] }
+      result: { delivered: [], messageId: null, permanentBounces: [], queued: [] }
     }
   }
   const record = payload as Record<string, unknown>
   const result =
     record.result && typeof record.result === 'object' ? (record.result as Record<string, unknown>) : {}
   return {
+    resultKeys: Object.keys(result).sort(),
     success: record.success === true,
     result: {
       delivered: stringArray(result.delivered),
+      messageId: typeof result.message_id === 'string' && result.message_id.trim() !== '' ? result.message_id : null,
       permanentBounces: stringArray(result.permanent_bounces),
       queued: stringArray(result.queued)
     }
   }
+}
+
+function normalizeSuccessfulCloudflareEmailSendResult(
+  result: CloudflareEmailSendResult,
+  requestedRecipients: string[]
+): CloudflareEmailSendResult {
+  if (
+    result.messageId !== null &&
+    result.delivered.length === 0 &&
+    result.queued.length === 0 &&
+    result.permanentBounces.length === 0
+  ) {
+    return {
+      ...result,
+      queued: [...requestedRecipients]
+    }
+  }
+  return result
 }
 
 function stringArray(value: unknown): string[] {
@@ -392,4 +604,54 @@ function readErrorNumber(error: unknown, key: string): number | null {
 
   const value = error[key as keyof typeof error]
   return typeof value === 'number' ? value : null
+}
+
+function readCloudflareProviderErrors(error: unknown): CloudflareProviderErrorSummary[] {
+  if (!error || typeof error !== 'object') {
+    return []
+  }
+  const errors = (error as Record<string, unknown>).errors
+  if (!Array.isArray(errors)) {
+    return []
+  }
+
+  return errors.flatMap((entry): CloudflareProviderErrorSummary[] => {
+    if (!entry || typeof entry !== 'object') {
+      return []
+    }
+    const record = entry as Record<string, unknown>
+    const code = typeof record.code === 'string' || typeof record.code === 'number' ? record.code : undefined
+    const message = typeof record.message === 'string' ? safeProviderErrorMessage(record.message) : undefined
+
+    return code === undefined && message === undefined ? [] : [{ code, message }]
+  })
+}
+
+function cloudflareOperationErrorLogFields(error: unknown) {
+  if (error instanceof CloudflareProvisioningOperationError) {
+    return {
+      name: error.name,
+      operation: error.cloudflareProvisioningOperation,
+      providerErrorCodes: error.cloudflareProviderErrors.flatMap((entry) =>
+        entry.code === undefined ? [] : [entry.code]
+      ),
+      providerErrorMessages: error.cloudflareProviderErrors.flatMap((entry) =>
+        entry.message === undefined ? [] : [entry.message]
+      ),
+      status: error.status
+    }
+  }
+
+  return {
+    message: error instanceof Error ? safeProviderErrorMessage(error.message) : undefined,
+    name: error instanceof Error ? error.name : typeof error,
+    status: readErrorNumber(error, 'status')
+  }
+}
+
+function safeProviderErrorMessage(message: string): string {
+  return message
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/giu, 'Bearer [redacted]')
+    .replace(/\b(cf[a-z0-9_-]{16,}|[A-Za-z0-9+/=_-]{32,})\b/gu, '[redacted]')
+    .slice(0, SAFE_ERROR_MESSAGE_MAX_LENGTH)
 }

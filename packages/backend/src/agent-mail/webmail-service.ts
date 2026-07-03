@@ -5,8 +5,10 @@ import {
   AgentMailCapability,
   AgentMailMailboxCapabilityGrantConstraints
 } from '@main/db'
+import debug from 'debug'
 
 import { globals } from '../globals'
+import { AgentMailControlAPIError, getAgentMailMessageView } from './control-client'
 import { agentMailCapabilityGrantConstraints, agentMailSubject } from './permission-policy'
 import {
   consumeAgentMailTrialSendQuota,
@@ -39,6 +41,7 @@ const THREAD_MESSAGE_LIMIT = 250
 const AGENT_MAIL_ROUTE_PREFIX_HEADER = 'x-agentteam-mail-route-prefix'
 
 const SAFE_INLINE_ATTACHMENT_TYPES = new Set(['image/gif', 'image/jpeg', 'image/png', 'image/webp'])
+const log = debug('app:agent-mail:webmail')
 
 export interface AgentMailWebAccount {
   address: string
@@ -82,13 +85,32 @@ export interface AgentMailWebAttachment {
   url: string
 }
 
+export interface AgentMailWebExternalLink {
+  host?: string
+  id: string
+  scheme?: string
+  text?: string
+  url: string
+}
+
+export interface AgentMailWebRemoteImage {
+  alt?: string
+  host?: string
+  id: string
+  scheme?: string
+  url: string
+}
+
 export interface AgentMailWebThreadMessage extends AgentMailWebMessageSummary {
   attachments: AgentMailWebAttachment[]
   cc: string[]
+  externalLinks: AgentMailWebExternalLink[]
   html: string
   messageId?: string
   plainText: string
   replyTo: string[]
+  remoteImages: AgentMailWebRemoteImage[]
+  remoteImagesAllowed: boolean
   sourceUrl: string
   to: string[]
 }
@@ -993,13 +1015,14 @@ async function getMessageDetailWithThread({
   routePrefix: string
   userId: string
 }): Promise<AgentMailWebMessageDetail> {
-  const selectedMessage = toMessageDetail(
+  const selectedMessage = await toMessageDetail(
     await requireAuthorizedWildDuckMessage(client, userId, mailboxId, messageId, accountId, {
       ownership: ownershipOptionsForMailbox(mailboxes, mailboxId)
     }),
     accountId,
     mailboxId,
-    routePrefix
+    routePrefix,
+    userId
   )
   if (!selectedMessage.threadId) {
     return selectedMessage
@@ -1069,13 +1092,13 @@ async function listThreadMessageDetails({
     summaries.map((message) =>
       client
         .getMessage(userId, message.mailboxId, message.id)
-        .then((detail) =>
+        .then(async (detail) =>
           messageBelongsToAccount(
             detail,
             accountId,
             conversationOwnershipOptionsForMailbox(mailboxes, message.mailboxId)
           )
-            ? toMessageDetail(detail, accountId, message.mailboxId, routePrefix)
+            ? await toMessageDetail(detail, accountId, message.mailboxId, routePrefix, userId)
             : null
         )
     )
@@ -1083,6 +1106,8 @@ async function listThreadMessageDetails({
 }
 
 interface MessageOwnershipOptions {
+  includeEnvelopeRecipients?: boolean
+  includeLocalRouteTarget?: boolean
   includeSender?: boolean
 }
 
@@ -1110,6 +1135,15 @@ function messageEnvelopeAddresses(message: WildDuckMessage, options: MessageOwne
   if (options.includeSender) {
     addMessageAddressValues(addresses, message.from)
   }
+  if (options.includeEnvelopeRecipients) {
+    for (const recipient of message.envelope?.rcpt ?? []) {
+      addNormalizedMailbox(addresses, recipient.formatted)
+      addNormalizedMailbox(addresses, recipient.value)
+    }
+  }
+  if (options.includeLocalRouteTarget && localRouteHeaderValue(message, 'x-agent-mail-local-route-id')) {
+    addNormalizedMailbox(addresses, localRouteHeaderValue(message, 'x-agent-mail-target-mailbox'))
+  }
   addMessageAddressValues(addresses, message.to)
   addMessageAddressValues(addresses, message.cc)
   addMessageAddressValues(addresses, message.bcc)
@@ -1121,7 +1155,11 @@ function ownershipOptionsForMailbox(
   mailboxId: string
 ): MessageOwnershipOptions {
   const mailbox = mailboxes.find((candidate) => candidate.id === mailboxId)
-  return { includeSender: mailbox ? isOutboundMailbox(mailbox) : false }
+  return {
+    includeEnvelopeRecipients: true,
+    includeLocalRouteTarget: true,
+    includeSender: mailbox ? isOutboundMailbox(mailbox) : false
+  }
 }
 
 function conversationOwnershipOptionsForMailbox(
@@ -1157,6 +1195,24 @@ function addMessageAddressValues(
   addNormalizedMailbox(addresses, value.address)
 }
 
+function localRouteHeaderValue(message: WildDuckMessage, name: string) {
+  const headers = message.headers
+  if (!headers) {
+    return undefined
+  }
+  const normalizedName = name.toLowerCase()
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() !== normalizedName) {
+      continue
+    }
+    if (Array.isArray(value)) {
+      return value.find((candidate) => candidate.trim())
+    }
+    return value
+  }
+  return undefined
+}
+
 function addParsedAddress(addresses: Set<string>, parsed: addressparser.AddressOrGroup) {
   if ('address' in parsed) {
     addNormalizedMailbox(addresses, parsed.address)
@@ -1167,26 +1223,80 @@ function addParsedAddress(addresses: Set<string>, parsed: addressparser.AddressO
   }
 }
 
-function toMessageDetail(
+async function toMessageDetail(
   message: WildDuckMessage,
   accountId: string,
   fallbackMailboxId: string,
-  routePrefix: string
-): AgentMailWebThreadMessage {
+  routePrefix: string,
+  userId: string
+): Promise<AgentMailWebThreadMessage> {
   const summary = toMessageSummary(message, fallbackMailboxId)
   const mailboxId = summary.mailboxId
+  const messageView = await loadMessageView({
+    accountId,
+    mailboxId,
+    message,
+    messageId: summary.id,
+    userId
+  })
   return {
     ...summary,
     attachments: messageAttachments(message)
       .map((attachment) => toAttachmentView(attachment, accountId, mailboxId, summary.id, routePrefix))
       .filter((attachment): attachment is AgentMailWebAttachment => attachment !== null),
     cc: addressList(message.cc),
-    html: htmlBody(message),
+    externalLinks: messageView.externalLinks,
+    html: messageView.displayHtml,
     messageId: stringValue(message.messageId) || undefined,
-    plainText: stringValue(message.text) || stripHTML(htmlBody(message)),
+    plainText: messageView.plainText || stringValue(message.text) || stripHTML(htmlBody(message)),
     replyTo: addressList(message.replyTo),
-    sourceUrl: mailRoutePath(routePrefix, 'accounts', accountId, 'mailboxes', mailboxId, 'messages', summary.id, 'source'),
+    remoteImages: messageView.remoteImages,
+    remoteImagesAllowed: messageView.remoteImagesAllowed,
+    sourceUrl: mailRoutePath(
+      routePrefix,
+      'accounts',
+      accountId,
+      'mailboxes',
+      mailboxId,
+      'messages',
+      summary.id,
+      'source'
+    ),
     to: addressList(message.to)
+  }
+}
+
+async function loadMessageView({
+  accountId,
+  mailboxId,
+  message,
+  messageId,
+  userId
+}: {
+  accountId: string
+  mailboxId: string
+  message: WildDuckMessage
+  messageId: string
+  userId: string
+}) {
+  try {
+    return await getAgentMailMessageView({
+      remoteImages: 'block',
+      wildDuckMailboxId: mailboxId,
+      wildDuckUid: requirePositiveMessageId(messageId),
+      wildDuckUserId: userId
+    })
+  } catch (error) {
+    const status = error instanceof AgentMailControlAPIError ? error.status : undefined
+    log('message view unavailable %o', {
+      accountId,
+      mailboxId,
+      messageId,
+      status,
+      userId,
+      wildDuckMessageId: stringValue(message.messageId) || undefined
+    })
+    throw new AgentMailWebmailError('Message view is not available', 502)
   }
 }
 
@@ -1744,10 +1854,7 @@ function mailRoutePrefix(headers: Headers) {
 
 function mailRoutePath(routePrefix: string, ...segments: string[]) {
   const pathURL = new URL('https://agent-mail.invalid/')
-  pathURL.pathname = [
-    ...routePrefix.split('/').filter(Boolean),
-    ...segments
-  ]
+  pathURL.pathname = [...routePrefix.split('/').filter(Boolean), ...segments]
     .map((segment) => encodeURIComponent(segment))
     .join('/')
   return pathURL.pathname

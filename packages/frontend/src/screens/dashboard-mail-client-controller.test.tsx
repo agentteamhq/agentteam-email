@@ -29,6 +29,7 @@ const controllerTestState = vi.hoisted(() => ({
   finalizeCloudflareOAuth: vi.fn(),
   navigate: vi.fn(() => Promise.resolve()),
   provisionCloudflareConnection: vi.fn(),
+  removeCloudflareDomain: vi.fn(),
   routePathname: '/dashboard/',
   startCloudflareOAuth: vi.fn()
 }))
@@ -63,6 +64,7 @@ vi.mock('../lib/cloudflare-rpc', () => ({
   fetchCloudflareZones: controllerTestState.fetchCloudflareZones,
   finalizeCloudflareOAuth: controllerTestState.finalizeCloudflareOAuth,
   provisionCloudflareConnection: controllerTestState.provisionCloudflareConnection,
+  removeCloudflareDomain: controllerTestState.removeCloudflareDomain,
   startCloudflareOAuth: controllerTestState.startCloudflareOAuth
 }))
 
@@ -104,6 +106,7 @@ describe('DashboardMailController Cloudflare OAuth routing', () => {
     controllerTestState.finalizeCloudflareOAuth.mockReset()
     controllerTestState.navigate.mockClear()
     controllerTestState.provisionCloudflareConnection.mockReset()
+    controllerTestState.removeCloudflareDomain.mockReset()
     controllerTestState.routePathname = '/dashboard/'
     controllerTestState.startCloudflareOAuth.mockReset()
     controllerTestState.startCloudflareOAuth.mockResolvedValue({

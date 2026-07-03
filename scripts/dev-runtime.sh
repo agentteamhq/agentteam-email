@@ -122,7 +122,7 @@ wait_http() {
 }
 
 control_health_url() {
-  local listen_address="${AT_EMAIL_ADMIN_CONTROL_LISTEN_ADDRESS:-:8081}"
+  local listen_address="${AT_EMAIL_ADMIN_CONTROL_LISTEN_ADDRESS:-127.0.0.1:8081}"
   local port="${listen_address##*:}"
   if [[ -z "${port}" || "${port}" == "${listen_address}" ]]; then
     port="8081"

@@ -3,9 +3,7 @@ import {
   AuthenticatedDashboardContent,
   AuthenticatedShell
 } from '../partials/authenticated/authenticated-shell'
-import {
-  withActiveSidebarItem
-} from '../partials/authenticated/authenticated-shell-models'
+import { withActiveSidebarItem } from '../partials/authenticated/authenticated-shell-models'
 import {
   getMailboxAdminSectionTitle,
   isMailboxAdminSectionId
@@ -18,6 +16,7 @@ import type {
   AuthenticatedDashboardView,
   AuthenticatedEmailAction,
   AuthenticatedEmailPreview,
+  AuthenticatedEmailThreadMessage,
   AuthenticatedMailActionDialogKind,
   AuthenticatedMailActionView,
   AuthenticatedMailFolderAction,
@@ -192,9 +191,10 @@ export function DashboardScreen({
   const [remoteImagesAllowedByMessageScope, setRemoteImagesAllowedByMessageScope] = React.useState<
     ReadonlySet<string>
   >(() => new Set())
-  const [uncontrolledSettingsOpen, setUncontrolledSettingsOpen] = React.useState(
-    defaultSettingsOpen ?? false
-  )
+  const [threadMessageStateByScope, setThreadMessageStateByScope] = React.useState<
+    ReadonlyMap<string, NonNullable<AuthenticatedEmailThreadMessage['state']>>
+  >(() => new Map())
+  const [uncontrolledSettingsOpen, setUncontrolledSettingsOpen] = React.useState(defaultSettingsOpen ?? false)
   const [uncontrolledSettingsSection, setUncontrolledSettingsSection] = React.useState<SettingsSectionId>(
     defaultSettingsSection ?? 'account'
   )
@@ -218,24 +218,57 @@ export function DashboardScreen({
       ? getRemoteImageApprovalKey(resolvedSidebarView.activeAccountId, preview.id)
       : undefined
 
+    let resolvedPreview = preview
+
     if (
-      !preview ||
-      !remoteImageApprovalKey ||
-      !remoteImagesAllowedByMessageScope.has(remoteImageApprovalKey)
+      resolvedPreview &&
+      remoteImageApprovalKey &&
+      remoteImagesAllowedByMessageScope.has(remoteImageApprovalKey)
     ) {
-      return preview
+      resolvedPreview = {
+        ...resolvedPreview,
+        remoteImagesAllowed: true
+      } satisfies AuthenticatedEmailPreview
     }
 
-    return {
-      ...preview,
-      html: preview.htmlWithRemoteImages ?? preview.html,
-      remoteImagesAllowed: true
-    } satisfies AuthenticatedEmailPreview
+    if (resolvedPreview?.thread?.length) {
+      let threadChanged = false
+      const resolvedThread = resolvedPreview.thread.map((threadMessage) => {
+        const state = threadMessageStateByScope.get(
+          getThreadMessageStateKey(
+            resolvedSidebarView.activeAccountId,
+            resolvedPreview.threadId ?? resolvedPreview.id,
+            threadMessage.id,
+            threadMessage.folderId
+          )
+        )
+
+        if (!state || state === threadMessage.state) {
+          return threadMessage
+        }
+
+        threadChanged = true
+        return {
+          ...threadMessage,
+          state
+        } satisfies AuthenticatedEmailThreadMessage
+      })
+
+      if (threadChanged) {
+        resolvedPreview = {
+          ...resolvedPreview,
+          thread: resolvedThread
+        } satisfies AuthenticatedEmailPreview
+      }
+    }
+
+    return resolvedPreview
   }, [
     emailPreviewsById,
     remoteImagesAllowedByMessageScope,
     resolvedSidebarView.activeAccountId,
-    selectedMailId
+    selectedMailId,
+    threadMessageStateByScope
   ])
   const resolvedDashboardView = React.useMemo<AuthenticatedDashboardView>(
     () =>
@@ -254,6 +287,21 @@ export function DashboardScreen({
         setRemoteImagesAllowedByMessageScope((current) => {
           const next = new Set(current)
           next.add(getRemoteImageApprovalKey(resolvedSidebarView.activeAccountId, email.id))
+          return next
+        })
+      }
+      if (action === 'collapse-thread-message' || action === 'expand-thread-message') {
+        setThreadMessageStateByScope((current) => {
+          const next = new Map(current)
+          next.set(
+            getThreadMessageStateKey(
+              resolvedSidebarView.activeAccountId,
+              email.threadId ?? email.id,
+              email.id,
+              email.folderId
+            ),
+            action === 'collapse-thread-message' ? 'collapsed' : 'expanded'
+          )
           return next
         })
       }
@@ -376,6 +424,15 @@ export function DashboardScreen({
 
 function getRemoteImageApprovalKey(accountId: string | undefined, emailId: string) {
   return `${accountId ?? 'default-mailbox'}:${emailId}`
+}
+
+function getThreadMessageStateKey(
+  accountId: string | undefined,
+  threadId: string | undefined,
+  messageId: string,
+  folderId: string | undefined
+) {
+  return `${accountId ?? 'default-mailbox'}:${threadId ?? 'thread'}:${folderId ?? 'folder'}:${messageId}`
 }
 
 function getMailboxScopedStateKey(accountId: string | undefined, value: string | undefined) {

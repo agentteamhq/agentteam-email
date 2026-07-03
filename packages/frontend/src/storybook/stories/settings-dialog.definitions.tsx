@@ -7,6 +7,7 @@ import {
   domainSettingsDomainDisconnectedState,
   domainSettingsDomainLiveState,
   domainSettingsDomainNeedsAttentionState,
+  domainSettingsDomainRemovedState,
   domainSettingsDomainRetryBusyState,
   domainSettingsEmptyFirstUseState,
   domainSettingsLoadDomainsBusyState,
@@ -742,6 +743,19 @@ export const DomainsAddDomainSelectZone: Story = {
     domainSettingsState: domainSettingsAddDomainSelectZoneState,
     settingsSection: 'domains'
   })
+}
+
+export const DomainsDomainRemoved: Story = {
+  args: buildSettingsScreenArgs({
+    domainSettingsState: domainSettingsDomainRemovedState,
+    settingsSection: 'domains'
+  }),
+  play: async ({ args, canvasElement }) => {
+    const canvas = await expectSettingsDomainsDialog(args, canvasElement)
+
+    await expect(await canvas.findByText('Domain removed')).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /add selected domain/i })).toBeEnabled()
+  }
 }
 
 export const DomainsDomainLive: Story = {

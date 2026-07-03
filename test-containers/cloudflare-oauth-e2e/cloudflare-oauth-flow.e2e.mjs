@@ -22,6 +22,8 @@ const cloudflareScopes = [
   'user-details.read',
   'dns.read',
   'dns.write',
+  'zone-dns-settings.read',
+  'zone-dns-settings.write',
   'zone.read',
   'cloud-email-security.read',
   'email-routing-address.read',

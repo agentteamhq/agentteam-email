@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   getOrganizationSettingsSectionFromSegment,
+  getSettingsSectionFromPathname,
   getSettingsSectionFromSegment,
   resolveOrganizationRouteSegment,
   resolveSettingsRouteSegment
@@ -29,6 +30,15 @@ describe('settings section routing', () => {
       section: 'integrations',
       type: 'section'
     })
+  })
+
+  it('maps settings route pathnames to active settings sections', () => {
+    expect(getSettingsSectionFromPathname('/settings/')).toBe('account')
+    expect(getSettingsSectionFromPathname('/settings/domains/')).toBe('domains')
+    expect(getSettingsSectionFromPathname('/settings/connected-accounts/?cloudflareIntentId=abc')).toBe(
+      'connected-accounts'
+    )
+    expect(getSettingsSectionFromPathname('/dashboard/')).toBeNull()
   })
 
   it('does not silently accept camelCase route segments', () => {

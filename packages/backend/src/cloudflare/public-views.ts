@@ -1,4 +1,6 @@
 import { publicIdFromUUIDv7 } from '@main/db'
+
+import { getCloudflareRequiredOAuthScopes } from './config'
 import type {
   CloudflareConnectionDocument,
   CloudflareConnectionPublicId,
@@ -82,7 +84,8 @@ export function cloudflareOAuthGrantPublicView(
 
 function missingRequiredCloudflareScopeCount(grant: CloudflareOAuthGrantDocument): number {
   const grantedScopes = new Set(grant.grantedScopes)
-  return grant.requiredScopes.filter((scope) => !grantedScopes.has(scope)).length
+  const requiredScopes = new Set([...grant.requiredScopes, ...getCloudflareRequiredOAuthScopes()])
+  return [...requiredScopes].filter((scope) => !grantedScopes.has(scope)).length
 }
 
 export function cloudflareConnectionPublicView(

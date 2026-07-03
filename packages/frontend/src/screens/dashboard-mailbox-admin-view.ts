@@ -7,6 +7,8 @@ export type MailboxAdminControllerActions = Pick<
   | 'onCreateAgent'
   | 'onCopyAgentEnrollmentCommand'
   | 'onDialogChange'
+  | 'onDeleteAccount'
+  | 'onDeleteGroup'
   | 'onDisableAccount'
   | 'onDisableGroup'
   | 'onOpenMailbox'
@@ -19,7 +21,9 @@ export type MailboxAdminControllerActions = Pick<
   | 'onSaveGroup'
   | 'onSavePrincipalMailboxGrants'
   | 'onSavePrincipalSystemPermissions'
+  | 'pendingAccountDeleteId'
   | 'pendingAccountDisableId'
+  | 'pendingGroupDeleteId'
   | 'pendingAccountSave'
   | 'pendingAgentCreate'
   | 'pendingAgentEnrollmentRevokeId'
@@ -78,6 +82,8 @@ function allowedMailboxAdminControllerActions(
     ...actions,
     onCopyAgentEnrollmentCommand: actions.onCopyAgentEnrollmentCommand,
     onCreateAgent: view.allowedActions.createAgent ? actions.onCreateAgent : undefined,
+    onDeleteAccount: view.allowedActions.deleteAccount ? actions.onDeleteAccount : undefined,
+    onDeleteGroup: view.allowedActions.deleteGroup ? actions.onDeleteGroup : undefined,
     onDisableAccount: view.allowedActions.disableAccount ? actions.onDisableAccount : undefined,
     onDisableGroup: view.allowedActions.disableGroup ? actions.onDisableGroup : undefined,
     onRevokeAgent: view.allowedActions.revokeAgent ? actions.onRevokeAgent : undefined,
@@ -118,6 +124,8 @@ const emptyMailboxAdminAllowedActions = {
   createAccount: false,
   createAgent: false,
   createGroup: false,
+  deleteAccount: false,
+  deleteGroup: false,
   disableAccount: false,
   disableGroup: false,
   manageAgentMailboxGrants: false,

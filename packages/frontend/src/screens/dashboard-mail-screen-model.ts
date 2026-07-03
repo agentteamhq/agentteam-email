@@ -1,9 +1,5 @@
 import { mailboxAddressOrRaw, mailboxDisplayName } from '../lib/mail-addresses'
-import {
-  actionsForMessage,
-  threadActionsForMessage,
-  toSidebarView
-} from './dashboard-mail-sidebar-view'
+import { actionsForMessage, toSidebarView } from './dashboard-mail-sidebar-view'
 import { toDashboardView } from './dashboard-mail-dashboard-view'
 import type { DashboardSearch } from '../lib/dashboard-search'
 import type {
@@ -108,6 +104,7 @@ export function toEmailPreview(
   return {
     actions: actionsForMessage(message, folders),
     attachments: message.attachments.map(toEmailAttachment),
+    externalLinks: message.externalLinks,
     folderId: message.mailboxId,
     html: message.html,
     id: message.id,
@@ -116,16 +113,19 @@ export function toEmailPreview(
     isUnread: message.unread,
     receivedAt: message.receivedAt ?? '',
     recipientEmail: message.to.join(', '),
+    remoteImages: message.remoteImages,
+    remoteImagesAllowed: message.remoteImagesAllowed,
     senderEmail: mailboxAddressOrRaw(message.from),
     senderName: mailboxDisplayName(message.from),
     subject: message.subject,
     thread: message.thread?.map((threadMessage: AgentMailWebThreadMessage) =>
       toEmailThreadMessage(
         threadMessage,
-        folders,
-        threadMessage.id === message.id && threadMessage.mailboxId === message.mailboxId
+        threadMessage.isDraft ||
+          (threadMessage.id === message.id && threadMessage.mailboxId === message.mailboxId)
           ? 'expanded'
-          : 'collapsed'
+          : 'collapsed',
+        folders
       )
     ),
     threadId: message.threadId
@@ -134,18 +134,23 @@ export function toEmailPreview(
 
 function toEmailThreadMessage(
   message: AgentMailWebThreadMessage,
-  folders: ReadonlyArray<AgentMailWebFolder>,
-  state: 'collapsed' | 'expanded'
+  state: 'collapsed' | 'expanded',
+  folders: ReadonlyArray<AgentMailWebFolder>
 ): NonNullable<AuthenticatedEmailPreview['thread']>[number] {
   return {
-    actions: threadActionsForMessage(message, folders),
+    actions: actionsForMessage(message, folders),
     attachments: message.attachments.map(toEmailAttachment),
+    externalLinks: message.externalLinks,
     folderId: message.mailboxId,
     html: message.html,
     id: message.id,
     isDraft: message.isDraft,
+    isStarred: message.isStarred,
+    isUnread: message.unread,
     receivedAt: message.receivedAt ?? '',
     recipientEmail: message.to.join(', '),
+    remoteImages: message.remoteImages,
+    remoteImagesAllowed: message.remoteImagesAllowed,
     senderEmail: mailboxAddressOrRaw(message.from),
     senderName: mailboxDisplayName(message.from),
     state,

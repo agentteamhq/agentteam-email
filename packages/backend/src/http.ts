@@ -1,4 +1,5 @@
 import { HttpStatusCode } from '@main/common'
+import debug from 'debug'
 import { Elysia } from 'elysia'
 
 import { globals } from './globals'
@@ -10,6 +11,8 @@ import { handleAtEmailMetadataRequest, isAtEmailMetadataRequestPath } from './au
 import { handleOAuthMetadataRequest, isOAuthMetadataRequestPath } from './auth/oauth-metadata'
 import { backendApiApp } from './api'
 import { backendRpcApp } from './rpc'
+
+const log = debug('app:http')
 
 function isRoutePath(pathname: string, basePath: string): boolean {
   return pathname === basePath || pathname.startsWith(`${basePath}/`)
@@ -31,6 +34,17 @@ export const backendHttpApp = new Elysia({
   normalize: false,
   strictPath: false
 })
+  .onError(({ code, error, request }) => {
+    const url = new URL(request.url)
+    log('backend_http_unhandled_error %o', {
+      errorCode: code,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorStack: error instanceof Error ? error.stack : undefined,
+      method: request.method,
+      path: url.pathname
+    })
+  })
   .use(backendApiApp)
   .use(backendRpcApp)
   .all('/.well-known/oauth-authorization-server', ({ request }) =>

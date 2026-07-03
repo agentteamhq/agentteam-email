@@ -17,6 +17,8 @@ encryption, sessions, cookies, API keys, tokens, JWT, OAuth, JWKS, secret
 storage, security-sensitive routes, or anything that could be security related,
 agents must stop, read [SECURITY.md](SECURITY.md), and follow it.
 
+## Architecture And Integration Boundaries
+
 Before changing existing product concepts, architecture boundaries, route
 surfaces, authentication terms, integration terms, account/domain ownership, or
 settings semantics, agents must read [ARCHITECTURE.md](ARCHITECTURE.md) and
@@ -25,6 +27,24 @@ preserve the vocabulary and ownership model defined there.
 When [ARCHITECTURE.md](ARCHITECTURE.md) points to a package or directory
 `AGENTS.md` as the owning rule surface, agents must read that file before
 changing behavior in that scope.
+
+Before proposing or changing any code, configuration, documentation, task,
+Compose file, chart, test, or runtime wiring that connects one service to
+another, agents must read [ARCHITECTURE.md](ARCHITECTURE.md) and the owning
+service architecture documentation.
+
+This applies to service-to-service integration, network or listener binding,
+hostnames, ports, Compose or Kubernetes routing, RPC clients, SMTP relay paths,
+OAuth callbacks, webhooks, provider boundaries, and any other connection
+between services. Connection-specific changes include adding, removing, or
+changing URLs, base URLs, listen addresses, network aliases, target services,
+protocols, ports, client factories, callback paths, relay paths, health checks,
+credential boundaries, or provider endpoints. Agents must identify the
+documented contract, the current runtime evidence, and the specific mismatch
+before editing. Agents must not infer connectivity changes from a local
+symptom, temporary dev topology, or current broken code alone. If observed
+behavior matches the documented contract, agents must not change wiring and
+must continue validation at the next failing boundary.
 
 ## Fixes And Failures
 

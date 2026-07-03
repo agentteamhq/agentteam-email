@@ -68,6 +68,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '../../components/ui/dropdown-menu'
 import { Input } from '../../components/ui/input'
@@ -95,7 +96,6 @@ import {
   SidebarInput,
   SidebarInset,
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
@@ -103,15 +103,13 @@ import {
   SidebarTrigger,
   useSidebar
 } from '../../components/ui/sidebar'
-import { Switch } from '../../components/ui/switch'
 import { Textarea } from '../../components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip'
 import {
   buildEmailContentSecurityPolicy,
   buildEmailIframeDocument,
   normalizeEmailAttachmentURL,
-  normalizeEmailLink,
-  rewriteEmailHTMLForIframe
+  normalizeEmailLink
 } from '../../lib/email-safety'
 import { cn } from '../../lib/utils'
 import { CloudflareConnectButton, CloudflareLogo } from './cloudflare-brand'
@@ -243,14 +241,12 @@ export function AuthenticatedShell({
   onMailboxFolderRenameOpenChange,
   onMailboxFolderRenameSubmit,
   onMailboxPageChange,
-  onMailboxRefresh,
   onMailboxRetry,
   onMailSelect,
   onSettingsOpenChange,
   onSettingsSectionChange,
   onSidebarItemSelect,
   onSidebarSearchChange,
-  onSidebarUnreadOnlyChange,
   settingsContentState,
   settingsOpen,
   settingsSection,
@@ -264,6 +260,7 @@ export function AuthenticatedShell({
 
   return (
     <SidebarProvider
+      className='h-svh min-h-0'
       open={hasActiveManagementItem ? false : undefined}
       style={
         {
@@ -287,11 +284,9 @@ export function AuthenticatedShell({
         onFolderRenameSubmit={onMailboxFolderRenameSubmit}
         onMailSelect={onMailSelect}
         onPageChange={onMailboxPageChange}
-        onRefresh={onMailboxRefresh}
         onRetry={onMailboxRetry}
         onSearchChange={onSidebarSearchChange}
         onSelectItem={onSidebarItemSelect}
-        onUnreadOnlyChange={onSidebarUnreadOnlyChange}
         view={sidebarView}
       />
       <SidebarInset>
@@ -731,7 +726,7 @@ function MailActionDialogs({
             <Select
               disabled={!onMoveTargetChange || moveView?.isSubmitting}
               onValueChange={onMoveTargetChange}
-              value={moveView?.selectedFolderId}
+              value={moveView?.selectedFolderId ?? ''}
             >
               <SelectTrigger
                 id='authenticated-mail-move-target'
@@ -1137,11 +1132,9 @@ export interface AuthenticatedSidebarProps {
   onFolderRenameSubmit?: () => void
   onMailSelect?: (mailId: string) => void
   onPageChange?: (pageChange: AuthenticatedMailPageChange) => void
-  onRefresh?: () => void
   onRetry?: () => void
   onSearchChange?: (query: string) => void
   onSelectItem?: (itemId: string) => void
-  onUnreadOnlyChange?: (unreadOnly: boolean) => void
   view: AuthenticatedSidebarView
 }
 
@@ -1159,11 +1152,9 @@ export function AuthenticatedSidebar({
   onFolderRenameSubmit,
   onMailSelect,
   onPageChange,
-  onRefresh,
   onRetry,
   onSearchChange,
   onSelectItem,
-  onUnreadOnlyChange,
   view
 }: AuthenticatedSidebarProps) {
   const { setOpen } = useSidebar()
@@ -1177,6 +1168,8 @@ export function AuthenticatedSidebar({
     view.workspaceSwitcher?.activeWorkspaceId ?? workspaceSwitcherWorkspaces[0]?.id
   const workspaceSwitcherMailboxes = getSidebarWorkspaceSwitcherMailboxes(view.accounts ?? [])
   const workspaceSwitcherState = getSidebarWorkspaceSwitcherState(view)
+  const activeMailNavItem = view.navMain.find((item) => item.id === view.activeItemId)
+  const activeFolderActions = activeMailNavItem?.actions ?? []
 
   return (
     <>
@@ -1211,7 +1204,6 @@ export function AuthenticatedSidebar({
                         <MailNavButton
                           item={item}
                           isActive={item.id === view.activeItemId}
-                          onAction={onFolderAction}
                           onSelect={() => {
                             onSelectItem?.(item.id)
                             setOpen(true)
@@ -1277,50 +1269,67 @@ export function AuthenticatedSidebar({
               <div className='flex w-full items-center justify-between gap-2'>
                 <div className='flex min-w-0 items-center gap-1.5'>
                   <div className='text-foreground truncate text-base font-medium'>{view.paneTitle}</div>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        aria-label={
-                          view.refreshLabel ?? (view.isRefreshing ? 'Refreshing mailbox' : 'Refresh mailbox')
-                        }
-                        className='size-7'
-                        disabled={!onRefresh || view.isRefreshing || view.state === 'loading'}
-                        onClick={onRefresh}
-                        size='icon'
-                        type='button'
-                        variant='ghost'
+                  {activeMailNavItem && activeFolderActions.length ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          aria-label={`${activeMailNavItem.title} folder options`}
+                          className='size-7 shrink-0'
+                          disabled={!onFolderAction}
+                          size='icon'
+                          type='button'
+                          variant='ghost'
+                        >
+                          <DotsThreeIcon data-icon='icon-only' />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align='start'
+                        side='bottom'
                       >
-                        {view.isRefreshing ? (
-                          <Spinner data-icon='icon-only' />
-                        ) : (
-                          <ArrowsClockwiseIcon data-icon='icon-only' />
-                        )}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{view.refreshLabel ?? 'Refresh mailbox'}</TooltipContent>
-                  </Tooltip>
+                        {activeFolderActions.map((action) => {
+                          const ActionIcon = folderActionIcons[action.action]
+
+                          return (
+                            <DropdownMenuItem
+                              disabled={action.disabled || action.pending || !onFolderAction}
+                              key={action.action}
+                              onSelect={() => {
+                                onFolderAction?.(action.action, activeMailNavItem)
+                              }}
+                              variant={action.action === 'delete-folder' ? 'destructive' : 'default'}
+                            >
+                              {action.pending ? (
+                                <Spinner data-icon='inline-start' />
+                              ) : (
+                                <ActionIcon data-icon='inline-start' />
+                              )}
+                              <span className='grid min-w-0 gap-0.5'>
+                                <span className='truncate'>{action.label}</span>
+                                {action.disabledReason ? (
+                                  <span className='text-muted-foreground truncate text-xs'>
+                                    {action.disabledReason}
+                                  </span>
+                                ) : null}
+                              </span>
+                            </DropdownMenuItem>
+                          )
+                        })}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : null}
                 </div>
-                <Label className='flex items-center gap-2 text-sm'>
-                  <span>Unreads</span>
-                  <Switch
-                    aria-label='Show unread messages only'
-                    checked={view.unreadOnly ?? false}
-                    className='shadow-none'
-                    onCheckedChange={onUnreadOnlyChange}
-                  />
-                </Label>
+                <Button
+                  className='shrink-0'
+                  disabled={!onComposeOpen || hasExplicitlyNoAccounts}
+                  onClick={onComposeOpen}
+                  size='sm'
+                  type='button'
+                >
+                  <PencilSimpleIcon data-icon='inline-start' />
+                  Compose
+                </Button>
               </div>
-              <Button
-                className='w-full justify-start'
-                disabled={!onComposeOpen || hasExplicitlyNoAccounts}
-                onClick={onComposeOpen}
-                size='sm'
-                type='button'
-                variant='outline'
-              >
-                <PencilSimpleIcon data-icon='inline-start' />
-                Compose
-              </Button>
               <SidebarInput
                 onChange={(event) => {
                   onSearchChange?.(event.currentTarget.value)
@@ -1391,7 +1400,7 @@ function CreateMailFolderButton({
       }}
     >
       <PlusIcon />
-      <span>{label}</span>
+      <span className='sr-only'>{label}</span>
     </SidebarMenuButton>
   )
 }
@@ -1638,15 +1647,10 @@ const managementNavIcons = {
 function MailNavButton({
   isActive,
   item,
-  onAction,
   onSelect
 }: {
   isActive: boolean
   item: AuthenticatedSidebarView['navMain'][number]
-  onAction?: (
-    action: AuthenticatedMailFolderAction,
-    folder: AuthenticatedSidebarView['navMain'][number]
-  ) => void
   onSelect: () => void
 }) {
   const Icon = mailNavIcons[item.iconKey]
@@ -1680,7 +1684,7 @@ function MailNavButton({
         type='button'
       >
         <Icon />
-        <span>{item.title}</span>
+        <span className='sr-only'>{item.title}</span>
         {item.badgeLabel ? (
           <Badge
             className='ml-auto min-w-5 justify-center px-1 text-[10px]'
@@ -1690,50 +1694,6 @@ function MailNavButton({
           </Badge>
         ) : null}
       </SidebarMenuButton>
-      {item.actions?.length ? (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <SidebarMenuAction
-              aria-label={`${item.title} folder actions`}
-              disabled={!onAction}
-              showOnHover
-            >
-              <DotsThreeIcon />
-            </SidebarMenuAction>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align='start'
-            side='right'
-          >
-            {item.actions.map((action) => {
-              const ActionIcon = folderActionIcons[action.action]
-
-              return (
-                <DropdownMenuItem
-                  disabled={action.disabled || action.pending || !onAction}
-                  key={action.action}
-                  onSelect={() => {
-                    onAction?.(action.action, item)
-                  }}
-                  variant={action.action === 'delete-folder' ? 'destructive' : 'default'}
-                >
-                  {action.pending ? (
-                    <Spinner data-icon='inline-start' />
-                  ) : (
-                    <ActionIcon data-icon='inline-start' />
-                  )}
-                  <span className='grid min-w-0 gap-0.5'>
-                    <span className='truncate'>{action.label}</span>
-                    {action.disabledReason ? (
-                      <span className='text-muted-foreground truncate text-xs'>{action.disabledReason}</span>
-                    ) : null}
-                  </span>
-                </DropdownMenuItem>
-              )
-            })}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ) : null}
     </>
   )
 }
@@ -2207,6 +2167,9 @@ function EmailPreviewPane({
   const [selectedExternalLink, setSelectedExternalLink] = React.useState<AuthenticatedExternalLink | null>(
     null
   )
+  const hasAttachments = Boolean(email.attachments?.length)
+  const hasThread = Boolean(email.thread?.length)
+  const selectedThreadMessage = email.thread?.find((message) => isSelectedThreadMessage(email, message))
 
   return (
     <main className='bg-background flex min-h-0 flex-1 flex-col overflow-hidden'>
@@ -2219,39 +2182,58 @@ function EmailPreviewPane({
         onEmailAction={onEmailAction}
         onExternalLinkSelect={setSelectedExternalLink}
       />
-      <EmailPreviewHeader email={email} />
-      <EmailAttachmentList
-        attachments={email.attachments ?? []}
-        onAttachmentPreview={
-          onAttachmentPreview
-            ? (attachment) => {
-                onAttachmentPreview(attachment, email)
-              }
-            : undefined
-        }
-      />
-      <div className='bg-background min-h-0 flex-1 overflow-auto'>
-        {email.thread?.length ? (
+      {hasThread ? (
+        <div
+          className='bg-background min-h-0 flex-1 overflow-auto'
+          data-email-thread-scroll-region='thread'
+        >
+          <EmailPreviewHeader
+            email={email}
+            onEmailAction={onEmailAction}
+            selectedThreadMessage={selectedThreadMessage}
+          />
+          {selectedThreadMessage?.state === 'collapsed' ? null : (
+            <EmailSelectedThreadMessageBody
+              email={email}
+              message={selectedThreadMessage}
+              onAttachmentPreview={onAttachmentPreview}
+              onExternalLinkSelect={setSelectedExternalLink}
+            />
+          )}
           <EmailThreadView
             email={email}
             onAttachmentPreview={onAttachmentPreview}
             onEmailAction={onEmailAction}
             onExternalLinkSelect={setSelectedExternalLink}
           />
-        ) : (
-          <EmailMessageBodyFrame
-            allowRemoteImages={email.remoteImagesAllowed}
-            attachments={email.attachments ?? []}
-            className={getEmailBodyFrameClass(email.bodySize ?? 'fill')}
-            externalLinks={email.externalLinks ?? []}
-            html={email.html}
-            loading='lazy'
-            onExternalLinkSelect={setSelectedExternalLink}
-            remoteImages={email.remoteImages ?? []}
-            title={`${email.subject} email body`}
-          />
-        )}
-      </div>
+        </div>
+      ) : (
+        <>
+          <EmailPreviewHeader email={email} />
+          <div className='bg-background min-h-0 flex-1 overflow-auto'>
+            <EmailMessageBodyFrame
+              allowRemoteImages={email.remoteImagesAllowed}
+              className={hasAttachments ? undefined : getEmailBodyFrameClass(email.bodySize ?? 'fill')}
+              externalLinks={email.externalLinks ?? []}
+              fitContent={hasAttachments}
+              html={email.html}
+              loading='lazy'
+              onExternalLinkSelect={setSelectedExternalLink}
+              title={`${email.subject} email body`}
+            />
+            <EmailAttachmentList
+              attachments={email.attachments ?? []}
+              onAttachmentPreview={
+                onAttachmentPreview
+                  ? (attachment) => {
+                      onAttachmentPreview(attachment, email)
+                    }
+                : undefined
+              }
+            />
+          </div>
+        </>
+      )}
       <ExternalLinkWarningDialog
         link={selectedExternalLink}
         onOpenChange={(open) => {
@@ -2264,20 +2246,95 @@ function EmailPreviewPane({
   )
 }
 
-function EmailPreviewHeader({ email }: { email: AuthenticatedEmailPreview }) {
-  return (
-    <header className='border-b px-4 py-3'>
-      <div className='flex min-w-0 flex-wrap items-center gap-2'>
-        <h1 className='text-foreground min-w-0 truncate text-sm leading-5 font-semibold'>{email.subject}</h1>
-        <EmailStateBadges email={email} />
+function EmailPreviewHeader({
+  email,
+  onEmailAction,
+  selectedThreadMessage
+}: {
+  email: AuthenticatedEmailPreview
+  onEmailAction?: (action: AuthenticatedEmailAction, email: AuthenticatedEmailPreview) => void
+  selectedThreadMessage?: AuthenticatedEmailThreadMessage
+}) {
+  const selectedThreadActionTarget = selectedThreadMessage
+    ? getThreadMessageActionTarget(email, selectedThreadMessage)
+    : undefined
+  const selectedThreadMessageIsCollapsed = selectedThreadMessage?.state === 'collapsed'
+  const selectedThreadMessageAction: AuthenticatedEmailAction = selectedThreadMessageIsCollapsed
+    ? 'expand-thread-message'
+    : 'collapse-thread-message'
+  const headerContent = (
+    <div className='flex min-w-0 flex-1 items-center gap-3'>
+      <div className='min-w-0 flex-1'>
+        <div className='flex min-w-0 flex-wrap items-center gap-2'>
+          <h1 className='text-foreground min-w-0 truncate text-sm leading-5 font-semibold'>
+            {email.subject}
+          </h1>
+          <EmailStateBadges email={email} />
+        </div>
+        <EmailMessageMeta
+          className='mt-2 min-w-0'
+          receivedAt={email.receivedAt}
+          recipientEmail={email.recipientEmail}
+          senderEmail={email.senderEmail}
+          senderName={email.senderName}
+          showDate={false}
+        />
       </div>
-      <EmailMessageMeta
-        className='mt-2'
-        receivedAt={email.receivedAt}
-        recipientEmail={email.recipientEmail}
-        senderEmail={email.senderEmail}
-        senderName={email.senderName}
-      />
+    </div>
+  )
+
+  return (
+    <header className='border-b'>
+      {selectedThreadMessage && selectedThreadActionTarget ? (
+        <div
+          className={cn(
+            'group/thread-row flex min-w-0 items-stretch transition-colors duration-150 ease-out',
+            'hover:bg-muted/25 focus-within:bg-muted/25 active:bg-muted/30 motion-reduce:transition-none',
+            'dark:hover:bg-muted/25 dark:focus-within:bg-muted/25 dark:active:bg-muted/30',
+            !selectedThreadMessageIsCollapsed && 'bg-muted/15 dark:bg-muted/20'
+          )}
+        >
+          <Button
+            aria-label={`${
+              selectedThreadMessageIsCollapsed ? 'Expand' : 'Collapse'
+            } ${selectedThreadMessage.senderName} message`}
+            aria-expanded={!selectedThreadMessageIsCollapsed}
+            className='h-auto min-w-0 flex-1 shrink justify-start whitespace-normal rounded-none !bg-transparent
+              px-4 py-3 text-left hover:!bg-transparent hover:text-inherit active:!bg-transparent
+              focus-visible:!bg-transparent focus-visible:border-transparent focus-visible:ring-0'
+            onClick={() => {
+              onEmailAction?.(selectedThreadMessageAction, selectedThreadActionTarget)
+            }}
+            type='button'
+            variant='ghost'
+          >
+            {headerContent}
+          </Button>
+          <EmailThreadRowActions
+            actions={selectedThreadActionTarget.actions ?? []}
+            cluster='selected'
+            isStarred={selectedThreadActionTarget.isStarred}
+            onAction={(action) => {
+              onEmailAction?.(action, selectedThreadActionTarget)
+            }}
+            receivedAt={selectedThreadActionTarget.receivedAt}
+            senderName={selectedThreadActionTarget.senderName}
+          />
+        </div>
+      ) : (
+        <div className='flex min-w-0 items-center justify-between gap-3 px-4 py-3'>
+          {headerContent}
+          <div
+            className='flex shrink-0 items-center gap-1.5'
+            data-email-thread-date-cluster='selected'
+          >
+            <LocalDateTime
+              className='text-muted-foreground shrink-0 text-xs whitespace-nowrap'
+              value={email.receivedAt}
+            />
+          </div>
+        </div>
+      )}
     </header>
   )
 }
@@ -2296,22 +2353,159 @@ function EmailStateBadges({ email }: { email: AuthenticatedEmailPreview }) {
   )
 }
 
+function EmailThreadRowActions({
+  actions,
+  cluster,
+  isStarred,
+  onAction,
+  receivedAt,
+  senderName
+}: {
+  actions: ReadonlyArray<AuthenticatedEmailToolbarAction>
+  cluster: 'selected' | 'message' | 'collapsed'
+  isStarred?: boolean
+  onAction: (action: AuthenticatedEmailAction) => void
+  receivedAt: string
+  senderName: string
+}) {
+  const starAction = actions.find((action) => action.action === 'star' || action.action === 'unstar')
+  const starIsActive = starAction?.action === 'unstar' || Boolean(isStarred)
+  const menuActions = actions.filter(isThreadOverflowAction)
+
+  return (
+    <div
+      className='flex shrink-0 items-center gap-1.5 py-3 pr-3 pl-1'
+      data-email-thread-date-cluster={cluster}
+    >
+      {starAction ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              aria-label={`${starAction.label} ${senderName} message`}
+              aria-pressed={starIsActive}
+              className={cn(
+                'size-8 shrink-0 text-muted-foreground opacity-70 transition-opacity',
+                'hover:text-foreground hover:opacity-100 focus-visible:opacity-100',
+                'group-hover/thread-row:opacity-100 motion-reduce:transition-none',
+                starIsActive && 'text-foreground opacity-100'
+              )}
+              disabled={starAction.disabled || starAction.pending}
+              onClick={() => {
+                onAction(starAction.action)
+              }}
+              size='icon'
+              title={actionTitle(starAction)}
+              type='button'
+              variant='ghost'
+            >
+              {starAction.pending ? (
+                <Spinner data-icon='icon-only' />
+              ) : (
+                <StarIcon
+                  data-icon='icon-only'
+                  weight={starIsActive ? 'fill' : 'regular'}
+                />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{actionTitle(starAction)}</TooltipContent>
+        </Tooltip>
+      ) : null}
+      <LocalDateTime
+        className='text-muted-foreground shrink-0 text-xs whitespace-nowrap'
+        value={receivedAt}
+      />
+      {menuActions.length ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              aria-label={`More actions for ${senderName} message`}
+              className='size-8 shrink-0 text-muted-foreground opacity-70 transition-opacity
+                hover:text-foreground hover:opacity-100 focus-visible:opacity-100
+                group-hover/thread-row:opacity-100 motion-reduce:transition-none'
+              size='icon'
+              title={`More actions for ${senderName} message`}
+              type='button'
+              variant='ghost'
+            >
+              <DotsThreeIcon data-icon='icon-only' />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align='end'
+            side='bottom'
+          >
+            {menuActions.map((action, index) => {
+              const Icon = emailActionIcons[action.iconKey]
+
+              return (
+                <React.Fragment key={action.action}>
+                  {index > 0 && action.group !== menuActions[index - 1]?.group ? (
+                    <DropdownMenuSeparator />
+                  ) : null}
+                  <DropdownMenuItem
+                    disabled={action.disabled || action.pending}
+                    onSelect={() => {
+                      onAction(action.action)
+                    }}
+                    title={actionTitle(action)}
+                    variant={isDestructiveEmailAction(action.action) ? 'destructive' : 'default'}
+                  >
+                    {action.pending ? <Spinner data-icon='inline-start' /> : <Icon data-icon='inline-start' />}
+                    {action.label}
+                  </DropdownMenuItem>
+                </React.Fragment>
+              )
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+    </div>
+  )
+}
+
+function isThreadOverflowAction(action: AuthenticatedEmailToolbarAction) {
+  switch (action.action) {
+    case 'back':
+    case 'collapse-thread-message':
+    case 'expand-thread-message':
+    case 'show-remote-images':
+    case 'star':
+    case 'unstar':
+      return false
+    default:
+      return true
+  }
+}
+
+function isDestructiveEmailAction(action: AuthenticatedEmailAction) {
+  return action === 'delete' || action === 'discard-draft'
+}
+
+function actionTitle(action: AuthenticatedEmailToolbarAction) {
+  return action.disabledReason ? `${action.label}: ${action.disabledReason}` : action.label
+}
+
 function EmailMessageMeta({
   className,
+  isDraft = false,
   receivedAt,
   recipientEmail,
   senderEmail,
-  senderName
+  senderName,
+  showDate = true
 }: {
   className?: string
+  isDraft?: boolean
   receivedAt: string
   recipientEmail: string
   senderEmail: string
   senderName: string
+  showDate?: boolean
 }) {
   return (
-    <div className={cn('flex min-w-0 items-start justify-between gap-3', className)}>
-      <div className='flex min-w-0 items-start gap-2.5'>
+    <div className={cn('flex min-w-0 items-center justify-between gap-3', className)}>
+      <div className='flex min-w-0 items-center gap-2.5'>
         <div
           className='bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center
             rounded-full text-xs font-semibold'
@@ -2320,93 +2514,126 @@ function EmailMessageMeta({
           {getSenderInitial(senderName)}
         </div>
         <div className='min-w-0'>
-          <div className='text-foreground truncate text-xs font-medium'>
-            {senderName} <span className='text-muted-foreground font-normal'>{senderEmail}</span>
+          <div className='flex min-w-0 items-center gap-1.5'>
+            <span className='text-foreground min-w-0 truncate text-xs font-medium'>
+              {senderName} <span className='text-muted-foreground font-normal'>{senderEmail}</span>
+            </span>
+            {isDraft ? (
+              <Badge
+                className='shrink-0'
+                variant='secondary'
+              >
+                Draft
+              </Badge>
+            ) : null}
           </div>
           <div className='text-muted-foreground text-xs'>To: {recipientEmail}</div>
         </div>
       </div>
-      <LocalDateTime
-        className='text-muted-foreground shrink-0 text-xs whitespace-nowrap'
-        value={receivedAt}
-      />
+      {showDate ? (
+        <LocalDateTime
+          className='text-muted-foreground shrink-0 text-xs whitespace-nowrap'
+          value={receivedAt}
+        />
+      ) : null}
     </div>
+  )
+}
+
+function isSelectedThreadMessage(
+  email: AuthenticatedEmailPreview,
+  message: AuthenticatedEmailThreadMessage
+) {
+  return message.id === email.id && message.folderId === email.folderId
+}
+
+function EmailSelectedThreadMessageBody({
+  email,
+  message,
+  onAttachmentPreview,
+  onExternalLinkSelect
+}: {
+  email: AuthenticatedEmailPreview
+  message: AuthenticatedEmailThreadMessage | undefined
+  onAttachmentPreview?: (attachment: AuthenticatedEmailAttachment, email: AuthenticatedEmailPreview) => void
+  onExternalLinkSelect?: (link: AuthenticatedExternalLink) => void
+}) {
+  if (!message) {
+    return null
+  }
+
+  const messageActionTarget = getThreadMessageActionTarget(email, message)
+
+  return (
+    <article
+      className='border-b'
+      data-email-message-state='expanded'
+    >
+      <EmailMessageBodyFrame
+        allowRemoteImages={message.remoteImagesAllowed}
+        externalLinks={message.externalLinks ?? []}
+        fitContent
+        html={message.html}
+        loading='eager'
+        onExternalLinkSelect={onExternalLinkSelect}
+        title={`${message.senderName} message body`}
+      />
+      <EmailAttachmentList
+        attachments={message.attachments ?? []}
+        onAttachmentPreview={
+          onAttachmentPreview
+            ? (attachment) => {
+                onAttachmentPreview(attachment, messageActionTarget)
+              }
+            : undefined
+        }
+      />
+      <EmailCollapsedQuoteList quotes={message.collapsedQuotes ?? []} />
+    </article>
   )
 }
 
 function EmailMessageBodyFrame({
   allowRemoteImages = false,
-  attachments = [],
   className,
   externalLinks = [],
   fitContent = false,
   html,
   loading,
   onExternalLinkSelect,
-  remoteImages = [],
   title
 }: {
   allowRemoteImages?: boolean
-  attachments?: ReadonlyArray<AuthenticatedEmailAttachment>
   className?: string
   externalLinks?: ReadonlyArray<AuthenticatedExternalLink>
   fitContent?: boolean
   html: string
   loading: 'eager' | 'lazy'
   onExternalLinkSelect?: (link: AuthenticatedExternalLink) => void
-  remoteImages?: ReadonlyArray<AuthenticatedRemoteImage>
   title: string
 }) {
   const iframeRef = React.useRef<HTMLIFrameElement>(null)
   const cleanupFrameRef = React.useRef<() => void>(() => {})
   const baseURL = getCurrentBrowserHref()
-  const rewritten = React.useMemo(
-    () =>
-      rewriteEmailHTMLForIframe(html, {
-        allowRemoteImages,
-        baseURL,
-        knownExternalLinks: externalLinks,
-        knownRemoteImages: remoteImages,
-        reservedExternalLinkIds: externalLinks.map((link) => link.id),
-        inlineAttachments: attachments.flatMap((attachment) =>
-          attachment.contentId && attachment.url
-            ? [
-                {
-                  contentId: attachment.contentId,
-                  url: attachment.url
-                }
-              ]
-            : []
-        )
-      }),
-    [allowRemoteImages, attachments, baseURL, externalLinks, html, remoteImages]
-  )
   const externalLinkMap = React.useMemo(() => {
     const map = new Map<string, AuthenticatedExternalLink>()
     for (const link of externalLinks) {
       map.set(link.id, link)
     }
-    for (const link of rewritten.externalLinks) {
-      map.set(link.id, {
-        host: link.host,
-        id: link.id,
-        url: link.url
-      })
-    }
     return map
-  }, [externalLinks, rewritten.externalLinks])
+  }, [externalLinks])
   const emailDocumentThemeMode = useEmailDocumentThemeMode()
   const srcDoc = React.useMemo(
     () =>
       buildEmailIframeDocument({
-        bodyHTML: rewritten.html,
+        bodyHTML: html,
         csp: buildEmailContentSecurityPolicy({
           allowRemoteImages,
           sameOrigin: getCurrentBrowserOrigin()
         }),
         themeMode: emailDocumentThemeMode
       }),
-    [allowRemoteImages, emailDocumentThemeMode, rewritten.html]
+    [allowRemoteImages, emailDocumentThemeMode, html]
   )
   const installFrameHandlers = React.useCallback(() => {
     const iframe = iframeRef.current
@@ -2420,8 +2647,18 @@ function EmailMessageBodyFrame({
 
     if (fitContent) {
       const resizeFrameToContent = () => {
-        const bodyHeight = iframeDocument.body.scrollHeight
-        const nextHeight = Math.ceil(Math.max(bodyHeight, 1))
+        const documentElement = iframeDocument.documentElement
+        const bodyHeight = Math.max(
+          iframeDocument.body.getBoundingClientRect().height,
+          iframeDocument.body.offsetHeight,
+          iframeDocument.body.scrollHeight
+        )
+        const documentHeight = Math.max(
+          documentElement.getBoundingClientRect().height,
+          documentElement.offsetHeight,
+          documentElement.scrollHeight
+        )
+        const nextHeight = Math.ceil(Math.max(bodyHeight, documentHeight, 1))
 
         iframe.height = String(nextHeight)
       }
@@ -2770,9 +3007,12 @@ function EmailThreadView({
   onEmailAction?: (action: AuthenticatedEmailAction, email: AuthenticatedEmailPreview) => void
   onExternalLinkSelect?: (link: AuthenticatedExternalLink) => void
 }) {
+  const visibleThreadMessages =
+    email.thread?.filter((message) => !isSelectedThreadMessage(email, message)) ?? []
+
   return (
-    <div className='bg-background flex min-h-full flex-col'>
-      {email.thread?.map((message, index) => (
+    <div className='bg-background flex flex-col'>
+      {visibleThreadMessages.map((message, index) => (
         <EmailThreadMessageItem
           email={email}
           index={index}
@@ -2838,6 +3078,7 @@ function EmailThreadMessageItem({
     return (
       <EmailCollapsedThreadMessage
         message={message}
+        onAction={triggerMessageAction}
         onExpand={() => {
           triggerMessageAction('expand-thread-message')
         }}
@@ -2850,48 +3091,45 @@ function EmailThreadMessageItem({
       className='border-b last:border-b-0'
       data-email-message-state='expanded'
     >
-      <div className='flex items-start gap-2 px-4 py-3'>
-        <EmailMessageMeta
-          className='flex-1'
+      <div
+        className='group/thread-row bg-muted/15 flex min-w-0 items-stretch transition-colors duration-150 ease-out
+          hover:bg-muted/25 focus-within:bg-muted/25 active:bg-muted/30 motion-reduce:transition-none
+          dark:bg-muted/20 dark:hover:bg-muted/25 dark:focus-within:bg-muted/25 dark:active:bg-muted/30'
+      >
+        <Button
+          aria-label={`Collapse ${message.senderName} message`}
+          aria-expanded
+          className='h-auto min-w-0 flex-1 shrink justify-start whitespace-normal rounded-none !bg-transparent
+            px-4 py-3 text-left hover:!bg-transparent hover:text-inherit active:!bg-transparent
+            focus-visible:!bg-transparent focus-visible:border-transparent focus-visible:ring-0'
+          onClick={() => {
+            triggerMessageAction('collapse-thread-message')
+          }}
+          type='button'
+          variant='ghost'
+        >
+          <EmailMessageMeta
+            className='min-w-0 flex-1'
+            isDraft={message.isDraft}
+            receivedAt={message.receivedAt}
+            recipientEmail={message.recipientEmail}
+            senderEmail={message.senderEmail}
+            senderName={message.senderName}
+            showDate={false}
+          />
+        </Button>
+        <EmailThreadRowActions
+          actions={message.actions ?? []}
+          cluster='message'
+          isStarred={message.isStarred}
+          onAction={triggerMessageAction}
           receivedAt={message.receivedAt}
-          recipientEmail={message.recipientEmail}
-          senderEmail={message.senderEmail}
           senderName={message.senderName}
         />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              aria-label={`Collapse ${message.senderName} message`}
-              className='size-8 shrink-0'
-              onClick={() => {
-                triggerMessageAction('collapse-thread-message')
-              }}
-              size='icon'
-              type='button'
-              variant='ghost'
-            >
-              <CaretUpIcon data-icon='icon-only' />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Collapse message</TooltipContent>
-        </Tooltip>
       </div>
-      {message.actions?.length || message.isDraft ? (
-        <div className='flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2'>
-          <div className='flex min-w-0 flex-wrap gap-1'>
-            {message.isDraft ? <Badge variant='secondary'>Draft</Badge> : null}
-          </div>
-          {message.actions?.length ? (
-            <EmailToolbarButtonList
-              actions={message.actions}
-              onAction={triggerMessageAction}
-            />
-          ) : null}
-        </div>
-      ) : null}
       <EmailMessageBodyFrame
-        allowRemoteImages={false}
-        attachments={message.attachments ?? []}
+        allowRemoteImages={message.remoteImagesAllowed}
+        externalLinks={message.externalLinks ?? []}
         fitContent
         html={message.html}
         loading={index === 0 ? 'eager' : 'lazy'}
@@ -2918,14 +3156,20 @@ function getThreadMessageActionTarget(
   message: AuthenticatedEmailThreadMessage
 ) {
   return {
+    actions: message.actions,
     attachments: message.attachments,
     bodySize: message.bodySize,
+    externalLinks: message.externalLinks,
     folderId: message.folderId,
     html: message.html,
     id: message.id,
     isDraft: message.isDraft,
+    isStarred: message.isStarred,
+    isUnread: message.isUnread,
     receivedAt: message.receivedAt,
     recipientEmail: message.recipientEmail,
+    remoteImages: message.remoteImages,
+    remoteImagesAllowed: message.remoteImagesAllowed,
     senderEmail: message.senderEmail,
     senderName: message.senderName,
     subject: email.subject,
@@ -2935,9 +3179,11 @@ function getThreadMessageActionTarget(
 
 function EmailCollapsedThreadMessage({
   message,
+  onAction,
   onExpand
 }: {
   message: NonNullable<AuthenticatedEmailPreview['thread']>[number]
+  onAction: (action: AuthenticatedEmailAction) => void
   onExpand: () => void
 }) {
   return (
@@ -2945,43 +3191,62 @@ function EmailCollapsedThreadMessage({
       className='border-b last:border-b-0'
       data-email-message-state='collapsed'
     >
-      <Button
-        aria-label={`Expand ${message.senderName} message`}
-        className='hover:bg-muted/25 h-auto w-full justify-start rounded-none px-4 py-3 text-left'
-        onClick={onExpand}
-        type='button'
-        variant='ghost'
+      <div
+        className='group/thread-row flex min-w-0 items-stretch transition-colors duration-150 ease-out
+          hover:bg-muted/25 focus-within:bg-muted/25 active:bg-muted/30 motion-reduce:transition-none
+          dark:hover:bg-muted/25 dark:focus-within:bg-muted/25 dark:active:bg-muted/30'
       >
-        <span className='flex min-w-0 flex-1 items-start gap-2.5'>
-          <span
-            className='bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center
-              rounded-full text-xs font-semibold'
-            aria-hidden='true'
-          >
-            {getSenderInitial(message.senderName)}
-          </span>
-          <span className='flex min-w-0 flex-1 flex-col gap-1'>
-            <span className='flex min-w-0 items-start justify-between gap-3'>
-              <span className='text-foreground min-w-0 truncate text-xs font-medium'>
-                {message.senderName}{' '}
-                <span className='text-muted-foreground font-normal'>{message.senderEmail}</span>
-              </span>
-              <LocalDateTime
-                className='text-muted-foreground shrink-0 text-xs whitespace-nowrap'
-                value={message.receivedAt}
-              />
+        <Button
+          aria-label={`Expand ${message.senderName} message`}
+          aria-expanded={false}
+          className='h-auto min-w-0 flex-1 shrink justify-start whitespace-normal rounded-none !bg-transparent
+            px-4 py-3 text-left hover:!bg-transparent hover:text-inherit active:!bg-transparent
+            focus-visible:!bg-transparent focus-visible:border-transparent focus-visible:ring-0'
+          onClick={onExpand}
+          type='button'
+          variant='ghost'
+        >
+          <span className='flex min-w-0 flex-1 items-center gap-2.5'>
+            <span
+              className='bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center
+                rounded-full text-xs font-semibold'
+              aria-hidden='true'
+            >
+              {getSenderInitial(message.senderName)}
             </span>
-            <span className='text-muted-foreground truncate text-xs'>To: {message.recipientEmail}</span>
-            {message.teaser ? (
-              <span className='text-muted-foreground mt-1 line-clamp-1 text-xs'>{message.teaser}</span>
-            ) : null}
+            <span className='flex min-w-0 flex-1 flex-col gap-1'>
+              <span className='flex min-w-0 items-center gap-1.5'>
+                <span className='flex min-w-0 items-center gap-1.5'>
+                  <span className='text-foreground min-w-0 truncate text-xs font-medium'>
+                    {message.senderName}{' '}
+                    <span className='text-muted-foreground font-normal'>{message.senderEmail}</span>
+                  </span>
+                  {message.isDraft ? (
+                    <Badge
+                      className='shrink-0'
+                      variant='secondary'
+                    >
+                      Draft
+                    </Badge>
+                  ) : null}
+                </span>
+              </span>
+              <span className='text-muted-foreground truncate text-xs'>To: {message.recipientEmail}</span>
+              {message.teaser ? (
+                <span className='text-muted-foreground mt-1 line-clamp-1 text-xs'>{message.teaser}</span>
+              ) : null}
+            </span>
           </span>
-          <CaretDownIcon
-            className='text-muted-foreground mt-1 size-4 shrink-0'
-            data-icon='icon-only'
-          />
-        </span>
-      </Button>
+        </Button>
+        <EmailThreadRowActions
+          actions={message.actions ?? []}
+          cluster='collapsed'
+          isStarred={message.isStarred}
+          onAction={onAction}
+          receivedAt={message.receivedAt}
+          senderName={message.senderName}
+        />
+      </div>
     </article>
   )
 }
@@ -3113,7 +3378,6 @@ function getEmailBodyFrameClass(size: AuthenticatedEmailBodySize) {
 const emailActionIcons = {
   archive: ArchiveIcon,
   back: ArrowLeftIcon,
-  close: XIcon,
   'collapse-thread-message': CaretUpIcon,
   delete: TrashIcon,
   'discard-draft': TrashIcon,
@@ -3183,7 +3447,7 @@ function EmailToolbarButton({
       <TooltipTrigger asChild>
         <Button
           aria-label={action.label}
-          className='size-8'
+          className={cn('size-8', action.action === 'back' && 'md:hidden')}
           disabled={disabled}
           onClick={() => {
             onAction(action.action)

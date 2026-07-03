@@ -5,6 +5,7 @@ import {
   DomainsDomainDisconnected as DomainsDomainDisconnectedStory,
   DomainsDomainLive as DomainsDomainLiveStory,
   DomainsDomainNeedsAttention as DomainsDomainNeedsAttentionStory,
+  DomainsDomainRemoved as DomainsDomainRemovedStory,
   DomainsDomainRetryBusy as DomainsDomainRetryBusyStory,
   DomainsLoadDomainsBusy as DomainsLoadDomainsBusyStory,
   DomainsLoadDomains as DomainsLoadDomainsStory,
@@ -57,6 +58,11 @@ export const DomainsLoadDomainsBusy: Story = {
 export const DomainsAddDomainSelectZone: Story = {
   ...DomainsAddDomainSelectZoneStory,
   name: 'Add domain select zone'
+}
+
+export const DomainsDomainRemoved: Story = {
+  ...DomainsDomainRemovedStory,
+  name: 'Domain removed'
 }
 
 export const DomainsDomainLive: Story = {

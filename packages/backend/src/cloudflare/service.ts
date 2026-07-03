@@ -22,6 +22,7 @@ import {
   applyCloudflareProvisioning,
   listCloudflareAccounts,
   listCloudflareZones,
+  removeCloudflareProvisioning,
   sanitizeCloudflareError,
   sendCloudflareRawEmail
 } from './client'
@@ -63,6 +64,7 @@ const ACTIVE_SEND_DOMAIN_STATUSES = ['active', 'degraded'] as const
 const ACTIVE_SEND_CONNECTION_STATUSES = ['active', 'degraded'] as const
 const CLOUDFLARE_EMAIL_SEND_SCOPE = 'email-sending.write'
 const log = debug('app:cloudflare:provisioning')
+const sendLog = debug('app:cloudflare:send')
 export const CloudflareOAuthReturnTargetValues = [
   'dashboard-onboarding',
   'settings-connected-accounts',
@@ -141,6 +143,7 @@ export interface CloudflareControlSendRawInput {
 
 export interface CloudflareControlSendRawResult {
   delivered: string[]
+  message_id?: string
   permanent_bounces: string[]
   queued: string[]
 }
@@ -312,7 +315,9 @@ export async function sendCloudflareRawEmailForControl({
   mimeMessage,
   organizationId,
   organizationPublicId,
-  recipients
+  recipients,
+  sendId,
+  zoneMtaQueueId
 }: CloudflareControlSendRawInput): Promise<CloudflareControlSendRawResult> {
   const domain = normalizeDomain(inputDomain)
   const requestedOrganizationId = organizationId as OrganizationId
@@ -368,21 +373,47 @@ export async function sendCloudflareRawEmailForControl({
   }
 
   try {
-    const accessToken = await getStoredCloudflareAccessToken(db, grant)
-    const result = await sendCloudflareRawEmail({
-      accessToken,
+    const result = await sendCloudflareRawEmailWithStoredGrantRetry({
       cloudflareAccountId: connection.cloudflareAccountId,
+      db,
+      domain,
       from,
+      grant,
       mimeMessage,
-      recipients
+      organizationPublicId: requestedOrganizationPublicId,
+      recipients,
+      sendId,
+      zoneMtaQueueId
     })
+    await db.models.cloudflareConnection
+      .updateOne(
+        { _id: connection._id },
+        {
+          $set: {
+            lastErrorCode: null,
+            lastErrorMessage: null,
+            status: 'active'
+          }
+        }
+      )
+      .exec()
     return {
       delivered: result.delivered,
+      ...(result.messageId ? { message_id: result.messageId } : {}),
       permanent_bounces: result.permanentBounces,
       queued: result.queued
     }
   } catch (error) {
     const sanitized = sanitizeCloudflareError(error)
+    sendLog('Cloudflare raw email send failed', {
+      connectionPublicId: publicIdFromUUIDv7(connection._id),
+      domain,
+      error: provisioningErrorLogFields(error, sanitized),
+      organizationPublicId: requestedOrganizationPublicId,
+      recipientCount: recipients.length,
+      sendId,
+      zoneMtaQueueId
+    })
     await db.models.cloudflareConnection
       .updateOne(
         { _id: connection._id },
@@ -396,6 +427,63 @@ export async function sendCloudflareRawEmailForControl({
       )
       .exec()
     throw new CloudflareControlSendError(sanitized.message, 502)
+  }
+}
+
+async function sendCloudflareRawEmailWithStoredGrantRetry({
+  cloudflareAccountId,
+  db,
+  domain,
+  from,
+  grant,
+  mimeMessage,
+  organizationPublicId,
+  recipients,
+  sendId,
+  zoneMtaQueueId
+}: {
+  cloudflareAccountId: string
+  db: Database
+  domain: string
+  from: string
+  grant: CloudflareOAuthGrantDocument
+  mimeMessage: string
+  organizationPublicId: OrganizationPublicId
+  recipients: string[]
+  sendId?: string
+  zoneMtaQueueId?: string
+}) {
+  const accessToken = await getStoredCloudflareAccessToken(db, grant)
+
+  try {
+    return await sendCloudflareRawEmail({
+      accessToken,
+      cloudflareAccountId,
+      from,
+      mimeMessage,
+      recipients
+    })
+  } catch (error) {
+    if (readNumberProperty(error, 'status') !== 401) {
+      throw error
+    }
+
+    sendLog('Cloudflare raw email send access token rejected; refreshing and retrying', {
+      cloudflareAccountId,
+      domain,
+      organizationPublicId,
+      recipientCount: recipients.length,
+      sendId,
+      zoneMtaQueueId
+    })
+    const refreshedAccessToken = await refreshStoredCloudflareAccessToken(db, grant)
+    return sendCloudflareRawEmail({
+      accessToken: refreshedAccessToken,
+      cloudflareAccountId,
+      from,
+      mimeMessage,
+      recipients
+    })
   }
 }
 
@@ -967,6 +1055,165 @@ export async function disconnectCloudflare({
   return getCloudflareStatus(headers)
 }
 
+export async function removeCloudflareDomain({
+  connectionPublicId,
+  headers
+}: {
+  connectionPublicId: CloudflareConnectionPublicId | string
+  headers: Headers
+}): Promise<CloudflareStatusResult> {
+  const { db } = await globals()
+  const context = await requireCloudflareOrganizationContext(headers)
+  const userId = context.userId
+  const connectionId = parseCloudflareConnectionPublicId(connectionPublicId)
+  const connection = await db.models.cloudflareConnection
+    .findOne({
+      _id: connectionId,
+      organizationId: context.organizationId
+    })
+    .exec()
+
+  if (!connection) {
+    throw new Error('Cloudflare connection was not found')
+  }
+
+  await requireCloudflareDomainManagement(headers, context, connection.domain)
+  const connectionView = cloudflareConnectionPublicView(connection)
+  const logContext = cloudflareProvisioningLogContext({
+    connection,
+    connectionPublicId: connectionView.publicId,
+    organizationPublicId: context.organizationPublicId
+  })
+  let stage = 'load-worker-deployment'
+
+  log('Cloudflare domain removal started', logContext)
+
+  try {
+    const deployment = await db.models.agentMailWorkerDeployment
+      .findOne({ cloudflareConnectionId: connection._id, organizationId: context.organizationId })
+      .exec()
+    const workerScriptName = connection.workerScriptName ?? deployment?.workerScriptName ?? null
+    const hasProviderResources =
+      connection.provisioningStatus === 'succeeded' || Boolean(workerScriptName) || Boolean(deployment)
+
+    if (hasProviderResources) {
+      stage = 'load-oauth-grant'
+      const grant = await getGrantById(db, connection.grantId, userId, context.organizationId)
+
+      stage = 'get-oauth-access-token'
+      const accessToken = await getCloudflareAccessToken(headers, grant)
+
+      stage = 'remove-cloudflare-resources'
+      await removeCloudflareProvisioning({
+        accessToken,
+        cloudflareAccountId: connection.cloudflareAccountId,
+        cloudflareZoneId: connection.cloudflareZoneId,
+        workerScriptName
+      })
+      log('Cloudflare domain removal removed provider resources', {
+        ...logContext,
+        stage,
+        workerScriptName
+      })
+    } else if (connection.status === 'disconnected') {
+      log('Cloudflare domain removal skipped provider resources for already disconnected domain', {
+        ...logContext,
+        stage,
+        workerScriptName
+      })
+    }
+
+    stage = 'disconnect-cloudflare-connection'
+    await db.models.cloudflareConnection
+      .updateOne(
+        { _id: connection._id, organizationId: context.organizationId },
+        {
+          $set: {
+            encryptedWorkerHmacSecret: null,
+            hmacSecretReference: null,
+            lastErrorCode: null,
+            lastErrorMessage: null,
+            provisioningStatus: 'not_started',
+            status: 'disconnected'
+          }
+        }
+      )
+      .exec()
+
+    stage = 'disconnect-agent-mail-domain'
+    await db.models.agentMailDomain
+      .updateMany(
+        {
+          organizationId: context.organizationId,
+          cloudflareConnectionId: connection._id
+        },
+        {
+          $set: {
+            lastErrorCode: null,
+            lastErrorMessage: null,
+            status: 'disconnected'
+          }
+        }
+      )
+      .exec()
+
+    stage = 'disconnect-worker-deployment'
+    await db.models.agentMailWorkerDeployment
+      .updateMany(
+        {
+          organizationId: context.organizationId,
+          cloudflareConnectionId: connection._id
+        },
+        {
+          $set: {
+            encryptedWorkerHmacSecret: null,
+            hmacSecretReference: null,
+            lastErrorCode: null,
+            lastErrorMessage: null,
+            status: 'disconnected'
+          }
+        }
+      )
+      .exec()
+
+    stage = 'sync-agent-mail-runtime'
+    await syncAgentMailRuntimeProjection(db, { reason: 'cloudflare-domain-remove' })
+
+    log('Cloudflare domain removal succeeded', {
+      ...logContext,
+      stage: 'complete',
+      workerScriptName
+    })
+    return getCloudflareStatus(headers)
+  } catch (error) {
+    const sanitized = sanitizeCloudflareProvisioningError(stage, error)
+    log('Cloudflare domain removal failed', {
+      ...logContext,
+      stage,
+      error: provisioningErrorLogFields(error, sanitized)
+    })
+
+    await db.models.cloudflareConnection
+      .updateOne(
+        { _id: connection._id, organizationId: context.organizationId },
+        {
+          $set: {
+            lastErrorCode: sanitized.code,
+            lastErrorMessage: sanitized.message,
+            status: 'degraded'
+          }
+        }
+      )
+      .exec()
+
+    if (isCloudflareAccessError(error)) {
+      throw error
+    }
+
+    throw error
+  }
+}
+
 export async function refreshDueAgentMailWorkerCredentials(
   db: Database,
   now = new Date(),
@@ -1210,11 +1457,34 @@ function provisioningErrorLogFields(
 ): Record<string, unknown> {
   return {
     code: sanitized.code,
+    cloudflareOperation:
+      readStringProperty(error, 'cloudflareProvisioningOperation') ??
+      readStringProperty(error, 'cloudflareEmailSendOperation'),
+    cloudflareProviderErrorCodes: readCloudflareProviderErrorProperties(error, 'code'),
+    cloudflareProviderErrorMessages: readCloudflareProviderErrorProperties(error, 'message'),
     message: sanitized.message,
     method: readStringProperty(error, 'method'),
     name: error instanceof Error ? error.name : typeof error,
     status: readNumberProperty(error, 'status')
   }
+}
+
+function readCloudflareProviderErrorProperties(value: unknown, key: 'code' | 'message'): unknown[] | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined
+  }
+  const property = (value as Record<string, unknown>).cloudflareProviderErrors
+  if (!Array.isArray(property)) {
+    return undefined
+  }
+  const values = property.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return []
+    }
+    const value = (entry as Record<string, unknown>)[key]
+    return typeof value === 'string' || typeof value === 'number' ? [value] : []
+  })
+  return values.length > 0 ? values : undefined
 }
 
 function readNumberProperty(value: unknown, key: string): number | undefined {
@@ -1352,7 +1622,7 @@ async function getStoredCloudflareAccessToken(
     body: {
       accountId: grant.cloudflareUserId,
       providerId: CLOUDFLARE_OAUTH_PROVIDER_ID,
-      userId: grant.userId
+      userId: normalizeMongooseUUIDv7(grant.userId)
     }
   })
 
@@ -1361,6 +1631,43 @@ async function getStoredCloudflareAccessToken(
       { _id: grant._id },
       {
         $set: {
+          lastRefreshAt: now,
+          lastTokenCheckAt: now,
+          status: 'active',
+          lastErrorCode: null,
+          lastErrorMessage: null
+        }
+      }
+    )
+    .exec()
+
+  return result.accessToken
+}
+
+async function refreshStoredCloudflareAccessToken(
+  db: Database,
+  grant: CloudflareOAuthGrantDocument,
+  now = new Date()
+): Promise<string> {
+  const { auth } = await globals()
+  const result = await auth.api.refreshToken({
+    body: {
+      accountId: grant.cloudflareUserId,
+      providerId: CLOUDFLARE_OAUTH_PROVIDER_ID,
+      userId: normalizeMongooseUUIDv7(grant.userId)
+    }
+  })
+  if (!result.accessToken) {
+    throw new Error('Cloudflare OAuth refresh did not return an access token')
+  }
+  const grantedScopes = parseOAuthScopeString(result.scope)
+
+  await db.models.cloudflareOAuthGrant
+    .updateOne(
+      { _id: grant._id },
+      {
+        $set: {
+          ...(grantedScopes.length > 0 ? { grantedScopes } : {}),
           lastRefreshAt: now,
           lastTokenCheckAt: now,
           status: 'active',
@@ -1438,7 +1745,12 @@ async function listActiveGrantsForUser(
     throw new Error('Cloudflare OAuth is not connected')
   }
 
-  return grants
+  const usableGrants = grants.filter(hasCurrentRequiredCloudflareScopes)
+  if (usableGrants.length === 0) {
+    throw new CloudflareAccessError('Cloudflare OAuth grant is missing required scopes', 403)
+  }
+
+  return usableGrants
 }
 
 async function getActiveGrantByPublicIdForUser(
@@ -1471,8 +1783,16 @@ async function getGrantById(
   if (!grant) {
     throw new CloudflareAccessError('Cloudflare OAuth grant is not active', 403)
   }
+  if (!hasCurrentRequiredCloudflareScopes(grant)) {
+    throw new CloudflareAccessError('Cloudflare OAuth grant is missing required scopes', 403)
+  }
 
   return grant
+}
+
+function hasCurrentRequiredCloudflareScopes(grant: CloudflareOAuthGrantDocument): boolean {
+  const grantedScopes = new Set(grant.grantedScopes)
+  return getCloudflareRequiredOAuthScopes().every((scope) => grantedScopes.has(scope))
 }
 
 async function upsertAgentMailDomain(

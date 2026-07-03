@@ -54,13 +54,22 @@ If the addressed mailbox does not exist, mail-control records the failed deliver
 
 <Step title='Mail-control relay archives the message'>
   ZoneMTA submits the message to the mail-control internal relay. The relay verifies the sender domain, writes
-  `relay.eml` and `relay.json`, and chooses the delivery boundary.
+  `relay.eml` and `relay.json`, and builds the provider-bound delivery payload.
 </Step>
 
   <Step title='Delivery result is recorded'>
-    After local routing or external delivery accepts or rejects the message, the relay writes `result.json`. Retries create additional outbound bundles linked by the ZoneMTA queue ID.
+    After the selected outbound provider accepts or rejects the message, the relay writes `result.json`. Retries create additional outbound bundles linked by the ZoneMTA queue ID.
   </Step>
 </Steps>
+
+Ordinary authored sends are always provider-bound, including sends to mailboxes
+on the same connected domain. The only local delivery exception is inbound group
+forwarding fanout, which is receive-side routing for an already accepted inbound
+message. That local fanout path must link to the source Worker inbound archive;
+replay-looking message headers alone are not enough to create a local copy. When
+local fanout succeeds, mail-control reports the delivery back to the web server
+over the internal service credential so the forwarding group can show its latest
+delivery time.
 
 ## Archive contract
 

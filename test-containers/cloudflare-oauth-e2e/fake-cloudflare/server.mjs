@@ -8,7 +8,7 @@ const clientId = process.env.OAUTH_CLIENT_ID || 'agentteam-email-cloudflare-test
 const redirectUris = splitList(process.env.OAUTH_REDIRECT_URIS || process.env.OAUTH_REDIRECT_URI)
 const cloudflareScopes = splitList(
   process.env.CLOUDFLARE_OAUTH_SCOPES ||
-    'workers-r2.read workers-r2.write workers-scripts.read workers-scripts.write user-details.read dns.read dns.write zone.read cloud-email-security.read email-routing-address.read email-routing-address.write email-routing-rule.read email-routing-rule.write email-routing-suppression.read email-security-dmarcreports.read email-sending.read email-sending.write offline_access'
+    'workers-r2.read workers-r2.write workers-scripts.read workers-scripts.write user-details.read dns.read dns.write zone-dns-settings.read zone-dns-settings.write zone.read zone-settings.read zone-settings.write cloud-email-security.read email-routing-address.read email-routing-address.write email-routing-rule.read email-routing-rule.write email-routing-suppression.read email-security-dmarcreports.read email-sending.read email-sending.write offline_access'
 )
 const grantedUser = {
   accountId: 'cloudflare-user-1',
@@ -34,6 +34,7 @@ const zone = {
 }
 const buckets = new Set()
 const scripts = new Set()
+const sendingSubdomains = new Set()
 
 if (redirectUris.length === 0) {
   throw new Error('OAUTH_REDIRECT_URI or OAUTH_REDIRECT_URIS is required')
@@ -239,6 +240,49 @@ async function handleCloudflareApi(request, response, url) {
     await readBody(request)
     scripts.add(scriptName)
     sendJson(response, 200, cloudflareResponse({ id: scriptName, script_name: scriptName }))
+    return
+  }
+
+  const sendingSubdomainsMatch = url.pathname.match(
+    /^\/client\/v4\/zones\/(?<zoneId>[^/]+)\/email\/sending\/subdomains$/u
+  )
+  if (request.method === 'GET' && sendingSubdomainsMatch?.groups) {
+    sendJson(
+      response,
+      200,
+      paginatedCloudflareResponse(
+        [...sendingSubdomains].map((name) => ({
+          enabled: true,
+          name,
+          tag: `sending-${name}`
+        })),
+        url
+      )
+    )
+    return
+  }
+  if (request.method === 'POST' && sendingSubdomainsMatch?.groups) {
+    const body = await readJsonBody(request)
+    const name = readString(body, 'name')
+    if (!name) {
+      sendJson(
+        response,
+        400,
+        cloudflareResponse(null, false, [{ code: 1000, message: 'Sending subdomain name is required' }])
+      )
+      return
+    }
+
+    sendingSubdomains.add(name)
+    sendJson(
+      response,
+      200,
+      cloudflareResponse({
+        enabled: true,
+        name,
+        tag: `sending-${name}`
+      })
+    )
     return
   }
 

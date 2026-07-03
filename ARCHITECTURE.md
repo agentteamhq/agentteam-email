@@ -291,10 +291,22 @@ relay. The relay:
 - authenticates ZoneMTA submissions;
 - archives the relay boundary payload and metadata;
 - resolves the active sender-domain policy;
-- sends provider-bound messages through the selected outbound provider;
-- routes all-local active AgentTeam domains back through Haraka/WildDuck without
-  calling the outbound provider;
+- sends every ordinary user-authored outbound message through the selected
+  outbound provider, including messages whose recipients are on active
+  AgentTeam domains;
 - records result metadata in archive storage.
+
+The outbound relay must send ordinary user-authored messages through the
+provider regardless of recipient-domain local state. The only local delivery
+exception is receive-side inbound group forwarding fanout; that fanout is
+archive/routing work for an already accepted inbound message, not a new
+authored outbound send. The fanout exception must bind to the source Worker
+inbound archive and the internal receive-side fanout marker stamped during
+inbound replay; replay-looking headers alone are not authority for local
+delivery. After a successful local fanout delivery, mail-control reports the
+group delivery to the web server through the internal control-to-web service
+credential so the web-owned forwarding group record can advance
+`lastDeliveredAt`.
 
 ZoneMTA owns outbound queueing, retries, and bounce generation. The control
 service owns the provider handoff and archive/provenance records at the internal

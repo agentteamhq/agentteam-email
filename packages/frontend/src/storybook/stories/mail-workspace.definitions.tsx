@@ -12,6 +12,7 @@ import {
   mailWorkspaceScreenAttachmentView,
   mailWorkspaceScreenBillingAccountView,
   mailWorkspaceScreenBlockedImagesView,
+  mailWorkspaceScreenConversationOriginalView,
   mailWorkspaceScreenConversationView,
   mailWorkspaceScreenCustomFolderView,
   mailWorkspaceScreenDocumentResourceView,
@@ -22,6 +23,7 @@ import {
   mailWorkspaceScreenFormView,
   mailWorkspaceScreenInlineAttachmentView,
   mailWorkspaceScreenJunkView,
+  mailWorkspaceScreenLongConversationThreadView,
   mailWorkspaceScreenLongMailboxListView,
   mailWorkspaceScreenMailtoView,
   mailWorkspaceScreenNoAccountsView,
@@ -31,6 +33,7 @@ import {
   mailWorkspaceScreenSearchEmptyView,
   mailWorkspaceScreenSearchFilteredView,
   mailWorkspaceScreenSentView,
+  mailWorkspaceScreenThreadAttachmentsView,
   mailWorkspaceScreenTrashView,
   mailWorkspaceScreenUnreadOnlyView,
   mailWorkspaceScreenViewsByFolderId,
@@ -286,8 +289,12 @@ export const MessageAttachments: Story = {
     }),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
+    const messageBody = await canvas.findByTitle(/deployment attachments email body/i)
     const manifestLink = await canvas.findByRole('link', { name: /manifest\.json/i })
 
+    expect(
+      Boolean(messageBody.compareDocumentPosition(manifestLink) & Node.DOCUMENT_POSITION_FOLLOWING)
+    ).toBe(true)
     await expect(manifestLink).toHaveAttribute(
       'href',
       expect.stringContaining(
@@ -314,11 +321,10 @@ export const MessageInlineAttachments: Story = {
       'inline attachment email body'
     )
 
-    await expect(iframeSource).toContain(
-      '/rpc/mail/accounts/agent-support/mailboxes/inbox/messages/attachment-message/attachments/inline-provider-logo'
-    )
-    await expect(iframeSource).toContain('Inline image unavailable')
-    await expect(iframeSource).not.toContain('cid:provider-logo')
+    await expect(iframeSource).toContain('src="cid:provider-logo%40provider.example"')
+    await expect(iframeSource).toContain('src="cid:unsafe-inline@provider.example"')
+    await expect(iframeSource).toContain("img-src 'none'")
+    await expect(iframeSource).not.toContain('Inline image unavailable')
     await expect(iframeSource).not.toContain('wildduck.example.test')
   }
 }
@@ -333,11 +339,135 @@ export const ConversationThread: Story = {
     }),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
+    const body = within(canvasElement.ownerDocument.body)
 
     await expect(await canvas.findByRole('heading', { name: /agent mail smoke/i })).toBeInTheDocument()
     await expect(
-      await canvas.findByText(/drafting reply from the selected wildduck drafts/i)
+      await canvas.findByRole('button', { name: /expand agentteam email message/i })
     ).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /collapse testing message/i })).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /collapse support agent message/i })).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /star testing message/i })).toBeInTheDocument()
+    await expect(
+      await canvas.findByRole('button', { name: /more actions for testing message/i })
+    ).toBeInTheDocument()
+    await userEvent.click(await canvas.findByRole('button', { name: /more actions for agentteam email message/i }))
+    await expect(await body.findByRole('menuitem', { name: /^view original$/i })).toBeInTheDocument()
+    expect(body.queryByRole('menuitem', { name: /^mark as spam$/i })).not.toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    await expect(await canvas.findByText('Draft')).toBeInTheDocument()
+    expectSelectedThreadHeaderActionCentered(canvasElement, 'conversation thread')
+    await expectThreadScrollRegionNotOverflowing(canvasElement, 'conversation thread')
+    await expect(await canvas.findByTitle(/testing message body/i)).toBeInTheDocument()
+    const draftFrameSource = await findEmailFrameSource(
+      canvasElement,
+      /support agent message body/i,
+      'draft reply body'
+    )
+
+    await expect(draftFrameSource).toContain('Drafting reply from the selected WildDuck Drafts folder.')
+  }
+}
+
+export const ConversationThreadRowToggle: Story = {
+  args: {
+    routeSearch: { messageId: 'conversation-thread' }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenConversationView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    const selectedMessageToggle = await canvas.findByRole('button', {
+      name: /collapse testing message/i
+    })
+
+    await expect(await canvas.findByTitle(/testing message body/i)).toBeInTheDocument()
+    await userEvent.click(selectedMessageToggle)
+    const selectedMessageExpand = await canvas.findByRole('button', { name: /expand testing message/i })
+    await expect(selectedMessageExpand).toBeInTheDocument()
+    await expect(canvas.queryByTitle(/testing message body/i)).not.toBeInTheDocument()
+    await userEvent.click(selectedMessageExpand)
+    await expect(await canvas.findByRole('button', { name: /collapse testing message/i })).toBeInTheDocument()
+    await expect(await canvas.findByTitle(/testing message body/i)).toBeInTheDocument()
+  }
+}
+
+export const ConversationThreadCollapsedMiddle: Story = {
+  args: {
+    routeSearch: { messageId: 'thread-original' }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenConversationOriginalView
+    }),
+  play: async ({ canvasElement }) => {
+    // Regression fixture: a collapsed middle message must not create nested scroll flicker.
+    const canvas = within(canvasElement)
+
+    await expect(
+      await canvas.findByRole('button', { name: /collapse agentteam email message/i })
+    ).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /expand testing message/i })).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /collapse support agent message/i })).toBeInTheDocument()
+    expectSelectedThreadHeaderActionCentered(canvasElement, 'collapsed middle thread')
+    expectCollapsedThreadRowsNotOverflowing(canvasElement, 'collapsed middle thread')
+    expectThreadBodyFramesFitContent(canvasElement, 'collapsed middle thread')
+    await expectThreadScrollRegionNotOverflowing(canvasElement, 'collapsed middle thread')
+  }
+}
+
+export const ConversationThreadLong: Story = {
+  args: {
+    routeSearch: { messageId: 'conversation-thread-long' }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenLongConversationThreadView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+
+    await expect(await canvas.findByRole('heading', { name: /agent mail smoke/i })).toBeInTheDocument()
+    await expect(await canvas.findByText(/thread follow-up 24/i)).toBeInTheDocument()
+    await expectThreadScrollRegionOverflowing(canvasElement, 'long conversation thread')
+  }
+}
+
+export const ConversationThreadAttachments: Story = {
+  args: {
+    routeSearch: { messageId: 'conversation-thread' }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenThreadAttachmentsView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    const messageBody = await canvas.findByTitle(/testing message body/i)
+    const firstAttachment = await canvas.findByText('customer-data-export-2026-06.csv')
+    const attachmentNames = [
+      'customer-data-export-2026-06.csv',
+      'routing-diagnostics-full-trace.json',
+      'provider-delivery-preview.png',
+      'mx-record-screenshot-before-cutover.png',
+      'incident-notes-with-very-long-file-name-for-layout-review.md',
+      'wildduck-raw-source.eml',
+      'dmarc-alignment-report.pdf',
+      'cloudflare-email-routing-rules.json',
+      'forwarding-group-members.csv',
+      'delivery-latency-chart.svg',
+      'mailbox-import-results.txt',
+      'provider-side-export.zip'
+    ]
+
+    expect(
+      Boolean(messageBody.compareDocumentPosition(firstAttachment) & Node.DOCUMENT_POSITION_FOLLOWING)
+    ).toBe(true)
+    for (const attachmentName of attachmentNames) {
+      await expect(await canvas.findByText(attachmentName)).toBeInTheDocument()
+    }
   }
 }
 
@@ -470,7 +600,7 @@ export const MailboxCreateFolder: Story = {
   }
 }
 
-export const MailboxFolderActions: Story = {
+export const MailboxFolderOptions: Story = {
   args: {
     routeSearch: { folderId: mailWorkspaceScreenFolderIds.archive }
   },
@@ -482,13 +612,13 @@ export const MailboxFolderActions: Story = {
     const canvas = within(canvasElement)
     const body = within(canvasElement.ownerDocument.body)
 
-    await userEvent.click(await canvas.findByRole('button', { name: /^archive folder actions$/i }))
+    await userEvent.click(await canvas.findByRole('button', { name: /^archive folder options$/i }))
     await userEvent.click(await body.findByRole('menuitem', { name: /^rename folder$/i }))
     await expect(await body.findByRole('dialog', { name: /^rename archive$/i })).toBeInTheDocument()
   }
 }
 
-export const MailboxRenameFolderOpen: Story = MailboxFolderActions
+export const MailboxRenameFolderOpen: Story = MailboxFolderOptions
 
 export const MailboxDeleteFolderConfirm: Story = {
   args: {
@@ -502,7 +632,7 @@ export const MailboxDeleteFolderConfirm: Story = {
     const canvas = within(canvasElement)
     const body = within(canvasElement.ownerDocument.body)
 
-    await userEvent.click(await canvas.findByRole('button', { name: /^archive folder actions$/i }))
+    await userEvent.click(await canvas.findByRole('button', { name: /^archive folder options$/i }))
     await userEvent.click(await body.findByRole('menuitem', { name: /^delete folder$/i }))
     await expect(await body.findByRole('alertdialog')).toHaveTextContent(/delete archive/i)
   }
@@ -689,8 +819,9 @@ export const SecurityRemoteContentBlocked: Story = {
       'email body'
     )
 
-    await expect(iframeSource).toContain('Remote image blocked')
-    await expect(iframeSource).not.toContain('assets.provider.example/launch-banner.png')
+    await expect(iframeSource).toContain('assets.provider.example/launch-banner.png')
+    await expect(iframeSource).toContain("img-src 'none'")
+    await expect(iframeSource).not.toContain('Remote image blocked')
   }
 }
 
@@ -935,6 +1066,107 @@ async function findEmailFrameSource(
   }
 
   return iframeElement.srcdoc
+}
+
+async function findThreadScrollRegion(
+  canvasElement: HTMLElement,
+  description: string
+): Promise<HTMLElement> {
+  const canvas = within(canvasElement)
+  await canvas.findByRole('heading', { name: /agent mail smoke/i })
+
+  const scrollRegion = canvasElement.querySelector('[data-email-thread-scroll-region="thread"]')
+  if (!(scrollRegion instanceof HTMLElement)) {
+    throw new TypeError(`Expected ${description} to render a thread scroll region`)
+  }
+
+  const header = canvas.getByRole('heading', { name: /agent mail smoke/i }).closest('header')
+  if (!header || !scrollRegion.contains(header)) {
+    throw new Error(`Expected ${description} selected message header to scroll with the thread`)
+  }
+
+  return scrollRegion
+}
+
+async function expectThreadScrollRegionNotOverflowing(
+  canvasElement: HTMLElement,
+  description: string
+) {
+  const scrollRegion = await findThreadScrollRegion(canvasElement, description)
+
+  await waitFor(
+    () => {
+      expect(scrollRegion.scrollHeight).toBeLessThanOrEqual(scrollRegion.clientHeight + 1)
+    },
+    { timeout: 5_000 }
+  )
+}
+
+async function expectThreadScrollRegionOverflowing(canvasElement: HTMLElement, description: string) {
+  const scrollRegion = await findThreadScrollRegion(canvasElement, description)
+
+  await waitFor(
+    () => {
+      expect(scrollRegion.scrollHeight).toBeGreaterThan(scrollRegion.clientHeight + 1)
+    },
+    { timeout: 5_000 }
+  )
+}
+
+function expectCollapsedThreadRowsNotOverflowing(canvasElement: HTMLElement, description: string) {
+  const collapsedRows = canvasElement.querySelectorAll('[data-email-message-state="collapsed"]')
+  expect(collapsedRows.length).toBeGreaterThan(0)
+
+  for (const row of collapsedRows) {
+    expect(row.scrollHeight).toBeLessThanOrEqual(row.clientHeight + 1)
+    expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth + 1)
+  }
+}
+
+function expectSelectedThreadHeaderActionCentered(canvasElement: HTMLElement, description: string) {
+  const header = canvasElement
+    .querySelector('[data-email-thread-scroll-region="thread"]')
+    ?.querySelector('header')
+  if (!(header instanceof HTMLElement)) {
+    throw new TypeError(`Expected ${description} to render a selected thread header`)
+  }
+
+  const dateCluster = header.querySelector('[data-email-thread-date-cluster="selected"]')
+  if (!(dateCluster instanceof HTMLElement)) {
+    throw new TypeError(`Expected ${description} selected thread header to render a date cluster`)
+  }
+
+  const headerRect = header.getBoundingClientRect()
+  const actionRect = dateCluster.getBoundingClientRect()
+  const headerCenter = headerRect.top + headerRect.height / 2
+  const actionCenter = actionRect.top + actionRect.height / 2
+
+  expect(Math.abs(headerCenter - actionCenter)).toBeLessThanOrEqual(1)
+}
+
+function expectThreadBodyFramesFitContent(canvasElement: HTMLElement, description: string) {
+  const threadFrames = canvasElement.querySelectorAll('[data-email-thread-scroll-region="thread"] iframe')
+  expect(threadFrames.length).toBeGreaterThan(0)
+
+  for (const frame of threadFrames) {
+    if (!(frame instanceof HTMLIFrameElement) || !frame.contentDocument?.body) {
+      throw new TypeError(`Expected ${description} thread body to render in an iframe`)
+    }
+
+    const documentElement = frame.contentDocument.documentElement
+    const contentHeight = Math.ceil(
+      Math.max(
+        frame.contentDocument.body.getBoundingClientRect().height,
+        frame.contentDocument.body.offsetHeight,
+        frame.contentDocument.body.scrollHeight,
+        documentElement.getBoundingClientRect().height,
+        documentElement.offsetHeight,
+        documentElement.scrollHeight
+      )
+    )
+
+    expect(frame.clientHeight).toBeGreaterThanOrEqual(contentHeight)
+  }
 }
 
 function renderMailWorkspaceStory(

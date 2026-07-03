@@ -528,8 +528,8 @@ func TestMessageViewRPCReturnsLinkAndImageMetadata(t *testing.T) {
 	if len(payload.Result.RemoteImages) != 1 || payload.Result.RemoteImages[0].URL != "https://tracker.example/pixel.png" {
 		t.Fatalf("remote images = %#v", payload.Result.RemoteImages)
 	}
-	if strings.Contains(payload.Result.DisplayHTML, `<img src="https://tracker.example/pixel.png"`) {
-		t.Fatalf("display HTML loaded blocked remote image: %s", payload.Result.DisplayHTML)
+	if !strings.Contains(payload.Result.DisplayHTML, `<img src="https://tracker.example/pixel.png"`) {
+		t.Fatalf("display HTML missing preserved remote image: %s", payload.Result.DisplayHTML)
 	}
 	if !strings.Contains(payload.Result.DisplayHTML, `data-agent-mail-external-link-id="link-1"`) {
 		t.Fatalf("display HTML missing external-link marker: %s", payload.Result.DisplayHTML)

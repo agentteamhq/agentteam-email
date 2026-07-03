@@ -1,13 +1,17 @@
+import * as React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { ConnectedAccountsPanel, IntegrationsPanel, SettingsDomainsPanel } from './settings-dialog'
 import type { DomainSettingsState, DomainSettingsStatus } from './settings-dialog'
 
 describe('settings Cloudflare account and domain separation', () => {
-  it('does not expose integration disconnect actions on the domains surface', () => {
-    const markup = renderToStaticMarkup(<SettingsDomainsPanel state={domainSettingsState()} />)
+  it('shows domain removal without exposing connected-account disconnect actions on the domains surface', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(SettingsDomainsPanel, { state: domainSettingsState() })
+    )
 
     expect(markup).toContain('agentteam.example')
+    expect(markup).toContain('Remove domain')
     expect(markup).not.toContain('Disconnect Cloudflare')
     expect(markup).not.toContain('Disconnect account')
   })
@@ -15,12 +19,12 @@ describe('settings Cloudflare account and domain separation', () => {
   it('keeps Cloudflare grant disconnect on the connected accounts surface', () => {
     const onDisconnectCloudflare = vi.fn()
     const markup = renderToStaticMarkup(
-      <ConnectedAccountsPanel
-        state={{
+      React.createElement(ConnectedAccountsPanel, {
+        state: {
           ...domainSettingsState(),
           onDisconnectCloudflare
-        }}
-      />
+        }
+      })
     )
 
     expect(markup).toContain('Connected accounts')

@@ -123,6 +123,47 @@ describe('WildDuck client', () => {
     })
   })
 
+  it('omits update-only forwarded-address fields from WildDuck create requests', async () => {
+    expect.hasAssertions()
+    const { WildDuckClient } = await import('./wildduck-client')
+    const fetchImplementation = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: 'forwarded-address-id',
+          success: true
+        }),
+        {
+          headers: { 'content-type': 'application/json' },
+          status: 200
+        }
+      )
+    )
+    const client = new WildDuckClient(
+      new URL('https://wildduck.example.test'),
+      'fake-wildduck-token',
+      fetchImplementation
+    )
+
+    await expect(
+      client.createForwardedAddress({
+        address: 'team@example.test',
+        forwardedDisabled: true,
+        name: 'Team',
+        targets: ['member@example.test']
+      })
+    ).resolves.toStrictEqual({
+      id: 'forwarded-address-id',
+      success: true
+    })
+    const [, requestInit] = fetchImplementation.mock.calls[0] as [URL, RequestInit]
+    expect(requestInit.body).toBeTypeOf('string')
+    expect(JSON.parse(requestInit.body as string)).toStrictEqual({
+      address: 'team@example.test',
+      name: 'Team',
+      targets: ['member@example.test']
+    })
+  })
+
   it('accepts WildDuck message attachments with null content ids', async () => {
     expect.hasAssertions()
     const { WildDuckClient } = await import('./wildduck-client')
@@ -176,6 +217,10 @@ describe('WildDuck client', () => {
         }
       ]
     })
+    const [url] = fetchImplementation.mock.calls[0] as [URL, RequestInit]
+    expect(url.searchParams.get('includeHeaders')).toBe(
+      'X-Agent-Mail-Local-Route-ID,X-Agent-Mail-Target-Mailbox'
+    )
   })
 
   it('accepts WildDuck message move update responses', async () => {

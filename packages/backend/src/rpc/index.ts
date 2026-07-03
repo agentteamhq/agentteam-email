@@ -3,6 +3,7 @@ import debug from 'debug'
 import { Elysia } from 'elysia'
 
 import { globals } from '../globals'
+import { handleAgentMailForwardingGroupDeliveryRequest } from '../agent-mail/forwarding-group-delivery'
 import { handleAgentMailIngestRequest } from '../agent-mail/ingest'
 import { handleAgentMailRuntimeSnapshotRequest } from '../agent-mail/runtime-projection'
 import { handleBetterAuthProtocolRequest } from '../auth/protocol-handler'
@@ -19,10 +20,14 @@ import mail from './mail'
 import whoami from './whoami'
 
 const apiLog = debug('api:backend')
+const rpcLog = debug('app:rpc')
 
 const internalRpcApp = new Elysia({ name: 'rpc-internal', prefix: '/internal' })
   .get('/agent-mail/runtime/snapshot', ({ request }) => handleAgentMailRuntimeSnapshotRequest(request))
   .post('/agent-mail/cloudflare/send-raw', ({ request }) => handleCloudflareControlSendRawRequest(request))
+  .post('/agent-mail/forwarding-groups/deliveries', ({ request }) =>
+    handleAgentMailForwardingGroupDeliveryRequest(request)
+  )
 
 if (PRIVATE_VARS.E2E_TEST_SUPPORT_ENABLED) {
   internalRpcApp.use(e2eTestSupport)
@@ -36,6 +41,17 @@ export const backendRpcApp = new Elysia({ name: 'rpc', prefix: '/rpc', normalize
     const url = new URL(request.url)
     apiLog(`${request.method} ${url.pathname}`)
     set.headers['cache-control'] = 'private, no-cache, no-store'
+  })
+  .onError(({ code, error, request }) => {
+    const url = new URL(request.url)
+    rpcLog('rpc_unhandled_error %o', {
+      errorCode: code,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorStack: error instanceof Error ? error.stack : undefined,
+      method: request.method,
+      path: url.pathname
+    })
   })
   .get('/health', async ({ status }) => {
     await globals()

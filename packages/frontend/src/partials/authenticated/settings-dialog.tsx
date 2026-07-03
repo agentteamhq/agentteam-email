@@ -120,19 +120,6 @@ type CloudflareConnectionView = Pick<
 
 type AgentAccessCapabilityRequest = AgentAccessApproval['capabilityRequests'][number]
 
-type MailRuntimeStatusSummary = {
-  modules: Record<
-    string,
-    {
-      ok?: boolean
-      queue?: {
-        pending?: number
-        retryWait?: number
-      }
-    }
-  >
-}
-
 export interface DomainSettingsStatus {
   connections: readonly CloudflareConnectionView[]
   grants: readonly CloudflareGrantView[]
@@ -150,6 +137,7 @@ export interface DomainSettingsState {
   onLoadAccounts?: () => void
   onLoadZones?: () => void
   onProvisionDomain?: (connectionPublicId: CloudflareConnectionView['publicId']) => void
+  onRemoveDomain?: (connectionPublicId: CloudflareConnectionView['publicId']) => void
   onSelectAccount?: (accountId: string) => void
   onSelectDomain?: (connectionPublicId: CloudflareConnectionView['publicId']) => void
   onSelectZone?: (zoneId: string) => void
@@ -1296,6 +1284,7 @@ interface DomainSettingsController {
   onLoadAccounts: () => void
   onLoadZones: () => void
   onProvisionDomain: (connectionPublicId: DomainPublicId) => void
+  onRemoveDomain: (connectionPublicId: DomainPublicId) => void
   onSelectAccount: (accountId: string) => void
   onSelectDomain: (connectionPublicId: DomainPublicId) => void
   onSelectZone: (zoneId: string) => void
@@ -1360,6 +1349,7 @@ function domainSettingsControllerFromState(state?: DomainSettingsState): DomainS
     onLoadAccounts: action(state?.onLoadAccounts),
     onLoadZones: action(state?.onLoadZones),
     onProvisionDomain: action(state?.onProvisionDomain),
+    onRemoveDomain: action(state?.onRemoveDomain),
     onSelectAccount: action(state?.onSelectAccount),
     onSelectDomain: action(state?.onSelectDomain),
     onSelectZone: action(state?.onSelectZone),
@@ -1662,6 +1652,9 @@ function formatCloudflareGrantHelper(grant: CloudflareGrantView): string {
   if (grant.missingRequiredScopeCount > 0) {
     return `Reconnect this account to grant ${formatMissingPermissionCount(grant.missingRequiredScopeCount)}.`
   }
+  if (grant.status === 'revoked') {
+    return 'This account is disconnected and cannot manage domains.'
+  }
 
   return 'Reconnect this account before using it to manage domains.'
 }
@@ -1920,8 +1913,8 @@ function SettingsDomainDetailPanel({ settings }: { settings: DomainSettingsContr
           ) : null}
           {settings.message ? <p className='text-muted-foreground text-sm'>{settings.message}</p> : null}
 
-          {provisionVisible ? (
-            <div className='flex justify-start sm:justify-end'>
+          <div className='flex flex-wrap justify-start gap-2 sm:justify-end'>
+            {provisionVisible ? (
               <Button
                 className='w-full sm:w-auto'
                 disabled={
@@ -1940,8 +1933,42 @@ function SettingsDomainDetailPanel({ settings }: { settings: DomainSettingsContr
                 {settings.busy || isProvisioning ? <Spinner data-icon='inline-start' /> : null}
                 {provisionLabel}
               </Button>
-            </div>
-          ) : null}
+            ) : null}
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  className='w-full sm:w-auto'
+                  disabled={settings.busy || settings.readOnly}
+                  size='sm'
+                  variant='outline'
+                >
+                  <TrashIcon data-icon='inline-start' />
+                  Remove domain
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Remove this domain?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    AgentTeam Email will remove the Cloudflare routing for {domain.domain}. The connected
+                    Cloudflare account will remain available.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={settings.busy}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    disabled={settings.busy}
+                    onClick={() => {
+                      settings.onRemoveDomain(domain.publicId)
+                    }}
+                    variant='destructive'
+                  >
+                    Remove domain
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
         </div>
       </SettingsDomainsSection>
     </section>
@@ -2003,35 +2030,6 @@ function groupCloudflareZonesByAccount(zones: readonly CloudflareZoneSummary[]) 
 
 function cloudflareZoneSelectionValue(zone: CloudflareZoneSummary): string {
   return `${zone.grantPublicId}|${zone.id}`
-}
-
-function aggregateMailRuntimeQueue(status: MailRuntimeStatusSummary) {
-  let pending = 0
-  let retryWait = 0
-  let seen = false
-
-  for (const moduleStatus of Object.values(status.modules)) {
-    if (!moduleStatus.queue) {
-      continue
-    }
-    pending += moduleStatus.queue.pending ?? 0
-    retryWait += moduleStatus.queue.retryWait ?? 0
-    seen = true
-  }
-
-  return seen ? { pending, retryWait } : null
-}
-
-function summarizeMailRuntimeModules(status: MailRuntimeStatusSummary) {
-  const modules = Object.values(status.modules)
-  if (modules.length === 0) {
-    return null
-  }
-
-  return {
-    ok: modules.filter((moduleStatus) => moduleStatus.ok === true).length,
-    total: modules.length
-  }
 }
 
 function formatStatusLabel(value: string): string {
