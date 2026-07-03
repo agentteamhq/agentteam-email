@@ -69,6 +69,7 @@ jobs:
 
       - name: Run CI validation
         env:
+          AT_EMAIL_ADMIN_TEST_CI_ENV_FILE: .env.example
           CONTAINER_ENGINE: docker
           CONTAINER_ENGINE_HOST: unix:///var/run/docker.sock
           MISE_TASK_OUTPUT: prefix

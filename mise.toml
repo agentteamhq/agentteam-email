@@ -139,6 +139,8 @@ run = "node scripts/generate-rpc-openapi.mjs"
 
 [tasks."test:node"]
 description = "Run workspace package unit tests"
+# Container/browser E2E packages are excluded from root pnpm test and routed
+# through test:e2e so their mise-owned runtime setup always runs.
 run = "pnpm test"
 
 [tasks.test]
@@ -245,7 +247,7 @@ run = [
 [tasks."test:e2e:browser-recorded"]
 description = "Run the recorded full-stack browser E2E harness"
 run = [
-  { task = "//test-containers/full-stack-browser-e2e:test:with-images" },
+  { task = "//test-containers/full-stack-browser-e2e:test" },
 ]
 
 [tasks."test:e2e"]
@@ -255,13 +257,14 @@ run = [
   { task = ":test:e2e:node" },
   { task = ":test:e2e:auth" },
   { task = ":test:e2e:kubernetes" },
+  { task = ":test:e2e:browser-recorded" },
 ]
 
 [tasks."test:ci"]
-description = "Run the full CI validation gate against the example environment"
-# Default to the checked-in example environment for CI parity, while allowing
-# local worktrees to run the same gate against their isolated .env ports.
-env = { _.file = "{{ get_env(name='AT_EMAIL_ADMIN_TEST_CI_ENV_FILE', default='.env.example') }}", CI = "true", DEBUG = "*", TEST_ARTIFACT_SUBMIT_SKIP = "1" }
+description = "Run the full CI validation gate against the configured environment"
+# Local runs default to the repo-local .env so WT-scoped ports stay isolated.
+# CI overrides AT_EMAIL_ADMIN_TEST_CI_ENV_FILE to validate .env.example.
+env = { _.file = "{{ get_env(name='AT_EMAIL_ADMIN_TEST_CI_ENV_FILE', default='.env') }}", CI = "true", DEBUG = "*", TEST_ARTIFACT_SUBMIT_SKIP = "1" }
 run = [
   { task = ":test:static" },
   { task = ":build" },

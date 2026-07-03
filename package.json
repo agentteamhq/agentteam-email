@@ -38,7 +38,7 @@
     "playwright-cli": "./node_modules/.bin/playwright-cli",
     "pnpm:reset": "rimraf --glob {.,packages/*,apps/*,test-containers/*}/{pnpm-lock.yaml,node_modules,.pnpm}",
     "preview": "turbo run preview --filter=@main/web-server",
-    "test": "turbo run test --filter=!@main/auth-e2e --filter=!@main/cloudflare-oauth-e2e --filter=!@main/full-stack-e2e --filter=!@main/kind-e2e --filter=!@main/paperclip-plugin-e2e",
+    "test": "turbo run test --filter=!@main/auth-e2e --filter=!@main/cloudflare-oauth-e2e --filter=!@main/full-stack-browser-e2e --filter=!@main/full-stack-e2e --filter=!@main/kind-e2e --filter=!@main/paperclip-plugin-e2e",
     "test:integration": "turbo run test && turbo run test:integration",
     "turbo": "node --env-file-if-exists=.env ./node_modules/turbo/bin/turbo",
     "typecheck": "turbo run typecheck"
