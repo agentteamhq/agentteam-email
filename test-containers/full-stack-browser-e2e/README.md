@@ -5,15 +5,22 @@ runs a Playwright browser in a container on the same isolated network, records
 the first-use product flow, and submits the complete run directory as one test
 artifact bundle.
 
+The recorded flow provisions the Cloudflare Email Worker through the fake
+Cloudflare API, then delivers inbound mail by invoking the built Worker
+`email()` handler with the provisioned runtime bindings. The harness adapts the
+Worker's local R2 and ingest fetches to the isolated HTTP Testcontainers
+services; production Worker URL validation is not changed.
+
 Run it from the repository root after installing dependencies:
 
 ```bash
 mise run test:e2e:browser-recorded
 ```
 
-That command creates the run directory first, then records the required image
-build logs and browser harness logs into the same bundle. To rerun only the
-browser harness against already-built `stage` images, use:
+That command creates the run directory first, builds the Worker package, then
+records the required image build logs and browser harness logs into the same
+bundle. To rerun only the browser harness against already-built `stage` images,
+use:
 
 ```bash
 pnpm --filter @main/full-stack-browser-e2e test

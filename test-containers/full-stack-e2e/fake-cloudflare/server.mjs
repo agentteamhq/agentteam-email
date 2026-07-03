@@ -64,6 +64,7 @@ const state = {
   buckets: new Set(),
   catchAllRules: new Map(),
   dnsEnabledZones: new Set(),
+  emailSends: [],
   operations: [],
   requests: [],
   sendingSubdomains: new Map(),
@@ -94,6 +95,7 @@ const server = http.createServer(async (request, response) => {
         buckets: [...state.buckets].sort(),
         catchAllRules: Object.fromEntries(state.catchAllRules),
         dnsEnabledZones: [...state.dnsEnabledZones].sort(),
+        emailSends: state.emailSends,
         operations: state.operations,
         requests: state.requests,
         sendingSubdomains: Object.fromEntries(
@@ -102,6 +104,11 @@ const server = http.createServer(async (request, response) => {
         scripts: Object.fromEntries(state.scripts),
         secrets: state.secrets
       })
+      return
+    }
+
+    if (url.pathname === '/__worker-runtime' && request.method === 'GET') {
+      handleWorkerRuntime(response, url)
       return
     }
 
@@ -281,7 +288,9 @@ async function handleCloudflareApi(request, response, url, body) {
   )
   if (sendMatch?.groups && request.method === 'POST') {
     const json = parseJsonBody(body) || {}
-    const fromDomain = domainFromAddress(readString(json, 'from') || '')
+    const from = readString(json, 'from') || ''
+    const mimeMessage = readString(json, 'mime_message') || ''
+    const fromDomain = domainFromAddress(from)
     if (!isSendingDomainEnabled(fromDomain)) {
       sendJson(
         response,
@@ -296,8 +305,19 @@ async function handleCloudflareApi(request, response, url, body) {
       ...arrayOfStrings(json.bcc),
       ...arrayOfStrings(json.recipients)
     ]
+    state.emailSends.push({
+      bodySha256: hashBody(body),
+      delivered,
+      from,
+      fromDomain,
+      mimeMessageSha256: hashText(mimeMessage),
+      receivedAt: new Date().toISOString(),
+      sendKind: sendMatch.groups.sendKind
+    })
     recordOperation({
       bytes: body.byteLength,
+      deliveredCount: delivered.length,
+      fromDomain,
       sendKind: sendMatch.groups.sendKind,
       type: 'email.sending.send'
     })
@@ -552,6 +572,20 @@ function handleWorkerNotificationSigning(response, body) {
   })
 }
 
+function handleWorkerRuntime(response, url) {
+  const domain = url.searchParams.get('domain') || ''
+  const worker = [...state.workerRuntimeBindings.values()].find((candidate) => candidate.domain === domain)
+  if (!worker || !worker.env || !worker.connectionId) {
+    sendJson(response, 404, { error: 'worker_not_found' })
+    return
+  }
+  sendJson(response, 200, {
+    connectionId: worker.connectionId,
+    domain: worker.domain,
+    env: worker.env
+  })
+}
+
 function signStandardWebhook(secret, webhookId, timestamp, bodyText) {
   const key = decodeStandardWebhookSecret(secret)
   const signedContent = `${webhookId}.${timestamp}.${bodyText}`
@@ -791,6 +825,7 @@ function workerRuntimeBindings(metadata) {
       .map((binding) => [binding.name, binding.text])
   )
   return {
+    env: bindings,
     connectionId: bindings.AGENTTEAM_CONNECTION_ID || '',
     domain: bindings.AGENTTEAM_DOMAIN || '',
     webhookSigningSecret: bindings.AGENTTEAM_WORKER_HMAC_SECRET || ''
@@ -808,6 +843,7 @@ function resetState() {
   state.buckets.clear()
   state.catchAllRules.clear()
   state.dnsEnabledZones.clear()
+  state.emailSends.length = 0
   state.operations.length = 0
   state.requests.length = 0
   state.sendingSubdomains.clear()
