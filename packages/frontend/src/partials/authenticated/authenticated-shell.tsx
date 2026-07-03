@@ -259,6 +259,7 @@ export function AuthenticatedShell({
 
   return (
     <SidebarProvider
+      className='h-svh min-h-0'
       open={hasActiveManagementItem ? false : undefined}
       style={
         {
@@ -2166,6 +2167,7 @@ function EmailPreviewPane({
     null
   )
   const hasAttachments = Boolean(email.attachments?.length)
+  const hasThread = Boolean(email.thread?.length)
   const selectedThreadMessage = email.thread?.find((message) => isSelectedThreadMessage(email, message))
 
   return (
@@ -2179,31 +2181,35 @@ function EmailPreviewPane({
         onEmailAction={onEmailAction}
         onExternalLinkSelect={setSelectedExternalLink}
       />
-      <EmailPreviewHeader
-        email={email}
-        onEmailAction={onEmailAction}
-        selectedThreadMessage={selectedThreadMessage}
-      />
-      <div className='bg-background min-h-0 flex-1 overflow-auto'>
-        {email.thread?.length ? (
-          <>
-            {selectedThreadMessage?.state === 'collapsed' ? null : (
-              <EmailSelectedThreadMessageBody
-                email={email}
-                message={selectedThreadMessage}
-                onAttachmentPreview={onAttachmentPreview}
-                onExternalLinkSelect={setSelectedExternalLink}
-              />
-            )}
-            <EmailThreadView
+      {hasThread ? (
+        <div
+          className='bg-background min-h-0 flex-1 overflow-auto'
+          data-email-thread-scroll-region='thread'
+        >
+          <EmailPreviewHeader
+            email={email}
+            onEmailAction={onEmailAction}
+            selectedThreadMessage={selectedThreadMessage}
+          />
+          {selectedThreadMessage?.state === 'collapsed' ? null : (
+            <EmailSelectedThreadMessageBody
               email={email}
+              message={selectedThreadMessage}
               onAttachmentPreview={onAttachmentPreview}
-              onEmailAction={onEmailAction}
               onExternalLinkSelect={setSelectedExternalLink}
             />
-          </>
-        ) : (
-          <>
+          )}
+          <EmailThreadView
+            email={email}
+            onAttachmentPreview={onAttachmentPreview}
+            onEmailAction={onEmailAction}
+            onExternalLinkSelect={setSelectedExternalLink}
+          />
+        </div>
+      ) : (
+        <>
+          <EmailPreviewHeader email={email} />
+          <div className='bg-background min-h-0 flex-1 overflow-auto'>
             <EmailMessageBodyFrame
               allowRemoteImages={email.remoteImagesAllowed}
               className={hasAttachments ? undefined : getEmailBodyFrameClass(email.bodySize ?? 'fill')}
@@ -2221,12 +2227,12 @@ function EmailPreviewPane({
                   ? (attachment) => {
                       onAttachmentPreview(attachment, email)
                     }
-                  : undefined
+                : undefined
               }
             />
-          </>
-        )}
-      </div>
+          </div>
+        </>
+      )}
       <ExternalLinkWarningDialog
         link={selectedExternalLink}
         onOpenChange={(open) => {
@@ -2486,8 +2492,18 @@ function EmailMessageBodyFrame({
 
     if (fitContent) {
       const resizeFrameToContent = () => {
-        const bodyHeight = iframeDocument.body.scrollHeight
-        const nextHeight = Math.ceil(Math.max(bodyHeight, 1))
+        const documentElement = iframeDocument.documentElement
+        const bodyHeight = Math.max(
+          iframeDocument.body.getBoundingClientRect().height,
+          iframeDocument.body.offsetHeight,
+          iframeDocument.body.scrollHeight
+        )
+        const documentHeight = Math.max(
+          documentElement.getBoundingClientRect().height,
+          documentElement.offsetHeight,
+          documentElement.scrollHeight
+        )
+        const nextHeight = Math.ceil(Math.max(bodyHeight, documentHeight, 1))
 
         iframe.height = String(nextHeight)
       }
@@ -2840,7 +2856,7 @@ function EmailThreadView({
     email.thread?.filter((message) => !isSelectedThreadMessage(email, message)) ?? []
 
   return (
-    <div className='bg-background flex min-h-full flex-col'>
+    <div className='bg-background flex flex-col'>
       {visibleThreadMessages.map((message, index) => (
         <EmailThreadMessageItem
           email={email}
@@ -3014,7 +3030,8 @@ function EmailCollapsedThreadMessage({
     >
       <Button
         aria-label={`Expand ${message.senderName} message`}
-        className='hover:bg-muted/25 h-auto w-full justify-start rounded-none px-4 py-3 text-left'
+        className='hover:bg-muted/25 h-auto min-w-0 w-full shrink justify-start whitespace-normal rounded-none px-4
+          py-3 text-left'
         onClick={onExpand}
         type='button'
         variant='ghost'

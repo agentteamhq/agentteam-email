@@ -23,6 +23,7 @@ import {
   mailWorkspaceScreenFormView,
   mailWorkspaceScreenInlineAttachmentView,
   mailWorkspaceScreenJunkView,
+  mailWorkspaceScreenLongConversationThreadView,
   mailWorkspaceScreenLongMailboxListView,
   mailWorkspaceScreenMailtoView,
   mailWorkspaceScreenNoAccountsView,
@@ -346,6 +347,7 @@ export const ConversationThread: Story = {
     await expect(await canvas.findByRole('button', { name: /collapse testing message/i })).toBeInTheDocument()
     await expect(await canvas.findByRole('button', { name: /collapse support agent message/i })).toBeInTheDocument()
     await expect(await canvas.findByText('Draft')).toBeInTheDocument()
+    await expectThreadScrollRegionNotOverflowing(canvasElement, 'conversation thread')
     const draftFrameSource = await findEmailFrameSource(
       canvasElement,
       /support agent message body/i,
@@ -365,6 +367,7 @@ export const ConversationThreadCollapsedMiddle: Story = {
       view: mailWorkspaceScreenConversationOriginalView
     }),
   play: async ({ canvasElement }) => {
+    // Regression fixture: a collapsed middle message must not create nested scroll flicker.
     const canvas = within(canvasElement)
 
     await expect(
@@ -372,6 +375,26 @@ export const ConversationThreadCollapsedMiddle: Story = {
     ).toBeInTheDocument()
     await expect(await canvas.findByRole('button', { name: /expand testing message/i })).toBeInTheDocument()
     await expect(await canvas.findByRole('button', { name: /collapse support agent message/i })).toBeInTheDocument()
+    expectCollapsedThreadRowsNotOverflowing(canvasElement, 'collapsed middle thread')
+    expectThreadBodyFramesFitContent(canvasElement, 'collapsed middle thread')
+    await expectThreadScrollRegionNotOverflowing(canvasElement, 'collapsed middle thread')
+  }
+}
+
+export const ConversationThreadLong: Story = {
+  args: {
+    routeSearch: { messageId: 'conversation-thread-long' }
+  },
+  render: (args) =>
+    renderMailWorkspaceStory(args, {
+      view: mailWorkspaceScreenLongConversationThreadView
+    }),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+
+    await expect(await canvas.findByRole('heading', { name: /agent mail smoke/i })).toBeInTheDocument()
+    await expect(await canvas.findByText(/thread follow-up 24/i)).toBeInTheDocument()
+    await expectThreadScrollRegionOverflowing(canvasElement, 'long conversation thread')
   }
 }
 
@@ -1006,6 +1029,86 @@ async function findEmailFrameSource(
   }
 
   return iframeElement.srcdoc
+}
+
+async function findThreadScrollRegion(
+  canvasElement: HTMLElement,
+  description: string
+): Promise<HTMLElement> {
+  const canvas = within(canvasElement)
+  await canvas.findByRole('heading', { name: /agent mail smoke/i })
+
+  const scrollRegion = canvasElement.querySelector('[data-email-thread-scroll-region="thread"]')
+  if (!(scrollRegion instanceof HTMLElement)) {
+    throw new TypeError(`Expected ${description} to render a thread scroll region`)
+  }
+
+  const header = canvas.getByRole('heading', { name: /agent mail smoke/i }).closest('header')
+  if (!header || !scrollRegion.contains(header)) {
+    throw new Error(`Expected ${description} selected message header to scroll with the thread`)
+  }
+
+  return scrollRegion
+}
+
+async function expectThreadScrollRegionNotOverflowing(
+  canvasElement: HTMLElement,
+  description: string
+) {
+  const scrollRegion = await findThreadScrollRegion(canvasElement, description)
+
+  await waitFor(
+    () => {
+      expect(scrollRegion.scrollHeight).toBeLessThanOrEqual(scrollRegion.clientHeight + 1)
+    },
+    { timeout: 5_000 }
+  )
+}
+
+async function expectThreadScrollRegionOverflowing(canvasElement: HTMLElement, description: string) {
+  const scrollRegion = await findThreadScrollRegion(canvasElement, description)
+
+  await waitFor(
+    () => {
+      expect(scrollRegion.scrollHeight).toBeGreaterThan(scrollRegion.clientHeight + 1)
+    },
+    { timeout: 5_000 }
+  )
+}
+
+function expectCollapsedThreadRowsNotOverflowing(canvasElement: HTMLElement, description: string) {
+  const collapsedRows = canvasElement.querySelectorAll('[data-email-message-state="collapsed"]')
+  expect(collapsedRows.length).toBeGreaterThan(0)
+
+  for (const row of collapsedRows) {
+    expect(row.scrollHeight).toBeLessThanOrEqual(row.clientHeight + 1)
+    expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth + 1)
+  }
+}
+
+function expectThreadBodyFramesFitContent(canvasElement: HTMLElement, description: string) {
+  const threadFrames = canvasElement.querySelectorAll('[data-email-thread-scroll-region="thread"] iframe')
+  expect(threadFrames.length).toBeGreaterThan(0)
+
+  for (const frame of threadFrames) {
+    if (!(frame instanceof HTMLIFrameElement) || !frame.contentDocument?.body) {
+      throw new TypeError(`Expected ${description} thread body to render in an iframe`)
+    }
+
+    const documentElement = frame.contentDocument.documentElement
+    const contentHeight = Math.ceil(
+      Math.max(
+        frame.contentDocument.body.getBoundingClientRect().height,
+        frame.contentDocument.body.offsetHeight,
+        frame.contentDocument.body.scrollHeight,
+        documentElement.getBoundingClientRect().height,
+        documentElement.offsetHeight,
+        documentElement.scrollHeight
+      )
+    )
+
+    expect(frame.clientHeight).toBeGreaterThanOrEqual(contentHeight)
+  }
 }
 
 function renderMailWorkspaceStory(

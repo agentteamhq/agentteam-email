@@ -251,6 +251,31 @@ const conversationDraftMessage = createThreadMessage({
   to: ['Testing <testingtesting@example.test>']
 })
 
+const conversationLongThreadMessages = Array.from({ length: 24 }, (_, index) => {
+  const messageNumber = index + 1
+  const isCustomerReply = index % 2 === 0
+
+  return createThreadMessage({
+    from: isCustomerReply
+      ? `Testing ${messageNumber} <testingtesting@example.test>`
+      : `Support Agent <support@agentteam.test>`,
+    html: [
+      `<p>Thread follow-up ${messageNumber} keeps the conversation history long enough to require scrolling.</p>`,
+      '<p>The selected message header and body must remain part of the same scrolling surface.</p>'
+    ].join(''),
+    id: `thread-history-${messageNumber}`,
+    mailboxId: isCustomerReply ? inboxFolder.id : sentFolder.id,
+    receivedAt: `2026-06-01T${String(Math.floor(messageNumber / 2)).padStart(2, '0')}:${String(
+      (messageNumber * 4) % 60
+    ).padStart(2, '0')}:00.000Z`,
+    subject: 'Re: Agent Mail smoke - 20260601-044348Z',
+    teaser: `Thread follow-up ${messageNumber} keeps the conversation history long enough to require scrolling.`,
+    to: isCustomerReply
+      ? ['Support Agent <support@agentteam.test>']
+      : ['Testing <testingtesting@example.test>']
+  })
+})
+
 const conversationMessage = {
   ...conversationLatestMessage,
   thread: [conversationOriginalMessage, conversationLatestMessage, conversationDraftMessage]
@@ -264,6 +289,17 @@ const conversationOriginalDetail = {
 const conversationThreadAttachmentDetail = {
   ...conversationThreadAttachmentMessage,
   thread: [conversationOriginalMessage, conversationThreadAttachmentMessage, conversationDraftMessage]
+} satisfies MailMessageDetail
+
+const conversationLongThreadDetail = {
+  ...conversationLatestMessage,
+  id: 'conversation-thread-long',
+  thread: [
+    conversationOriginalMessage,
+    ...conversationLongThreadMessages,
+    { ...conversationLatestMessage, id: 'conversation-thread-long' },
+    conversationDraftMessage
+  ]
 } satisfies MailMessageDetail
 
 const sentMessage = createMessageDetail({
@@ -618,6 +654,14 @@ export const mailWorkspaceScreenThreadAttachmentsView = workspace({
     ...baseMessages.filter((message) => message.id !== 'conversation-thread')
   ],
   selectedMessage: conversationThreadAttachmentDetail
+})
+
+export const mailWorkspaceScreenLongConversationThreadView = workspace({
+  messages: [
+    summaryFromDetail(conversationLongThreadDetail),
+    ...baseMessages.filter((message) => message.id !== 'conversation-thread')
+  ],
+  selectedMessage: conversationLongThreadDetail
 })
 
 export const mailWorkspaceScreenDraftView = workspace({
