@@ -105,6 +105,7 @@ func TestActiveDomainRecordsFiltersAndValidatesSelection(t *testing.T) {
 	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
 	if _, _, err := SyncRuntimeDomains(ctx, store, ProviderSES, []DomainConfigParams{
 		testDomainConfigParams("example.com", true),
+		testDomainConfigParams("second.example.com", true),
 		testDomainConfigParams("disabled.example.com", false),
 	}, now); err != nil {
 		t.Fatalf("SyncRuntimeDomains: %v", err)
@@ -114,8 +115,24 @@ func TestActiveDomainRecordsFiltersAndValidatesSelection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ActiveDomainRecords: %v", err)
 	}
-	if len(records) != 1 || records[0].Domain != "example.com" {
-		t.Fatalf("active records=%#v, want only example.com", records)
+	if len(records) != 2 || records[0].Domain != "example.com" || records[1].Domain != "second.example.com" {
+		t.Fatalf("active records=%#v, want example.com and second.example.com", records)
+	}
+
+	selected, err := ActiveDomainRecords(ctx, store, []string{"example.com"})
+	if err != nil {
+		t.Fatalf("selected ActiveDomainRecords: %v", err)
+	}
+	if len(selected) != 1 || selected[0].Domain != "example.com" {
+		t.Fatalf("selected active records=%#v, want only example.com", selected)
+	}
+
+	selectedPair, err := ActiveDomainRecords(ctx, store, []string{"second.example.com", "example.com"})
+	if err != nil {
+		t.Fatalf("selected pair ActiveDomainRecords: %v", err)
+	}
+	if len(selectedPair) != 2 || selectedPair[0].Domain != "example.com" || selectedPair[1].Domain != "second.example.com" {
+		t.Fatalf("selected pair active records=%#v, want example.com and second.example.com", selectedPair)
 	}
 
 	if _, err := ActiveDomainRecords(ctx, store, []string{"disabled.example.com"}); err == nil {

@@ -122,30 +122,31 @@ func ActiveDomainRecords(ctx context.Context, store Store, domains []string) ([]
 	if err != nil {
 		return nil, err
 	}
-	requested, err := canonicalDomainSelection(domains)
+	selected, err := canonicalDomainSelection(domains)
 	if err != nil {
 		return nil, err
 	}
+	missing := cloneDomainSelection(selected)
 	records := make([]DomainRecord, 0, len(state.Domains))
 	for _, record := range state.Domains {
 		if record.Status != DomainStatusActive {
 			continue
 		}
-		if len(requested) > 0 {
-			if _, ok := requested[record.Domain]; !ok {
+		if selected != nil {
+			if _, ok := selected[record.Domain]; !ok {
 				continue
 			}
-			delete(requested, record.Domain)
+			delete(missing, record.Domain)
 		}
 		records = append(records, record)
 	}
-	if len(requested) > 0 {
-		missing := make([]string, 0, len(requested))
-		for domain := range requested {
-			missing = append(missing, domain)
+	if len(missing) > 0 {
+		missingDomains := make([]string, 0, len(missing))
+		for domain := range missing {
+			missingDomains = append(missingDomains, domain)
 		}
-		slices.Sort(missing)
-		return nil, fmt.Errorf("active domain not found: %s", strings.Join(missing, ", "))
+		slices.Sort(missingDomains)
+		return nil, fmt.Errorf("active domain not found: %s", strings.Join(missingDomains, ", "))
 	}
 	sortDomains(records)
 	return records, nil
@@ -365,6 +366,17 @@ func canonicalDomainSelection(domains []string) (map[string]struct{}, error) {
 		result[domain] = struct{}{}
 	}
 	return result, nil
+}
+
+func cloneDomainSelection(domains map[string]struct{}) map[string]struct{} {
+	if len(domains) == 0 {
+		return nil
+	}
+	result := make(map[string]struct{}, len(domains))
+	for domain := range domains {
+		result[domain] = struct{}{}
+	}
+	return result
 }
 
 func normalizeProviderMetadata(metadata DomainProviderMetadata, provider string, domain string, feedbackAddress string) (DomainProviderMetadata, error) {

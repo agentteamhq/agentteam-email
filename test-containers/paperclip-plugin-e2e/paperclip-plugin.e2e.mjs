@@ -170,17 +170,20 @@ const pluginWithFakeCli = workerModule.createAgentTeamEmailPaperclipPlugin({
     }
   }
 })
+const oauthTestConfig = {
+  oauthClientId: 'paperclip-email-e2e',
+  oauthRedirectUri: 'https://paperclip.example.test/oauth/callback',
+  serviceBaseUrl: 'https://app.agentteam.email'
+}
 const harness = createTestHarness({
   manifest,
-  config: {
-    serviceBaseUrl: 'https://app.agentteam.email'
-  }
+  config: oauthTestConfig
 })
 await pluginWithFakeCli.definition.setup(harness.ctx)
 
 const oauthConnect = await harness.performAction(
   'start-oauth-connect',
-  { serviceBaseUrl: 'https://app.agentteam.email' },
+  { serviceBaseUrl: oauthTestConfig.serviceBaseUrl },
   {
     actor: { type: 'user', userId: 'paperclip-user-1' },
     companyId: 'paperclip-company-1'
@@ -191,13 +194,22 @@ if (!oauthConnect.ok || typeof oauthConnect.connectUrl !== 'string') {
 }
 const oauthConnectUrl = new URL(oauthConnect.connectUrl)
 if (
-  oauthConnectUrl.origin !== 'https://app.agentteam.email' ||
-  oauthConnectUrl.pathname !== '/settings/agent-access/' ||
-  oauthConnectUrl.searchParams.get('source') !== 'paperclip' ||
-  oauthConnectUrl.searchParams.get('paperclip_company_id') !== 'paperclip-company-1' ||
-  oauthConnectUrl.searchParams.get('paperclip_plugin_id') !== 'agentteam.paperclip-email-plugin'
+  oauthConnectUrl.origin !== oauthTestConfig.serviceBaseUrl ||
+  oauthConnectUrl.pathname !== '/rpc/auth/api/oauth2/authorize' ||
+  oauthConnectUrl.searchParams.get('response_type') !== 'code' ||
+  oauthConnectUrl.searchParams.get('client_id') !== oauthTestConfig.oauthClientId ||
+  oauthConnectUrl.searchParams.get('redirect_uri') !== oauthTestConfig.oauthRedirectUri ||
+  oauthConnectUrl.searchParams.get('scope') !== 'openid profile email offline_access email.full_access' ||
+  oauthConnectUrl.searchParams.get('code_challenge_method') !== 'S256' ||
+  oauthConnectUrl.searchParams.get('audience') !== `${oauthTestConfig.serviceBaseUrl}/api`
 ) {
-  throw new Error(`OAuth connect URL did not preserve the expected safe context: ${oauthConnect.connectUrl}`)
+  throw new Error(`OAuth connect URL did not match the AgentTeam OAuth authorize contract: ${oauthConnect.connectUrl}`)
+}
+if (!oauthConnectUrl.searchParams.get('state') || !oauthConnectUrl.searchParams.get('code_challenge')) {
+  throw new Error(`OAuth connect URL must include opaque state and PKCE challenge: ${oauthConnect.connectUrl}`)
+}
+if (oauthConnect.connectUrl.includes('paperclip-company-1') || oauthConnect.connectUrl.includes('paperclip-user-1')) {
+  throw new Error(`OAuth connect URL must keep Paperclip context server-side: ${oauthConnect.connectUrl}`)
 }
 if (/token|secret|key/iu.test(oauthConnect.connectUrl)) {
   throw new Error(`OAuth connect URL must not expose credentials: ${oauthConnect.connectUrl}`)

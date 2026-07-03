@@ -97,7 +97,7 @@ export const WebmailInbox: Story = {
     const canvas = within(canvasElement.ownerDocument.body)
 
     await expect(await canvas.findAllByText('Quarterly research packet')).toHaveLength(2)
-    await expect(await canvas.findAllByText('research-packet.txt')).toHaveLength(2)
+    await expect(await canvas.findByText('research-packet.txt')).toBeInTheDocument()
     await expect(await canvas.findByText('2 shown')).toBeInTheDocument()
     await expect(await canvas.findByText('42 messages')).toBeInTheDocument()
   }
