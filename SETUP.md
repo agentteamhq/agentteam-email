@@ -336,12 +336,29 @@ Run all end-to-end suites through the aggregate root task:
 mise run test:e2e
 ```
 
+Run the full CI gate locally through the root task after configuring the
+repo-local `.env` for this worktree:
+
+```bash
+mise run test:ci
+```
+
+The root task reads `.env` by default so local `WT` and port overrides remain
+isolated. GitHub Actions sets `AT_EMAIL_ADMIN_TEST_CI_ENV_FILE=.env.example` to
+validate the checked-in example environment on its clean runner.
+
+Container and browser E2E packages are intentionally excluded from the root
+package `pnpm test` aggregate. They run through their owning `mise` tasks so
+runtime setup such as image builds, Compose stacks, dev services, and artifact
+capture is always included.
+
 Run an individual suite through its owning test-container task:
 
 ```bash
 mise run //test-containers/auth-e2e:test
 mise run //apps/mail-control-service/test-containers/inbound-replay-smoke-e2e:test
 mise run //test-containers/cloudflare-oauth-e2e:test
+mise run //test-containers/full-stack-browser-e2e:test
 mise run //test-containers/kind-e2e:test
 mise run //test-containers/full-stack-e2e:test
 ```
