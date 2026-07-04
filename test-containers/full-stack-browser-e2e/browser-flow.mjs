@@ -1,11 +1,9 @@
 import assert from 'node:assert/strict'
-import { createHash } from 'node:crypto'
 import { appendFile, mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import { AwsClient } from 'aws4fetch'
 import { chromium } from 'playwright'
-import { v7 as uuidv7 } from 'uuid'
 
 const runId = requireEnv('TEST_RUN_ID')
 const runDir = requireEnv('TEST_RUN_DIR')
@@ -22,6 +20,7 @@ const userUsername = requireEnv('USER_USERNAME')
 const mailboxLocalPart = requireEnv('MAILBOX_LOCAL_PART')
 const mailboxDisplayName = requireEnv('MAILBOX_DISPLAY_NAME')
 const inboundSubject = requireEnv('INBOUND_SUBJECT')
+const outboundRecipient = 'recipient@example.net'
 const scenarioSlug = 'full-product-walkthrough'
 const scenarioDir = path.join(runDir, 'scenarios', scenarioSlug)
 const screenshotsDir = path.join(scenarioDir, 'screenshots')
@@ -154,14 +153,16 @@ try {
 
   await step('Provision the Cloudflare domain from the dashboard.', async () => {
     const loadDomains = page.getByRole('button', { name: 'Load Cloudflare domains' })
-    if (await isVisible(loadDomains, 5_000)) {
-      await clickForVideo(loadDomains)
-      await page.getByRole('button', { name: /Adopt example\.test/u }).waitFor({ timeout: 60_000 })
+    if (await clickIfVisibleForVideo(loadDomains, 5_000)) {
+      await page
+        .getByRole('button', { name: /Adopt example\.test/u })
+        .waitFor({ timeout: 60_000 })
+        .catch(async (error) => {
+          await writeScenarioLog(`adopt button did not appear after load domains: ${stringifyError(error)}`)
+        })
     }
     const adoptDomain = page.getByRole('button', { name: /Adopt example\.test/u })
-    if (await isVisible(adoptDomain, 5_000)) {
-      await clickForVideo(adoptDomain)
-    }
+    await clickIfVisibleForVideo(adoptDomain, 5_000)
     // Domain setup leaves settings open; close it so the dashboard action returns to the active a11y tree.
     await closeDialogIfOpen()
     await page.getByRole('button', { exact: true, name: 'Create mailbox' }).waitFor({ timeout: 120_000 })
@@ -176,25 +177,27 @@ try {
     await page.getByRole('button', { exact: true, name: 'Compose' }).waitFor({ timeout: 120_000 })
   })
 
-  await step('Send an outbound message from the new mailbox.', async () => {
-    await clickForVideo(page.getByRole('button', { exact: true, name: 'Compose' }))
-    await page.getByLabel('To', { exact: true }).waitFor({ timeout: 60_000 })
-    await previewEmptyForm('compose message form')
-    await page.getByLabel('To', { exact: true }).fill('recipient@example.net')
-    await page.getByLabel('Subject', { exact: true }).fill(`Browser E2E outbound ${runId}`)
-    await page.getByLabel('Body', { exact: true }).fill('Outbound message from the recorded browser E2E run.')
-    await previewFilledForm('compose message form')
-    await clickForVideo(page.getByRole('button', { exact: true, name: 'Send' }))
-    await page.getByRole('button', { exact: true, name: 'Compose' }).waitFor({ timeout: 60_000 })
-  })
-
-  await step('Inject a signed inbound Cloudflare Email notification.', async () => {
+  await step('Deliver inbound mail through the provisioned Cloudflare Email Worker.', async () => {
     await deliverInboundMessage()
   })
 
   await step('Refresh the mailbox and verify the inbound message appears.', async () => {
     await page.goto('/dashboard/', { waitUntil: 'domcontentloaded' })
     await page.getByRole('heading', { exact: true, name: inboundSubject }).waitFor({ timeout: 120_000 })
+  })
+
+  await step('Send an outbound message from the new mailbox.', async () => {
+    await ensureArchiveBucket()
+    await clickForVideo(page.getByRole('button', { exact: true, name: 'Compose' }))
+    await page.getByLabel('To', { exact: true }).waitFor({ timeout: 60_000 })
+    await previewEmptyForm('compose message form')
+    await page.getByLabel('To', { exact: true }).fill(outboundRecipient)
+    await page.getByLabel('Subject', { exact: true }).fill(`Browser E2E outbound ${runId}`)
+    await page.getByLabel('Body', { exact: true }).fill('Outbound message from the recorded browser E2E run.')
+    await previewFilledForm('compose message form')
+    await clickForVideo(page.getByRole('button', { exact: true, name: 'Send' }))
+    await page.getByRole('button', { exact: true, name: 'Compose' }).waitFor({ timeout: 60_000 })
+    await recordOutboundCloudflareSendObservation()
   })
 
   assertNoBlockingBrowserDiagnostics()
@@ -256,9 +259,22 @@ async function previewFilledForm(label) {
 async function clickForVideo(locator, options) {
   const target = locator.first()
   await target.scrollIntoViewIfNeeded()
-  await target.hover()
+  await target.hover({ timeout: options?.timeout })
   await holdForRecording('recording preview: pre-click hover', recordingPacing.preClickPreviewMs)
   await target.click({ delay: 80, ...options })
+}
+
+async function clickIfVisibleForVideo(locator, timeout) {
+  if (!(await isVisible(locator, timeout))) {
+    return false
+  }
+  try {
+    await clickForVideo(locator, { timeout })
+    return true
+  } catch (error) {
+    await writeScenarioLog(`optional click skipped: ${stringifyError(error)}`)
+    return false
+  }
 }
 
 async function closeDialogIfOpen() {
@@ -475,96 +491,57 @@ async function extractLinks(message) {
 async function deliverInboundMessage() {
   await ensureArchiveBucket()
   const worker = await loadProvisionedWorker('example.test')
-  const receivedAt = new Date().toISOString()
-  const ingestId = uuidv7({ msecs: new Date(receivedAt).getTime() })
-  const archivePrefix = `${worker.archivePrefix}/${receivedAt.slice(0, 10).replaceAll('-', '/')}/${ingestId}`
-  const rawKey = `${archivePrefix}/raw.eml`
-  const edgeKey = `${archivePrefix}/edge.json`
-  const resultKey = `${archivePrefix}/result.json`
-  const messageId = `<${ingestId}@example.test>`
+  const messageId = `<browser-e2e-${runId}@example.test>`
   const rawMessage = [
     'From: Sender <sender@example.net>',
     `To: ${mailboxDisplayName} <${mailboxLocalPart}@example.test>`,
+    `Date: ${new Date().toUTCString()}`,
     `Message-ID: ${messageId}`,
     `Subject: ${inboundSubject}`,
     '',
     'Inbound message from the recorded browser E2E run.'
   ].join('\r\n')
-  const edgeManifest = {
-    schema: 'agent-mail.inbound.edge.v1',
-    ingest_id: ingestId,
-    org_public_id: worker.organizationPublicId,
-    archive_prefix: worker.archivePrefix,
-    connection_id: worker.connectionId,
-    domain_id: worker.domainId,
-    domain: 'example.test',
-    raw_key: rawKey,
-    edge_key: edgeKey,
-    result_key: resultKey,
-    mailbox: `${mailboxLocalPart}@example.test`,
-    envelope_from: 'sender@example.net',
-    envelope_to: `${mailboxLocalPart}@example.test`,
-    recipient_domain: 'example.test',
-    cloudflare_zone_name: 'example.test',
-    worker_name: 'agent-mail-ingress',
-    received_at: receivedAt,
-    message_id: messageId,
-    atmcf_headers: {
-      'X-ATMCF-Edge-Action': 'worker',
-      'X-ATMCF-Edge-Envelope-From': 'sender@example.net',
-      'X-ATMCF-Edge-Envelope-To': `${mailboxLocalPart}@example.test`,
-      'X-ATMCF-Edge-Message-ID': messageId,
-      'X-ATMCF-Edge-Received-At': receivedAt,
-      'X-ATMCF-Edge-Status': 'received'
+  const archiveWrites = []
+  const workerFetches = []
+  await runProvisionedEmailWorker({
+    archiveWrites,
+    env: worker.env,
+    message: {
+      from: 'sender@example.net',
+      headers: new Headers({
+        Date: new Date().toUTCString(),
+        From: 'Sender <sender@example.net>',
+        'Message-ID': messageId,
+        Subject: inboundSubject,
+        To: `${mailboxDisplayName} <${mailboxLocalPart}@example.test>`
+      }),
+      raw: new TextEncoder().encode(rawMessage),
+      rawSize: new TextEncoder().encode(rawMessage).byteLength,
+      to: `${mailboxLocalPart}@example.test`
     },
-    raw_sha256: sha256Hex(rawMessage)
-  }
-  await s3PutObject(rawKey, rawMessage, 'message/rfc822')
-  await s3PutObject(edgeKey, `${JSON.stringify(edgeManifest, null, 2)}\n`, 'application/json')
-  await writeJson(path.join(diagnosticsDir, 'inbound-edge.json'), edgeManifest)
-
-  const notification = {
-    schema: 'agent-mail.inbound.ingest.v1',
-    ingest_id: ingestId,
-    organization_public_id: worker.organizationPublicId,
-    archive_prefix: worker.archivePrefix,
-    worker_connection_id: worker.connectionId,
-    worker_domain_deployment_id: worker.domainId,
-    recipient_domain: 'example.test',
-    raw_key: rawKey,
-    edge_key: edgeKey,
-    result_key: resultKey,
-    received_at: receivedAt,
-    raw_sha256: sha256Hex(rawMessage)
-  }
-  const bodyText = JSON.stringify(notification)
-  const signed = await fetchJson('http://fake-cloudflare:8788/__sign-worker-notification', {
-    body: JSON.stringify({
-      bodyText,
-      domain: 'example.test',
-      timestamp: String(Math.floor(Date.now() / 1000)),
-      webhookId: ingestId
-    }),
-    headers: { 'content-type': 'application/json' },
-    method: 'POST'
+    workerFetches
   })
-  const response = await fetch(
-    `${appBaseUrl}/rpc/agent-mail/ingest/v1/${encodeURIComponent(worker.connectionId)}`,
-    {
-      body: bodyText,
-      headers: {
-        'content-type': 'application/json',
-        ...signed.headers
-      },
-      method: 'POST'
-    }
-  )
-  const responseText = await response.text()
-  await writeFile(path.join(diagnosticsDir, 'inbound-notification-response.txt'), responseText)
-  assert(
-    response.status >= 200 && response.status < 300,
-    `inbound notification returned ${response.status}: ${responseText.slice(0, 500)}`
-  )
+
+  const edgeManifest = parseWorkerEdgeManifest(archiveWrites)
+  const resultKey = readWorkerResultKey(edgeManifest)
+  assert.equal(edgeManifest.schema, 'agent-mail.inbound.edge.v1')
+  assert.equal(edgeManifest.connection_id, worker.connectionId)
+  assert.equal(edgeManifest.domain, 'example.test')
+  assert.equal(edgeManifest.mailbox, `${mailboxLocalPart}@example.test`)
+  assert.equal(edgeManifest.message_id, messageId)
+  await writeJson(path.join(diagnosticsDir, 'inbound-edge.json'), edgeManifest)
+  await writeJson(path.join(diagnosticsDir, 'inbound-worker-fetches.json'), workerFetches)
+  await writeJson(path.join(diagnosticsDir, 'inbound-worker-delivery.json'), {
+    archiveWriteCount: archiveWrites.length,
+    edgeKey: edgeManifest.edge_key,
+    ingestId: edgeManifest.ingest_id,
+    rawKey: edgeManifest.raw_key,
+    resultKey,
+    workerConnectionId: worker.connectionId
+  })
+  const failedWorkerFetch = workerFetches.find((event) => event.kind === 'ingest' && !event.ok)
+  assert(!failedWorkerFetch, `worker ingest notification failed: ${JSON.stringify(failedWorkerFetch)}`)
+
   const result = await retry(
     async () => {
       const text = await s3GetObject(resultKey)
@@ -577,25 +554,16 @@ async function deliverInboundMessage() {
 }
 
 async function loadProvisionedWorker(domain) {
-  const cloudflare = await fetchJson('http://fake-cloudflare:8788/__requests')
-  for (const script of Object.values(cloudflare.scripts || {})) {
-    const bindings = Object.fromEntries(
-      (script.metadata?.bindings || [])
-        .filter((binding) => typeof binding.name === 'string' && typeof binding.text === 'string')
-        .map((binding) => [binding.name, binding.text])
-    )
-    if (bindings.AGENTTEAM_DOMAIN !== domain) {
-      continue
-    }
-    return {
-      archivePrefix: bindings.AGENTTEAM_ARCHIVE_PREFIX,
-      connectionId: bindings.AGENTTEAM_CONNECTION_ID,
-      domain,
-      domainId: bindings.AGENTTEAM_DOMAIN_ID,
-      organizationPublicId: bindings.AGENTTEAM_ORG_PUBLIC_ID
-    }
+  const url = new URL('http://fake-cloudflare:8788/__worker-runtime')
+  url.searchParams.set('domain', domain)
+  const runtime = await fetchJson(url)
+  assert(runtime && typeof runtime === 'object', 'missing worker runtime response')
+  assert(runtime.env && typeof runtime.env === 'object', 'missing worker runtime env')
+  return {
+    connectionId: requireRuntimeString(runtime, 'connectionId'),
+    domain,
+    env: localizeWorkerEnvironment(runtime.env)
   }
-  throw new Error(`missing provisioned worker metadata for ${domain}`)
 }
 
 async function ensureArchiveBucket() {
@@ -612,6 +580,7 @@ async function s3PutObject(key, body, contentType) {
     response.status >= 200 && response.status < 300,
     `S3 PUT ${key} returned ${response.status}: ${(await response.text()).slice(0, 500)}`
   )
+  return response
 }
 
 async function s3GetObject(key) {
@@ -630,6 +599,154 @@ async function s3Fetch({ body = '', contentType, key, method }) {
     method
   })
   return fetch(signedRequest)
+}
+
+async function recordOutboundCloudflareSendObservation() {
+  try {
+    const matchingSend = await retry(
+      async () => {
+        const cloudflare = await fetchJson('http://fake-cloudflare:8788/__requests')
+        const sends = Array.isArray(cloudflare.emailSends) ? cloudflare.emailSends : []
+        const matching = sends.filter(
+          (send) =>
+            send &&
+            send.sendKind === 'send_raw' &&
+            send.fromDomain === 'example.test' &&
+            Array.isArray(send.delivered) &&
+            send.delivered.includes(outboundRecipient)
+        )
+        assert(matching.length > 0, 'fake Cloudflare has not recorded the outbound raw send yet')
+        return matching.at(-1)
+      },
+      { attempts: 20, delayMs: 1000, description: 'outbound Cloudflare raw send capture' }
+    )
+    assert(String(matchingSend.from || '').toLowerCase().includes(`${mailboxLocalPart}@example.test`))
+    await writeJson(path.join(diagnosticsDir, 'outbound-cloudflare-send.json'), {
+      observed: true,
+      send: matchingSend
+    })
+  } catch (error) {
+    await writeScenarioLog(`outbound Cloudflare send not observed: ${stringifyError(error)}`)
+    await writeJson(path.join(diagnosticsDir, 'outbound-cloudflare-send.json'), {
+      error: stringifyError(error),
+      observed: false
+    })
+  }
+}
+
+async function runProvisionedEmailWorker({ archiveWrites, env, message, workerFetches }) {
+  let workerModule
+  try {
+    workerModule = await import(new URL('../../packages/cloudflare-email-worker/dist/worker.mjs', import.meta.url))
+  } catch (error) {
+    throw new Error(
+      `failed to load built Cloudflare Email Worker; run pnpm --filter @main/cloudflare-email-worker build first: ${stringifyError(
+        error
+      )}`
+    )
+  }
+  assert.equal(typeof workerModule.default?.email, 'function', 'Cloudflare Email Worker email() export missing')
+
+  const originalFetch = globalThis.fetch
+  const waitUntilPromises = []
+  globalThis.fetch = createWorkerLocalFetch(originalFetch, archiveWrites, workerFetches)
+  try {
+    await workerModule.default.email(message, env, {
+      waitUntil(promise) {
+        waitUntilPromises.push(Promise.resolve(promise))
+      }
+    })
+    await Promise.all(waitUntilPromises)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+}
+
+function createWorkerLocalFetch(originalFetch, archiveWrites, workerFetches) {
+  return async (input, init) => {
+    const request = input instanceof Request ? input : new Request(input, init)
+    const url = new URL(request.url)
+
+    if (url.protocol === 'https:' && url.hostname === 'minio') {
+      return putWorkerArchiveObject(request, url, archiveWrites)
+    }
+
+    if (url.protocol === 'https:' && url.hostname === 'atemail-web-server') {
+      url.protocol = 'http:'
+      const response = await originalFetch(new Request(url, request))
+      workerFetches.push({
+        body: response.ok ? '' : await response.clone().text().then((text) => text.slice(0, 1000)),
+        kind: 'ingest',
+        method: request.method,
+        ok: response.ok,
+        status: response.status,
+        statusText: response.statusText,
+        url: sanitizeUrl(url.toString())
+      })
+      return response
+    }
+
+    return originalFetch(input, init)
+  }
+}
+
+async function putWorkerArchiveObject(request, url, archiveWrites) {
+  assert.equal(request.method, 'PUT', `unexpected worker R2 method ${request.method}`)
+  const { bucket, key } = parseS3Path(url)
+  assert.equal(bucket, archiveBucket)
+  const body = new Uint8Array(await request.arrayBuffer())
+  const contentType = request.headers.get('content-type') || 'application/octet-stream'
+  const response = await s3PutObject(key, body, contentType)
+  archiveWrites.push({
+    bytes: body.byteLength,
+    contentType,
+    key,
+    text: contentType === 'application/json' ? new TextDecoder().decode(body) : ''
+  })
+  return response
+}
+
+function parseS3Path(url) {
+  const segments = url.pathname
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => decodeURIComponent(segment))
+  assert(segments.length >= 2, `unexpected worker R2 path ${url.pathname}`)
+  return {
+    bucket: segments[0],
+    key: segments.slice(1).join('/')
+  }
+}
+
+function parseWorkerEdgeManifest(archiveWrites) {
+  const edgeWrite = archiveWrites.find((write) => write.key.endsWith('/edge.json'))
+  assert(edgeWrite, 'worker did not write an edge manifest')
+  return JSON.parse(edgeWrite.text)
+}
+
+function readWorkerResultKey(edgeManifest) {
+  if (typeof edgeManifest.result_key === 'string' && edgeManifest.result_key.trim() !== '') {
+    return edgeManifest.result_key
+  }
+  assert(
+    typeof edgeManifest.edge_key === 'string' && edgeManifest.edge_key.endsWith('/edge.json'),
+    'worker edge manifest is missing edge_key'
+  )
+  return edgeManifest.edge_key.replace(/\/edge\.json$/u, '/result.json')
+}
+
+function localizeWorkerEnvironment(env) {
+  return {
+    ...env,
+    AGENTTEAM_INGEST_URL: forceLocalHttps(env.AGENTTEAM_INGEST_URL, 'Worker ingest URL'),
+    AGENTTEAM_R2_ENDPOINT: forceLocalHttps(env.AGENTTEAM_R2_ENDPOINT, 'Worker R2 endpoint')
+  }
+}
+
+function forceLocalHttps(value, label) {
+  const url = new URL(requireRuntimeString({ value }, 'value'))
+  url.protocol = 'https:'
+  return url.toString()
 }
 
 function assertNoBlockingBrowserDiagnostics() {
@@ -821,16 +938,20 @@ function formatVttTime(ms) {
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}.${String(milliseconds).padStart(3, '0')}`
 }
 
-function sha256Hex(value) {
-  return createHash('sha256').update(value).digest('hex')
-}
-
 function requireEnv(name) {
   const value = process.env[name]
   if (!value) {
     throw new Error(`missing ${name}`)
   }
   return value
+}
+
+function requireRuntimeString(value, key) {
+  const candidate = value && typeof value === 'object' ? value[key] : undefined
+  if (typeof candidate !== 'string' || candidate.trim() === '') {
+    throw new Error(`missing worker runtime ${key}`)
+  }
+  return candidate.trim()
 }
 
 function readNonNegativeIntegerEnv(name, defaultValue) {

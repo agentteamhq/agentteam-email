@@ -137,6 +137,7 @@ export TEST_ARTIFACT_SUBMIT_SKIP="${artifact_submit_skip_value}"
 write_runner_context
 
 log "run directory: tmp/run-${run_id}"
+run_build_step "cloudflare-email-worker package" pnpm --filter @main/cloudflare-email-worker build || exit "$?"
 if [ "${build_images}" = true ]; then
   run_build_step "mail-control-service image" mise run //apps/mail-control-service:image:build || exit "$?"
   run_build_step "web-server image" mise run //apps/web-server:image:build || exit "$?"
