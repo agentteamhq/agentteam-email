@@ -229,10 +229,15 @@ export const WebmailAccountSwitch: Story = {
       view: mailWorkspaceAssistantAccountView
     }),
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement.ownerDocument.body)
+    const canvas = storyBody(canvasElement)
 
     await expect(await canvas.findAllByText('Assistant account handoff')).toHaveLength(2)
-    await expect(await canvas.findByText('Assistant')).toBeInTheDocument()
+    const assistantMailboxItem = await openWorkspaceMailboxSwitcherItem(
+      canvasElement,
+      /assistant@second\.example/i
+    )
+
+    await expect(await within(assistantMailboxItem).findByText('Assistant')).toBeInTheDocument()
   }
 }
 
@@ -271,15 +276,19 @@ export const MailboxAdminAccounts: Story = {
     }),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement.ownerDocument.body)
-    const switcher = await canvas.findByRole('button', { name: /^open workspace and mailbox switcher$/i })
 
     await expect(await canvas.findByRole('heading', { name: 'Accounts' })).toBeInTheDocument()
     await expect(
       await canvas.findByRole('row', { name: /research@agentteam\.example/u })
     ).toBeInTheDocument()
-    await expect(await within(switcher).findByText('Research')).toBeInTheDocument()
-    await expect(await within(switcher).findByText('research@agentteam.example')).toBeInTheDocument()
     await expect(await canvas.findByRole('button', { name: 'New account' })).toBeEnabled()
+    const researchMailboxItem = await openWorkspaceMailboxSwitcherItem(
+      canvasElement,
+      /research@agentteam\.example/i
+    )
+
+    await expect(await within(researchMailboxItem).findByText('Research')).toBeInTheDocument()
+    await expect(await within(researchMailboxItem).findByText('research@agentteam.example')).toBeInTheDocument()
   }
 }
 
@@ -766,6 +775,15 @@ export const MailboxAdminError: Story = {
 
 function storyBody(canvasElement: HTMLElement) {
   return within(canvasElement.ownerDocument.body)
+}
+
+async function openWorkspaceMailboxSwitcherItem(canvasElement: HTMLElement, itemName: RegExp) {
+  const canvas = within(canvasElement)
+  const body = storyBody(canvasElement)
+
+  await userEvent.click(await canvas.findByRole('button', { name: /^open workspace and mailbox switcher$/i }))
+
+  return body.findByRole('menuitem', { name: itemName })
 }
 
 async function selectMailboxAdminStatus(canvasElement: HTMLElement, statusLabel: string) {
