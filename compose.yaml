@@ -302,6 +302,13 @@ services:
       NODE_ENV: production
       DEBUG: '${AT_EMAIL_ADMIN_WEB_SERVER_DEBUG:-}'
       DEBUG_HIDE_DATE: '${AT_EMAIL_ADMIN_WEB_SERVER_DEBUG_HIDE_DATE:-1}'
+      NODE_USE_ENV_PROXY: '${AT_EMAIL_ADMIN_WEB_SERVER_NODE_USE_ENV_PROXY:-1}'
+      HTTP_PROXY: '${AT_EMAIL_ADMIN_WEB_SERVER_HTTP_PROXY:-}'
+      HTTPS_PROXY: '${AT_EMAIL_ADMIN_WEB_SERVER_HTTPS_PROXY:-}'
+      NO_PROXY: '${AT_EMAIL_ADMIN_WEB_SERVER_NO_PROXY:-localhost,127.0.0.1,::1,mongodb,redis,wildduck,haraka,zonemta,rspamd,atemail-mail-control-service}'
+      http_proxy: '${AT_EMAIL_ADMIN_WEB_SERVER_HTTP_PROXY:-}'
+      https_proxy: '${AT_EMAIL_ADMIN_WEB_SERVER_HTTPS_PROXY:-}'
+      no_proxy: '${AT_EMAIL_ADMIN_WEB_SERVER_NO_PROXY:-localhost,127.0.0.1,::1,mongodb,redis,wildduck,haraka,zonemta,rspamd,atemail-mail-control-service}'
       PORT: '4321'
       FRONTEND_HOST: 0.0.0.0
       PUBLIC_HOSTNAME: '${AT_EMAIL_ADMIN_PUBLIC_HOSTNAME:?missing AT_EMAIL_ADMIN_PUBLIC_HOSTNAME}'
