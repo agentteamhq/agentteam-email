@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   createBetterAuthLogDetails,
+  createProtocolDiagnosticErrorLogDetails,
   createSafeErrorLogDetails,
   createSafeRequestLogDetails,
   sanitizePathnameForLogging
@@ -243,6 +244,67 @@ describe('auth log redaction', () => {
     })
     expect(serialized).toContain('UNAUTHORIZED')
     expect(serialized).toContain('UnauthorizedError')
+  })
+
+  it('preserves Better Fetch provider OAuth error payloads from token exchange failures', () => {
+    expect.hasAssertions()
+
+    const error = new Error('Forbidden') as Error & {
+      error: Record<string, unknown>
+      status: number
+      statusText: string
+    }
+    error.status = 403
+    error.statusText = 'Forbidden'
+    error.error = {
+      access_token: 'raw-provider-access-token',
+      error: 'invalid_client',
+      error_description: 'Client authentication failed',
+      messages: [{ code: 1000, message: 'Cloudflare rejected token endpoint auth method none' }]
+    }
+
+    const safeDetails = createSafeErrorLogDetails(error)
+    const protocolDetails = createProtocolDiagnosticErrorLogDetails(error)
+    const betterAuthDetails = createBetterAuthLogDetails('error', 'Better Auth callback failed', [error])
+    const serialized = JSON.stringify(protocolDetails)
+
+    expect(safeDetails).toMatchObject({
+      code: 'invalid_client',
+      message: 'Forbidden',
+      name: 'Error',
+      status: '403',
+      statusCode: 403,
+      type: 'object'
+    })
+    expect(protocolDetails).toMatchObject({
+      body: {
+        access_token: 'secret_redacted',
+        error: 'invalid_client',
+        error_description: 'Client authentication failed',
+        messages: [{ code: 1000, message: 'Cloudflare rejected token endpoint auth method none' }]
+      },
+      code: 'invalid_client',
+      message: 'Forbidden',
+      name: 'Error',
+      statusCode: 403,
+      type: 'object'
+    })
+    expect(betterAuthDetails).toMatchObject({
+      code: 'invalid_client',
+      error: {
+        code: 'invalid_client',
+        message: 'Forbidden',
+        status: '403',
+        statusCode: 403
+      },
+      operation: 'better_auth_callback_failed',
+      status: '403',
+      statusCode: 403
+    })
+    expect(serialized).toContain('invalid_client')
+    expect(serialized).toContain('Client authentication failed')
+    expect(serialized).toContain('Cloudflare rejected token endpoint auth method none')
+    expect(serialized).not.toContain('raw-provider-access-token')
   })
 
   it('preserves ordinary safe error names and codes', () => {

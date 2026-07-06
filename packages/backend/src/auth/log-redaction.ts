@@ -111,9 +111,13 @@ export function createSafeRequestLogDetails(request: Request): { method: string;
 
 export function createSafeErrorLogDetails(error: unknown): SafeErrorLogDetails {
   const record = toRecord(error)
-  const body = toRecord(record?.body)
+  const body = diagnosticErrorPayloadRecord(record)
   const code =
-    safeCode(body?.code) ?? safeCode(record?.code) ?? safeCode(record?.errorCode) ?? safeCode(record?.status)
+    safeCode(body?.code) ??
+    safeCode(body?.error) ??
+    safeCode(record?.code) ??
+    safeCode(record?.errorCode) ??
+    safeCode(record?.status)
   const message = createSafeDiagnosticMessage(error)
   const status = safeCode(record?.status)
   const statusCode = safeStatusCode(record?.statusCode) ?? safeStatusCode(record?.status)
@@ -181,11 +185,15 @@ export function createProtocolDiagnosticErrorLogDetails(
   error: unknown
 ): ProtocolDiagnosticErrorLogDetails {
   const record = toRecord(error)
-  const body = sanitizeProtocolDiagnosticRecord(record?.body)
+  const rawBody = diagnosticErrorPayloadRecord(record)
+  const body = sanitizeProtocolDiagnosticRecord(rawBody)
   const message = createProtocolDiagnosticMessage(error)
   const statusCode = safeStatusCode(record?.statusCode) ?? safeStatusCode(record?.status)
   const status = protocolDiagnosticString(record?.status)
-  const code = protocolDiagnosticString(record?.code) ?? protocolDiagnosticString(body?.code)
+  const code =
+    protocolDiagnosticString(record?.code) ??
+    protocolDiagnosticString(rawBody?.code) ??
+    protocolDiagnosticString(rawBody?.error)
 
   return {
     ...(body ? { body } : {}),
@@ -274,6 +282,9 @@ function collectSafeMetadata(args: readonly unknown[]): {
       continue
     }
 
+    const body = diagnosticErrorPayloadRecord(record)
+    metadata.code ??= safeCode(body?.code) ?? safeCode(body?.error)
+
     for (const key of SAFE_METADATA_KEYS) {
       const value = record[key]
       if (key === 'statusCode') {
@@ -300,6 +311,12 @@ function collectSafeMetadata(args: readonly unknown[]): {
   }
 
   return metadata
+}
+
+function diagnosticErrorPayloadRecord(
+  record: Record<string, unknown> | null
+): Record<string, unknown> | undefined {
+  return toRecord(record?.body) ?? toRecord(record?.error) ?? undefined
 }
 
 function findErrorLike(args: readonly unknown[]): Error | Record<string, unknown> | null {
