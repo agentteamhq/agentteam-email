@@ -64,6 +64,8 @@ const KNOWN_CREDENTIAL_QUERY_KEYS = new Set([
   'token',
   'verifier'
 ])
+const KNOWN_CREDENTIAL_HEADER_KEYS = new Set(['authorization', 'cookie', 'proxyauthorization', 'setcookie'])
+const CLOUDFLARE_OAUTH_BROWSER_CHALLENGE_CODE = 'CLOUDFLARE_OAUTH_BROWSER_CHALLENGE'
 
 export interface SafeErrorLogDetails {
   code?: string
@@ -84,6 +86,13 @@ export type ProtocolDiagnosticLogValue =
 
 export interface ProtocolDiagnosticErrorLogDetails extends SafeErrorLogDetails {
   body?: Record<string, ProtocolDiagnosticLogValue>
+  responseBody?: string
+  responseHeaders?: Record<string, ProtocolDiagnosticLogValue>
+}
+
+export interface BetterAuthProviderFailureLogDetails {
+  code: string
+  reason: string
 }
 
 export interface BetterAuthLogDetails {
@@ -94,6 +103,7 @@ export interface BetterAuthLogDetails {
   level: string
   message?: string
   operation: string
+  providerFailure?: BetterAuthProviderFailureLogDetails
   provider?: string
   providerId?: string
   protocol?: BetterAuthProtocolDiagnosticLogDetails
@@ -188,6 +198,8 @@ export function createProtocolDiagnosticErrorLogDetails(
   const rawBody = diagnosticErrorPayloadRecord(record)
   const body = sanitizeProtocolDiagnosticRecord(rawBody)
   const message = createProtocolDiagnosticMessage(error)
+  const responseBody = diagnosticResponseBodyString(record)
+  const responseHeaders = diagnosticResponseHeaders(record)
   const statusCode = safeStatusCode(record?.statusCode) ?? safeStatusCode(record?.status)
   const status = protocolDiagnosticString(record?.status)
   const code =
@@ -200,6 +212,8 @@ export function createProtocolDiagnosticErrorLogDetails(
     ...(code ? { code } : {}),
     ...(message ? { message } : {}),
     name: createSafeDiagnosticErrorName(error),
+    ...(responseBody ? { responseBody } : {}),
+    ...(responseHeaders ? { responseHeaders } : {}),
     ...(status ? { status } : {}),
     ...(typeof statusCode === 'number' ? { statusCode } : {}),
     type: error === null ? 'null' : typeof error
@@ -214,17 +228,23 @@ export function createBetterAuthLogDetails(
 ): BetterAuthLogDetails {
   const details = collectSafeMetadata(args)
   const error = findErrorLike(args)
+  const errorDetails = error
+    ? protocol
+      ? createProtocolDiagnosticErrorLogDetails(error)
+      : createSafeErrorLogDetails(error)
+    : undefined
+  const providerFailure =
+    protocol && errorDetails ? classifyBetterAuthProviderFailure(protocol, errorDetails) : undefined
 
   return {
     argumentCount: args.length,
     argumentTypes: args.map((arg) => (arg === null ? 'null' : typeof arg)),
     ...(details.code ? { code: details.code } : {}),
-    ...(error
-      ? { error: protocol ? createProtocolDiagnosticErrorLogDetails(error) : createSafeErrorLogDetails(error) }
-      : {}),
+    ...(errorDetails ? { error: errorDetails } : {}),
     level: safeLabel(level) ?? 'info',
     ...(protocol ? { message: sanitizeProtocolDiagnosticTextForLogging(message) } : {}),
     operation: createSafeOperation(message),
+    ...(providerFailure ? { providerFailure } : {}),
     ...(details.provider ? { provider: details.provider } : {}),
     ...(details.providerId ? { providerId: details.providerId } : {}),
     ...(protocol ? { protocol } : {}),
@@ -319,6 +339,36 @@ function diagnosticErrorPayloadRecord(
   return toRecord(record?.body) ?? toRecord(record?.error) ?? undefined
 }
 
+function diagnosticResponseBodyString(record: Record<string, unknown> | null): string | undefined {
+  const response = toRecord(record?.response)
+  for (const value of [record?.responseBody, record?.body, record?.error, record?.data, response?.body]) {
+    if (typeof value !== 'string') {
+      continue
+    }
+
+    const sanitized = sanitizeProtocolDiagnosticTextForLogging(value).trim()
+    if (sanitized) {
+      return sanitized
+    }
+  }
+
+  return undefined
+}
+
+function diagnosticResponseHeaders(
+  record: Record<string, unknown> | null
+): Record<string, ProtocolDiagnosticLogValue> | undefined {
+  const response = toRecord(record?.response)
+  for (const value of [record?.responseHeaders, record?.headers, response?.headers]) {
+    const headers = sanitizeDiagnosticHeaders(value)
+    if (headers && Object.keys(headers).length > 0) {
+      return headers
+    }
+  }
+
+  return undefined
+}
+
 function findErrorLike(args: readonly unknown[]): Error | Record<string, unknown> | null {
   for (const arg of args) {
     if (arg instanceof Error) {
@@ -341,6 +391,33 @@ function findErrorLike(args: readonly unknown[]): Error | Record<string, unknown
   return null
 }
 
+function classifyBetterAuthProviderFailure(
+  protocol: BetterAuthProtocolDiagnosticLogDetails,
+  error: ProtocolDiagnosticErrorLogDetails | SafeErrorLogDetails
+): BetterAuthProviderFailureLogDetails | undefined {
+  if (protocol.providerId !== 'cloudflare') {
+    return undefined
+  }
+
+  if (!isCloudflareOAuthBrowserChallenge(error)) {
+    return undefined
+  }
+
+  return {
+    code: CLOUDFLARE_OAUTH_BROWSER_CHALLENGE_CODE,
+    reason: 'cloudflare_oauth_token_endpoint_browser_challenge'
+  }
+}
+
+function isCloudflareOAuthBrowserChallenge(error: ProtocolDiagnosticErrorLogDetails | SafeErrorLogDetails) {
+  const haystack = JSON.stringify(error).toLowerCase()
+  return (
+    (haystack.includes('cf-mitigated') && haystack.includes('challenge')) ||
+    haystack.includes('/cdn-cgi/challenge-platform') ||
+    haystack.includes('just a moment')
+  )
+}
+
 function createSafeOperation(message: string): string {
   const stablePrefix = message.split(/[:\n\r]/u)[0] ?? ''
   const redacted = redactKnownSecretValues(stablePrefix).slice(0, 160)
@@ -352,6 +429,61 @@ function createSafeOperation(message: string): string {
     .slice(0, 80)
 
   return normalized || 'better_auth_event'
+}
+
+function sanitizeDiagnosticHeaders(value: unknown): Record<string, ProtocolDiagnosticLogValue> | undefined {
+  if (value instanceof Headers) {
+    return sanitizeDiagnosticHeaderEntries([...value.entries()])
+  }
+
+  const maybeForEach = toRecord(value)
+  if (typeof maybeForEach?.forEach === 'function') {
+    const entries: Array<[string, unknown]> = []
+    try {
+      ;(maybeForEach.forEach as (callback: (value: unknown, key: string) => void) => void)((entry, key) => {
+        entries.push([key, entry])
+      })
+      return sanitizeDiagnosticHeaderEntries(entries)
+    } catch {
+      return undefined
+    }
+  }
+
+  const record = toRecord(value)
+  return record ? sanitizeDiagnosticHeaderEntries(Object.entries(record)) : undefined
+}
+
+function sanitizeDiagnosticHeaderEntries(
+  entries: Array<[string, unknown]>
+): Record<string, ProtocolDiagnosticLogValue> | undefined {
+  const headers: Record<string, ProtocolDiagnosticLogValue> = {}
+  for (const [rawKey, rawValue] of entries) {
+    const key = sanitizeHeaderNameForLogging(rawKey)
+    if (!key) {
+      continue
+    }
+
+    if (isKnownCredentialHeaderKey(key)) {
+      headers[key] = 'secret_redacted'
+      continue
+    }
+
+    const value = sanitizeProtocolDiagnosticValue(rawValue, new WeakSet<object>())
+    if (value !== undefined) {
+      headers[key] = value
+    }
+  }
+
+  return Object.keys(headers).length > 0 ? headers : undefined
+}
+
+function sanitizeHeaderNameForLogging(value: string): string | undefined {
+  const sanitized = replaceControlCharacters(value).trim().toLowerCase()
+  return /^[a-z0-9!#$%&'*+.^_`|~-]+$/u.test(sanitized) ? sanitized : undefined
+}
+
+function isKnownCredentialHeaderKey(key: string): boolean {
+  return KNOWN_CREDENTIAL_HEADER_KEYS.has(normalizeCredentialKey(key))
 }
 
 function sanitizeHttpMethod(method: string): string {

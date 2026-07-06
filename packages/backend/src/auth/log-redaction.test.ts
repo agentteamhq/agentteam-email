@@ -307,6 +307,80 @@ describe('auth log redaction', () => {
     expect(serialized).not.toContain('raw-provider-access-token')
   })
 
+  it('classifies Cloudflare OAuth browser challenges while preserving response diagnostics', () => {
+    expect.hasAssertions()
+
+    const error = new Error('Forbidden') as Error & {
+      error: string
+      headers: Headers
+      status: number
+      statusText: string
+    }
+    error.name = 'BetterFetchError'
+    error.status = 403
+    error.statusText = 'Forbidden'
+    error.headers = new Headers({
+      authorization: 'Bearer raw-response-bearer-token',
+      'cf-mitigated': 'challenge',
+      'cf-ray': 'a16ea5346947fef9-PDX',
+      'content-type': 'text/html; charset=UTF-8',
+      server: 'cloudflare'
+    })
+    error.error =
+      '<!DOCTYPE html><html><head><title>Just a moment...</title></head><body>/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1 code=raw-oauth-code code_verifier=raw-code-verifier</body></html>'
+
+    const details = createBetterAuthLogDetails('error', 'OAuth token exchange failed', [error], {
+      basePath: '/api',
+      callbackPath: '/rpc/auth/api/oauth2/callback/cloudflare',
+      flow: 'oauth_callback',
+      logicalBetterAuthRequestUrl: 'https://mail.example.test/api/oauth2/callback/cloudflare?code=secret_redacted',
+      logicalPath: '/api/oauth2/callback/cloudflare',
+      logicalQueryParameterNames: ['code', 'state'],
+      method: 'GET',
+      mountPath: '/rpc/auth',
+      mountedRequestUrl: 'https://mail.example.test/api/oauth2/callback/cloudflare?code=secret_redacted',
+      operation: 'better_auth_protocol_request',
+      phase: 'better_auth_internal',
+      provider: 'cloudflare',
+      providerId: 'cloudflare',
+      publicRequestUrl: 'https://mail.example.test/rpc/auth/api/oauth2/callback/cloudflare?code=secret_redacted',
+      requestPath: '/oauth2/callback/cloudflare',
+      requestQueryParameterNames: ['code', 'state'],
+      requestUrl: 'https://mail.example.test/rpc/auth/api/oauth2/callback/cloudflare?code=secret_redacted'
+    })
+    const serialized = JSON.stringify(details)
+
+    expect(details).toMatchObject({
+      error: {
+        message: 'Forbidden',
+        name: 'BetterFetchError',
+        responseBody: expect.stringContaining('Just a moment...'),
+        responseHeaders: {
+          authorization: 'secret_redacted',
+          'cf-mitigated': 'challenge',
+          'cf-ray': 'a16ea5346947fef9-PDX',
+          'content-type': 'text/html; charset=UTF-8',
+          server: 'cloudflare'
+        },
+        statusCode: 403,
+        type: 'object'
+      },
+      providerFailure: {
+        code: 'CLOUDFLARE_OAUTH_BROWSER_CHALLENGE',
+        reason: 'cloudflare_oauth_token_endpoint_browser_challenge'
+      },
+      protocol: {
+        providerId: 'cloudflare'
+      }
+    })
+    expect(serialized).toContain('cf-mitigated')
+    expect(serialized).toContain('a16ea5346947fef9-PDX')
+    expect(serialized).toContain('/cdn-cgi/challenge-platform')
+    expect(serialized).not.toContain('raw-oauth-code')
+    expect(serialized).not.toContain('raw-code-verifier')
+    expect(serialized).not.toContain('raw-response-bearer-token')
+  })
+
   it('treats status-only Better Fetch failures as error-like diagnostics', () => {
     expect.hasAssertions()
 
