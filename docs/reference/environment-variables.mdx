@@ -120,11 +120,13 @@ These values are defaulted by the Compose files. Leave them unset unless you are
 The web server and mail-control-service emit operational info/error logs to container stdout/stderr by default. Leave these unset for normal production.
 
 <ParamField path="AT_EMAIL_ADMIN_WEB_SERVER_DEBUG" type="string">
-  Enables the web server's safe `app:frontend` debug namespace when set to any non-empty value. The value is not passed through as a `DEBUG` pattern, so wildcards such as `*` or `app:*` are ignored.
+  Passed to the web server as the `DEBUG` namespace pattern. Use this to enable
+  detailed server-side diagnostics, including comma-separated namespace patterns
+  such as `app:*` or `app:*,api:backend`.
 
 **Default:** unset
 
-**Example:** `app:frontend`
+**Example:** `app:*`
 
 </ParamField>
 

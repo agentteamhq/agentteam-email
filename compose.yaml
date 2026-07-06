@@ -300,7 +300,7 @@ services:
       - '${AT_EMAIL_ADMIN_FRONTEND_PORT:-23100}:4321'
     environment:
       NODE_ENV: production
-      DEBUG: '${AT_EMAIL_ADMIN_WEB_SERVER_DEBUG:+app:frontend}'
+      DEBUG: '${AT_EMAIL_ADMIN_WEB_SERVER_DEBUG:-}'
       DEBUG_HIDE_DATE: '${AT_EMAIL_ADMIN_WEB_SERVER_DEBUG_HIDE_DATE:-1}'
       PORT: '4321'
       FRONTEND_HOST: 0.0.0.0
