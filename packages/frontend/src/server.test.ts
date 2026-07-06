@@ -1,9 +1,13 @@
 import process from 'node:process'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createRedirectErrorDiagnosticLogDetails } from './lib/redirect-error-page'
 import type { IncomingMessage } from 'node:http'
+import type { RedirectErrorDiagnosticLogDetails } from './lib/redirect-error-page'
 import type { ServerRequest } from 'srvx'
 
 type FetchHandler = (request: ServerRequest) => Promise<Response>
+type RedirectErrorLogger = (details: RedirectErrorDiagnosticLogDetails) => void
+type StartWebServerFetchOptions = { context?: { logRedirectError?: RedirectErrorLogger } }
 
 const restoreLogSpies: Array<() => void> = []
 
@@ -234,6 +238,87 @@ describe('frontend web-server default logging', () => {
     expect(errorLog).not.toHaveProperty('errorName')
     expect(logs.text()).not.toContain('JWTAccessTokenError')
     expect(logs.text()).not.toContain('token-bearing error name must not leak')
+  })
+
+  it('logs safe OAuth redirect error diagnostics without query secrets', async () => {
+    expect.hasAssertions()
+    const logs = captureDefaultLogs()
+    const fetch = await startTestServer()
+    serverTestState.backendPackageRequestHandler.mockResolvedValue(null)
+    serverTestState.startWebServerFetch.mockImplementation(
+      async (request: Request, options?: StartWebServerFetchOptions) => {
+        options?.context?.logRedirectError?.(
+          createRedirectErrorDiagnosticLogDetails({
+            occurredAt: new Date('2026-07-06T06:45:42.151Z'),
+            publicHostname: 'https://mail.example.test',
+            url: request.url
+          })
+        )
+
+        return new Response(null, { status: 200 })
+      }
+    )
+
+    await fetch(
+      createServerRequest({
+        headers: {
+          authorization: 'Bearer raw-authorization-token',
+          'cf-ray': '8d18f1d2c4a12345-SJC',
+          cookie: 'better-auth.session_token=raw-cookie-token',
+          traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01',
+          'x-request-id': 'request-redirect-1'
+        },
+        method: 'GET',
+        url:
+          '/redirect/error?' +
+          new URLSearchParams({
+            access_token: 'cloudflare-access-token',
+            authorization: 'Bearer provider-secret',
+            callbackUri:
+              'https://mail.example.test/rpc/auth/api/oauth2/callback/cloudflare?state=callback-state-secret',
+            client_secret: 'client-secret-value',
+            cloudflareIntentId: 'intent_public_test',
+            code: 'cloudflare-code',
+            error: 'oauth_code_verification_failed',
+            flow: 'connected-account',
+            provider: 'cloudflare',
+            returnTarget: 'settings-connected-accounts',
+            state: 'cloudflare-state'
+          }).toString()
+      })
+    )
+
+    const redirectLog = logs.entries().find((entry) => entry.event === 'oauth_redirect_error')
+
+    expect(redirectLog).toMatchObject({
+      callbackPath: '/rpc/auth/api/oauth2/callback/cloudflare',
+      cfRay: '8d18f1d2c4a12345-SJC',
+      errorCode: 'oauth_code_verification_failed',
+      event: 'oauth_redirect_error',
+      flow: 'connected-account',
+      level: 'error',
+      method: 'GET',
+      operation: 'oauth_redirect_error',
+      path: '/redirect/error',
+      provider: 'cloudflare',
+      providerId: 'cloudflare',
+      redactedQueryKeys: ['access_token', 'authorization', 'client_secret', 'code', 'state'],
+      requestId: 'request-redirect-1',
+      returnTarget: 'settings-connected-accounts',
+      supportReference:
+        'redirect-error:cloudflare:connected-account:oauth_code_verification_failed:2026-07-06T06:45:42.151Z',
+      traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01'
+    })
+    expect(redirectLog?.requestSequence).toStrictEqual(expect.any(Number))
+    expect(logs.text()).not.toContain('cloudflare-code')
+    expect(logs.text()).not.toContain('cloudflare-state')
+    expect(logs.text()).not.toContain('cloudflare-access-token')
+    expect(logs.text()).not.toContain('provider-secret')
+    expect(logs.text()).not.toContain('client-secret-value')
+    expect(logs.text()).not.toContain('callback-state-secret')
+    expect(logs.text()).not.toContain('intent_public_test')
+    expect(logs.text()).not.toContain('raw-authorization-token')
+    expect(logs.text()).not.toContain('raw-cookie-token')
   })
 
   it('redacts secret-shaped error codes from unhandled request diagnostics', async () => {

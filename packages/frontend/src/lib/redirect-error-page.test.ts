@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { createRedirectErrorViewState } from './redirect-error-page'
+import { createRedirectErrorDiagnosticLogDetails, createRedirectErrorViewState } from './redirect-error-page'
 import type { CloudflareOAuthReturnTarget } from '@main/backend'
 
 const cloudflareReturnTargetRetryCases = [
@@ -135,5 +135,52 @@ describe('redirect error page state', () => {
     expect(state.providerMessage).toBe('authorization=[redacted] client_secret=[redacted]')
     expect(state.pageUri).not.toContain('provider-secret')
     expect(state.pageUri).not.toContain('secret-value')
+  })
+
+  it('creates safe server diagnostics without query secrets or callback query values', () => {
+    expect.hasAssertions()
+    const details = createRedirectErrorDiagnosticLogDetails({
+      occurredAt: new Date('2026-07-06T06:45:42.151Z'),
+      publicHostname: 'https://mail.example.test',
+      url:
+        'https://mail.example.test/redirect/error?' +
+        new URLSearchParams({
+          access_token: 'cloudflare-access-token',
+          authorization: 'Bearer provider-secret',
+          callbackUri:
+            'https://mail.example.test/rpc/auth/api/oauth2/callback/cloudflare?code=callback-code-secret',
+          client_secret: 'client-secret-value',
+          cloudflareIntentId: 'intent_public_test',
+          code: 'cloudflare-code',
+          error: 'oauth_code_verification_failed',
+          error_description:
+            'authorization=Bearer provider-secret client_secret=client-secret-value code=cloudflare-code',
+          flow: 'connected-account',
+          provider: 'cloudflare',
+          returnTarget: 'settings-connected-accounts',
+          state: 'cloudflare-state'
+        }).toString()
+    })
+    const serialized = JSON.stringify(details)
+
+    expect(details).toStrictEqual({
+      callbackPath: '/rpc/auth/api/oauth2/callback/cloudflare',
+      errorCode: 'oauth_code_verification_failed',
+      flow: 'connected-account',
+      provider: 'cloudflare',
+      providerId: 'cloudflare',
+      redactedQueryKeys: ['access_token', 'authorization', 'client_secret', 'code', 'state'],
+      returnTarget: 'settings-connected-accounts',
+      supportReference:
+        'redirect-error:cloudflare:connected-account:oauth_code_verification_failed:2026-07-06T06:45:42.151Z'
+    })
+    expect(serialized).not.toContain('cloudflare-code')
+    expect(serialized).not.toContain('cloudflare-state')
+    expect(serialized).not.toContain('cloudflare-access-token')
+    expect(serialized).not.toContain('provider-secret')
+    expect(serialized).not.toContain('client-secret-value')
+    expect(serialized).not.toContain('callback-code-secret')
+    expect(serialized).not.toContain('intent_public_test')
+    expect(serialized).not.toContain('error_description')
   })
 })

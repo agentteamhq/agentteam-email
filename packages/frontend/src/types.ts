@@ -18,6 +18,7 @@ import type {
   loadSignOutRoute,
   loadSignUpRoute
 } from '@main/backend/routes/webapp'
+import type { RedirectErrorDiagnosticLogDetails } from './lib/redirect-error-page'
 
 export type PublicEnv = typeof PUBLIC_VARS
 
@@ -46,6 +47,7 @@ export interface FrontendRouterContext {
 }
 
 export interface FrontendStartRequestContext {
+  logRedirectError?: (details: RedirectErrorDiagnosticLogDetails) => void
   request?: Request
   serverRouteHandlers?: FrontendServerRouteHandlers
 }

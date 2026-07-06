@@ -11,6 +11,7 @@ import startWebServer from './start-web-server.js'
 import { resolveClientStaticAssetPath } from './static-assets'
 import type { Server, ServerRequest } from 'srvx'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { RedirectErrorDiagnosticLogDetails } from './lib/redirect-error-page'
 
 const log = debug('app:frontend')
 const clientDist = fileURLToPath(new URL('../client', import.meta.url))
@@ -63,7 +64,7 @@ type SendError = NodeJS.ErrnoException & {
   status?: number
 }
 
-type LogValue = boolean | number | string | null | undefined
+type LogValue = boolean | number | string | null | readonly string[] | undefined
 
 type DefaultLogFields = Record<string, LogValue>
 
@@ -123,7 +124,7 @@ async function handleServerRequest(serverRequest: ServerRequest): Promise<Respon
   try {
     const nodeRequest = resolveNodeRequest(serverRequest)
     requestLog = requestLogContext(nodeRequest, requestLog.requestSequence)
-    const response = await dispatchServerRequest(serverRequest, nodeRequest)
+    const response = await dispatchServerRequest(serverRequest, nodeRequest, requestLog)
     logRequestCompleted(requestLog, response.status, startedAt)
     return response
   } catch (error) {
@@ -139,7 +140,8 @@ async function handleServerRequest(serverRequest: ServerRequest): Promise<Respon
 
 async function dispatchServerRequest(
   serverRequest: ServerRequest,
-  nodeRequest: IncomingMessage
+  nodeRequest: IncomingMessage,
+  requestLog: RequestLogContext
 ): Promise<Response> {
   const request = createWebRequest(nodeRequest, getRequestOrigin(nodeRequest))
   const backendPackageResponse = await handleBackendPackageRequest(request)
@@ -158,7 +160,20 @@ async function dispatchServerRequest(
     return fetchNodeHandler(staticAssetHandler, serverRequest)
   }
 
-  return startWebServer.fetch(request, { context: {} })
+  let loggedRedirectError = false
+
+  return startWebServer.fetch(request, {
+    context: {
+      logRedirectError: (details) => {
+        if (loggedRedirectError) {
+          return
+        }
+
+        loggedRedirectError = true
+        logRedirectErrorHandled(requestLog, details)
+      }
+    }
+  })
 }
 
 function nextServerRequestSequence(): number {
@@ -342,6 +357,17 @@ function logRequestCompleted(requestLog: RequestLogContext, status: number, star
   }
 
   defaultInfoLog('web_server_request_completed', fields)
+}
+
+function logRedirectErrorHandled(
+  requestLog: RequestLogContext,
+  details: RedirectErrorDiagnosticLogDetails
+): void {
+  defaultErrorLog('oauth_redirect_error', {
+    ...requestLog,
+    ...details,
+    operation: 'oauth_redirect_error'
+  })
 }
 
 function elapsedMilliseconds(startedAt: number): number {

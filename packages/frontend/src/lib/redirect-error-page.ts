@@ -46,6 +46,17 @@ export interface RedirectErrorViewState {
   title: string
 }
 
+export interface RedirectErrorDiagnosticLogDetails {
+  callbackPath?: string
+  errorCode: string
+  flow?: string
+  provider?: string
+  providerId?: string
+  redactedQueryKeys: string[]
+  returnTarget?: CloudflareOAuthReturnTarget
+  supportReference: string
+}
+
 export interface CreateRedirectErrorViewStateOptions {
   occurredAt?: Date
   publicHostname: string
@@ -67,13 +78,12 @@ export function createRedirectErrorViewState({
   const redactedPageUri = createRedactedPageUri(pageUrl)
   const providerLabel = isCloudflare ? 'Cloudflare' : 'Unknown provider'
   const flowLabel = isConnectedAccount ? 'Connected account' : 'Authentication'
-  const supportReference = [
-    'redirect-error',
-    isCloudflare ? 'cloudflare' : 'unknown-provider',
-    isConnectedAccount ? 'connected-account' : 'authentication',
+  const supportReference = createRedirectErrorSupportReference({
     errorCode,
-    occurredAt.toISOString()
-  ].join(':')
+    flow,
+    occurredAt,
+    provider
+  })
 
   return {
     callbackUri:
@@ -98,6 +108,42 @@ export function createRedirectErrorViewState({
   }
 }
 
+export function createRedirectErrorDiagnosticLogDetails({
+  occurredAt = new Date(),
+  publicHostname,
+  url
+}: CreateRedirectErrorViewStateOptions): RedirectErrorDiagnosticLogDetails {
+  const pageUrl = new URL(url, publicHostname)
+  const provider = readSearchToken(pageUrl.searchParams.get('provider'))
+  const flow = readSearchToken(pageUrl.searchParams.get('flow'))
+  const isCloudflare = provider === 'cloudflare'
+  const isConnectedAccount = flow === 'connected-account'
+  const errorCode = readErrorCode(pageUrl.searchParams.get('error'))
+  const redactedPageUri = createRedactedPageUri(pageUrl)
+  const returnTarget = readCloudflareOAuthReturnTarget(pageUrl.searchParams.get('returnTarget'))
+  const callbackUri =
+    readPublicCallbackUri(pageUrl.searchParams.get('callbackUri'), publicHostname) ??
+    (isCloudflare
+      ? new URL('/rpc/auth/api/oauth2/callback/cloudflare', publicHostname).toString()
+      : null)
+  const callbackPath = callbackUri ? readCallbackPath(callbackUri) : null
+
+  return {
+    ...(callbackPath ? { callbackPath } : {}),
+    errorCode,
+    ...(isConnectedAccount ? { flow: 'connected-account' } : {}),
+    ...(isCloudflare ? { provider: 'cloudflare', providerId: 'cloudflare' } : {}),
+    redactedQueryKeys: createSafeRedactedQueryKeys(redactedPageUri.redactedQueryKeys),
+    ...(returnTarget ? { returnTarget } : {}),
+    supportReference: createRedirectErrorSupportReference({
+      errorCode,
+      flow,
+      occurredAt,
+      provider
+    })
+  }
+}
+
 function readRetryHref(
   pageUrl: URL,
   {
@@ -119,6 +165,26 @@ function readRetryHref(
   }
 
   return isConnectedAccount ? '/settings/connected-accounts/' : '/'
+}
+
+function createRedirectErrorSupportReference({
+  errorCode,
+  flow,
+  occurredAt,
+  provider
+}: {
+  errorCode: string
+  flow: string | null
+  occurredAt: Date
+  provider: string | null
+}): string {
+  return [
+    'redirect-error',
+    provider === 'cloudflare' ? 'cloudflare' : 'unknown-provider',
+    flow === 'connected-account' ? 'connected-account' : 'authentication',
+    errorCode,
+    occurredAt.toISOString()
+  ].join(':')
 }
 
 function readCloudflareOAuthReturnTarget(value: string | null): CloudflareOAuthReturnTarget | null {
@@ -211,6 +277,14 @@ function readPublicCallbackUri(value: string | null, publicHostname: string): st
   return null
 }
 
+function readCallbackPath(callbackUri: string): string | null {
+  try {
+    return new URL(callbackUri).pathname
+  } catch {
+    return null
+  }
+}
+
 function sanitizeVisibleText(value: string | null, maxLength: number): string | null {
   const trimmed = value?.trim().replace(/\s+/gu, ' ')
 
@@ -229,6 +303,22 @@ function redactSensitiveFragments(value: string): string {
       /\b(code|state|token|access_token|refresh_token|id_token|client_secret|authorization|cookie|session_state|password|secret)\s*=\s*([^\s&]+)/giu,
       '$1=[redacted]'
     )
+}
+
+function createSafeRedactedQueryKeys(keys: readonly string[]): string[] {
+  const safeKeys = new Set<string>()
+
+  for (const key of keys) {
+    safeKeys.add(safeQueryKeyForLogging(key))
+  }
+
+  return [...safeKeys].sort((left, right) => left.localeCompare(right))
+}
+
+function safeQueryKeyForLogging(key: string): string {
+  const normalized = key.trim().toLowerCase().slice(0, 64)
+
+  return /^[a-z][a-z0-9_.:-]{0,63}$/u.test(normalized) ? normalized : 'param'
 }
 
 function truncate(value: string, maxLength: number): string {
