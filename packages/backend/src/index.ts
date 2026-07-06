@@ -105,6 +105,7 @@ export type {
   RevokePaperclipIntegrationResult
 } from './integrations/service'
 export type { AgentMailSendSubmitResult } from './agent-mail/control-client'
+export type { PublicErrorResponseBody } from './public-error-response'
 export type {
   AgentMailComposeInput,
   AgentMailMessageActionInput,
