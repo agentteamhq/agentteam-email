@@ -54,6 +54,39 @@ describe('Cloudflare OAuth config', () => {
     expect(getCloudflareRequiredOAuthScopes()).toStrictEqual(EXPECTED_CLOUDFLARE_REQUIRED_OAUTH_SCOPES)
     expect(config).not.toHaveProperty('authentication')
     expect(config).not.toHaveProperty('clientSecret')
+    expect(config).not.toHaveProperty('getToken')
+  })
+
+  it('adds a Cloudflare-only Worker token exchanger when Worker config is present', async () => {
+    expect.hasAssertions()
+    stubRequiredEnv()
+    vi.stubEnv('CLOUDFLARE_OAUTH_CLIENT_ID', 'cloudflare-client-id')
+    vi.stubEnv('CLOUDFLARE_WORKER_ACCOUNT_ID', 'cf-account-1')
+    vi.stubEnv('CLOUDFLARE_WORKER_API_TOKEN', 'cf-worker-api-token')
+    vi.stubEnv('CLOUDFLARE_WORKER_PASSWORD', 'worker-password')
+    vi.stubEnv('CLOUDFLARE_WORKER_NAME', 'agentteam-service-worker')
+    vi.stubEnv('CLOUDFLARE_WORKER_SUBDOMAIN', 'agentteam-test')
+
+    const { createCloudflareGenericOAuthConfig, getCloudflareWorkerConfig } = await import('./config')
+    const config = createCloudflareGenericOAuthConfig()
+    const workerConfig = getCloudflareWorkerConfig()
+
+    expect(config).toMatchObject({
+      clientId: 'cloudflare-client-id',
+      pkce: true,
+      providerId: 'cloudflare'
+    })
+    expect(config).toHaveProperty('getToken')
+    expect(config).not.toHaveProperty('authentication')
+    expect(config).not.toHaveProperty('clientSecret')
+    expect(workerConfig).toMatchObject({
+      accountId: 'cf-account-1',
+      oauthTokenExchangeUrl: 'https://agentteam-service-worker.agentteam-test.workers.dev/oauth2/token',
+      password: 'worker-password',
+      subdomain: 'agentteam-test',
+      workerName: 'agentteam-service-worker',
+      workerUrl: 'https://agentteam-service-worker.agentteam-test.workers.dev'
+    })
   })
 
   it('maps the Cloudflare REST user envelope to a Better Auth profile', async () => {

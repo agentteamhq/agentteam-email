@@ -124,6 +124,10 @@ export { handleOAuthMetadataRequest, isOAuthMetadataRequestPath } from './auth/o
 export { backendHttpApp, isBackendHttpRequestPath, type BackendHttpAppType } from './http'
 export { backendApiApp, type BackendApiAppType } from './api'
 export { backendRpcApp, type BackendRpcAppType } from './rpc/'
+export {
+  provisionCloudflareWorkerOnStartup,
+  type CloudflareWorkerProvisioningResult
+} from './cloudflare/worker-provisioning'
 export * from './cloudflare/service'
 export * from './payments/is-delayed-data'
 // HMR - invalidate importers when this module changes

@@ -197,6 +197,11 @@ emptyDir: {}
 {{- else if eq $name "CLOUDFLARE_OAUTH_ISSUER" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.cloudflare.oauth.issuer) -}}
 {{- else if eq $name "CLOUDFLARE_OAUTH_REVOKE_URL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.cloudflare.oauth.revokeUrl) -}}
 {{- else if eq $name "CLOUDFLARE_OAUTH_TOKEN_URL" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.cloudflare.oauth.tokenUrl) -}}
+{{- else if eq $name "CLOUDFLARE_WORKER_ACCOUNT_ID" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.admin.cloudflare.worker.accountId "name" "admin.cloudflare.worker.accountId") -}}
+{{- else if eq $name "CLOUDFLARE_WORKER_API_TOKEN" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.admin.cloudflare.worker.apiToken "name" "admin.cloudflare.worker.apiToken") -}}
+{{- else if eq $name "CLOUDFLARE_WORKER_PASSWORD" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.admin.cloudflare.worker.password "name" "admin.cloudflare.worker.password") -}}
+{{- else if eq $name "CLOUDFLARE_WORKER_NAME" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.admin.cloudflare.worker.name "name" "admin.cloudflare.worker.name") -}}
+{{- else if eq $name "CLOUDFLARE_WORKER_SUBDOMAIN" -}}{{ include "agentteam-email.requiredValueSourceEnv" (dict "source" $root.Values.admin.cloudflare.worker.subdomain "name" "admin.cloudflare.worker.subdomain") -}}
 {{- else if eq $name "PUBLIC_GOOGLE_CLIENT_ID" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.socialAuth.google.clientId) -}}
 {{- else if eq $name "GOOGLE_CLIENT_SECRET" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.socialAuth.google.clientSecret) -}}
 {{- else if eq $name "PUBLIC_LINKEDIN_CLIENT_ID" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.socialAuth.linkedin.clientId) -}}

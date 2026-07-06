@@ -63,6 +63,21 @@ describe('resolveEnvironment', () => {
     await expect(import('./vars.private')).rejects.toThrow('BETTER_AUTH_SECRET is required in production')
   })
 
+  it('requires Cloudflare Worker config in production when Cloudflare OAuth is enabled', async () => {
+    expect.hasAssertions()
+    vi.resetModules()
+    vi.stubEnv('BETTER_AUTH_SECRET', 'better-auth-secret')
+    vi.stubEnv('CLOUDFLARE_OAUTH_CLIENT_ID', 'cloudflare-client-id')
+    vi.stubEnv('DATABASE_URL', 'mongodb://localhost:27017/app')
+    vi.stubEnv('ENCRYPT_SECRET_KEY', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('PUBLIC_HOSTNAME', 'https://mail.example.com')
+
+    await expect(import('./vars.private')).rejects.toThrow(
+      'Cloudflare Worker configuration is required in production'
+    )
+  })
+
   it('normalizes blank optional public provider values to undefined', async () => {
     expect.hasAssertions()
     vi.resetModules()

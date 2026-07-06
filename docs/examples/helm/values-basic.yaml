@@ -33,6 +33,17 @@ admin:
     oauth:
       clientId:
         value: '<cloudflare-oauth-client-id>'
+    worker:
+      accountId:
+        value: '<cloudflare-account-id>'
+      apiToken:
+        value: '<workers-api-token>'
+      password:
+        value: '<random-worker-password>'
+      name:
+        value: agentteam-email-worker
+      subdomain:
+        value: '<workers-dev-subdomain>'
     r2:
       accountId:
         value: '<cloudflare-account-id>'

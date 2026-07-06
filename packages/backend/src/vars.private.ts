@@ -100,6 +100,11 @@ const envSchema = z.object({
   CLOUDFLARE_OAUTH_ISSUER: optionalNonEmptyString,
   CLOUDFLARE_OAUTH_REVOKE_URL: optionalNonEmptyString,
   CLOUDFLARE_OAUTH_TOKEN_URL: optionalNonEmptyString,
+  CLOUDFLARE_WORKER_ACCOUNT_ID: optionalNonEmptyString,
+  CLOUDFLARE_WORKER_API_TOKEN: optionalNonEmptyString,
+  CLOUDFLARE_WORKER_NAME: optionalNonEmptyString,
+  CLOUDFLARE_WORKER_PASSWORD: optionalNonEmptyString,
+  CLOUDFLARE_WORKER_SUBDOMAIN: optionalNonEmptyString,
   AT_EMAIL_ADMIN_CONTROL_API_BASE_URL: optionalNonEmptyString,
   AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN: optionalNonEmptyString,
   AT_EMAIL_ADMIN_WILDDUCK_API_BASE_URL: optionalNonEmptyString,
@@ -158,6 +163,22 @@ if (PUBLIC_VARS.PROD && !PRIVATE_VARS.ENCRYPT_SECRET_KEY) {
 
 if (PUBLIC_VARS.PROD && !PRIVATE_VARS.BETTER_AUTH_SECRET) {
   throw new Error('BETTER_AUTH_SECRET is required in production')
+}
+
+if (PUBLIC_VARS.PROD && PRIVATE_VARS.CLOUDFLARE_OAUTH_CLIENT_ID) {
+  const missingWorkerVars = [
+    'CLOUDFLARE_WORKER_ACCOUNT_ID',
+    'CLOUDFLARE_WORKER_API_TOKEN',
+    'CLOUDFLARE_WORKER_PASSWORD',
+    'CLOUDFLARE_WORKER_NAME',
+    'CLOUDFLARE_WORKER_SUBDOMAIN'
+  ].filter((name) => !PRIVATE_VARS[name as keyof typeof PRIVATE_VARS])
+
+  if (missingWorkerVars.length > 0) {
+    throw new Error(
+      `Cloudflare Worker configuration is required in production: ${missingWorkerVars.join(', ')}`
+    )
+  }
 }
 
 if (PRIVATE_VARS.DEBUG) {

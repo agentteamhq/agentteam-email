@@ -43,15 +43,17 @@ Compose keeps internal services on the Compose network. Helm keeps them behind c
 
 Admin credentials configure the platform. User credentials authorize domain provisioning.
 
-| Credential                    | Owner                           | Used for                                                                                                              |
-| ----------------------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Cloudflare OAuth app client   | Admin instance                  | Lets signed-in users connect Cloudflare accounts                                                                      |
-| User Cloudflare OAuth grant   | Signed-in user                  | Provisions DNS, Email Routing, Worker scripts, bindings, and outbound Cloudflare Email Sending for that user's domain |
-| Admin R2 S3 access key        | Admin instance                  | Server-side archive reads and writes                                                                                  |
-| Admin R2 API token            | Admin instance                  | Issues prefix-scoped temporary Worker R2 credentials                                                                  |
-| Worker R2 session credentials | Generated per Worker deployment | Writes inbound archive objects for one domain prefix                                                                  |
-| Worker webhook signing secret | Generated per Worker deployment | Signs ingest notifications to the web server with Standard Webhooks                                                   |
-| Admin SMTP credentials        | Admin instance                  | Sends system transactional email only                                                                                 |
+| Credential                        | Owner                           | Used for                                                                                                              |
+| --------------------------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Cloudflare OAuth app client       | Admin instance                  | Lets signed-in users connect Cloudflare accounts                                                                      |
+| Admin Cloudflare Worker API token | Admin instance                  | Provisions the service-level Worker used for authenticated Cloudflare OAuth token endpoint forwarding                 |
+| Service-level Worker password     | Admin instance                  | Authenticates web-server calls to the service-level Worker with `Authorization: Bearer`                               |
+| User Cloudflare OAuth grant       | Signed-in user                  | Provisions DNS, Email Routing, Worker scripts, bindings, and outbound Cloudflare Email Sending for that user's domain |
+| Admin R2 S3 access key            | Admin instance                  | Server-side archive reads and writes                                                                                  |
+| Admin R2 API token                | Admin instance                  | Issues prefix-scoped temporary Worker R2 credentials                                                                  |
+| Worker R2 session credentials     | Generated per Worker deployment | Writes inbound archive objects for one domain prefix                                                                  |
+| Worker webhook signing secret     | Generated per Worker deployment | Signs ingest notifications to the web server with Standard Webhooks                                                   |
+| Admin SMTP credentials            | Admin instance                  | Sends system transactional email only                                                                                 |
 
 User-domain setup is not an environment-variable workflow. A signed-in user connects Cloudflare through OAuth, selects a zone, and the web server uses that grant to provision domain-specific DNS, Email Routing, Worker state, and archive bindings.
 
@@ -59,9 +61,18 @@ User-domain setup is not an environment-variable workflow. A signed-in user conn
 
 The Cloudflare OAuth app must request the required scopes listed in [Environment Variables](/reference/environment-variables#cloudflare-oauth).
 
+The admin Cloudflare Worker API token must be scoped to the Cloudflare account
+that owns the service-level Worker and must have account-level Workers Scripts
+read/write access. AgentTeam Email provisions this Worker at startup and calls
+it only for authenticated `POST /oauth2/token` forwarding to Cloudflare's OAuth
+token endpoint when server egress is challenged.
+
 The admin R2 API token must be scoped to the Cloudflare account that owns the archive bucket and must be able to call the R2 temporary credentials API for that bucket. AgentTeam Email requests `object-read-write` temporary credentials scoped to the connected domain archive prefix.
 
-The admin R2 API token must not be reused as a user-domain Cloudflare token. User-domain DNS, Email Routing, Worker deployment, Worker R2 bindings, and outbound Cloudflare Email Sending belong to the connected user's OAuth grant.
+The admin Cloudflare Worker API token, service-level Worker password, and admin
+R2 API token must not be reused as user-domain Cloudflare credentials.
+User-domain DNS, Email Routing, Worker deployment, Worker R2 bindings, and
+outbound Cloudflare Email Sending belong to the connected user's OAuth grant.
 
 ## Secret handling
 
@@ -73,7 +84,7 @@ The admin R2 API token must not be reused as a user-domain Cloudflare token. Use
 
 ## Worker bindings
 
-Operators do not set Worker bindings directly in Compose or Helm. Domain provisioning generates bindings for each connected domain.
+Operators do not set generated domain Worker bindings directly in Compose or Helm. Domain provisioning generates bindings for each connected domain. The service-level Worker password binding is provisioned by the web server from admin configuration and is separate from these generated domain bindings.
 
 Generated Worker bindings include:
 

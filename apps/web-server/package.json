@@ -57,6 +57,7 @@
     "@hookform/resolvers": "catalog:",
     "@main/backend": "workspace:*",
     "@main/cloudflare-email-worker": "workspace:*",
+    "@main/cloudflare-service-worker": "workspace:*",
     "@main/common": "workspace:*",
     "@main/db": "workspace:*",
     "@main/frontend": "workspace:*",

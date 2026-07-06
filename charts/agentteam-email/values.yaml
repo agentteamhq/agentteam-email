@@ -118,6 +118,12 @@ admin:
         value: ''
       tokenUrl:
         value: ''
+    worker:
+      accountId: {}
+      apiToken: {}
+      password: {}
+      name: {}
+      subdomain: {}
     r2:
       accountId: {}
       apiToken: {}

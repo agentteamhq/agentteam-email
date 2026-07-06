@@ -895,10 +895,13 @@ importers:
         version: 5.4.0(react-hook-form@7.79.0(react@19.2.7))
       '@main/backend':
         specifier: workspace:*
-        version: file:packages/backend(c54609c2b3b321fc20c8f91fda34e437)
+        version: file:packages/backend(e1d4e4de245283b755a92cf1a0f07205)
       '@main/cloudflare-email-worker':
         specifier: workspace:*
         version: link:../../packages/cloudflare-email-worker
+      '@main/cloudflare-service-worker':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare-service-worker
       '@main/common':
         specifier: workspace:*
         version: link:../../packages/common
@@ -907,7 +910,7 @@ importers:
         version: link:../../packages/db
       '@main/frontend':
         specifier: workspace:*
-        version: file:packages/frontend(b3bf49a260af879cd3ba6378a16cd388)
+        version: file:packages/frontend(0abba931f717d56ad4d53d7d8960da55)
       '@main/shutdown-manager':
         specifier: workspace:*
         version: link:../../packages/shutdown-manager
@@ -1320,6 +1323,9 @@ importers:
       '@main/cloudflare-email-worker':
         specifier: workspace:*
         version: link:../cloudflare-email-worker
+      '@main/cloudflare-service-worker':
+        specifier: workspace:*
+        version: link:../cloudflare-service-worker
       '@main/common':
         specifier: workspace:*
         version: link:../common
@@ -1531,6 +1537,15 @@ importers:
         specifier: 'catalog:'
         version: 8.0.16(6446220c1e3276021754a24faf858cda)
 
+  packages/cloudflare-service-worker:
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 25.9.3
+      vite:
+        specifier: 'catalog:'
+        version: 8.0.16(6446220c1e3276021754a24faf858cda)
+
   packages/common:
     devDependencies:
       '@date-fns/tz':
@@ -1710,6 +1725,9 @@ importers:
       '@main/cloudflare-email-worker':
         specifier: workspace:*
         version: link:../cloudflare-email-worker
+      '@main/cloudflare-service-worker':
+        specifier: workspace:*
+        version: link:../cloudflare-service-worker
       '@main/common':
         specifier: workspace:*
         version: link:../common
@@ -3053,6 +3071,7 @@ packages:
       '@date-fns/utc': '*'
       '@elysiajs/openapi': '*'
       '@main/cloudflare-email-worker': workspace:*
+      '@main/cloudflare-service-worker': workspace:*
       '@main/common': workspace:*
       '@main/db': workspace:*
       '@main/shutdown-manager': workspace:*
@@ -3119,6 +3138,9 @@ packages:
       standardwebhooks: '*'
       uuid: '*'
 
+  '@main/cloudflare-service-worker@file:packages/cloudflare-service-worker':
+    resolution: {directory: packages/cloudflare-service-worker, type: directory}
+
   '@main/common@file:packages/common':
     resolution: {directory: packages/common, type: directory}
     peerDependencies:
@@ -3181,6 +3203,7 @@ packages:
       '@hookform/resolvers': '*'
       '@main/backend': workspace:*
       '@main/cloudflare-email-worker': workspace:*
+      '@main/cloudflare-service-worker': workspace:*
       '@main/common': workspace:*
       '@main/db': workspace:*
       '@main/shutdown-manager': workspace:*
@@ -10636,7 +10659,7 @@ snapshots:
 
   '@levischuck/tiny-cbor@0.2.11': {}
 
-  '@main/backend@file:packages/backend(c54609c2b3b321fc20c8f91fda34e437)':
+  '@main/backend@file:packages/backend(e1d4e4de245283b755a92cf1a0f07205)':
     dependencies:
       '@agendajs/mongo-backend': 4.0.2(f85595a9325ffde548f7db927ea1b6a7)
       '@better-auth-ui/core': 1.6.27(de4c539c52728e602ddebbea33891d73)
@@ -10654,6 +10677,7 @@ snapshots:
       '@date-fns/utc': 2.1.1
       '@elysiajs/openapi': 1.4.15(elysia@1.4.29(e11b0d924cd98d6f1819b4a553c5cb0c))
       '@main/cloudflare-email-worker': file:packages/cloudflare-email-worker(b2a85f1b505824a4462d520e27c1303e)
+      '@main/cloudflare-service-worker': file:packages/cloudflare-service-worker
       '@main/common': file:packages/common(3f006b1cb798ec636a1842410f99e0f2)
       '@main/db': file:packages/db(46d5f157a11ee3af3a2d1e6e7ad044e7)
       '@main/shutdown-manager': file:packages/shutdown-manager
@@ -10719,6 +10743,8 @@ snapshots:
       standardwebhooks: 1.0.0
       uuid: 14.0.0
 
+  '@main/cloudflare-service-worker@file:packages/cloudflare-service-worker': {}
+
   '@main/common@file:packages/common(3f006b1cb798ec636a1842410f99e0f2)':
     dependencies:
       '@date-fns/tz': 1.5.0
@@ -10751,7 +10777,7 @@ snapshots:
       uuid: 14.0.0
       zod: 4.4.3
 
-  '@main/frontend@file:packages/frontend(b3bf49a260af879cd3ba6378a16cd388)':
+  '@main/frontend@file:packages/frontend(0abba931f717d56ad4d53d7d8960da55)':
     dependencies:
       '@agendajs/mongo-backend': 4.0.2(f85595a9325ffde548f7db927ea1b6a7)
       '@base-ui/react': 1.6.0(6dab3ab8b285aa871f9aa69505023584)
@@ -10776,8 +10802,9 @@ snapshots:
       '@hcaptcha/react-hcaptcha': 2.0.2
       '@headlessui/react': 2.2.10(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@hookform/resolvers': 5.4.0(react-hook-form@7.79.0(react@19.2.7))
-      '@main/backend': file:packages/backend(c54609c2b3b321fc20c8f91fda34e437)
+      '@main/backend': file:packages/backend(e1d4e4de245283b755a92cf1a0f07205)
       '@main/cloudflare-email-worker': file:packages/cloudflare-email-worker(b2a85f1b505824a4462d520e27c1303e)
+      '@main/cloudflare-service-worker': file:packages/cloudflare-service-worker
       '@main/common': file:packages/common(3f006b1cb798ec636a1842410f99e0f2)
       '@main/db': file:packages/db(46d5f157a11ee3af3a2d1e6e7ad044e7)
       '@main/shutdown-manager': file:packages/shutdown-manager

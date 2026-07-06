@@ -38,6 +38,7 @@ Use these commands for:
 - `AT_EMAIL_ADMIN_MAIL_LOOP_SECRET`
 - `AT_EMAIL_ADMIN_ZONEMTA_RELAY_PASSWORD`
 - `AT_EMAIL_ADMIN_FEEDBACK_MAILBOX_PASSWORD`
+- `AT_EMAIL_ADMIN_CF_WORKER_PASSWORD`
 
 ## Admin web app
 
@@ -206,6 +207,45 @@ The required Cloudflare OAuth scopes are:
 
 <ParamField path="AT_EMAIL_ADMIN_CF_OAUTH_CLIENT_ID" type="string" required>
   Cloudflare OAuth client ID used by the web app. Configure the Cloudflare OAuth client for Authorization Code + PKCE with token endpoint auth method `none`.
+
+</ParamField>
+
+## Service-level Cloudflare Worker
+
+Production installs that enable Cloudflare OAuth must also configure a
+service-level Cloudflare Worker. AgentTeam Email provisions this admin-instance
+Worker at startup and uses it only for authenticated `POST /oauth2/token`
+forwarding to Cloudflare's OAuth token endpoint when server egress is
+challenged by Cloudflare.
+
+This Worker belongs to the AgentTeam Email admin instance, not to a customer
+domain. Its Cloudflare API token, workers.dev subdomain, Worker name, and
+backend-to-Worker password are deployment configuration. Customer-domain
+Cloudflare OAuth grants must not be used to provision or authenticate this
+service-level Worker.
+
+<ParamField path="AT_EMAIL_ADMIN_CF_WORKER_ACCOUNT_ID" type="string" required>
+  Cloudflare account ID that owns the service-level Cloudflare Worker.
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_CF_WORKER_API_TOKEN" type="string" required>
+  Cloudflare API token used by the web server to upload and enable the service-level Worker. The token needs account-level Workers Scripts read and write access for `AT_EMAIL_ADMIN_CF_WORKER_ACCOUNT_ID`.
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_CF_WORKER_PASSWORD" type="string" required>
+  Shared password used by the web server when calling the service-level Worker with `Authorization: Bearer`. Generate a unique high-entropy value per deployment.
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_CF_WORKER_NAME" type="string" required>
+  Cloudflare Worker script name for the service-level Worker. Set this explicitly for the deployment.
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_CF_WORKER_SUBDOMAIN" type="string" required>
+  Account workers.dev subdomain used to address the service-level Worker.
 
 </ParamField>
 

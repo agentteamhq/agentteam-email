@@ -330,6 +330,7 @@ Cloudflare responsibilities are split by boundary.
 The web server owns customer-facing Cloudflare work:
 
 - Cloudflare OAuth and account selection;
+- service-level Cloudflare Worker provisioning for the admin instance;
 - customer integration status;
 - hosted Worker deployment and Worker secret refresh;
 - customer-facing remediation messages.
@@ -342,6 +343,13 @@ Self-hosted operators configure the admin instance with Cloudflare OAuth
 credentials, archive bucket credentials, and transactional SMTP settings through
 Compose or Helm. Customer-domain Cloudflare credentials are connected in the web
 UI and are not deployment environment variables.
+
+The service-level Cloudflare Worker belongs to the admin instance, not to a
+customer domain. It is used for authenticated `POST /oauth2/token` forwarding
+to Cloudflare's OAuth token endpoint when server egress is challenged. Its
+deployment API token, workers.dev subdomain, Worker name, and backend-to-Worker
+password are deployment configuration. Customer-domain Cloudflare OAuth grants
+must not be used to provision or authenticate this service-level Worker.
 
 ## Hosted Archive Target
 

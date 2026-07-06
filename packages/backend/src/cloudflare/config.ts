@@ -2,9 +2,12 @@ import { z } from 'zod'
 
 import { PRIVATE_VARS } from '../vars.private'
 import { BETTER_AUTH_ROUTE } from '../auth/auth-routes'
+
+import { CLOUDFLARE_OAUTH_PROVIDER_ID } from './constants'
+import { createCloudflareOAuthTokenExchanger } from './oauth-token-exchange'
 import type { GenericOAuthConfig } from 'better-auth/plugins'
 
-export const CLOUDFLARE_OAUTH_PROVIDER_ID = 'cloudflare'
+export { CLOUDFLARE_OAUTH_PROVIDER_ID } from './constants'
 
 const CLOUDFLARE_REQUIRED_OAUTH_SCOPES = [
   'workers-r2.read',
@@ -42,6 +45,37 @@ export type CloudflareRequiredOAuthScope = (typeof CLOUDFLARE_REQUIRED_OAUTH_SCO
 
 type CloudflareOAuthGetUserInfo = NonNullable<GenericOAuthConfig['getUserInfo']>
 
+const CLOUDFLARE_WORKERS_DEV_DOMAIN = 'workers.dev'
+const CLOUDFLARE_OAUTH_TOKEN_EXCHANGE_PATH = '/oauth2/token'
+const CLOUDFLARE_OAUTH_TOKEN_EXCHANGE_DIRECT_FIRST = true
+
+const CLOUDFLARE_WORKER_CONFIG_ENV_NAMES = {
+  accountId: 'CLOUDFLARE_WORKER_ACCOUNT_ID',
+  apiToken: 'CLOUDFLARE_WORKER_API_TOKEN',
+  password: 'CLOUDFLARE_WORKER_PASSWORD',
+  subdomain: 'CLOUDFLARE_WORKER_SUBDOMAIN',
+  workerName: 'CLOUDFLARE_WORKER_NAME'
+} as const
+
+export interface CloudflareWorkerConfig {
+  accountId: string
+  apiToken: string
+  oauthTokenExchangeUrl: string
+  password: string
+  subdomain: string
+  workerName: string
+  workerUrl: string
+}
+
+type CloudflareWorkerConfigKey = keyof typeof CLOUDFLARE_WORKER_CONFIG_ENV_NAMES
+
+type RawCloudflareWorkerConfig = Record<CloudflareWorkerConfigKey, string | undefined>
+
+export interface CreateCloudflareWorkerUrlInput {
+  workerName: string
+  subdomain: string
+}
+
 const trimmedNonEmptyString = z.string().trim().min(1)
 
 const cloudflareUserDetailsResponseSchema = z.object({
@@ -78,6 +112,55 @@ export function getCloudflareOAuthTokenUrl(): string {
   return PRIVATE_VARS.CLOUDFLARE_OAUTH_TOKEN_URL ?? CLOUDFLARE_OAUTH_DEFAULTS.tokenUrl
 }
 
+export function getCloudflareWorkerConfig(): CloudflareWorkerConfig | null {
+  const raw: RawCloudflareWorkerConfig = {
+    accountId: PRIVATE_VARS.CLOUDFLARE_WORKER_ACCOUNT_ID,
+    apiToken: PRIVATE_VARS.CLOUDFLARE_WORKER_API_TOKEN,
+    password: PRIVATE_VARS.CLOUDFLARE_WORKER_PASSWORD,
+    subdomain: PRIVATE_VARS.CLOUDFLARE_WORKER_SUBDOMAIN,
+    workerName: PRIVATE_VARS.CLOUDFLARE_WORKER_NAME
+  }
+  const hasAnyWorkerConfig = Object.values(raw).some(Boolean)
+
+  if (!hasAnyWorkerConfig) {
+    return null
+  }
+
+  const missing = Object.entries(raw)
+    .filter(([, value]) => !value)
+    .map(([key]) => CLOUDFLARE_WORKER_CONFIG_ENV_NAMES[key as CloudflareWorkerConfigKey])
+
+  if (missing.length > 0) {
+    throw new Error(`Incomplete Cloudflare Worker configuration: ${missing.join(', ')}`)
+  }
+
+  const workerName = requireDNSLabel(raw.workerName, 'CLOUDFLARE_WORKER_NAME')
+  const subdomain = requireDNSLabel(raw.subdomain, 'CLOUDFLARE_WORKER_SUBDOMAIN')
+  const workerUrl = createCloudflareWorkerUrl({ workerName, subdomain })
+
+  return {
+    accountId: raw.accountId!,
+    apiToken: raw.apiToken!,
+    oauthTokenExchangeUrl: createCloudflareOAuthTokenExchangeUrl(workerUrl),
+    password: raw.password!,
+    subdomain,
+    workerName,
+    workerUrl
+  }
+}
+
+export function createCloudflareWorkerUrl({ workerName, subdomain }: CreateCloudflareWorkerUrlInput): string {
+  return `https://${workerName}.${subdomain}.${CLOUDFLARE_WORKERS_DEV_DOMAIN}`
+}
+
+export function createCloudflareOAuthTokenExchangeUrl(workerUrl: string): string {
+  const url = new URL(workerUrl)
+  url.pathname = CLOUDFLARE_OAUTH_TOKEN_EXCHANGE_PATH
+  url.search = ''
+  url.hash = ''
+  return url.toString()
+}
+
 export function createCloudflareGenericOAuthConfig(): GenericOAuthConfig | null {
   const clientId = PRIVATE_VARS.CLOUDFLARE_OAUTH_CLIENT_ID
 
@@ -85,18 +168,36 @@ export function createCloudflareGenericOAuthConfig(): GenericOAuthConfig | null 
     return null
   }
 
+  const redirectURI = createCloudflareOAuthRedirectURI()
+  const tokenUrl = getCloudflareOAuthTokenUrl()
+  const workerConfig = getCloudflareWorkerConfig()
+
   return {
     providerId: CLOUDFLARE_OAUTH_PROVIDER_ID,
     authorizationUrl:
       PRIVATE_VARS.CLOUDFLARE_OAUTH_AUTHORIZATION_URL ?? CLOUDFLARE_OAUTH_DEFAULTS.authorizationUrl,
-    tokenUrl: PRIVATE_VARS.CLOUDFLARE_OAUTH_TOKEN_URL ?? CLOUDFLARE_OAUTH_DEFAULTS.tokenUrl,
+    tokenUrl,
     issuer: PRIVATE_VARS.CLOUDFLARE_OAUTH_ISSUER,
     clientId,
-    redirectURI: createCloudflareOAuthRedirectURI(),
+    redirectURI,
     scopes: getCloudflareRequiredOAuthScopes(),
     pkce: true,
     disableImplicitSignUp: true,
     disableSignUp: true,
+    ...(workerConfig
+      ? {
+          getToken: createCloudflareOAuthTokenExchanger({
+            clientId,
+            redirectURI,
+            worker: {
+              directFirst: CLOUDFLARE_OAUTH_TOKEN_EXCHANGE_DIRECT_FIRST,
+              password: workerConfig.password,
+              tokenExchangeUrl: workerConfig.oauthTokenExchangeUrl
+            },
+            tokenEndpoint: tokenUrl
+          })
+        }
+      : {}),
     getUserInfo: getCloudflareOAuthUserInfo,
     mapProfileToUser: (profile: Record<string, unknown>) => {
       const email = readProfileString(profile, 'email')
@@ -187,4 +288,15 @@ function readProfileString(profile: Record<string, unknown>, key: string): strin
 function readProfileBoolean(profile: Record<string, unknown>, key: string): boolean | undefined {
   const value = profile[key]
   return typeof value === 'boolean' ? value : undefined
+}
+
+function requireDNSLabel(value: string | undefined, label: string): string {
+  if (!value) {
+    throw new Error(`${label} is required`)
+  }
+  const normalized = value.trim().toLowerCase()
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u.test(normalized)) {
+    throw new Error(`${label} must be a lowercase DNS label`)
+  }
+  return normalized
 }

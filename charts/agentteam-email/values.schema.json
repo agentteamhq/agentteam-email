@@ -84,6 +84,16 @@
                 "secretAccessKey": { "$ref": "#/$defs/valueSource" }
               },
               "type": "object"
+            },
+            "worker": {
+              "properties": {
+                "accountId": { "$ref": "#/$defs/valueSource" },
+                "apiToken": { "$ref": "#/$defs/valueSource" },
+                "name": { "$ref": "#/$defs/valueSource" },
+                "password": { "$ref": "#/$defs/valueSource" },
+                "subdomain": { "$ref": "#/$defs/valueSource" }
+              },
+              "type": "object"
             }
           },
           "type": "object"

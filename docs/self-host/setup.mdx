@@ -6,7 +6,7 @@ description: 'Canonical setup requirements for a self-hosted AgentTeam Email adm
 
 This page is the canonical self-host setup contract. It documents the inputs an operator must provide to run an AgentTeam Email admin instance and then provision the first user domain.
 
-AgentTeam Email does not provision user mail domains from admin environment variables. The admin instance provides platform infrastructure: the public web app, Cloudflare OAuth app, R2 archive bucket, service secrets, and optional admin transactional SMTP. A signed-in user provisions each mail domain later through the web UI.
+AgentTeam Email does not provision user mail domains from admin environment variables. The admin instance provides platform infrastructure: the public web app, Cloudflare OAuth app, service-level Cloudflare Worker, R2 archive bucket, service secrets, and optional admin transactional SMTP. A signed-in user provisions each mail domain later through the web UI.
 
 ## Setup sequence
 
@@ -40,6 +40,15 @@ AgentTeam Email does not provision user mail domains from admin environment vari
     Configure the required Cloudflare OAuth scopes listed in [Environment Variables](/reference/environment-variables#cloudflare-oauth).
 
     Configure the OAuth client for Authorization Code with PKCE and token endpoint authentication method `none`. OAuth access and refresh tokens from connected users are stored by Better Auth in the web server database and must not be copied into Compose files, Helm values, browser-visible config, logs, or docs.
+
+  </Step>
+
+  <Step title='Configure the service-level Cloudflare Worker'>
+    Configure the service-level Cloudflare Worker values for the admin instance. The web server provisions this Worker at startup and uses it only for authenticated `POST /oauth2/token` forwarding to Cloudflare's OAuth token endpoint when server egress is challenged.
+
+    This Worker is not a customer-domain Worker. Use an operator-owned Cloudflare account ID, an API token with account-level Workers Scripts read/write access, a deployment-specific Worker name, the account workers.dev subdomain, and a distinct backend-to-Worker password.
+
+    See [Environment Variables](/reference/environment-variables#service-level-cloudflare-worker) for the Compose variables and [Helm](/self-host/helm#minimal-values) for the equivalent chart values.
 
   </Step>
 
@@ -101,20 +110,21 @@ AgentTeam Email does not provision user mail domains from admin environment vari
 
 ## Required admin inputs
 
-| Input                          | Compose surface                                 | Helm surface                          |
-| ------------------------------ | ----------------------------------------------- | ------------------------------------- |
-| Public app URL                 | `AT_EMAIL_ADMIN_PUBLIC_HOSTNAME`                | `publicHostname`                      |
-| Web auth secret                | `AT_EMAIL_ADMIN_BETTER_AUTH_SECRET`             | `webServer.authSecret`                |
-| Encryption key                 | `AT_EMAIL_ADMIN_ENCRYPT_SECRET_KEY`             | `webServer.encryptionKey`             |
-| Cloudflare OAuth app           | `AT_EMAIL_ADMIN_CF_*`                           | `admin.cloudflare.oauth`              |
-| Admin R2 archive bucket        | `AT_EMAIL_ADMIN_R2_*`                           | `admin.cloudflare.r2`                 |
-| Control-to-web token           | `AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN`       | `controlApi.controlToWebToken`        |
-| WildDuck admin token           | `AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN`    | `wildduck.adminAccessToken`           |
-| WildDuck access-control secret | `AT_EMAIL_ADMIN_WILDDUCK_ACCESS_CONTROL_SECRET` | `wildduck.accessControlSecret`        |
-| Mail loop secret               | `AT_EMAIL_ADMIN_MAIL_LOOP_SECRET`               | `mailRuntime.loopSecret`              |
-| ZoneMTA relay password         | `AT_EMAIL_ADMIN_ZONEMTA_RELAY_PASSWORD`         | `mailRuntime.zonemtaRelayPassword`    |
-| Feedback mailbox password      | `AT_EMAIL_ADMIN_FEEDBACK_MAILBOX_PASSWORD`      | `mailRuntime.feedbackMailboxPassword` |
-| Admin transactional SMTP       | `AT_EMAIL_ADMIN_SMTP_*`                         | `admin.smtp`                          |
+| Input                           | Compose surface                                 | Helm surface                          |
+| ------------------------------- | ----------------------------------------------- | ------------------------------------- |
+| Public app URL                  | `AT_EMAIL_ADMIN_PUBLIC_HOSTNAME`                | `publicHostname`                      |
+| Web auth secret                 | `AT_EMAIL_ADMIN_BETTER_AUTH_SECRET`             | `webServer.authSecret`                |
+| Encryption key                  | `AT_EMAIL_ADMIN_ENCRYPT_SECRET_KEY`             | `webServer.encryptionKey`             |
+| Cloudflare OAuth app            | `AT_EMAIL_ADMIN_CF_OAUTH_*`                     | `admin.cloudflare.oauth`              |
+| Service-level Cloudflare Worker | `AT_EMAIL_ADMIN_CF_WORKER_*`                    | `admin.cloudflare.worker`             |
+| Admin R2 archive bucket         | `AT_EMAIL_ADMIN_R2_*`                           | `admin.cloudflare.r2`                 |
+| Control-to-web token            | `AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN`       | `controlApi.controlToWebToken`        |
+| WildDuck admin token            | `AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN`    | `wildduck.adminAccessToken`           |
+| WildDuck access-control secret  | `AT_EMAIL_ADMIN_WILDDUCK_ACCESS_CONTROL_SECRET` | `wildduck.accessControlSecret`        |
+| Mail loop secret                | `AT_EMAIL_ADMIN_MAIL_LOOP_SECRET`               | `mailRuntime.loopSecret`              |
+| ZoneMTA relay password          | `AT_EMAIL_ADMIN_ZONEMTA_RELAY_PASSWORD`         | `mailRuntime.zonemtaRelayPassword`    |
+| Feedback mailbox password       | `AT_EMAIL_ADMIN_FEEDBACK_MAILBOX_PASSWORD`      | `mailRuntime.feedbackMailboxPassword` |
+| Admin transactional SMTP        | `AT_EMAIL_ADMIN_SMTP_*`                         | `admin.smtp`                          |
 
 ## What setup does not do
 

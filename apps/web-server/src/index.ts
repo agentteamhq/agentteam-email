@@ -1,5 +1,5 @@
 /* eslint-disable no-restricted-syntax -- Runtime entrypoint starts backend jobs before loading the frontend side-effect server. */
-import { startScheduledJobs } from '@main/backend'
+import { provisionCloudflareWorkerOnStartup, startScheduledJobs } from '@main/backend'
 import debug from 'debug'
 
 const log = debug('app:web-server')
@@ -27,7 +27,10 @@ const sensitiveDiagnosticIdentifierTerms = new Set([
   'unauthorized'
 ])
 
-async function runStartupPhase(phase: 'frontend-import' | 'scheduled-jobs', task: () => Promise<unknown>) {
+async function runStartupPhase(
+  phase: 'cloudflare-worker' | 'frontend-import' | 'scheduled-jobs',
+  task: () => Promise<unknown>
+) {
   log('startup phase starting', { phase })
   try {
     await task()
@@ -73,7 +76,12 @@ function diagnosticIdentifierTerms(value: string): string[] {
     .filter(Boolean)
 }
 
+async function provisionCloudflareWorkerStartupTask(): Promise<unknown> {
+  return provisionCloudflareWorkerOnStartup()
+}
+
 // Start backend-owned background work before importing the frontend package,
 // which starts the HTTP server as a package side effect.
+await runStartupPhase('cloudflare-worker', provisionCloudflareWorkerStartupTask)
 await runStartupPhase('scheduled-jobs', startScheduledJobs)
 await runStartupPhase('frontend-import', () => import('@main/frontend'))
