@@ -87,7 +87,12 @@ export const backendRpcApp = new Elysia({ name: 'rpc', prefix: '/rpc', normalize
   // Better Auth is mounted at /rpc/auth for browser/internal auth protocol
   // traffic. The handler keeps Better Auth's logical /api base path internal to
   // the mounted request.
-  .mount('/auth', handleBetterAuthProtocolRequest)
+  .mount('/auth', (request) =>
+    handleBetterAuthProtocolRequest(request, {
+      consumerClass: 'browser-internal',
+      publicMountPath: '/rpc/auth'
+    })
+  )
   // Mount route modules
   .use(internalRpcApp)
   .use(admin)

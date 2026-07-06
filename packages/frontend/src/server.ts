@@ -1,6 +1,7 @@
 import process from 'node:process'
 import { performance } from 'node:perf_hooks'
 import { fileURLToPath } from 'node:url'
+import { format as formatLogMessage } from 'node:util'
 import debug from 'debug'
 import send from 'send'
 import { fetchNodeHandler, serve } from 'srvx/node'
@@ -14,37 +15,18 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { RedirectErrorDiagnosticLogDetails } from './lib/redirect-error-page'
 
 const log = debug('app:frontend')
+const structuredInfoLog = debug('app:frontend:info')
+const structuredErrorLog = debug('app:frontend:error')
 const clientDist = fileURLToPath(new URL('../client', import.meta.url))
 const serviceName = 'web-server'
 let nextRequestSequence = 0
+let structuredDebugLogsConfigured = false
 const redactedPathSegment = ':redacted'
 const truncatedPathSegment = ':truncated'
 const maxSafePathSegments = 32
 const maxSafePathSegmentLength = 80
 const maxRequestIdLength = 64
 const maxCfRayLength = 64
-const sensitiveDiagnosticIdentifierTerms = new Set([
-  'api-key',
-  'apikey',
-  'auth',
-  'authentication',
-  'authorization',
-  'authorized',
-  'bearer',
-  'cookie',
-  'credential',
-  'credentials',
-  'jwk',
-  'jwks',
-  'jwt',
-  'key',
-  'oauth',
-  'password',
-  'secret',
-  'session',
-  'token',
-  'unauthorized'
-])
 const safeSecretWordSegments = new Set([
   'access-token',
   'api-key',
@@ -414,29 +396,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isSafeDiagnosticToken(value: string): boolean {
-  return /^[A-Za-z][A-Za-z0-9_.:-]{0,79}$/.test(value) && !isSensitiveDiagnosticIdentifier(value)
-}
-
-function isSensitiveDiagnosticIdentifier(value: string): boolean {
-  const normalized = value.toLowerCase()
-
-  return (
-    isSuspiciousSecretValue(value) ||
-    diagnosticIdentifierTerms(value).some((term) => sensitiveDiagnosticIdentifierTerms.has(term)) ||
-    /(?:^|[._:-])(?:api-key|apikey|bearer|jwk|jwks|key|token)(?:$|[._:-])/u.test(normalized) ||
-    /(?:api|decrypt|encrypt|encryption|oauth|private|public|refresh|secret|session|signing)key/u.test(
-      normalized
-    )
-  )
-}
-
-function diagnosticIdentifierTerms(value: string): string[] {
-  return value
-    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .toLowerCase()
-    .split(/[^a-z0-9-]+/u)
-    .filter(Boolean)
+  return /^[A-Za-z][A-Za-z0-9_.:-]{0,159}$/.test(value)
 }
 
 function defaultInfoLog(event: string, fields: DefaultLogFields = {}): void {
@@ -448,6 +408,7 @@ function defaultErrorLog(event: string, fields: DefaultLogFields = {}): void {
 }
 
 function writeDefaultLog(level: 'error' | 'info', event: string, fields: DefaultLogFields): void {
+  ensureStructuredDebugLogsConfigured()
   const entry: Record<string, LogValue> = {
     event,
     level,
@@ -461,9 +422,32 @@ function writeDefaultLog(level: 'error' | 'info', event: string, fields: Default
     }
   }
 
-  const line = `${JSON.stringify(entry)}\n`
-  const stream = level === 'error' ? process.stderr : process.stdout
-  stream.write(line)
+  const structuredLog = level === 'error' ? structuredErrorLog : structuredInfoLog
+  structuredLog('%s', JSON.stringify(entry))
+}
+
+function ensureStructuredDebugLogsConfigured(): void {
+  if (structuredDebugLogsConfigured) {
+    return
+  }
+
+  structuredDebugLogsConfigured = true
+  configureStructuredDebugLog(structuredInfoLog, 'info')
+  configureStructuredDebugLog(structuredErrorLog, 'error')
+}
+
+function configureStructuredDebugLog(debugLog: ReturnType<typeof debug>, level: 'error' | 'info'): void {
+  debugLog.enabled = true
+  debugLog.log = (...args: unknown[]) => {
+    const payload = structuredDebugPayload(formatLogMessage(...args))
+    const stream = level === 'error' ? process.stderr : process.stdout
+    stream.write(payload.endsWith('\n') ? payload : `${payload}\n`)
+  }
+}
+
+function structuredDebugPayload(message: string): string {
+  const jsonStart = message.indexOf('{')
+  return jsonStart >= 0 ? message.slice(jsonStart) : message
 }
 
 async function sendStaticAsset(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<void> {

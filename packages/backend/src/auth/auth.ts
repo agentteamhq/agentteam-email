@@ -54,6 +54,10 @@ import {
 import { apiKeyConfigurations } from './api-key-config'
 import { canManageOAuthClientsForSession } from './oauth-client-privileges'
 import { createBetterAuthLogDetails, createSafeErrorLogDetails } from './log-redaction'
+import {
+  createBetterAuthProtocolErrorLogDetails,
+  getBetterAuthProtocolDiagnosticContext
+} from './protocol-diagnostics'
 import { createMongoSecondaryStorage } from './secondary-storage'
 import type { AgentSession } from '@better-auth/agent-auth'
 import type { refreshToken as betterAuthRefreshToken } from 'better-auth/api'
@@ -331,13 +335,16 @@ function compareAuthUrls(betterAuthUrl: string, manualUrl: string) {
 }
 
 function logBetterAuthEvent(level: string, message: string, ...args: unknown[]) {
-  log('better_auth_log %o', createBetterAuthLogDetails(level, message, args))
+  const protocol = getBetterAuthProtocolDiagnosticContext()
+  log('better_auth_log %o', createBetterAuthLogDetails(level, message, args, protocol))
 }
 
 function logBetterAuthApiError(error: unknown) {
+  const protocol = getBetterAuthProtocolDiagnosticContext()
   log('better_auth_api_error %o', {
-    error: createSafeErrorLogDetails(error),
-    operation: 'better_auth_api_error'
+    error: protocol ? createBetterAuthProtocolErrorLogDetails(error) : createSafeErrorLogDetails(error),
+    operation: 'better_auth_api_error',
+    ...(protocol ? { protocol } : {})
   })
 }
 

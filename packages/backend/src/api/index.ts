@@ -103,7 +103,12 @@ export const backendApiApp = new Elysia({
   strictPath: false
 })
   .use(createMailHttpRoutes())
-  .mount('/auth', handleBetterAuthProtocolRequest)
+  .mount('/auth', (request) =>
+    handleBetterAuthProtocolRequest(request, {
+      consumerClass: 'api-client',
+      publicMountPath: '/api/auth'
+    })
+  )
   .post(
     '/agent-access/trials',
     async ({ body, request, set }) =>

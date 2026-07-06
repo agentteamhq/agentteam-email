@@ -1,15 +1,20 @@
 import { HttpStatusCode } from '@main/common'
+import debug from 'debug'
 
 import { globals } from '../globals'
 import { isValidAgentMailCapabilityRequestBody } from './agent-auth-config'
 import { hasBearerCredential, hasBearerJwt, parseBearerAuthorization } from './authorization-header'
 import { rewritePublicOAuthMetadataResponse } from './oauth-metadata'
+import {
+  createBetterAuthProtocolDiagnosticContext,
+  createBetterAuthProtocolErrorLogDetails,
+  createBetterAuthProtocolResponseLogDetails,
+  runWithBetterAuthProtocolDiagnosticContext
+} from './protocol-diagnostics'
+import type { BetterAuthProtocolRequestContext } from './protocol-diagnostics'
 
 const BETTER_AUTH_LOGICAL_BASE_PATH = '/api'
-const AGENT_AUTH_CAPABILITY_REQUEST_PATHS = new Set([
-  '/api/agent/register',
-  '/api/agent/request-capability'
-])
+const AGENT_AUTH_CAPABILITY_REQUEST_PATHS = new Set(['/api/agent/register', '/api/agent/request-capability'])
 const AGENT_AUTH_BEARER_CREDENTIAL_PATHS = new Set([
   '/api/agent/register',
   '/api/agent/request-capability',
@@ -22,21 +27,71 @@ const OAUTH_METADATA_PATHS = new Set([
   '/api/.well-known/openid-configuration'
 ])
 const HTTP_STATUS_UNAUTHORIZED: number = HttpStatusCode.Unauthorized
+const log = debug('app:auth:protocol')
 
-export async function handleBetterAuthProtocolRequest(request: Request): Promise<Response> {
+export async function handleBetterAuthProtocolRequest(
+  request: Request,
+  context: BetterAuthProtocolRequestContext = {}
+): Promise<Response> {
   const authRequest = betterAuthLogicalRequest(request)
+  const diagnostics = createBetterAuthProtocolDiagnosticContext(request, authRequest, context)
   const invalidBearerCredentialResponse = invalidAgentAuthBearerCredentialResponse(authRequest)
   if (invalidBearerCredentialResponse) {
+    if (diagnostics) {
+      log('better_auth_oauth_callback_rejected %o', {
+        ...diagnostics,
+        phase: 'bearer_validation_failed',
+        response: { status: invalidBearerCredentialResponse.status }
+      })
+    }
     return invalidBearerCredentialResponse
   }
 
   const invalidCapabilityRequestResponse = await invalidAgentMailCapabilityRequestResponse(authRequest)
   if (invalidCapabilityRequestResponse) {
+    if (diagnostics) {
+      log('better_auth_oauth_callback_rejected %o', {
+        ...diagnostics,
+        phase: 'capability_request_validation_failed',
+        response: { status: invalidCapabilityRequestResponse.status }
+      })
+    }
     return invalidCapabilityRequestResponse
   }
 
   const { auth } = await globals()
-  const response = agentAuthBearerChallengeResponse(authRequest, await auth.handler(authRequest))
+  if (diagnostics) {
+    log('better_auth_oauth_callback_received %o', {
+      ...diagnostics,
+      phase: 'handler_entry'
+    })
+  }
+
+  let authResponse: Response
+  try {
+    authResponse = await runWithBetterAuthProtocolDiagnosticContext(diagnostics, () =>
+      auth.handler(authRequest)
+    )
+  } catch (error) {
+    if (diagnostics) {
+      const errorLogDetails = createBetterAuthProtocolErrorLogDetails(error)
+      log('better_auth_oauth_callback_exception %o', {
+        ...diagnostics,
+        error: errorLogDetails,
+        ...(errorLogDetails.code ? { errorCode: errorLogDetails.code } : {}),
+        phase: 'handler_exception'
+      })
+    }
+    throw error
+  }
+
+  const response = agentAuthBearerChallengeResponse(authRequest, authResponse)
+  if (diagnostics) {
+    log(
+      'better_auth_oauth_callback_completed %o',
+      await createBetterAuthProtocolResponseLogDetails(diagnostics, response)
+    )
+  }
   if (OAUTH_METADATA_PATHS.has(new URL(authRequest.url).pathname)) {
     return rewritePublicOAuthMetadataResponse(response)
   }
@@ -45,14 +100,15 @@ export async function handleBetterAuthProtocolRequest(request: Request): Promise
 
 function betterAuthLogicalRequest(request: Request): Request {
   const url = new URL(request.url)
-  if (url.pathname === BETTER_AUTH_LOGICAL_BASE_PATH || url.pathname.startsWith(`${BETTER_AUTH_LOGICAL_BASE_PATH}/`)) {
+  if (
+    url.pathname === BETTER_AUTH_LOGICAL_BASE_PATH ||
+    url.pathname.startsWith(`${BETTER_AUTH_LOGICAL_BASE_PATH}/`)
+  ) {
     return request
   }
 
   url.pathname =
-    url.pathname === '/'
-      ? BETTER_AUTH_LOGICAL_BASE_PATH
-      : `${BETTER_AUTH_LOGICAL_BASE_PATH}${url.pathname}`
+    url.pathname === '/' ? BETTER_AUTH_LOGICAL_BASE_PATH : `${BETTER_AUTH_LOGICAL_BASE_PATH}${url.pathname}`
   return new Request(url, request)
 }
 
