@@ -6,8 +6,14 @@ import { globals } from '../globals'
 import { handleAgentMailForwardingGroupDeliveryRequest } from '../agent-mail/forwarding-group-delivery'
 import { handleAgentMailIngestRequest } from '../agent-mail/ingest'
 import { handleAgentMailRuntimeSnapshotRequest } from '../agent-mail/runtime-projection'
+import { createSafeErrorLogDetails, createSafeRequestLogDetails } from '../auth/log-redaction'
 import { handleBetterAuthProtocolRequest } from '../auth/protocol-handler'
 import { handleCloudflareControlSendRawRequest } from '../cloudflare/internal-send'
+import {
+  createPublicErrorResponse,
+  createSafeRequestCorrelationLogDetails,
+  mapPublicErrorResponse
+} from '../public-error-response'
 
 import { PRIVATE_VARS } from '../vars.private'
 import admin from './admin'
@@ -21,10 +27,6 @@ import whoami from './whoami'
 
 const apiLog = debug('api:backend')
 const rpcLog = debug('app:rpc')
-
-function safeErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : typeof error === 'string' ? error : 'Non-Error thrown'
-}
 
 const internalRpcApp = new Elysia({ name: 'rpc-internal', prefix: '/internal' })
   .get('/agent-mail/runtime/snapshot', ({ request }) => handleAgentMailRuntimeSnapshotRequest(request))
@@ -42,20 +44,29 @@ if (PRIVATE_VARS.E2E_TEST_SUPPORT_ENABLED) {
  */
 export const backendRpcApp = new Elysia({ name: 'rpc', prefix: '/rpc', normalize: false, strictPath: false })
   .onRequest(({ request, set }) => {
-    const url = new URL(request.url)
-    apiLog(`${request.method} ${url.pathname}`)
+    apiLog('rpc_request %o', {
+      operation: 'rpc_request',
+      ...createSafeRequestLogDetails(request)
+    })
     set.headers['cache-control'] = 'private, no-cache, no-store'
   })
-  .onError(({ code, error, request }) => {
-    const url = new URL(request.url)
+  .onError(({ code, error, request, set }) => {
+    const publicError = mapPublicErrorResponse({ code, error, request })
+    const errorLogDetails = createSafeErrorLogDetails(error)
     rpcLog('rpc_unhandled_error %o', {
-      errorCode: code,
-      errorMessage: safeErrorMessage(error),
-      errorName: error instanceof Error ? error.name : typeof error,
-      errorStack: error instanceof Error ? error.stack : undefined,
-      method: request.method,
-      path: url.pathname
+      error: errorLogDetails,
+      ...(errorLogDetails.code ? { errorCode: errorLogDetails.code } : {}),
+      operation: 'rpc_unhandled_error',
+      publicError: {
+        code: publicError.body.code,
+        status: publicError.status,
+        ...(publicError.body.supportReference ? { supportReference: publicError.body.supportReference } : {})
+      },
+      ...createSafeRequestCorrelationLogDetails(request),
+      ...createSafeRequestLogDetails(request)
     })
+    set.status = publicError.status
+    return publicError.body
   })
   .get('/health', async ({ status }) => {
     await globals()
@@ -64,15 +75,15 @@ export const backendRpcApp = new Elysia({ name: 'rpc', prefix: '/rpc', normalize
   .all('/agent-mail/ingest/v1/:connectionPublicId', ({ params, request }) =>
     handleAgentMailIngestRequest(request, params.connectionPublicId)
   )
-  .all('/auth/api/admin/oauth2', ({ status }) => status(404, { error: 'Not found' }))
-  .all('/auth/api/admin/oauth2/*', ({ status }) => status(404, { error: 'Not found' }))
-  .all('/auth/api/agent/approve-capability', ({ status }) => status(404, { error: 'Not found' }))
-  .all('/auth/api/agent/grant-capability', ({ status }) => status(404, { error: 'Not found' }))
-  .all('/auth/api/agent/revoke-capability', ({ status }) => status(404, { error: 'Not found' }))
+  .all('/auth/api/admin/oauth2', ({ request }) => createRpcPublicNotFoundResponse(request))
+  .all('/auth/api/admin/oauth2/*', ({ request }) => createRpcPublicNotFoundResponse(request))
+  .all('/auth/api/agent/approve-capability', ({ request }) => createRpcPublicNotFoundResponse(request))
+  .all('/auth/api/agent/grant-capability', ({ request }) => createRpcPublicNotFoundResponse(request))
+  .all('/auth/api/agent/revoke-capability', ({ request }) => createRpcPublicNotFoundResponse(request))
   // The Better Auth audit-log plugin exposes a generic insert endpoint for
   // authenticated users. Audit records in this app are server-owned evidence, so
   // user-submitted audit events must not reach the Better Auth mount.
-  .all('/auth/api/audit-log/insert', ({ status }) => status(404, { error: 'Not found' }))
+  .all('/auth/api/audit-log/insert', ({ request }) => createRpcPublicNotFoundResponse(request))
   // Better Auth is mounted at /rpc/auth for browser/internal auth protocol
   // traffic. The handler keeps Better Auth's logical /api base path internal to
   // the mounted request.
@@ -86,5 +97,13 @@ export const backendRpcApp = new Elysia({ name: 'rpc', prefix: '/rpc', normalize
   .use(integrations)
   .use(mail)
   .use(whoami)
+
+function createRpcPublicNotFoundResponse(request: Request): Response {
+  return createPublicErrorResponse({
+    code: HttpStatusCode.NotFound,
+    error: { status: HttpStatusCode.NotFound },
+    request
+  })
+}
 
 export type BackendRpcAppType = typeof backendRpcApp

@@ -22,6 +22,7 @@ import (
 	"mail-control-service/internal/mail/dsn"
 	"mail-control-service/internal/mail/rfc822"
 	"mail-control-service/internal/mail/structured"
+	"mail-control-service/internal/safelog"
 	"mail-control-service/internal/stores/wildduck"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -46,11 +47,6 @@ const (
 	deliveryExisting  = "existing"
 	deliveryReplayed  = "replayed"
 	deliveryForwarded = "forwarded"
-)
-
-var (
-	logArchiveKeyPattern = regexp.MustCompile(`orgs/[A-Za-z0-9_.:-]+/domains/[A-Za-z0-9.-]+/mail/(?:inbound|outbound)/[^\s"']+`)
-	logEmailPattern      = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
 )
 
 type Config struct {
@@ -389,14 +385,14 @@ func (p *Poller) Status(ctx context.Context) Status {
 	domains, err := p.activeDomains(ctx)
 	if err != nil {
 		status.OK = false
-		status.Issues = append(status.Issues, "active_domain_load_failed: "+err.Error())
+		status.Issues = append(status.Issues, safelog.Issue("active_domain_load_failed", err))
 	} else {
 		status.ActiveDomains = len(domains)
 	}
 	queue, err := p.queueStatus(ctx)
 	if err != nil {
 		status.OK = false
-		status.Issues = append(status.Issues, "queue_status_failed: "+err.Error())
+		status.Issues = append(status.Issues, safelog.Issue("queue_status_failed", err))
 		log.Printf("agent-mail-reconciler event=status_degraded dependency=state_store operation=queue_status state_database=%s error=%q", p.cfg.StateMongoDatabase, sanitizeLogError(err))
 	} else {
 		status.Queue = queue
@@ -409,7 +405,7 @@ func (p *Poller) Status(ctx context.Context) Status {
 	lastSweepAt, err := p.lastSweepAt(ctx)
 	if err != nil {
 		status.OK = false
-		status.Issues = append(status.Issues, "sweep_cursor_status_failed: "+err.Error())
+		status.Issues = append(status.Issues, safelog.Issue("sweep_cursor_status_failed", err))
 		log.Printf("agent-mail-reconciler event=status_degraded dependency=state_store operation=last_sweep_at state_database=%s error=%q", p.cfg.StateMongoDatabase, sanitizeLogError(err))
 	} else {
 		status.LastSweepAt = lastSweepAt
@@ -892,7 +888,7 @@ func (p *Poller) writeDSNSubmittedReceipt(ctx context.Context, item workItem, ma
 		DSNAction:         dsn.ActionFailed,
 		DSNDiagnosticCode: failure.diagnosticCode,
 		DeliverySource:    "dsn_submitted",
-		Detail:            failure.err.Error(),
+		Detail:            safelog.Error(failure.err),
 	}
 	if err := p.r2.PutJSON(ctx, item.ResultKey, receipt); err != nil {
 		return retryable(failureTransient, err)
@@ -1372,7 +1368,7 @@ func sanitizeLogError(err error) string {
 	if err == nil {
 		return ""
 	}
-	return sanitizeLogText(err.Error())
+	return safelog.Error(err)
 }
 
 func logMailboxDomain(address string) string {
@@ -1384,13 +1380,7 @@ func logMailboxDomain(address string) string {
 }
 
 func sanitizeLogText(value string) string {
-	message := strings.TrimSpace(strings.Join(strings.Fields(value), " "))
-	message = logArchiveKeyPattern.ReplaceAllString(message, "[archive_key]")
-	message = logEmailPattern.ReplaceAllString(message, "[email]")
-	if len(message) > 240 {
-		return message[:240]
-	}
-	return message
+	return safelog.Text(value)
 }
 
 func classifyProcessingError(err error) classifiedError {

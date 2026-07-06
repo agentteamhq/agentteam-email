@@ -4,6 +4,7 @@ import { toFile } from 'cloudflare/uploads'
 import debug from 'debug'
 import { Webhook } from 'standardwebhooks'
 
+import { createSafeDiagnosticErrorName } from '../auth/log-redaction'
 import { PUBLIC_VARS } from '../vars.public'
 
 import { getCloudflareApiBaseUrl } from './config'
@@ -364,14 +365,19 @@ async function ensureEmailSendingEnabled({
   domain: string
 }): Promise<void> {
   const normalizedDomain = domain.trim().toLowerCase()
-  const sendingSubdomains = await runCloudflareProvisioningOperation('email-sending-subdomain-list', async () => {
-    const results: Array<{ enabled?: boolean; name: string }> = []
-    for await (const subdomain of client.emailSending.subdomains.list({ zone_id: cloudflareZoneId })) {
-      results.push(subdomain)
+  const sendingSubdomains = await runCloudflareProvisioningOperation(
+    'email-sending-subdomain-list',
+    async () => {
+      const results: Array<{ enabled?: boolean; name: string }> = []
+      for await (const subdomain of client.emailSending.subdomains.list({ zone_id: cloudflareZoneId })) {
+        results.push(subdomain)
+      }
+      return results
     }
-    return results
-  })
-  const existing = sendingSubdomains.find((subdomain) => subdomain.name.trim().toLowerCase() === normalizedDomain)
+  )
+  const existing = sendingSubdomains.find(
+    (subdomain) => subdomain.name.trim().toLowerCase() === normalizedDomain
+  )
   log('Cloudflare Email Sending domain lookup completed', {
     cloudflareZoneId,
     domain: normalizedDomain,
@@ -439,7 +445,8 @@ function parseCloudflareEmailSendEnvelope(payload: unknown): {
     success: record.success === true,
     result: {
       delivered: stringArray(result.delivered),
-      messageId: typeof result.message_id === 'string' && result.message_id.trim() !== '' ? result.message_id : null,
+      messageId:
+        typeof result.message_id === 'string' && result.message_id.trim() !== '' ? result.message_id : null,
       permanentBounces: stringArray(result.permanent_bounces),
       queued: stringArray(result.queued)
     }
@@ -630,7 +637,7 @@ function readCloudflareProviderErrors(error: unknown): CloudflareProviderErrorSu
 function cloudflareOperationErrorLogFields(error: unknown) {
   if (error instanceof CloudflareProvisioningOperationError) {
     return {
-      name: error.name,
+      name: createSafeDiagnosticErrorName(error),
       operation: error.cloudflareProvisioningOperation,
       providerErrorCodes: error.cloudflareProviderErrors.flatMap((entry) =>
         entry.code === undefined ? [] : [entry.code]
@@ -644,7 +651,7 @@ function cloudflareOperationErrorLogFields(error: unknown) {
 
   return {
     message: error instanceof Error ? safeProviderErrorMessage(error.message) : undefined,
-    name: error instanceof Error ? error.name : typeof error,
+    name: createSafeDiagnosticErrorName(error),
     status: readErrorNumber(error, 'status')
   }
 }

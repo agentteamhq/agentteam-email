@@ -570,6 +570,7 @@ describe('Agent Mail autonomous trial service', () => {
     expect.hasAssertions()
 
     const dbFailure = new Error('agent host write failed')
+    dbFailure.name = 'AuthError'
     trialServiceTestState.agentHostCreate.mockRejectedValueOnce(dbFailure)
 
     const { startAgentMailTrial } = await import('./trial-service')
@@ -582,13 +583,14 @@ describe('Agent Mail autonomous trial service', () => {
       action: 'agent_mail.trial.provisioning_failed',
       metadata: expect.objectContaining({
         cleanupStatus: 'deleted',
-        errorName: 'Error',
+        errorName: 'object',
         mailboxAddress: expect.stringMatching(/^trial-[a-f0-9]{16}@trial\.example\.test$/u),
         wildDuckUserId: 'wildduck-user-1'
       }),
       severity: 'high',
       status: 'failed'
     })
+    expect(JSON.stringify(trialServiceTestState.auditLogCreate.mock.calls)).not.toContain('AuthError')
   })
 
   it('keeps trial startup writes inside a database transaction when a later DB write fails', async () => {
@@ -626,8 +628,12 @@ describe('Agent Mail autonomous trial service', () => {
   it('reports cleanup failure if the WildDuck trial user cannot be deleted after DB provisioning fails', async () => {
     expect.hasAssertions()
 
-    trialServiceTestState.agentHostCreate.mockRejectedValueOnce(new Error('agent host write failed'))
-    trialServiceTestState.deleteUser.mockRejectedValueOnce(new Error('wildduck delete failed'))
+    const dbFailure = new Error('agent host write failed')
+    dbFailure.name = 'AuthError'
+    const cleanupFailure = new Error('wildduck delete failed')
+    cleanupFailure.name = 'OAuthTokenExchangeError'
+    trialServiceTestState.agentHostCreate.mockRejectedValueOnce(dbFailure)
+    trialServiceTestState.deleteUser.mockRejectedValueOnce(cleanupFailure)
 
     const { startAgentMailTrial } = await import('./trial-service')
 
@@ -637,15 +643,18 @@ describe('Agent Mail autonomous trial service', () => {
     expect(trialServiceTestState.auditLogCreate).toHaveBeenCalledWith({
       action: 'agent_mail.trial.provisioning_failed',
       metadata: expect.objectContaining({
-        cleanupErrorName: 'Error',
+        cleanupErrorName: 'object',
         cleanupStatus: 'failed',
-        errorName: 'Error',
+        errorName: 'object',
         mailboxAddress: expect.stringMatching(/^trial-[a-f0-9]{16}@trial\.example\.test$/u),
         wildDuckUserId: 'wildduck-user-1'
       }),
       severity: 'high',
       status: 'failed'
     })
+    const serializedAuditCalls = JSON.stringify(trialServiceTestState.auditLogCreate.mock.calls)
+    expect(serializedAuditCalls).not.toContain('AuthError')
+    expect(serializedAuditCalls).not.toContain('OAuthTokenExchangeError')
   })
 
   it('requires a signed-in user before looking up an autonomous trial claim token', async () => {

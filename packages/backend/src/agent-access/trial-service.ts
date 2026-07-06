@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { globals } from '../globals'
 import { createWildDuckClient } from '../agent-mail/wildduck-client'
 import { agentMailSubject, buildAgentMailAbility } from '../agent-mail/permission-policy'
+import { createSafeDiagnosticErrorName } from '../auth/log-redaction'
 import { PRIVATE_VARS } from '../vars.private'
 import { PUBLIC_VARS } from '../vars.public'
 import type {
@@ -1131,7 +1132,7 @@ async function auditTrialProvisioningFailure(
 }
 
 function errorName(error: unknown) {
-  return error instanceof Error && error.name ? error.name : typeof error
+  return createSafeDiagnosticErrorName(error)
 }
 
 function readWildDuckUserId(value: { id?: string; user?: string }): string | null {

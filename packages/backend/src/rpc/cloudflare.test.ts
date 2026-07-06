@@ -8,7 +8,10 @@ type CloudflareStartMock = (input: {
 }) => Promise<unknown>
 type CloudflareConnectionMock = (input: { headers: Headers; input: unknown }) => Promise<unknown>
 type CloudflareProvisionMock = (input: { connectionPublicId: string; headers: Headers }) => Promise<unknown>
-type CloudflareRemoveDomainMock = (input: { connectionPublicId: string; headers: Headers }) => Promise<unknown>
+type CloudflareRemoveDomainMock = (input: {
+  connectionPublicId: string
+  headers: Headers
+}) => Promise<unknown>
 type CloudflareDisconnectMock = (input: { grantPublicId: string; headers: Headers }) => Promise<unknown>
 type CloudflareFinalizeMock = (input: { headers: Headers; intentPublicId: string }) => Promise<unknown>
 type CloudflareZonesMock = (input: {
@@ -21,6 +24,12 @@ type IsCloudflareAccessErrorMock = (error: unknown) => error is Error & { status
 const cloudflareRpcTestState = vi.hoisted(() => ({
   applyCloudflareConnectionProvisioning: vi.fn<CloudflareProvisionMock>(),
   connectCloudflareDomain: vi.fn<CloudflareConnectionMock>(),
+  debugFactory: Object.assign(vi.fn(), {
+    disable: vi.fn(),
+    enable: vi.fn(),
+    enabled: vi.fn()
+  }),
+  debugLog: vi.fn(),
   disconnectCloudflare: vi.fn<CloudflareDisconnectMock>(),
   finalizeCloudflareOAuth: vi.fn<CloudflareFinalizeMock>(),
   getCloudflareStatus: vi.fn<CloudflareHeadersMock>(),
@@ -29,6 +38,10 @@ const cloudflareRpcTestState = vi.hoisted(() => ({
   listConnectedCloudflareZones: vi.fn<CloudflareZonesMock>(),
   removeCloudflareDomain: vi.fn<CloudflareRemoveDomainMock>(),
   startCloudflareOAuth: vi.fn<CloudflareStartMock>()
+}))
+
+vi.mock('debug', () => ({
+  default: cloudflareRpcTestState.debugFactory
 }))
 
 vi.mock('../cloudflare/service', () => ({
@@ -54,6 +67,9 @@ describe('Cloudflare RPC routes', () => {
     vi.resetModules()
     cloudflareRpcTestState.applyCloudflareConnectionProvisioning.mockReset()
     cloudflareRpcTestState.connectCloudflareDomain.mockReset()
+    cloudflareRpcTestState.debugFactory.mockClear()
+    cloudflareRpcTestState.debugFactory.mockImplementation(() => cloudflareRpcTestState.debugLog)
+    cloudflareRpcTestState.debugLog.mockReset()
     cloudflareRpcTestState.disconnectCloudflare.mockReset()
     cloudflareRpcTestState.finalizeCloudflareOAuth.mockReset()
     cloudflareRpcTestState.getCloudflareStatus.mockReset()
@@ -322,7 +338,9 @@ describe('Cloudflare RPC routes', () => {
 
     const { default: cloudflare } = await import('./cloudflare')
     const response = await cloudflare.handle(
-      new Request('https://mail.example.com/cloudflare/zones?accountId=cf-account-2&grantPublicId=grant-public-2')
+      new Request(
+        'https://mail.example.com/cloudflare/zones?accountId=cf-account-2&grantPublicId=grant-public-2'
+      )
     )
 
     expect(response.status).toBe(200)
@@ -357,24 +375,116 @@ describe('Cloudflare RPC routes', () => {
     expect(cloudflareRpcTestState.listConnectedCloudflareZones).not.toHaveBeenCalled()
   })
 
-  it('maps Cloudflare access errors without exposing a Bearer challenge for UI routes', async () => {
+  it('maps Cloudflare access errors to generic public copy without exposing a Bearer challenge', async () => {
     expect.hasAssertions()
 
-    const error = new Error('Organization administrator access is required') as Error & {
+    const error = new Error(
+      'Cloudflare OAuth access token sk-cloudflare-secret-token failed for admin@example.test'
+    ) as Error & {
+      code: string
       status: 401 | 403
     }
     error.name = 'CloudflareAccessError'
+    error.code = 'CLOUDFLARE_TOKEN_REJECTED'
     error.status = 403
+    error.stack = 'stack with sk-cloudflare-secret-token and admin@example.test'
     cloudflareRpcTestState.getCloudflareStatus.mockRejectedValue(error)
 
     const { default: cloudflare } = await import('./cloudflare')
-    const response = await cloudflare.handle(new Request('https://mail.example.com/cloudflare/status'))
+    const response = await cloudflare.handle(
+      new Request('https://mail.example.com/cloudflare/status', {
+        headers: {
+          'x-request-id': 'cloudflare_status_req-1'
+        }
+      })
+    )
 
     expect(response.status).toBe(403)
     expect(response.headers.get('www-authenticate')).toBeNull()
-    await expect(response.json()).resolves.toStrictEqual({
-      error: 'Organization administrator access is required'
+    const body = await response.json()
+    expect(body).toStrictEqual({
+      code: 'FORBIDDEN',
+      error: 'Access denied.',
+      supportReference: 'request-id:cloudflare_status_req-1'
     })
+    expect(cloudflareRpcTestState.debugLog).toHaveBeenCalledWith('cloudflare_rpc_error %o', {
+      error: {
+        code: '403',
+        name: 'CloudflareAccessError',
+        status: '403',
+        statusCode: 403,
+        type: 'object'
+      },
+      method: 'GET',
+      operation: 'cloudflare_status',
+      path: '/cloudflare/status',
+      publicError: {
+        code: 'FORBIDDEN',
+        status: 403,
+        supportReference: 'request-id:cloudflare_status_req-1'
+      },
+      requestId: 'cloudflare_status_req-1',
+      status: 403
+    })
+    const serializedResponseBody = JSON.stringify(body)
+    const serializedLogCalls = JSON.stringify(cloudflareRpcTestState.debugLog.mock.calls)
+    expect(serializedResponseBody).not.toContain('sk-cloudflare-secret-token')
+    expect(serializedResponseBody).not.toContain('admin@example.test')
+    expect(serializedResponseBody).not.toContain('Cloudflare OAuth access token')
+    expect(serializedLogCalls).not.toContain('sk-cloudflare-secret-token')
+    expect(serializedLogCalls).not.toContain('admin@example.test')
+    expect(serializedLogCalls).not.toContain('Cloudflare OAuth access token')
+    expect(serializedLogCalls).not.toContain('CLOUDFLARE_TOKEN_REJECTED')
+    expect(serializedLogCalls).not.toContain('stack with')
+  })
+
+  it('maps unexpected Cloudflare provider failures to generic public errors', async () => {
+    expect.hasAssertions()
+
+    const error = new Error('Cloudflare provider returned Bearer provider-token for oauth-code=secret-code')
+    error.name = 'CloudflareProviderError'
+    error.stack = 'provider stack with Bearer provider-token'
+    cloudflareRpcTestState.startCloudflareOAuth.mockRejectedValue(error)
+
+    const { default: cloudflare } = await import('./cloudflare')
+    const response = await cloudflare.handle(
+      new Request('https://mail.example.com/cloudflare/oauth/start', {
+        body: JSON.stringify({ returnTarget: 'settings-domains' }),
+        headers: {
+          'content-type': 'application/json',
+          'x-request-id': 'cloudflare_oauth_start_req-1'
+        },
+        method: 'POST'
+      })
+    )
+
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toStrictEqual({
+      code: 'INTERNAL_SERVER_ERROR',
+      error: 'Internal server error.',
+      supportReference: 'request-id:cloudflare_oauth_start_req-1'
+    })
+    expect(cloudflareRpcTestState.debugLog).toHaveBeenCalledWith('cloudflare_rpc_error %o', {
+      error: {
+        name: 'CloudflareProviderError',
+        type: 'object'
+      },
+      method: 'POST',
+      operation: 'cloudflare_oauth_start',
+      path: '/cloudflare/oauth/start',
+      publicError: {
+        code: 'INTERNAL_SERVER_ERROR',
+        status: 500,
+        supportReference: 'request-id:cloudflare_oauth_start_req-1'
+      },
+      requestId: 'cloudflare_oauth_start_req-1',
+      status: 500
+    })
+    const serializedLogCalls = JSON.stringify(cloudflareRpcTestState.debugLog.mock.calls)
+    expect(serializedLogCalls).not.toContain('provider-token')
+    expect(serializedLogCalls).not.toContain('secret-code')
+    expect(serializedLogCalls).not.toContain('Cloudflare provider returned')
+    expect(serializedLogCalls).not.toContain('provider stack')
   })
 
   it('provisions a connected domain by public connection id', async () => {

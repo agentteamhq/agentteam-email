@@ -53,6 +53,7 @@ import {
 } from './oauth-provider-config'
 import { apiKeyConfigurations } from './api-key-config'
 import { canManageOAuthClientsForSession } from './oauth-client-privileges'
+import { createBetterAuthLogDetails, createSafeErrorLogDetails } from './log-redaction'
 import { createMongoSecondaryStorage } from './secondary-storage'
 import type { AgentSession } from '@better-auth/agent-auth'
 import type { refreshToken as betterAuthRefreshToken } from 'better-auth/api'
@@ -319,7 +320,7 @@ export type GlobalAuth = {
 
 function compareAuthUrls(betterAuthUrl: string, manualUrl: string) {
   log(
-    'compareAuthUrls:',
+    'compareAuthUrls %o',
     createAuthUrlComparisonLogDetails({
       betterAuthBasePath: BETTER_AUTH_BASE_PATH,
       betterAuthUrl,
@@ -327,6 +328,17 @@ function compareAuthUrls(betterAuthUrl: string, manualUrl: string) {
       manualUrl
     })
   )
+}
+
+function logBetterAuthEvent(level: string, message: string, ...args: unknown[]) {
+  log('better_auth_log %o', createBetterAuthLogDetails(level, message, args))
+}
+
+function logBetterAuthApiError(error: unknown) {
+  log('better_auth_api_error %o', {
+    error: createSafeErrorLogDetails(error),
+    operation: 'better_auth_api_error'
+  })
 }
 
 export function createGlobalAuth(db: Database): GlobalAuth {
@@ -477,7 +489,8 @@ export function createGlobalAuth(db: Database): GlobalAuth {
     // traffic and at /api/auth/* for API-client auth protocol traffic.
     basePath: BETTER_AUTH_BASE_PATH,
     onAPIError: {
-      errorURL: AUTH_REDIRECT_ERROR_ROUTE
+      errorURL: AUTH_REDIRECT_ERROR_ROUTE,
+      onError: logBetterAuthApiError
     },
     secret: PRIVATE_VARS.BETTER_AUTH_SECRET,
     secondaryStorage: createMongoSecondaryStorage(db),
@@ -650,7 +663,10 @@ export function createGlobalAuth(db: Database): GlobalAuth {
             // }
           }
         } catch (error) {
-          log('Failed to provision user session:', error)
+          log('failed_to_provision_user_session %o', {
+            error: createSafeErrorLogDetails(error),
+            operation: 'provision_user_session'
+          })
         }
 
         const error = ctx.context.returned
@@ -782,7 +798,8 @@ export function createGlobalAuth(db: Database): GlobalAuth {
     },
     logger: {
       disabled: false,
-      level: 'debug'
+      level: PUBLIC_VARS.PROD ? 'warn' : 'debug',
+      log: logBetterAuthEvent
     }
   })
   return auth

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -20,9 +21,13 @@ import (
 
 type fakeStatusProvider struct {
 	snapshot domainregistry.Snapshot
+	err      error
 }
 
 func (p fakeStatusProvider) Snapshot(now time.Time) (domainregistry.Snapshot, error) {
+	if p.err != nil {
+		return domainregistry.Snapshot{}, p.err
+	}
 	snapshot := p.snapshot
 	snapshot.GeneratedAt = now
 	return snapshot, nil
@@ -135,10 +140,183 @@ func TestStatusRPCValidatesMethod(t *testing.T) {
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 
-	server.Handler().ServeHTTP(response, request)
+	logOutput := captureLogs(t, func() {
+		server.Handler().ServeHTTP(response, request)
+	})
 
 	if response.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("response.Code = %d, want %d", response.Code, http.StatusUnprocessableEntity)
+	}
+	assertGenericControlAPIResponse(t, response.Body.String(),
+		"agentMail.status.get",
+		"agentMail.status.unknown",
+		"method must be",
+		"expected",
+	)
+	for _, want := range []string{
+		"event=rpc_method_validation_failed",
+		"rpc_method=agentMail.status.get",
+		"rpc_id=request-1",
+		"status=422",
+		"received_method=\"agentMail.status.unknown\"",
+	} {
+		if !strings.Contains(logOutput, want) {
+			t.Fatalf("log missing %q: %s", want, logOutput)
+		}
+	}
+}
+
+func TestControlAPIRPCEnvelopeValidationReturnsGenericPublicErrors(t *testing.T) {
+	server := newTestServer(t)
+	invalidMethodIngestBody := validIngestRPCBody(t, "ingest-1", "agentMail.ingest.expected", poller.IngestNotificationSchema)
+	cases := []struct {
+		name       string
+		path       string
+		body       string
+		wantLog    string
+		forbidden  []string
+		wantStatus int
+	}{
+		{
+			name:       "runtime method",
+			path:       "/rpc/agentMail.runtime.sync",
+			body:       `{"jsonrpc":"2.0","id":"runtime-1","method":"agentMail.runtime.expected","params":{"domains":[]}}`,
+			wantLog:    "rpc_method_validation_failed",
+			forbidden:  []string{"agentMail.runtime.sync", "agentMail.runtime.expected", "method must be", "expected"},
+			wantStatus: http.StatusUnprocessableEntity,
+		},
+		{
+			name:       "ingest method",
+			path:       "/rpc/agentMail.ingest.enqueue",
+			body:       invalidMethodIngestBody,
+			wantLog:    "rpc_method_validation_failed",
+			forbidden:  []string{"agentMail.ingest.enqueue", "agentMail.ingest.expected", "method must be", "expected"},
+			wantStatus: http.StatusUnprocessableEntity,
+		},
+		{
+			name:       "worker credentials method",
+			path:       "/rpc/agentMail.worker.archiveCredentials.issue",
+			body:       `{"jsonrpc":"2.0","id":"worker-1","method":"agentMail.worker.expected","params":{"organization_id":"org-1","organization_public_id":"org_pub_123","domain":"example.com","archive_prefix":"orgs/org_pub_123/domains/example.com/mail/inbound","worker_connection_id":"worker-connection-1","worker_domain_deployment_id":"worker-deployment-1"}}`,
+			wantLog:    "rpc_method_validation_failed",
+			forbidden:  []string{"agentMail.worker.archiveCredentials.issue", "agentMail.worker.expected", "method must be", "expected"},
+			wantStatus: http.StatusUnprocessableEntity,
+		},
+		{
+			name:       "send method",
+			path:       "/rpc/agentMail.send.submit",
+			body:       `{"jsonrpc":"2.0","id":"send-1","method":"agentMail.send.expected","params":{"idempotency_key":"send-1","domain":"example.com","from":"agent@example.com","to":"recipient@example.net","raw":"Subject: Test\r\n\r\nBody"}}`,
+			wantLog:    "rpc_method_validation_failed",
+			forbidden:  []string{"agentMail.send.submit", "agentMail.send.expected", "method must be", "expected"},
+			wantStatus: http.StatusUnprocessableEntity,
+		},
+		{
+			name:       "message provenance method",
+			path:       "/rpc/agentMail.message.provenance.get",
+			body:       `{"jsonrpc":"2.0","id":"provenance-1","method":"agentMail.message.provenance.expected","params":{"wildDuckUserId":"user-1","wildDuckMailboxId":"mailbox-1","wildDuckUid":324}}`,
+			wantLog:    "rpc_method_validation_failed",
+			forbidden:  []string{"agentMail.message.provenance.get", "agentMail.message.provenance.expected", "method must be", "expected"},
+			wantStatus: http.StatusUnprocessableEntity,
+		},
+		{
+			name:       "message view method",
+			path:       "/rpc/agentMail.message.view.get",
+			body:       `{"jsonrpc":"2.0","id":"view-1","method":"agentMail.message.view.expected","params":{"wildDuckUserId":"user-1","wildDuckMailboxId":"mailbox-1","wildDuckUid":324}}`,
+			wantLog:    "rpc_method_validation_failed",
+			forbidden:  []string{"agentMail.message.view.get", "agentMail.message.view.expected", "method must be", "expected"},
+			wantStatus: http.StatusUnprocessableEntity,
+		},
+		{
+			name:       "message security method",
+			path:       "/rpc/agentMail.message.security.get",
+			body:       `{"jsonrpc":"2.0","id":"security-1","method":"agentMail.message.security.expected","params":{"wildDuckUserId":"user-1","wildDuckMailboxId":"mailbox-1","wildDuckUid":324}}`,
+			wantLog:    "rpc_method_validation_failed",
+			forbidden:  []string{"agentMail.message.security.get", "agentMail.message.security.expected", "method must be", "expected"},
+			wantStatus: http.StatusUnprocessableEntity,
+		},
+		{
+			name:       "jsonrpc version",
+			path:       "/rpc/agentMail.status.get",
+			body:       `{"jsonrpc":"2.1","id":"status-1","method":"agentMail.status.get","params":{}}`,
+			wantLog:    "rpc_envelope_validation_failed",
+			forbidden:  []string{"jsonrpc must be", "2.0", "2.1", "expected"},
+			wantStatus: http.StatusUnprocessableEntity,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var response *httptest.ResponseRecorder
+			logOutput := captureLogs(t, func() {
+				response = postControlRPC(t, server, tc.path, tc.body)
+			})
+			if response.Code != tc.wantStatus {
+				t.Fatalf("response.Code = %d, want %d, body=%s", response.Code, tc.wantStatus, response.Body.String())
+			}
+			assertGenericControlAPIResponse(t, response.Body.String(), tc.forbidden...)
+			if !strings.Contains(logOutput, tc.wantLog) {
+				t.Fatalf("log missing %q: %s", tc.wantLog, logOutput)
+			}
+		})
+	}
+}
+
+func TestControlAPIErrorResponseIsGenericAndDiagnosticsAreLogged(t *testing.T) {
+	server, err := New(Config{ListenAddress: "127.0.0.1:0"}, fakeStatusProvider{
+		err: errors.New(
+			`status failed for agent.one@example.com raw_key=orgs/org_pub_123/domains/example.com/mail/inbound/2026/07/05/018f0000-0000-7000-8000-000000000000/raw.eml ` +
+				`url=https://r2.example.test/archive?token=example-token access_key_id=example-access-key secret_access_key=example-secret-key`,
+		),
+	}, mustTestProvenance(t))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	body := bytes.NewBufferString(`{"jsonrpc":"2.0","id":"request-1","method":"agentMail.status.get","params":{}}`)
+	request := httptest.NewRequest(http.MethodPost, "/rpc/agentMail.status.get", body)
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+
+	logOutput := captureLogs(t, func() {
+		server.Handler().ServeHTTP(response, request)
+	})
+
+	if response.Code != http.StatusInternalServerError {
+		t.Fatalf("response.Code = %d, want %d, body=%s", response.Code, http.StatusInternalServerError, response.Body.String())
+	}
+	responseBody := response.Body.String()
+	if !strings.Contains(responseBody, publicControlAPIErrorMessage) {
+		t.Fatalf("response missing generic public message: %s", responseBody)
+	}
+	for _, forbidden := range []string{
+		"build status snapshot",
+		"status failed",
+		"[email]",
+		"[archive_key]",
+		"agent.one@example.com",
+		"orgs/org_pub_123",
+		"example-token",
+		"example-access-key",
+		"example-secret-key",
+		"?",
+	} {
+		if strings.Contains(responseBody, forbidden) {
+			t.Fatalf("response exposed %q: %s", forbidden, responseBody)
+		}
+	}
+	for _, want := range []string{"event=status_snapshot_failed", "rpc_method=agentMail.status.get", "rpc_id=request-1", "[email]", "[archive_key]"} {
+		if !strings.Contains(logOutput, want) {
+			t.Fatalf("log missing %q: %s", want, logOutput)
+		}
+	}
+	for _, forbidden := range []string{
+		"agent.one@example.com",
+		"orgs/org_pub_123",
+		"example-token",
+		"example-access-key",
+		"example-secret-key",
+		"?",
+	} {
+		if strings.Contains(logOutput, forbidden) {
+			t.Fatalf("log exposed %q: %s", forbidden, logOutput)
+		}
 	}
 }
 
@@ -166,6 +344,67 @@ func TestOpenAPISpecDocumentsControlContract(t *testing.T) {
 		if !strings.Contains(spec, operation) {
 			t.Fatalf("openapi response missing operation %s: %s", operation, spec)
 		}
+	}
+}
+
+func TestHandlerLogsRequestActivityWithoutQueryOrHeaders(t *testing.T) {
+	server := newTestServer(t)
+	logOutput := captureLogs(t, func() {
+		request := httptest.NewRequest(http.MethodGet, "/healthz?debug_value=example-placeholder", nil)
+		request.Header.Set("Authorization", "Bearer example-placeholder")
+		response := httptest.NewRecorder()
+
+		server.Handler().ServeHTTP(response, request)
+
+		if response.Code != http.StatusOK {
+			t.Fatalf("response.Code = %d, want %d", response.Code, http.StatusOK)
+		}
+	})
+
+	for _, want := range []string{
+		"event=http_request",
+		"method=GET",
+		`path="/healthz"`,
+		"status=200",
+		"duration_ms=",
+	} {
+		if !strings.Contains(logOutput, want) {
+			t.Fatalf("request log missing %q: %s", want, logOutput)
+		}
+	}
+	for _, forbidden := range []string{"debug_value", "example-placeholder", "Authorization"} {
+		if strings.Contains(logOutput, forbidden) {
+			t.Fatalf("request log exposed %q: %s", forbidden, logOutput)
+		}
+	}
+}
+
+func TestRequestLogMiddlewareRecoversPanicWithSanitizedLog(t *testing.T) {
+	handler := requestLogMiddleware("agent-mail-control-api", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		panic("failed for Agent.One+tag@example.com\nwith details")
+	}))
+	logOutput := captureLogs(t, func() {
+		request := httptest.NewRequest(http.MethodGet, "/panic", nil)
+		response := httptest.NewRecorder()
+
+		handler.ServeHTTP(response, request)
+
+		if response.Code != http.StatusInternalServerError {
+			t.Fatalf("response.Code = %d, want %d", response.Code, http.StatusInternalServerError)
+		}
+	})
+
+	if !strings.Contains(logOutput, "event=http_panic") {
+		t.Fatalf("panic log missing: %s", logOutput)
+	}
+	if !strings.Contains(logOutput, "event=http_request_error") {
+		t.Fatalf("request error log missing: %s", logOutput)
+	}
+	if strings.Contains(logOutput, "Agent.One+tag@example.com") {
+		t.Fatalf("panic log exposed email address: %s", logOutput)
+	}
+	if !strings.Contains(logOutput, "[email]") {
+		t.Fatalf("panic log did not include redaction marker: %s", logOutput)
 	}
 }
 
@@ -221,7 +460,70 @@ func TestIngestEnqueueRPCEnqueuesVerifiedNotification(t *testing.T) {
 	}
 }
 
-func TestIngestEnqueueRPCReportsValidationReasonWithoutSecrets(t *testing.T) {
+func TestControlAPIUnavailableModulesReturnGenericPublicErrors(t *testing.T) {
+	server := newTestServer(t)
+	validIngestBody := validIngestRPCBody(t, "ingest-1", ingestEnqueueMethod, poller.IngestNotificationSchema)
+	cases := []struct {
+		name       string
+		path       string
+		body       string
+		wantStatus int
+		wantLog    string
+		forbidden  []string
+	}{
+		{
+			name:       "runtime sync",
+			path:       "/rpc/agentMail.runtime.sync",
+			body:       `{"jsonrpc":"2.0","id":"runtime-1","method":"agentMail.runtime.sync","params":{"domains":[]}}`,
+			wantStatus: http.StatusServiceUnavailable,
+			wantLog:    "event=runtime_sync_unavailable",
+			forbidden:  []string{"runtime sync is not configured"},
+		},
+		{
+			name:       "ingest enqueue",
+			path:       "/rpc/agentMail.ingest.enqueue",
+			body:       validIngestBody,
+			wantStatus: http.StatusServiceUnavailable,
+			wantLog:    "event=ingest_enqueue_unavailable",
+			forbidden:  []string{"ingest enqueue is not configured"},
+		},
+		{
+			name:       "worker archive credentials",
+			path:       "/rpc/agentMail.worker.archiveCredentials.issue",
+			body:       `{"jsonrpc":"2.0","id":"worker-creds-1","method":"agentMail.worker.archiveCredentials.issue","params":{"organization_id":"org-1","organization_public_id":"org_pub_123","domain":"example.com","archive_prefix":"orgs/org_pub_123/domains/example.com/mail/inbound","worker_connection_id":"worker-connection-1","worker_domain_deployment_id":"worker-deployment-1"}}`,
+			wantStatus: http.StatusServiceUnavailable,
+			wantLog:    "event=worker_archive_credentials_unavailable",
+			forbidden:  []string{"worker archive credential issuer is not configured", "orgs/org_pub_123", "worker-connection-1"},
+		},
+		{
+			name:       "send submit",
+			path:       "/rpc/agentMail.send.submit",
+			body:       `{"jsonrpc":"2.0","id":"send-1","method":"agentMail.send.submit","params":{"idempotency_key":"send-1","domain":"example.com","from":"agent@example.com","to":"recipient@example.net","raw":"Subject: Test\r\n\r\nBody"}}`,
+			wantStatus: http.StatusNotImplemented,
+			wantLog:    "event=send_submit_unimplemented",
+			forbidden:  []string{"send submit is not configured", "agent@example.com", "recipient@example.net", "Subject: Test"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var response *httptest.ResponseRecorder
+			logOutput := captureLogs(t, func() {
+				response = postControlRPC(t, server, tc.path, tc.body)
+			})
+			if response.Code != tc.wantStatus {
+				t.Fatalf("response.Code = %d, want %d, body=%s", response.Code, tc.wantStatus, response.Body.String())
+			}
+			assertGenericControlAPIResponse(t, response.Body.String(), tc.forbidden...)
+			for _, want := range []string{tc.wantLog, "error=\"control module unavailable\""} {
+				if !strings.Contains(logOutput, want) {
+					t.Fatalf("log missing %q: %s", want, logOutput)
+				}
+			}
+		})
+	}
+}
+
+func TestIngestEnqueueRPCReportsGenericValidationFailureAndLogsReason(t *testing.T) {
 	ingestID, err := r2archive.NewUUIDv7String()
 	if err != nil {
 		t.Fatalf("NewUUIDv7String: %v", err)
@@ -257,15 +559,209 @@ func TestIngestEnqueueRPCReportsValidationReasonWithoutSecrets(t *testing.T) {
 		}
 	}`
 
-	response := postControlRPC(t, server, "/rpc/agentMail.ingest.enqueue", body)
+	var response *httptest.ResponseRecorder
+	logOutput := captureLogs(t, func() {
+		response = postControlRPC(t, server, "/rpc/agentMail.ingest.enqueue", body)
+	})
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("response.Code = %d, want %d, body=%s", response.Code, http.StatusBadRequest, response.Body.String())
 	}
-	if !strings.Contains(response.Body.String(), "organization_id does not match active domain") {
-		t.Fatalf("response did not include validation reason: %s", response.Body.String())
+	responseBody := response.Body.String()
+	if !strings.Contains(responseBody, publicControlAPIErrorMessage) {
+		t.Fatalf("response missing generic public message: %s", responseBody)
 	}
-	if strings.Contains(response.Body.String(), "worker-secret-key") || strings.Contains(response.Body.String(), "session-token") {
-		t.Fatalf("response exposed credential material: %s", response.Body.String())
+	for _, forbidden := range []string{
+		"enqueue verified ingest notification",
+		"organization_id does not match active domain",
+		"worker-secret-key",
+		"session-token",
+	} {
+		if strings.Contains(responseBody, forbidden) {
+			t.Fatalf("response exposed %q: %s", forbidden, responseBody)
+		}
+	}
+	for _, want := range []string{"event=ingest_enqueue_rejected", "organization_id does not match active domain", "ingest_id=", "recipient_domain=\"example.com\""} {
+		if !strings.Contains(logOutput, want) {
+			t.Fatalf("log missing %q: %s", want, logOutput)
+		}
+	}
+}
+
+func TestIngestEnqueueRPCSchemaMismatchReturnsGenericPublicError(t *testing.T) {
+	ingestID, err := r2archive.NewUUIDv7String()
+	if err != nil {
+		t.Fatalf("NewUUIDv7String: %v", err)
+	}
+	receivedAt, err := r2archive.UUIDv7Time(ingestID)
+	if err != nil {
+		t.Fatalf("UUIDv7Time: %v", err)
+	}
+	bundle, err := r2archive.OrganizationInboundBundleKeys("org_pub_123", "example.com", receivedAt, ingestID)
+	if err != nil {
+		t.Fatalf("OrganizationInboundBundleKeys: %v", err)
+	}
+	ingest := &fakeIngestEnqueuer{}
+	server := newTestServerWithOptions(t, WithIngestEnqueuer(ingest))
+	body := `{
+		"jsonrpc":"2.0",
+		"id":"ingest-schema-1",
+		"method":"agentMail.ingest.enqueue",
+		"params":{
+			"schema":"agent-mail.inbound.unexpected.v1",
+			"organization_id":"org-1",
+			"organization_public_id":"org_pub_123",
+			"archive_prefix":"` + bundle.ArchivePrefix + `",
+			"worker_connection_id":"worker-connection-1",
+			"worker_domain_deployment_id":"worker-deployment-1",
+			"ingest_id":"` + ingestID + `",
+			"recipient_domain":"example.com",
+			"raw_key":"` + bundle.RawKey + `",
+			"edge_key":"` + bundle.EdgeKey + `",
+			"result_key":"` + bundle.ResultKey + `",
+			"received_at":"` + receivedAt.Format(time.RFC3339Nano) + `",
+			"raw_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		}
+	}`
+
+	var response *httptest.ResponseRecorder
+	logOutput := captureLogs(t, func() {
+		response = postControlRPC(t, server, "/rpc/agentMail.ingest.enqueue", body)
+	})
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("response.Code = %d, want %d, body=%s", response.Code, http.StatusBadRequest, response.Body.String())
+	}
+	assertGenericControlAPIResponse(t, response.Body.String(),
+		"agent-mail.inbound.ingest.v1",
+		"agent-mail.inbound.unexpected.v1",
+		"does not match",
+	)
+	for _, want := range []string{"event=ingest_enqueue_rejected", "schema", "ingest_id=", "status=400"} {
+		if !strings.Contains(logOutput, want) {
+			t.Fatalf("log missing %q: %s", want, logOutput)
+		}
+	}
+}
+
+func TestControlAPIPreHandlerValidationErrorIsGeneric(t *testing.T) {
+	server := newTestServer(t)
+	body := `{"jsonrpc":"2.0","id":"ingest-1","method":"agentMail.ingest.enqueue","params":{}}`
+
+	var response *httptest.ResponseRecorder
+	logOutput := captureLogs(t, func() {
+		response = postControlRPC(t, server, "/rpc/agentMail.ingest.enqueue", body)
+	})
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("response.Code = %d, want %d, body=%s", response.Code, http.StatusUnprocessableEntity, response.Body.String())
+	}
+	assertGenericControlAPIResponse(t, response.Body.String(),
+		"validation failed",
+		"expected required property",
+		"archive_prefix",
+		"worker_connection_id",
+		"agent-mail.inbound.ingest.v1",
+	)
+	for _, want := range []string{"event=rpc_error_response_redacted", "rpc_method=agentMail.ingest.enqueue", "operation_id=\"agentMailIngestEnqueue\"", "status=422"} {
+		if !strings.Contains(logOutput, want) {
+			t.Fatalf("log missing %q: %s", want, logOutput)
+		}
+	}
+}
+
+func TestIngestEnqueueRPCRedactsLowerLayerErrorFromResponseAndLogs(t *testing.T) {
+	ingestID, err := r2archive.NewUUIDv7String()
+	if err != nil {
+		t.Fatalf("NewUUIDv7String: %v", err)
+	}
+	receivedAt, err := r2archive.UUIDv7Time(ingestID)
+	if err != nil {
+		t.Fatalf("UUIDv7Time: %v", err)
+	}
+	bundle, err := r2archive.OrganizationInboundBundleKeys("org_pub_123", "example.com", receivedAt, ingestID)
+	if err != nil {
+		t.Fatalf("OrganizationInboundBundleKeys: %v", err)
+	}
+	unsafeErr := errors.New(
+		`validate raw_key ` + bundle.RawKey +
+			`: GET https://r2.example.test/archive?X-Amz-Signature=example-signature&token=example-token ` +
+			`Authorization: Bearer example-bearer Cookie: session=example-cookie mailbox=agent.one@example.com`,
+	)
+	ingest := &fakeIngestEnqueuer{err: unsafeErr}
+	server := newTestServerWithOptions(t, WithIngestEnqueuer(ingest))
+	body := `{
+		"jsonrpc":"2.0",
+		"id":"ingest-1",
+		"method":"agentMail.ingest.enqueue",
+		"params":{
+			"schema":"agent-mail.inbound.ingest.v1",
+			"organization_id":"org-1",
+			"organization_public_id":"org_pub_123",
+			"archive_prefix":"` + bundle.ArchivePrefix + `",
+			"worker_connection_id":"worker-connection-1",
+			"worker_domain_deployment_id":"worker-deployment-1",
+			"ingest_id":"` + ingestID + `",
+			"recipient_domain":"example.com",
+			"raw_key":"` + bundle.RawKey + `",
+			"edge_key":"` + bundle.EdgeKey + `",
+			"result_key":"` + bundle.ResultKey + `",
+			"received_at":"` + receivedAt.Format(time.RFC3339Nano) + `",
+			"raw_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		}
+	}`
+
+	var response *httptest.ResponseRecorder
+	logOutput := captureLogs(t, func() {
+		response = postControlRPC(t, server, "/rpc/agentMail.ingest.enqueue", body)
+	})
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("response.Code = %d, want %d, body=%s", response.Code, http.StatusBadRequest, response.Body.String())
+	}
+	responseBody := response.Body.String()
+	if !strings.Contains(responseBody, publicControlAPIErrorMessage) {
+		t.Fatalf("response missing generic public message: %s", responseBody)
+	}
+	for _, forbidden := range []string{
+		"enqueue verified ingest notification",
+		"validate raw_key",
+		"[archive_key]",
+		"[email]",
+		bundle.RawKey,
+		"X-Amz-Signature",
+		"example-signature",
+		"example-token",
+		"example-bearer",
+		"example-cookie",
+		"agent.one@example.com",
+		"Authorization",
+		"Cookie",
+		"?",
+	} {
+		if strings.Contains(responseBody, forbidden) {
+			t.Fatalf("response exposed %q: %s", forbidden, responseBody)
+		}
+	}
+	for _, want := range []string{"event=ingest_enqueue_rejected", "[archive_key]", "[email]", "ingest_id=", "recipient_domain=\"example.com\""} {
+		if !strings.Contains(logOutput, want) {
+			t.Fatalf("log missing %q: %s", want, logOutput)
+		}
+	}
+	for _, forbidden := range []string{
+		bundle.RawKey,
+		"X-Amz-Signature",
+		"example-signature",
+		"example-token",
+		"example-bearer",
+		"example-cookie",
+		"agent.one@example.com",
+		"Authorization",
+		"Cookie",
+		"?",
+	} {
+		if strings.Contains(logOutput, forbidden) {
+			t.Fatalf("log exposed %q: %s", forbidden, logOutput)
+		}
+	}
+	if !strings.Contains(logOutput, "event=ingest_enqueue_rejected") {
+		t.Fatalf("log missing ingest rejection event: %s", logOutput)
 	}
 }
 
@@ -433,9 +929,24 @@ func TestMessageProvenanceRPCSourceFetchFailureReturnsError(t *testing.T) {
 		}
 	}`
 
-	response := postControlRPC(t, server, "/rpc/agentMail.message.provenance.get", body)
+	var response *httptest.ResponseRecorder
+	logOutput := captureLogs(t, func() {
+		response = postControlRPC(t, server, "/rpc/agentMail.message.provenance.get", body)
+	})
 	if response.Code != http.StatusBadGateway {
 		t.Fatalf("response.Code = %d, want %d, body=%s", response.Code, http.StatusBadGateway, response.Body.String())
+	}
+	responseBody := response.Body.String()
+	if !strings.Contains(responseBody, publicControlAPIErrorMessage) {
+		t.Fatalf("response missing generic public message: %s", responseBody)
+	}
+	if strings.Contains(responseBody, "get message provenance") || strings.Contains(responseBody, "wildduck unavailable") {
+		t.Fatalf("response exposed operation detail: %s", responseBody)
+	}
+	for _, want := range []string{"event=message_provenance_failed", "rpc_method=agentMail.message.provenance.get", "wildduck_user_id=\"user-1\"", "wildduck unavailable"} {
+		if !strings.Contains(logOutput, want) {
+			t.Fatalf("log missing %q: %s", want, logOutput)
+		}
 	}
 }
 
@@ -596,6 +1107,69 @@ func postControlRPC(t *testing.T, server *Server, path string, body string) *htt
 	return response
 }
 
+func validIngestRPCBody(t *testing.T, rpcID string, method string, schema string) string {
+	t.Helper()
+	ingestID, err := r2archive.NewUUIDv7String()
+	if err != nil {
+		t.Fatalf("NewUUIDv7String: %v", err)
+	}
+	receivedAt, err := r2archive.UUIDv7Time(ingestID)
+	if err != nil {
+		t.Fatalf("UUIDv7Time: %v", err)
+	}
+	bundle, err := r2archive.OrganizationInboundBundleKeys("org_pub_123", "example.com", receivedAt, ingestID)
+	if err != nil {
+		t.Fatalf("OrganizationInboundBundleKeys: %v", err)
+	}
+	return `{
+		"jsonrpc":"2.0",
+		"id":"` + rpcID + `",
+		"method":"` + method + `",
+		"params":{
+			"schema":"` + schema + `",
+			"organization_id":"org-1",
+			"organization_public_id":"org_pub_123",
+			"archive_prefix":"` + bundle.ArchivePrefix + `",
+			"worker_connection_id":"worker-connection-1",
+			"worker_domain_deployment_id":"worker-deployment-1",
+			"ingest_id":"` + ingestID + `",
+			"recipient_domain":"example.com",
+			"raw_key":"` + bundle.RawKey + `",
+			"edge_key":"` + bundle.EdgeKey + `",
+			"result_key":"` + bundle.ResultKey + `",
+			"received_at":"` + receivedAt.Format(time.RFC3339Nano) + `",
+			"raw_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		}
+	}`
+}
+
+func captureLogs(t *testing.T, run func()) string {
+	t.Helper()
+	var buffer bytes.Buffer
+	previousOutput := log.Writer()
+	previousFlags := log.Flags()
+	log.SetOutput(&buffer)
+	log.SetFlags(0)
+	t.Cleanup(func() {
+		log.SetOutput(previousOutput)
+		log.SetFlags(previousFlags)
+	})
+	run()
+	return buffer.String()
+}
+
+func assertGenericControlAPIResponse(t *testing.T, responseBody string, forbidden ...string) {
+	t.Helper()
+	if !strings.Contains(responseBody, publicControlAPIErrorMessage) {
+		t.Fatalf("response missing generic public message: %s", responseBody)
+	}
+	for _, value := range forbidden {
+		if strings.Contains(responseBody, value) {
+			t.Fatalf("response exposed %q: %s", value, responseBody)
+		}
+	}
+}
+
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
 	return newTestServerWithOptions(t)
@@ -603,12 +1177,7 @@ func newTestServer(t *testing.T) *Server {
 
 func newTestServerWithOptions(t *testing.T, options ...Option) *Server {
 	t.Helper()
-	source := []byte("Message-ID: <default@example.net>\r\nX-ATM-Ingest-ID: default-ingest\r\n\r\nbody")
-	provenance, err := messageprovenance.New(&fakeMessageSourceFetcher{source: source})
-	if err != nil {
-		t.Fatalf("messageprovenance.New: %v", err)
-	}
-	return newTestServerWithProvenanceAndOptions(t, provenance, options...)
+	return newTestServerWithProvenanceAndOptions(t, mustTestProvenance(t), options...)
 }
 
 func newTestServerWithProvenance(t *testing.T, provenance MessageProvenanceProvider) *Server {
@@ -684,4 +1253,14 @@ func newTestServerWithProvenanceAndOptions(t *testing.T, provenance MessageProve
 		t.Fatalf("New: %v", err)
 	}
 	return server
+}
+
+func mustTestProvenance(t *testing.T) MessageProvenanceProvider {
+	t.Helper()
+	source := []byte("Message-ID: <default@example.net>\r\nX-ATM-Ingest-ID: default-ingest\r\n\r\nbody")
+	provenance, err := messageprovenance.New(&fakeMessageSourceFetcher{source: source})
+	if err != nil {
+		t.Fatalf("messageprovenance.New: %v", err)
+	}
+	return provenance
 }

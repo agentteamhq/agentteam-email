@@ -1,3 +1,4 @@
+import debug from 'debug'
 import { Elysia, t } from 'elysia'
 
 import {
@@ -13,6 +14,12 @@ import {
   removeCloudflareDomain,
   startCloudflareOAuth
 } from '../cloudflare/service'
+import { createSafeErrorLogDetails, createSafeRequestLogDetails } from '../auth/log-redaction'
+import {
+  createSafeRequestCorrelationLogDetails,
+  mapPublicErrorResponse,
+  publicErrorResponseBodySchema
+} from '../public-error-response'
 import { typedResponseSchema } from './response-schema'
 import type {
   CloudflareAccountSummary,
@@ -20,19 +27,32 @@ import type {
   CloudflareZoneSummary,
   FinalizeCloudflareOAuthResult
 } from '../cloudflare/service'
+import type { PublicErrorResponseBody } from '../public-error-response'
 
 const cloudflareErrorResponseSchemas = {
-  401: t.Object({ error: t.String() }),
-  403: t.Object({ error: t.String() })
+  401: publicErrorResponseBodySchema,
+  403: publicErrorResponseBodySchema,
+  500: publicErrorResponseBodySchema
 }
 
 type CloudflareResponseSet = {
   status?: number | string
 }
 type CloudflareResponseHeaders = Record<string, string | number | string[]>
+type CloudflareRpcOperation =
+  | 'cloudflare_accounts'
+  | 'cloudflare_connections_create'
+  | 'cloudflare_connections_provision'
+  | 'cloudflare_connections_remove'
+  | 'cloudflare_disconnect'
+  | 'cloudflare_oauth_finalize'
+  | 'cloudflare_oauth_start'
+  | 'cloudflare_status'
+  | 'cloudflare_zones'
 
 const optionalDateLikeSchema = t.Optional(t.Any())
 const optionalNullableStringSchema = t.Optional(t.Nullable(t.String()))
+const log = debug('app:rpc:cloudflare')
 const cloudflareOAuthReturnTargetSchema = t.Enum(enumObject(CloudflareOAuthReturnTargetValues))
 const cloudflareOAuthGrantResponseSchema = t.Object({
   cloudflareEmail: optionalNullableStringSchema,
@@ -103,7 +123,7 @@ const cloudflare = new Elysia({
         set.headers['content-type'] = 'application/json'
         return responseBody
       } catch (error) {
-        return cloudflareErrorResponse(error, set)
+        return cloudflareErrorResponse(error, set, request, 'cloudflare_oauth_start')
       }
     },
     {
@@ -133,7 +153,7 @@ const cloudflare = new Elysia({
           intentPublicId: body.intentPublicId
         })
       } catch (error) {
-        return cloudflareErrorResponse(error, set)
+        return cloudflareErrorResponse(error, set, request, 'cloudflare_oauth_finalize')
       }
     },
     {
@@ -158,7 +178,7 @@ const cloudflare = new Elysia({
         const accounts = await listConnectedCloudflareAccounts(request.headers)
         return { accounts }
       } catch (error) {
-        return cloudflareErrorResponse(error, set)
+        return cloudflareErrorResponse(error, set, request, 'cloudflare_accounts')
       }
     },
     {
@@ -183,7 +203,7 @@ const cloudflare = new Elysia({
         })
         return { zones }
       } catch (error) {
-        return cloudflareErrorResponse(error, set)
+        return cloudflareErrorResponse(error, set, request, 'cloudflare_zones')
       }
     },
     {
@@ -218,7 +238,7 @@ const cloudflare = new Elysia({
         })
         return { connection }
       } catch (error) {
-        return cloudflareErrorResponse(error, set)
+        return cloudflareErrorResponse(error, set, request, 'cloudflare_connections_create')
       }
     },
     {
@@ -248,7 +268,7 @@ const cloudflare = new Elysia({
         })
         return { connection }
       } catch (error) {
-        return cloudflareErrorResponse(error, set)
+        return cloudflareErrorResponse(error, set, request, 'cloudflare_connections_provision')
       }
     },
     {
@@ -272,7 +292,7 @@ const cloudflare = new Elysia({
           headers: request.headers
         })
       } catch (error) {
-        return cloudflareErrorResponse(error, set)
+        return cloudflareErrorResponse(error, set, request, 'cloudflare_connections_remove')
       }
     },
     {
@@ -291,7 +311,7 @@ const cloudflare = new Elysia({
       try {
         return await getCloudflareStatus(request.headers)
       } catch (error) {
-        return cloudflareErrorResponse(error, set)
+        return cloudflareErrorResponse(error, set, request, 'cloudflare_status')
       }
     },
     {
@@ -310,7 +330,7 @@ const cloudflare = new Elysia({
           headers: request.headers
         })
       } catch (error) {
-        return cloudflareErrorResponse(error, set)
+        return cloudflareErrorResponse(error, set, request, 'cloudflare_disconnect')
       }
     },
     {
@@ -324,12 +344,28 @@ const cloudflare = new Elysia({
     }
   )
 
-function cloudflareErrorResponse(error: unknown, set: CloudflareResponseSet): { error: string } {
-  if (isCloudflareAccessError(error)) {
-    set.status = error.status
-    return { error: error.message }
-  }
-  throw error
+function cloudflareErrorResponse(
+  error: unknown,
+  set: CloudflareResponseSet,
+  request: Request,
+  operation: CloudflareRpcOperation
+): PublicErrorResponseBody {
+  const status = isCloudflareAccessError(error) ? error.status : 500
+  const publicError = mapPublicErrorResponse({ code: status, error, request })
+  set.status = publicError.status
+  log('cloudflare_rpc_error %o', {
+    error: createSafeErrorLogDetails(error),
+    ...createSafeRequestCorrelationLogDetails(request),
+    ...createSafeRequestLogDetails(request),
+    operation,
+    publicError: {
+      code: publicError.body.code,
+      status: publicError.status,
+      ...(publicError.body.supportReference ? { supportReference: publicError.body.supportReference } : {})
+    },
+    status: publicError.status
+  })
+  return publicError.body
 }
 
 function getSetCookieHeaders(headers: Headers): string[] {

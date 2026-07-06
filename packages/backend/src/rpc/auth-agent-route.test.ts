@@ -155,7 +155,29 @@ describe('Better Auth Agent Auth mounted routes', () => {
       )
 
       expect({ path, status: response.status, body: await readJsonResponse(response) }).toStrictEqual({
-        body: { error: 'Not found' },
+        body: {
+          code: 'NOT_FOUND',
+          error: 'Not found.'
+        },
+        path,
+        status: 404
+      })
+    }
+  })
+
+  it('does not expose Better Auth admin OAuth blocklist routes through the RPC auth mount', async () => {
+    expect.hasAssertions()
+
+    const { backendRpcApp } = await import('./index')
+
+    for (const path of ['/rpc/auth/api/admin/oauth2', '/rpc/auth/api/admin/oauth2/client']) {
+      const response = await backendRpcApp.handle(new Request(`https://mail.example.com${path}`))
+
+      expect({ path, status: response.status, body: await readJsonResponse(response) }).toStrictEqual({
+        body: {
+          code: 'NOT_FOUND',
+          error: 'Not found.'
+        },
         path,
         status: 404
       })
@@ -183,7 +205,10 @@ describe('Better Auth Agent Auth mounted routes', () => {
     )
 
     expect(response.status).toBe(404)
-    await expect(readJsonResponse(response)).resolves.toStrictEqual({ error: 'Not found' })
+    await expect(readJsonResponse(response)).resolves.toStrictEqual({
+      code: 'NOT_FOUND',
+      error: 'Not found.'
+    })
   })
 
   it('accepts delegated dynamic agent registration at the public RPC auth mount', async () => {
@@ -525,14 +550,20 @@ describe('Better Auth Agent Auth mounted routes', () => {
         })
       )
 
-      expect({ body: await readJsonResponse(response), path: endpoint.path, status: response.status }).toStrictEqual({
+      expect({
+        body: await readJsonResponse(response),
+        path: endpoint.path,
+        status: response.status
+      }).toStrictEqual({
         body: {
           error: 'invalid_token'
         },
         path: endpoint.path,
         status: 401
       })
-      expect(response.headers.get('www-authenticate'), endpoint.path).toBe('Bearer realm="agentteam-agent-auth"')
+      expect(response.headers.get('www-authenticate'), endpoint.path).toBe(
+        'Bearer realm="agentteam-agent-auth"'
+      )
     }
 
     expect(adapterStore.recordsFor('agentHost')).toStrictEqual([])

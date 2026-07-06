@@ -1,9 +1,15 @@
 import { HttpStatusCode } from '@main/common'
+import debug from 'debug'
 import { z } from 'zod'
 
 import { hasValidControlToWebToken } from '../agent-mail/control-to-web-auth'
+import { createSafeErrorLogDetails, createSafeRequestLogDetails } from '../auth/log-redaction'
+import { createSafeRequestCorrelationLogDetails, mapPublicErrorResponse } from '../public-error-response'
 
 import { CloudflareControlSendError, sendCloudflareRawEmailForControl } from './service'
+import type { PublicErrorResponse } from '../public-error-response'
+
+const log = debug('app:cloudflare:internal-send')
 
 const cloudflareControlSendRawRequestSchema = z.object({
   domain: z.string().min(1),
@@ -18,24 +24,28 @@ const cloudflareControlSendRawRequestSchema = z.object({
 
 export async function handleCloudflareControlSendRawRequest(request: Request): Promise<Response> {
   if (!hasValidControlToWebToken(request)) {
-    return Response.json(
-      { message: 'Unauthorized' },
-      {
-        status: HttpStatusCode.Unauthorized
-      }
-    )
+    return createCloudflareControlSendPublicErrorResponse({
+      request,
+      status: HttpStatusCode.Unauthorized
+    })
   }
 
   let body: unknown
   try {
     body = await request.json()
   } catch {
-    return Response.json({ message: 'Invalid JSON body' }, { status: HttpStatusCode.BadRequest })
+    return createCloudflareControlSendPublicErrorResponse({
+      request,
+      status: HttpStatusCode.BadRequest
+    })
   }
 
   const parsed = cloudflareControlSendRawRequestSchema.safeParse(body)
   if (!parsed.success) {
-    return Response.json({ message: 'Invalid send request' }, { status: HttpStatusCode.BadRequest })
+    return createCloudflareControlSendPublicErrorResponse({
+      request,
+      status: HttpStatusCode.BadRequest
+    })
   }
 
   try {
@@ -52,8 +62,53 @@ export async function handleCloudflareControlSendRawRequest(request: Request): P
     return Response.json(result)
   } catch (error) {
     if (error instanceof CloudflareControlSendError) {
-      return Response.json({ message: error.message }, { status: error.status })
+      const response = createCloudflareControlSendPublicErrorResponse({
+        error,
+        request,
+        status: error.status
+      })
+      return response
     }
     throw error
   }
+}
+
+function createCloudflareControlSendPublicErrorResponse({
+  error,
+  request,
+  status
+}: {
+  error?: unknown
+  request: Request
+  status: number
+}): Response {
+  const publicError = mapPublicErrorResponse({
+    code: status,
+    error: { status },
+    request
+  })
+
+  if (error !== undefined) {
+    logCloudflareControlSendError(error, publicError, request)
+  }
+
+  return Response.json(publicError.body, {
+    status: publicError.status
+  })
+}
+
+function logCloudflareControlSendError(error: unknown, publicError: PublicErrorResponse, request: Request) {
+  const errorLogDetails = createSafeErrorLogDetails(error)
+  log('cloudflare_control_send_raw_failed %o', {
+    error: errorLogDetails,
+    ...(errorLogDetails.code ? { errorCode: errorLogDetails.code } : {}),
+    operation: 'cloudflare_control_send_raw',
+    publicError: {
+      code: publicError.body.code,
+      status: publicError.status,
+      ...(publicError.body.supportReference ? { supportReference: publicError.body.supportReference } : {})
+    },
+    ...createSafeRequestCorrelationLogDetails(request),
+    ...createSafeRequestLogDetails(request)
+  })
 }

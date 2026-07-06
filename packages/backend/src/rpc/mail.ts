@@ -41,8 +41,15 @@ import {
   sendAgentMailMessageForWeb,
   updateAgentMailMessageForWeb
 } from '../agent-mail/webmail-service'
+import { createSafeErrorLogDetails, createSafeRequestLogDetails } from '../auth/log-redaction'
+import {
+  createSafeRequestCorrelationLogDetails,
+  mapPublicErrorResponse,
+  publicErrorResponseBodySchema
+} from '../public-error-response'
 import { typedResponseSchema } from './response-schema'
 import type { TSchema } from '@sinclair/typebox'
+import type { PublicErrorResponse, PublicErrorResponseBody } from '../public-error-response'
 import type {
   AgentMailAdminCreateAgentResult,
   AgentMailAdminDeleteAccountResult,
@@ -168,11 +175,11 @@ const composeBodySchema = t.Object({
 })
 
 const mailErrorResponseSchemas = {
-  400: t.Object({ error: t.String() }),
-  401: t.Object({ error: t.String() }),
-  403: t.Object({ error: t.String() }),
-  404: t.Object({ error: t.String() }),
-  502: t.Object({ error: t.String() })
+  400: publicErrorResponseBodySchema,
+  401: publicErrorResponseBodySchema,
+  403: publicErrorResponseBodySchema,
+  404: publicErrorResponseBodySchema,
+  502: publicErrorResponseBodySchema
 }
 
 const mailSuccessResponseSchema = t.Object({
@@ -478,844 +485,839 @@ export function createMailHttpRoutes() {
     name: 'mail',
     prefix: '/mail'
   })
-  .get(
-    '/admin',
-    async ({ query, request, set }) => {
-      try {
-        return await getAgentMailAdminViewForWeb({
-          headers: mailAuthHeaders(request),
-          page: query.page,
-          pageSize: query.pageSize,
-          searchQuery: query.searchQuery,
-          section: query.section,
-          statusFilter: query.statusFilter
-        })
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      query: t.Object({
-        page: t.Optional(t.Number({ minimum: 1 })),
-        pageSize: t.Optional(t.Number({ maximum: 100, minimum: 1 })),
-        searchQuery: t.Optional(t.String()),
-        section: t.Optional(adminSectionSchema),
-        statusFilter: t.Optional(
-          t.Union([
-            t.Literal('active'),
-            t.Literal('disabled'),
-            t.Literal('limited'),
-            t.Literal('pending'),
-            t.Literal('all')
-          ])
-        )
-      }),
-      response: {
-        200: typedResponseSchema<AgentMailAdminView>(adminViewResponseSchema),
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .get(
-    '/admin/navigation',
-    async ({ request, set }) => {
-      try {
-        return await getAgentMailAdminNavigationForWeb({
-          headers: mailAuthHeaders(request)
-        })
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      response: {
-        200: typedResponseSchema<AgentMailAdminNavigation>(adminNavigationResponseSchema),
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .post(
-    '/admin/accounts',
-    async ({ body, request, set }) => {
-      try {
-        return await createAgentMailAccountForWeb({
-          headers: mailAuthHeaders(request),
-          input: body
-        })
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      body: adminAccountBodySchema,
-      response: {
-        200: typedResponseSchema<AgentMailAdminSaveAccountResult>(adminSaveAccountResponseSchema),
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .patch(
-    '/admin/accounts/:accountId',
-    async ({ body, params, request, set }) => {
-      try {
-        return await updateAgentMailAccountForWeb({
-          accountId: params.accountId,
-          headers: mailAuthHeaders(request),
-          input: body
-        })
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      body: adminAccountUpdateBodySchema,
-      params: accountParamsSchema,
-      response: {
-        200: typedResponseSchema<AgentMailAdminSaveAccountResult>(adminSaveAccountResponseSchema),
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .post(
-    '/admin/accounts/:accountId/disable',
-    async ({ params, request, set }) => {
-      try {
-        return await disableAgentMailAccountForWeb({
-          accountId: params.accountId,
-          headers: mailAuthHeaders(request)
-        })
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      params: accountParamsSchema,
-      response: {
-        200: typedResponseSchema<AgentMailAdminSaveAccountResult>(adminSaveAccountResponseSchema),
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .delete(
-    '/admin/accounts/:accountId',
-    async ({ params, request, set }) => {
-      try {
-        return await deleteAgentMailAccountForWeb({
-          accountId: params.accountId,
-          headers: mailAuthHeaders(request)
-        })
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      params: accountParamsSchema,
-      response: {
-        200: typedResponseSchema<AgentMailAdminDeleteAccountResult>(adminDeleteAccountResponseSchema),
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .post(
-    '/admin/agents',
-    async ({ body, request, set }) => {
-      set.headers['cache-control'] = 'no-store'
-      try {
-        return await createAgentMailAgentEnrollmentForWeb({
-          headers: mailAuthHeaders(request),
-          input: body
-        })
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      body: adminAgentBodySchema,
-      response: {
-        200: typedResponseSchema<AgentMailAdminCreateAgentResult>(adminCreateAgentResponseSchema),
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .patch(
-    '/admin/agents/:agentId',
-    async ({ body, params, request, set }) => {
-      try {
-        return await updateAgentMailAgentForWeb({
-          agentId: params.agentId,
-          headers: mailAuthHeaders(request),
-          input: body
-        })
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      body: adminAgentBodySchema,
-      params: t.Object({
-        agentId: t.String({ minLength: 1 })
-      }),
-      response: {
-        200: typedResponseSchema<AgentMailAdminSaveAgentResult>(adminSaveAgentResponseSchema),
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .post(
-    '/admin/agents/:agentId/mailbox-grants',
-    async ({ body, params, request, set }) => {
-      try {
-        return await updateAgentMailAgentMailboxGrantsForWeb({
-          agentId: params.agentId,
-          headers: mailAuthHeaders(request),
-          input: body
-        })
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      body: adminAgentMailboxGrantBodySchema,
-      params: t.Object({
-        agentId: t.String({ minLength: 1 })
-      }),
-      response: {
-        200: typedResponseSchema<AgentMailAdminSaveAgentMailboxGrantsResult>(adminSaveAgentResponseSchema),
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .post(
-    '/admin/agents/:agentId/permissions',
-    async ({ body, params, request, set }) => {
-      try {
-        return await updateAgentMailAgentSystemPermissionsForWeb({
-          agentId: params.agentId,
-          headers: mailAuthHeaders(request),
-          input: body
-        })
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      body: adminAgentSystemPermissionsBodySchema,
-      params: t.Object({
-        agentId: t.String({ minLength: 1 })
-      }),
-      response: {
-        200: typedResponseSchema<AgentMailAdminSaveAgentPermissionsResult>(adminSaveAgentResponseSchema),
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .post(
-    '/admin/agents/:agentId/revoke',
-    async ({ params, request, set }) => {
-      try {
-        return await revokeAgentMailAgentForWeb({
-          agentId: params.agentId,
-          headers: mailAuthHeaders(request)
-        })
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      params: t.Object({
-        agentId: t.String({ minLength: 1 })
-      }),
-      response: {
-        200: typedResponseSchema<AgentMailAdminRevokeAgentResult>(adminRevokeAgentResponseSchema),
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .post(
-    '/admin/agent-enrollments/:enrollmentId/revoke',
-    async ({ params, request, set }) => {
-      try {
-        return await revokeAgentMailAgentEnrollmentForWeb({
-          enrollmentId: params.enrollmentId,
-          headers: mailAuthHeaders(request)
-        })
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      params: t.Object({
-        enrollmentId: t.String({ minLength: 1 })
-      }),
-      response: {
-        200: typedResponseSchema<AgentMailAdminRevokeAgentEnrollmentResult>(
-          adminRevokeAgentEnrollmentResponseSchema
-        ),
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .post(
-    '/admin/principals/:principalType/:principalId/mailbox-grants',
-    async ({ body, params, request, set }) => {
-      try {
-        return await updateAgentMailPrincipalMailboxGrantsForWeb({
-          headers: mailAuthHeaders(request),
-          input: body,
-          principalId: params.principalId,
-          principalType: params.principalType
-        })
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      body: adminAgentMailboxGrantBodySchema,
-      params: adminGrantPrincipalParamsSchema,
-      response: {
-        200: typedResponseSchema<AgentMailAdminSavePrincipalMailboxGrantsResult>(
-          adminSavePrincipalMailboxGrantsResponseSchema
-        ),
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .post(
-    '/admin/principals/:principalType/:principalId/permissions',
-    async ({ body, params, request, set }) => {
-      try {
-        return await updateAgentMailPrincipalSystemPermissionsForWeb({
-          headers: mailAuthHeaders(request),
-          input: body,
-          principalId: params.principalId,
-          principalType: params.principalType
-        })
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      body: adminAgentSystemPermissionsBodySchema,
-      params: adminGrantPrincipalParamsSchema,
-      response: {
-        200: typedResponseSchema<AgentMailAdminSavePrincipalSystemPermissionsResult>(
-          adminSavePrincipalSystemPermissionsResponseSchema
-        ),
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .post(
-    '/admin/groups',
-    async ({ body, request, set }) => {
-      try {
-        return await createAgentMailForwardingGroupForWeb({
-          headers: mailAuthHeaders(request),
-          input: body
-        })
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      body: adminForwardingGroupBodySchema,
-      response: {
-        200: typedResponseSchema<AgentMailAdminSaveForwardingGroupResult>(adminSaveGroupResponseSchema),
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .patch(
-    '/admin/groups/:groupId',
-    async ({ body, params, request, set }) => {
-      try {
-        return await updateAgentMailForwardingGroupForWeb({
-          groupId: params.groupId,
-          headers: mailAuthHeaders(request),
-          input: body
-        })
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      body: adminForwardingGroupUpdateBodySchema,
-      params: t.Object({
-        groupId: t.String({ minLength: 1 })
-      }),
-      response: {
-        200: typedResponseSchema<AgentMailAdminSaveForwardingGroupResult>(adminSaveGroupResponseSchema),
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .post(
-    '/admin/groups/:groupId/disable',
-    async ({ params, request, set }) => {
-      try {
-        return await disableAgentMailForwardingGroupForWeb({
-          groupId: params.groupId,
-          headers: mailAuthHeaders(request)
-        })
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      params: t.Object({
-        groupId: t.String({ minLength: 1 })
-      }),
-      response: {
-        200: typedResponseSchema<AgentMailAdminSaveForwardingGroupResult>(adminSaveGroupResponseSchema),
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .delete(
-    '/admin/groups/:groupId',
-    async ({ params, request, set }) => {
-      try {
-        return await deleteAgentMailForwardingGroupForWeb({
-          groupId: params.groupId,
-          headers: mailAuthHeaders(request)
-        })
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      params: t.Object({
-        groupId: t.String({ minLength: 1 })
-      }),
-      response: {
-        200: typedResponseSchema<AgentMailAdminDeleteForwardingGroupResult>(
-          adminDeleteGroupResponseSchema
-        ),
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .get(
-    '/accounts',
-    async ({ request, set }) => {
-      try {
-        return await getAgentMailAccountsForWeb(mailAuthHeaders(request))
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      response: {
-        200: typedResponseSchema<Awaited<ReturnType<typeof getAgentMailAccountsForWeb>>>(
-          t.Object({ accounts: t.Array(mailWebAccountResponseSchema) })
-        ),
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .get(
-    '/workspace',
-    async ({ query, request, set }) => {
-      try {
-        return await getAgentMailWorkspaceForWeb({
-          headers: mailAuthHeaders(request),
-          input: {
-            accountId: query.accountId,
-            cursor: query.cursor,
-            direction: query.direction,
-            folderId: query.folderId,
-            limit: query.limit,
-            messageId: query.messageId,
-            query: query.query,
-            unreadOnly: query.unreadOnly
-          }
-        })
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      query: t.Object({
-        accountId: t.Optional(t.String({ minLength: 3 })),
-        cursor: t.Optional(t.String({ minLength: 1 })),
-        direction: t.Optional(t.Union([t.Literal('next'), t.Literal('previous')])),
-        folderId: t.Optional(t.String({ minLength: 1 })),
-        limit: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
-        messageId: t.Optional(t.String({ minLength: 1 })),
-        query: t.Optional(t.String()),
-        unreadOnly: t.Optional(t.Boolean())
-      }),
-      response: {
-        200: typedResponseSchema<AgentMailWebWorkspace>(mailWebWorkspaceResponseSchema),
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .get(
-    '/accounts/:accountId/mailboxes/:mailboxId/messages/:messageId/attachments/:attachmentId',
-    async ({ params, request, set }) => {
-      try {
-        return await getAgentMailAttachmentForWeb({
-          accountId: params.accountId,
-          attachmentId: params.attachmentId,
-          headers: mailAuthHeaders(request),
-          mailboxId: params.mailboxId,
-          messageId: params.messageId
-        })
-      } catch (error) {
-        return mailErrorFetchResponse(error, set)
-      }
-    },
-    {
-      params: t.Object({
-        accountId: t.String({ minLength: 3 }),
-        attachmentId: t.String({ minLength: 1 }),
-        mailboxId: t.String({ minLength: 1 }),
-        messageId: t.String({ minLength: 1 })
-      }),
-      response: {
-        200: t.Any(),
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .get(
-    '/accounts/:accountId/mailboxes/:mailboxId/messages/:messageId/source',
-    async ({ params, request, set }) => {
-      try {
-        return await getAgentMailOriginalSourceForWeb({
-          accountId: params.accountId,
-          headers: mailAuthHeaders(request),
-          mailboxId: params.mailboxId,
-          messageId: params.messageId
-        })
-      } catch (error) {
-        return mailErrorFetchResponse(error, set)
-      }
-    },
-    {
-      params: t.Object({
-        accountId: t.String({ minLength: 3 }),
-        mailboxId: t.String({ minLength: 1 }),
-        messageId: t.String({ minLength: 1 })
-      }),
-      response: {
-        200: t.Any(),
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .get(
-    '/accounts/:accountId/mailboxes/:mailboxId/messages/:messageId/source-preview',
-    async ({ params, request, set }) => {
-      try {
-        const response = await getAgentMailOriginalSourceForWeb({
-          accountId: params.accountId,
-          headers: mailAuthHeaders(request),
-          mailboxId: params.mailboxId,
-          messageId: params.messageId
-        })
-        return await response.text()
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      params: t.Object({
-        accountId: t.String({ minLength: 3 }),
-        mailboxId: t.String({ minLength: 1 }),
-        messageId: t.String({ minLength: 1 })
-      }),
-      response: {
-        200: t.String(),
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .post(
-    '/accounts/:accountId/messages',
-    async ({ body, params, request, set }) => {
-      try {
-        return await sendAgentMailMessageForWeb({
-          headers: mailAuthHeaders(request),
-          input: {
-            accountId: params.accountId,
-            bcc: body.bcc,
-            body: body.body,
-            cc: body.cc,
-            html: body.html,
-            reference: body.reference,
-            replyTo: body.replyTo,
-            subject: body.subject,
-            to: body.to
-          }
-        })
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      body: composeBodySchema,
-      params: accountParamsSchema,
-      response: {
-        200: mailSuccessResponseSchema,
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .post(
-    '/accounts/:accountId/drafts',
-    async ({ body, params, request, set }) => {
-      try {
-        return await saveAgentMailDraftForWeb({
-          headers: mailAuthHeaders(request),
-          input: {
-            accountId: params.accountId,
-            bcc: body.bcc,
-            body: body.body,
-            cc: body.cc,
-            draftMailboxId: body.draftMailboxId,
-            draftMessageId: body.draftMessageId,
-            html: body.html,
-            reference: body.reference,
-            replyTo: body.replyTo,
-            subject: body.subject,
-            to: body.to
-          }
-        })
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      body: t.Intersect([
-        composeBodySchema,
-        t.Object({
-          draftMailboxId: t.Optional(t.String({ minLength: 1 })),
-          draftMessageId: t.Optional(t.String({ minLength: 1 }))
-        })
-      ]),
-      params: accountParamsSchema,
-      response: {
-        200: draftSaveResponseSchema,
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .post(
-    '/accounts/:accountId/mailboxes/:mailboxId/messages/:messageId/send-draft',
-    async ({ params, request, set }) => {
-      try {
-        return await sendAgentMailDraftForWeb({
-          headers: mailAuthHeaders(request),
-          input: params
-        })
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      params: messageParamsSchema,
-      response: {
-        200: mailSuccessResponseSchema,
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .patch(
-    '/accounts/:accountId/mailboxes/:mailboxId/messages/:messageId',
-    async ({ body, params, request, set }) => {
-      try {
-        return await updateAgentMailMessageForWeb({
-          headers: mailAuthHeaders(request),
-          input: {
-            ...params,
-            flagged: body.flagged,
-            seen: body.seen
-          }
-        })
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      body: t.Object({
-        flagged: t.Optional(t.Boolean()),
-        seen: t.Optional(t.Boolean())
-      }),
-      params: messageParamsSchema,
-      response: {
-        200: mailSuccessResponseSchema,
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .post(
-    '/accounts/:accountId/mailboxes/:mailboxId/messages/:messageId/move',
-    async ({ body, params, request, set }) => {
-      try {
-        return await moveAgentMailMessageForWeb({
-          headers: mailAuthHeaders(request),
-          input: {
-            ...params,
-            targetMailboxId: body.targetMailboxId
-          }
-        })
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      body: t.Object({
-        targetMailboxId: t.String({ minLength: 1 })
-      }),
-      params: messageParamsSchema,
-      response: {
-        200: mailSuccessResponseSchema,
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .delete(
-    '/accounts/:accountId/mailboxes/:mailboxId/messages/:messageId',
-    async ({ params, request, set }) => {
-      try {
-        return await deleteAgentMailMessageForWeb({
-          headers: mailAuthHeaders(request),
-          input: params
-        })
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      params: messageParamsSchema,
-      response: {
-        200: mailSuccessResponseSchema,
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .post(
-    '/accounts/:accountId/mailboxes',
-    async ({ body, params, request, set }) => {
-      try {
-        return await createAgentMailFolderForWeb({
-          accountId: params.accountId,
-          headers: mailAuthHeaders(request),
-          name: body.name
-        })
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      body: t.Object({
-        name: t.String({ minLength: 1 })
-      }),
-      params: accountParamsSchema,
-      response: {
-        200: typedResponseSchema<{ folder: AgentMailWebFolder; success: boolean }>(
-          mailFolderMutationResponseSchema
-        ),
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .patch(
-    '/accounts/:accountId/mailboxes/:mailboxId',
-    async ({ body, params, request, set }) => {
-      try {
-        return await renameAgentMailFolderForWeb({
-          accountId: params.accountId,
-          headers: mailAuthHeaders(request),
-          mailboxId: params.mailboxId,
-          name: body.name
-        })
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      body: t.Object({
-        name: t.String({ minLength: 1 })
-      }),
-      params: t.Object({
-        accountId: t.String({ minLength: 3 }),
-        mailboxId: t.String({ minLength: 1 })
-      }),
-      response: {
-        200: typedResponseSchema<{ folder: AgentMailWebFolder; success: boolean }>(
-          mailFolderMutationResponseSchema
-        ),
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .delete(
-    '/accounts/:accountId/mailboxes/:mailboxId',
-    async ({ params, request, set }) => {
-      try {
-        await deleteAgentMailFolderForWeb({
-          accountId: params.accountId,
-          headers: mailAuthHeaders(request),
-          mailboxId: params.mailboxId
-        })
-        return { success: true }
-      } catch (error) {
-        return mailErrorResponse(error, set)
-      }
-    },
-    {
-      params: t.Object({
-        accountId: t.String({ minLength: 3 }),
-        mailboxId: t.String({ minLength: 1 })
-      }),
-      response: {
-        200: mailSuccessResponseSchema,
-        ...mailErrorResponseSchemas
-      }
-    }
-  )
-  .post(
-    '/outbound',
-    async ({ body, request, set }) => {
-      try {
-        return await submitAgentMailOutboundFromWeb({
-          headers: mailAuthHeaders(request),
-          input: {
-            from: body.from,
-            subject: body.subject,
-            text: body.text,
-            to: body.to
-          }
-        })
-      } catch (error) {
-        if (isAgentMailAccessError(error) || isAgentMailWebmailError(error)) {
-          setMailAuthChallenge(error, set)
-          set.status = error.status
-          return { error: error.message }
+    .get(
+      '/admin',
+      async ({ query, request, set }) => {
+        try {
+          return await getAgentMailAdminViewForWeb({
+            headers: mailAuthHeaders(request),
+            page: query.page,
+            pageSize: query.pageSize,
+            searchQuery: query.searchQuery,
+            section: query.section,
+            statusFilter: query.statusFilter
+          })
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
         }
-        set.status = 400
-        return { error: error instanceof Error ? error.message : 'Invalid send request' }
+      },
+      {
+        query: t.Object({
+          page: t.Optional(t.Number({ minimum: 1 })),
+          pageSize: t.Optional(t.Number({ maximum: 100, minimum: 1 })),
+          searchQuery: t.Optional(t.String()),
+          section: t.Optional(adminSectionSchema),
+          statusFilter: t.Optional(
+            t.Union([
+              t.Literal('active'),
+              t.Literal('disabled'),
+              t.Literal('limited'),
+              t.Literal('pending'),
+              t.Literal('all')
+            ])
+          )
+        }),
+        response: {
+          200: typedResponseSchema<AgentMailAdminView>(adminViewResponseSchema),
+          ...mailErrorResponseSchemas
+        }
       }
-    },
-    {
-      body: t.Object({
-        from: t.String({ minLength: 3 }),
-        subject: t.String({ minLength: 1 }),
-        text: t.String({ minLength: 1 }),
-        to: t.Array(t.String({ minLength: 3 }), { minItems: 1 })
-      }),
-      response: {
-        200: typedResponseSchema<Awaited<ReturnType<typeof submitAgentMailOutboundFromWeb>>>(
-          mailOutboundResponseSchema
-        ),
-        ...mailErrorResponseSchemas
+    )
+    .get(
+      '/admin/navigation',
+      async ({ request, set }) => {
+        try {
+          return await getAgentMailAdminNavigationForWeb({
+            headers: mailAuthHeaders(request)
+          })
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        response: {
+          200: typedResponseSchema<AgentMailAdminNavigation>(adminNavigationResponseSchema),
+          ...mailErrorResponseSchemas
+        }
       }
-    }
-  )
-
+    )
+    .post(
+      '/admin/accounts',
+      async ({ body, request, set }) => {
+        try {
+          return await createAgentMailAccountForWeb({
+            headers: mailAuthHeaders(request),
+            input: body
+          })
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        body: adminAccountBodySchema,
+        response: {
+          200: typedResponseSchema<AgentMailAdminSaveAccountResult>(adminSaveAccountResponseSchema),
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .patch(
+      '/admin/accounts/:accountId',
+      async ({ body, params, request, set }) => {
+        try {
+          return await updateAgentMailAccountForWeb({
+            accountId: params.accountId,
+            headers: mailAuthHeaders(request),
+            input: body
+          })
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        body: adminAccountUpdateBodySchema,
+        params: accountParamsSchema,
+        response: {
+          200: typedResponseSchema<AgentMailAdminSaveAccountResult>(adminSaveAccountResponseSchema),
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .post(
+      '/admin/accounts/:accountId/disable',
+      async ({ params, request, set }) => {
+        try {
+          return await disableAgentMailAccountForWeb({
+            accountId: params.accountId,
+            headers: mailAuthHeaders(request)
+          })
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        params: accountParamsSchema,
+        response: {
+          200: typedResponseSchema<AgentMailAdminSaveAccountResult>(adminSaveAccountResponseSchema),
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .delete(
+      '/admin/accounts/:accountId',
+      async ({ params, request, set }) => {
+        try {
+          return await deleteAgentMailAccountForWeb({
+            accountId: params.accountId,
+            headers: mailAuthHeaders(request)
+          })
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        params: accountParamsSchema,
+        response: {
+          200: typedResponseSchema<AgentMailAdminDeleteAccountResult>(adminDeleteAccountResponseSchema),
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .post(
+      '/admin/agents',
+      async ({ body, request, set }) => {
+        set.headers['cache-control'] = 'no-store'
+        try {
+          return await createAgentMailAgentEnrollmentForWeb({
+            headers: mailAuthHeaders(request),
+            input: body
+          })
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        body: adminAgentBodySchema,
+        response: {
+          200: typedResponseSchema<AgentMailAdminCreateAgentResult>(adminCreateAgentResponseSchema),
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .patch(
+      '/admin/agents/:agentId',
+      async ({ body, params, request, set }) => {
+        try {
+          return await updateAgentMailAgentForWeb({
+            agentId: params.agentId,
+            headers: mailAuthHeaders(request),
+            input: body
+          })
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        body: adminAgentBodySchema,
+        params: t.Object({
+          agentId: t.String({ minLength: 1 })
+        }),
+        response: {
+          200: typedResponseSchema<AgentMailAdminSaveAgentResult>(adminSaveAgentResponseSchema),
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .post(
+      '/admin/agents/:agentId/mailbox-grants',
+      async ({ body, params, request, set }) => {
+        try {
+          return await updateAgentMailAgentMailboxGrantsForWeb({
+            agentId: params.agentId,
+            headers: mailAuthHeaders(request),
+            input: body
+          })
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        body: adminAgentMailboxGrantBodySchema,
+        params: t.Object({
+          agentId: t.String({ minLength: 1 })
+        }),
+        response: {
+          200: typedResponseSchema<AgentMailAdminSaveAgentMailboxGrantsResult>(adminSaveAgentResponseSchema),
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .post(
+      '/admin/agents/:agentId/permissions',
+      async ({ body, params, request, set }) => {
+        try {
+          return await updateAgentMailAgentSystemPermissionsForWeb({
+            agentId: params.agentId,
+            headers: mailAuthHeaders(request),
+            input: body
+          })
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        body: adminAgentSystemPermissionsBodySchema,
+        params: t.Object({
+          agentId: t.String({ minLength: 1 })
+        }),
+        response: {
+          200: typedResponseSchema<AgentMailAdminSaveAgentPermissionsResult>(adminSaveAgentResponseSchema),
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .post(
+      '/admin/agents/:agentId/revoke',
+      async ({ params, request, set }) => {
+        try {
+          return await revokeAgentMailAgentForWeb({
+            agentId: params.agentId,
+            headers: mailAuthHeaders(request)
+          })
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        params: t.Object({
+          agentId: t.String({ minLength: 1 })
+        }),
+        response: {
+          200: typedResponseSchema<AgentMailAdminRevokeAgentResult>(adminRevokeAgentResponseSchema),
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .post(
+      '/admin/agent-enrollments/:enrollmentId/revoke',
+      async ({ params, request, set }) => {
+        try {
+          return await revokeAgentMailAgentEnrollmentForWeb({
+            enrollmentId: params.enrollmentId,
+            headers: mailAuthHeaders(request)
+          })
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        params: t.Object({
+          enrollmentId: t.String({ minLength: 1 })
+        }),
+        response: {
+          200: typedResponseSchema<AgentMailAdminRevokeAgentEnrollmentResult>(
+            adminRevokeAgentEnrollmentResponseSchema
+          ),
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .post(
+      '/admin/principals/:principalType/:principalId/mailbox-grants',
+      async ({ body, params, request, set }) => {
+        try {
+          return await updateAgentMailPrincipalMailboxGrantsForWeb({
+            headers: mailAuthHeaders(request),
+            input: body,
+            principalId: params.principalId,
+            principalType: params.principalType
+          })
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        body: adminAgentMailboxGrantBodySchema,
+        params: adminGrantPrincipalParamsSchema,
+        response: {
+          200: typedResponseSchema<AgentMailAdminSavePrincipalMailboxGrantsResult>(
+            adminSavePrincipalMailboxGrantsResponseSchema
+          ),
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .post(
+      '/admin/principals/:principalType/:principalId/permissions',
+      async ({ body, params, request, set }) => {
+        try {
+          return await updateAgentMailPrincipalSystemPermissionsForWeb({
+            headers: mailAuthHeaders(request),
+            input: body,
+            principalId: params.principalId,
+            principalType: params.principalType
+          })
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        body: adminAgentSystemPermissionsBodySchema,
+        params: adminGrantPrincipalParamsSchema,
+        response: {
+          200: typedResponseSchema<AgentMailAdminSavePrincipalSystemPermissionsResult>(
+            adminSavePrincipalSystemPermissionsResponseSchema
+          ),
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .post(
+      '/admin/groups',
+      async ({ body, request, set }) => {
+        try {
+          return await createAgentMailForwardingGroupForWeb({
+            headers: mailAuthHeaders(request),
+            input: body
+          })
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        body: adminForwardingGroupBodySchema,
+        response: {
+          200: typedResponseSchema<AgentMailAdminSaveForwardingGroupResult>(adminSaveGroupResponseSchema),
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .patch(
+      '/admin/groups/:groupId',
+      async ({ body, params, request, set }) => {
+        try {
+          return await updateAgentMailForwardingGroupForWeb({
+            groupId: params.groupId,
+            headers: mailAuthHeaders(request),
+            input: body
+          })
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        body: adminForwardingGroupUpdateBodySchema,
+        params: t.Object({
+          groupId: t.String({ minLength: 1 })
+        }),
+        response: {
+          200: typedResponseSchema<AgentMailAdminSaveForwardingGroupResult>(adminSaveGroupResponseSchema),
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .post(
+      '/admin/groups/:groupId/disable',
+      async ({ params, request, set }) => {
+        try {
+          return await disableAgentMailForwardingGroupForWeb({
+            groupId: params.groupId,
+            headers: mailAuthHeaders(request)
+          })
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        params: t.Object({
+          groupId: t.String({ minLength: 1 })
+        }),
+        response: {
+          200: typedResponseSchema<AgentMailAdminSaveForwardingGroupResult>(adminSaveGroupResponseSchema),
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .delete(
+      '/admin/groups/:groupId',
+      async ({ params, request, set }) => {
+        try {
+          return await deleteAgentMailForwardingGroupForWeb({
+            groupId: params.groupId,
+            headers: mailAuthHeaders(request)
+          })
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        params: t.Object({
+          groupId: t.String({ minLength: 1 })
+        }),
+        response: {
+          200: typedResponseSchema<AgentMailAdminDeleteForwardingGroupResult>(adminDeleteGroupResponseSchema),
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .get(
+      '/accounts',
+      async ({ request, set }) => {
+        try {
+          return await getAgentMailAccountsForWeb(mailAuthHeaders(request))
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        response: {
+          200: typedResponseSchema<Awaited<ReturnType<typeof getAgentMailAccountsForWeb>>>(
+            t.Object({ accounts: t.Array(mailWebAccountResponseSchema) })
+          ),
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .get(
+      '/workspace',
+      async ({ query, request, set }) => {
+        try {
+          return await getAgentMailWorkspaceForWeb({
+            headers: mailAuthHeaders(request),
+            input: {
+              accountId: query.accountId,
+              cursor: query.cursor,
+              direction: query.direction,
+              folderId: query.folderId,
+              limit: query.limit,
+              messageId: query.messageId,
+              query: query.query,
+              unreadOnly: query.unreadOnly
+            }
+          })
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        query: t.Object({
+          accountId: t.Optional(t.String({ minLength: 3 })),
+          cursor: t.Optional(t.String({ minLength: 1 })),
+          direction: t.Optional(t.Union([t.Literal('next'), t.Literal('previous')])),
+          folderId: t.Optional(t.String({ minLength: 1 })),
+          limit: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
+          messageId: t.Optional(t.String({ minLength: 1 })),
+          query: t.Optional(t.String()),
+          unreadOnly: t.Optional(t.Boolean())
+        }),
+        response: {
+          200: typedResponseSchema<AgentMailWebWorkspace>(mailWebWorkspaceResponseSchema),
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .get(
+      '/accounts/:accountId/mailboxes/:mailboxId/messages/:messageId/attachments/:attachmentId',
+      async ({ params, request, set }) => {
+        try {
+          return await getAgentMailAttachmentForWeb({
+            accountId: params.accountId,
+            attachmentId: params.attachmentId,
+            headers: mailAuthHeaders(request),
+            mailboxId: params.mailboxId,
+            messageId: params.messageId
+          })
+        } catch (error) {
+          return mailErrorFetchResponse(error, set, request)
+        }
+      },
+      {
+        params: t.Object({
+          accountId: t.String({ minLength: 3 }),
+          attachmentId: t.String({ minLength: 1 }),
+          mailboxId: t.String({ minLength: 1 }),
+          messageId: t.String({ minLength: 1 })
+        }),
+        response: {
+          200: t.Any(),
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .get(
+      '/accounts/:accountId/mailboxes/:mailboxId/messages/:messageId/source',
+      async ({ params, request, set }) => {
+        try {
+          return await getAgentMailOriginalSourceForWeb({
+            accountId: params.accountId,
+            headers: mailAuthHeaders(request),
+            mailboxId: params.mailboxId,
+            messageId: params.messageId
+          })
+        } catch (error) {
+          return mailErrorFetchResponse(error, set, request)
+        }
+      },
+      {
+        params: t.Object({
+          accountId: t.String({ minLength: 3 }),
+          mailboxId: t.String({ minLength: 1 }),
+          messageId: t.String({ minLength: 1 })
+        }),
+        response: {
+          200: t.Any(),
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .get(
+      '/accounts/:accountId/mailboxes/:mailboxId/messages/:messageId/source-preview',
+      async ({ params, request, set }) => {
+        try {
+          const response = await getAgentMailOriginalSourceForWeb({
+            accountId: params.accountId,
+            headers: mailAuthHeaders(request),
+            mailboxId: params.mailboxId,
+            messageId: params.messageId
+          })
+          return await response.text()
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        params: t.Object({
+          accountId: t.String({ minLength: 3 }),
+          mailboxId: t.String({ minLength: 1 }),
+          messageId: t.String({ minLength: 1 })
+        }),
+        response: {
+          200: t.String(),
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .post(
+      '/accounts/:accountId/messages',
+      async ({ body, params, request, set }) => {
+        try {
+          return await sendAgentMailMessageForWeb({
+            headers: mailAuthHeaders(request),
+            input: {
+              accountId: params.accountId,
+              bcc: body.bcc,
+              body: body.body,
+              cc: body.cc,
+              html: body.html,
+              reference: body.reference,
+              replyTo: body.replyTo,
+              subject: body.subject,
+              to: body.to
+            }
+          })
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        body: composeBodySchema,
+        params: accountParamsSchema,
+        response: {
+          200: mailSuccessResponseSchema,
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .post(
+      '/accounts/:accountId/drafts',
+      async ({ body, params, request, set }) => {
+        try {
+          return await saveAgentMailDraftForWeb({
+            headers: mailAuthHeaders(request),
+            input: {
+              accountId: params.accountId,
+              bcc: body.bcc,
+              body: body.body,
+              cc: body.cc,
+              draftMailboxId: body.draftMailboxId,
+              draftMessageId: body.draftMessageId,
+              html: body.html,
+              reference: body.reference,
+              replyTo: body.replyTo,
+              subject: body.subject,
+              to: body.to
+            }
+          })
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        body: t.Intersect([
+          composeBodySchema,
+          t.Object({
+            draftMailboxId: t.Optional(t.String({ minLength: 1 })),
+            draftMessageId: t.Optional(t.String({ minLength: 1 }))
+          })
+        ]),
+        params: accountParamsSchema,
+        response: {
+          200: draftSaveResponseSchema,
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .post(
+      '/accounts/:accountId/mailboxes/:mailboxId/messages/:messageId/send-draft',
+      async ({ params, request, set }) => {
+        try {
+          return await sendAgentMailDraftForWeb({
+            headers: mailAuthHeaders(request),
+            input: params
+          })
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        params: messageParamsSchema,
+        response: {
+          200: mailSuccessResponseSchema,
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .patch(
+      '/accounts/:accountId/mailboxes/:mailboxId/messages/:messageId',
+      async ({ body, params, request, set }) => {
+        try {
+          return await updateAgentMailMessageForWeb({
+            headers: mailAuthHeaders(request),
+            input: {
+              ...params,
+              flagged: body.flagged,
+              seen: body.seen
+            }
+          })
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        body: t.Object({
+          flagged: t.Optional(t.Boolean()),
+          seen: t.Optional(t.Boolean())
+        }),
+        params: messageParamsSchema,
+        response: {
+          200: mailSuccessResponseSchema,
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .post(
+      '/accounts/:accountId/mailboxes/:mailboxId/messages/:messageId/move',
+      async ({ body, params, request, set }) => {
+        try {
+          return await moveAgentMailMessageForWeb({
+            headers: mailAuthHeaders(request),
+            input: {
+              ...params,
+              targetMailboxId: body.targetMailboxId
+            }
+          })
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        body: t.Object({
+          targetMailboxId: t.String({ minLength: 1 })
+        }),
+        params: messageParamsSchema,
+        response: {
+          200: mailSuccessResponseSchema,
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .delete(
+      '/accounts/:accountId/mailboxes/:mailboxId/messages/:messageId',
+      async ({ params, request, set }) => {
+        try {
+          return await deleteAgentMailMessageForWeb({
+            headers: mailAuthHeaders(request),
+            input: params
+          })
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        params: messageParamsSchema,
+        response: {
+          200: mailSuccessResponseSchema,
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .post(
+      '/accounts/:accountId/mailboxes',
+      async ({ body, params, request, set }) => {
+        try {
+          return await createAgentMailFolderForWeb({
+            accountId: params.accountId,
+            headers: mailAuthHeaders(request),
+            name: body.name
+          })
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        body: t.Object({
+          name: t.String({ minLength: 1 })
+        }),
+        params: accountParamsSchema,
+        response: {
+          200: typedResponseSchema<{ folder: AgentMailWebFolder; success: boolean }>(
+            mailFolderMutationResponseSchema
+          ),
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .patch(
+      '/accounts/:accountId/mailboxes/:mailboxId',
+      async ({ body, params, request, set }) => {
+        try {
+          return await renameAgentMailFolderForWeb({
+            accountId: params.accountId,
+            headers: mailAuthHeaders(request),
+            mailboxId: params.mailboxId,
+            name: body.name
+          })
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        body: t.Object({
+          name: t.String({ minLength: 1 })
+        }),
+        params: t.Object({
+          accountId: t.String({ minLength: 3 }),
+          mailboxId: t.String({ minLength: 1 })
+        }),
+        response: {
+          200: typedResponseSchema<{ folder: AgentMailWebFolder; success: boolean }>(
+            mailFolderMutationResponseSchema
+          ),
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .delete(
+      '/accounts/:accountId/mailboxes/:mailboxId',
+      async ({ params, request, set }) => {
+        try {
+          await deleteAgentMailFolderForWeb({
+            accountId: params.accountId,
+            headers: mailAuthHeaders(request),
+            mailboxId: params.mailboxId
+          })
+          return { success: true }
+        } catch (error) {
+          return mailErrorResponse(error, set, request)
+        }
+      },
+      {
+        params: t.Object({
+          accountId: t.String({ minLength: 3 }),
+          mailboxId: t.String({ minLength: 1 })
+        }),
+        response: {
+          200: mailSuccessResponseSchema,
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
+    .post(
+      '/outbound',
+      async ({ body, request, set }) => {
+        try {
+          return await submitAgentMailOutboundFromWeb({
+            headers: mailAuthHeaders(request),
+            input: {
+              from: body.from,
+              subject: body.subject,
+              text: body.text,
+              to: body.to
+            }
+          })
+        } catch (error) {
+          if (isAgentMailAccessError(error) || isAgentMailWebmailError(error)) {
+            setMailAuthChallenge(error, set)
+            return handledMailErrorResponse(error, set, request, error.status)
+          }
+          return handledMailErrorResponse(error, set, request, 400)
+        }
+      },
+      {
+        body: t.Object({
+          from: t.String({ minLength: 3 }),
+          subject: t.String({ minLength: 1 }),
+          text: t.String({ minLength: 1 }),
+          to: t.Array(t.String({ minLength: 3 }), { minItems: 1 })
+        }),
+        response: {
+          200: typedResponseSchema<Awaited<ReturnType<typeof submitAgentMailOutboundFromWeb>>>(
+            mailOutboundResponseSchema
+          ),
+          ...mailErrorResponseSchemas
+        }
+      }
+    )
 }
 
 type MailResponseSet = {
@@ -1324,33 +1326,62 @@ type MailResponseSet = {
 }
 
 type MailErrorStatusCode = 400 | 401 | 403 | 404 | 502
-type MailErrorBody = { error: string }
+type MailErrorBody = PublicErrorResponseBody
 
-function mailErrorResponse(error: unknown, set: MailResponseSet): MailErrorBody {
+function mailErrorResponse(error: unknown, set: MailResponseSet, request: Request): MailErrorBody {
   if (isAgentMailAccessError(error) || isAgentMailAdminError(error) || isAgentMailWebmailError(error)) {
     setMailAuthChallenge(error, set)
-    set.status = error.status satisfies MailErrorStatusCode
-    return { error: error.message }
+    return handledMailErrorResponse(error, set, request, error.status)
   }
 
   const webmailStatus = agentMailWebErrorStatus(error)
   if (webmailStatus) {
-    set.status = webmailStatus
-    return {
-      error: error instanceof Error ? error.message : 'Mail service failed'
-    }
+    return handledMailErrorResponse(error, set, request, webmailStatus)
   }
 
   log('mail_rpc_unhandled_error %o', {
-    errorMessage: error instanceof Error ? error.message : String(error),
-    errorName: error instanceof Error ? error.name : typeof error,
-    errorStack: error instanceof Error ? error.stack : undefined
+    error: createSafeErrorLogDetails(error),
+    operation: 'mail_rpc_request',
+    ...createSafeRequestCorrelationLogDetails(request),
+    ...createSafeRequestLogDetails(request)
   })
   throw error
 }
 
-function mailErrorFetchResponse(error: unknown, set: MailResponseSet): Response {
-  const body = mailErrorResponse(error, set)
+function handledMailErrorResponse(
+  error: unknown,
+  set: MailResponseSet,
+  request: Request,
+  status: MailErrorStatusCode
+): MailErrorBody {
+  const publicError = mapPublicErrorResponse({
+    code: status,
+    error: { status },
+    request
+  })
+  set.status = publicError.status
+  logMailHandledError(error, publicError, request)
+  return publicError.body
+}
+
+function logMailHandledError(error: unknown, publicError: PublicErrorResponse, request: Request) {
+  const errorLogDetails = createSafeErrorLogDetails(error)
+  log('mail_rpc_handled_error %o', {
+    error: errorLogDetails,
+    ...(errorLogDetails.code ? { errorCode: errorLogDetails.code } : {}),
+    operation: 'mail_rpc_request',
+    publicError: {
+      code: publicError.body.code,
+      status: publicError.status,
+      ...(publicError.body.supportReference ? { supportReference: publicError.body.supportReference } : {})
+    },
+    ...createSafeRequestCorrelationLogDetails(request),
+    ...createSafeRequestLogDetails(request)
+  })
+}
+
+function mailErrorFetchResponse(error: unknown, set: MailResponseSet, request: Request): Response {
+  const body = mailErrorResponse(error, set, request)
   const headers = new Headers()
   const authenticate = set.headers['WWW-Authenticate']
   if (typeof authenticate === 'string') {

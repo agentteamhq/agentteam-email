@@ -1,9 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mailRpcTestState = vi.hoisted(() => ({
+  agentMailWebErrorStatus: vi.fn(),
   createAgentMailAccountForWeb: vi.fn(),
   createAgentMailAgentEnrollmentForWeb: vi.fn(),
   createAgentMailForwardingGroupForWeb: vi.fn(),
+  debugFactory: Object.assign(vi.fn(), {
+    disable: vi.fn(),
+    enable: vi.fn(),
+    enabled: vi.fn()
+  }),
+  debugLog: vi.fn(),
   deleteAgentMailAccountForWeb: vi.fn(),
   deleteAgentMailForwardingGroupForWeb: vi.fn(),
   disableAgentMailAccountForWeb: vi.fn(),
@@ -15,6 +22,7 @@ const mailRpcTestState = vi.hoisted(() => ({
   renameAgentMailFolderForWeb: vi.fn(),
   revokeAgentMailAgentEnrollmentForWeb: vi.fn(),
   revokeAgentMailAgentForWeb: vi.fn(),
+  submitAgentMailOutboundFromWeb: vi.fn(),
   updateAgentMailAccountForWeb: vi.fn(),
   updateAgentMailAgentForWeb: vi.fn(),
   updateAgentMailAgentMailboxGrantsForWeb: vi.fn(),
@@ -25,9 +33,13 @@ const mailRpcTestState = vi.hoisted(() => ({
   disableAgentMailForwardingGroupForWeb: vi.fn()
 }))
 
+vi.mock('debug', () => ({
+  default: mailRpcTestState.debugFactory
+}))
+
 vi.mock('../agent-mail/service', () => ({
   isAgentMailAccessError: (error: unknown) => error instanceof Error && error.name === 'AgentMailAccessError',
-  submitAgentMailOutboundFromWeb: vi.fn()
+  submitAgentMailOutboundFromWeb: mailRpcTestState.submitAgentMailOutboundFromWeb
 }))
 
 vi.mock('../agent-mail/admin-service', () => ({
@@ -54,7 +66,7 @@ vi.mock('../agent-mail/admin-service', () => ({
 }))
 
 vi.mock('../agent-mail/webmail-service', () => ({
-  agentMailWebErrorStatus: vi.fn(() => null),
+  agentMailWebErrorStatus: mailRpcTestState.agentMailWebErrorStatus,
   createAgentMailFolderForWeb: vi.fn(),
   deleteAgentMailFolderForWeb: vi.fn(),
   deleteAgentMailMessageForWeb: vi.fn(),
@@ -78,6 +90,11 @@ describe('mail RPC routes', () => {
     vi.stubEnv('DATABASE_URL', 'mongodb://localhost:27017/app')
     vi.stubEnv('ENCRYPT_SECRET_KEY', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
     vi.stubEnv('PUBLIC_HOSTNAME', 'https://mail.example.com')
+    mailRpcTestState.debugFactory.mockClear()
+    mailRpcTestState.debugFactory.mockImplementation(() => mailRpcTestState.debugLog)
+    mailRpcTestState.debugLog.mockReset()
+    mailRpcTestState.agentMailWebErrorStatus.mockReset()
+    mailRpcTestState.agentMailWebErrorStatus.mockReturnValue(null)
     mailRpcTestState.createAgentMailAccountForWeb.mockReset()
     mailRpcTestState.createAgentMailAgentEnrollmentForWeb.mockReset()
     mailRpcTestState.createAgentMailForwardingGroupForWeb.mockReset()
@@ -93,6 +110,7 @@ describe('mail RPC routes', () => {
     mailRpcTestState.renameAgentMailFolderForWeb.mockReset()
     mailRpcTestState.revokeAgentMailAgentEnrollmentForWeb.mockReset()
     mailRpcTestState.revokeAgentMailAgentForWeb.mockReset()
+    mailRpcTestState.submitAgentMailOutboundFromWeb.mockReset()
     mailRpcTestState.updateAgentMailAccountForWeb.mockReset()
     mailRpcTestState.updateAgentMailAgentForWeb.mockReset()
     mailRpcTestState.updateAgentMailAgentMailboxGrantsForWeb.mockReset()
@@ -254,7 +272,10 @@ describe('mail RPC routes', () => {
 
     expect(response.status).toBe(401)
     expect(response.headers.get('www-authenticate')).toBe('Bearer realm="agentteam-email"')
-    await expect(response.json()).resolves.toStrictEqual({ error: 'Authentication required' })
+    await expect(response.json()).resolves.toStrictEqual({
+      code: 'UNAUTHORIZED',
+      error: 'Authentication is required.'
+    })
 
     const call = mailRpcTestState.getAgentMailWorkspaceForWeb.mock.calls[0]?.[0] as
       | {
@@ -467,7 +488,127 @@ describe('mail RPC routes', () => {
 
     expect(response.status).toBe(403)
     expect(response.headers.get('www-authenticate')).toBeNull()
-    await expect(response.json()).resolves.toStrictEqual({ error: 'Missing exact mailbox grant' })
+    await expect(response.json()).resolves.toStrictEqual({
+      code: 'FORBIDDEN',
+      error: 'Access denied.'
+    })
+  })
+
+  it('redacts status-mapped mail service failures from public responses', async () => {
+    expect.hasAssertions()
+    const error = new Error(
+      'WildDuck returned Authorization Bearer raw-wildduck-token for support@example.test'
+    ) as Error & {
+      statusCode: number
+    }
+    error.name = 'WildDuckAPIError'
+    error.statusCode = 502
+    mailRpcTestState.agentMailWebErrorStatus.mockReturnValue(502)
+    mailRpcTestState.getAgentMailWorkspaceForWeb.mockRejectedValue(error)
+
+    const { default: mail } = await import('./mail')
+    const response = await mail.handle(
+      new Request('https://mail.example.com/mail/workspace', {
+        headers: {
+          'x-request-id': 'mail-request-1'
+        }
+      })
+    )
+
+    expect(response.status).toBe(502)
+    const body = await response.json()
+    expect(body).toStrictEqual({
+      code: 'BAD_GATEWAY',
+      error: 'Upstream service unavailable.',
+      supportReference: 'request-id:mail-request-1'
+    })
+    const serializedBody = JSON.stringify(body)
+    expect(serializedBody).not.toContain('raw-wildduck-token')
+    expect(serializedBody).not.toContain('support@example.test')
+    expect(serializedBody).not.toContain('WildDuck returned')
+  })
+
+  it('returns a generic public send error for outbound lower-layer failures', async () => {
+    expect.hasAssertions()
+    mailRpcTestState.submitAgentMailOutboundFromWeb.mockRejectedValue(
+      new Error('mail-control returned Cookie raw-cookie and raw MIME body')
+    )
+
+    const { default: mail } = await import('./mail')
+    const response = await mail.handle(
+      new Request('https://mail.example.com/mail/outbound', {
+        body: JSON.stringify({
+          from: 'agent@example.test',
+          subject: 'Status',
+          text: 'hello',
+          to: ['recipient@example.net']
+        }),
+        headers: {
+          'content-type': 'application/json',
+          'x-request-id': 'send-request-1'
+        },
+        method: 'POST'
+      })
+    )
+
+    expect(response.status).toBe(400)
+    const body = await response.json()
+    expect(body).toStrictEqual({
+      code: 'BAD_REQUEST',
+      error: 'Invalid request.',
+      supportReference: 'request-id:send-request-1'
+    })
+    const serializedBody = JSON.stringify(body)
+    expect(serializedBody).not.toContain('raw-cookie')
+    expect(serializedBody).not.toContain('raw MIME body')
+    expect(serializedBody).not.toContain('mail-control returned')
+  })
+
+  it('logs unhandled mail RPC failures without raw messages or stacks', async () => {
+    expect.hasAssertions()
+    const error = new Error(
+      'mail-control returned Authorization Bearer raw-mail-token for support@example.test'
+    ) as Error & {
+      code: string
+      statusCode: number
+    }
+    error.name = 'MailControlTransportError'
+    error.code = 'ECONNRESET'
+    error.stack = 'stack with raw-mail-token and support@example.test'
+    error.statusCode = 502
+    mailRpcTestState.getAgentMailAdminViewForWeb.mockRejectedValue(error)
+
+    const { default: mail } = await import('./mail')
+    await mail.handle(new Request('https://mail.example.com/mail/admin')).catch(() => undefined)
+
+    expect(mailRpcTestState.debugLog).toHaveBeenCalledWith(
+      'mail_rpc_unhandled_error %o',
+      expect.objectContaining({
+        error: {
+          code: 'ECONNRESET',
+          name: 'MailControlTransportError',
+          statusCode: 502,
+          type: 'object'
+        },
+        method: 'GET',
+        operation: 'mail_rpc_request',
+        path: '/mail/admin'
+      })
+    )
+    expect(mailRpcTestState.debugLog.mock.calls[0]?.[1]).toMatchObject({
+      error: {
+        code: 'ECONNRESET',
+        name: 'MailControlTransportError',
+        statusCode: 502,
+        type: 'object'
+      },
+      operation: 'mail_rpc_request'
+    })
+    const serializedLogCalls = JSON.stringify(mailRpcTestState.debugLog.mock.calls)
+    expect(serializedLogCalls).not.toContain('support@example.test')
+    expect(serializedLogCalls).not.toContain('raw-mail-token')
+    expect(serializedLogCalls).not.toContain('mail-control returned')
+    expect(serializedLogCalls).not.toContain('stack with')
   })
 
   it('routes folder rename requests through the webserver mail boundary', async () => {
@@ -1052,7 +1193,8 @@ describe('mail RPC routes', () => {
     expect(response.status).toBe(403)
     expect(response.headers.get('www-authenticate')).toBeNull()
     await expect(response.json()).resolves.toStrictEqual({
-      error: 'Missing exact AgentGrant authority'
+      code: 'FORBIDDEN',
+      error: 'Access denied.'
     })
   })
 })

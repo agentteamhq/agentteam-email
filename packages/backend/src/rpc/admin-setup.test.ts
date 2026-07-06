@@ -2,12 +2,22 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const adminSetupTestState = vi.hoisted(() => ({
   countAdminUsersExec: vi.fn(),
+  debugFactory: Object.assign(vi.fn(), {
+    disable: vi.fn(),
+    enable: vi.fn(),
+    enabled: vi.fn()
+  }),
+  debugLog: vi.fn(),
   findUserByIdExec: vi.fn(),
   lockCreate: vi.fn(),
   lockDeleteOne: vi.fn(),
   lockDeleteOneExec: vi.fn(),
   signUpEmail: vi.fn(),
   updateUserExec: vi.fn()
+}))
+
+vi.mock('debug', () => ({
+  default: adminSetupTestState.debugFactory
 }))
 
 vi.mock('../globals', () => ({
@@ -47,6 +57,9 @@ describe('admin setup RPC', () => {
     vi.stubEnv('PUBLIC_HOSTNAME', 'https://mail.example.com')
     adminSetupTestState.countAdminUsersExec.mockReset()
     adminSetupTestState.countAdminUsersExec.mockResolvedValue(0)
+    adminSetupTestState.debugFactory.mockClear()
+    adminSetupTestState.debugFactory.mockImplementation(() => adminSetupTestState.debugLog)
+    adminSetupTestState.debugLog.mockReset()
     adminSetupTestState.findUserByIdExec.mockReset()
     adminSetupTestState.findUserByIdExec.mockResolvedValue({
       _id: 'created-user-id',
@@ -115,6 +128,10 @@ describe('admin setup RPC', () => {
     })
 
     expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toStrictEqual({
+      code: 'CONFLICT',
+      error: 'Request conflict.'
+    })
     expect(adminSetupTestState.signUpEmail).not.toHaveBeenCalled()
   })
 
@@ -132,6 +149,10 @@ describe('admin setup RPC', () => {
     })
 
     expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toStrictEqual({
+      code: 'CONFLICT',
+      error: 'Request conflict.'
+    })
     expect(adminSetupTestState.signUpEmail).not.toHaveBeenCalled()
     expect(adminSetupTestState.lockDeleteOne).toHaveBeenCalledTimes(1)
   })
@@ -139,15 +160,50 @@ describe('admin setup RPC', () => {
   it('releases the first-admin setup lock when Better Auth sign-up fails', async () => {
     expect.hasAssertions()
 
-    adminSetupTestState.signUpEmail.mockRejectedValue(new Error('sign-up failed'))
+    adminSetupTestState.signUpEmail.mockRejectedValue(
+      new Error('sign-up failed with Authorization Bearer raw-auth-token for admin@example.test')
+    )
 
-    const response = await postFirstAdmin({
-      confirmPassword: 'correct horse battery staple',
-      email: 'admin@example.test',
-      password: 'correct horse battery staple'
-    })
+    const response = await postFirstAdmin(
+      {
+        confirmPassword: 'correct horse battery staple',
+        email: 'admin@example.test',
+        password: 'correct horse battery staple'
+      },
+      {
+        'x-request-id': 'first-admin-signup-1'
+      }
+    )
 
     expect(response.status).toBe(400)
+    const body = await response.json()
+    expect(body).toStrictEqual({
+      code: 'BAD_REQUEST',
+      error: 'Invalid request.',
+      supportReference: 'request-id:first-admin-signup-1'
+    })
+    expect(JSON.stringify(body)).not.toContain('raw-auth-token')
+    expect(JSON.stringify(body)).not.toContain('admin@example.test')
+    expect(adminSetupTestState.debugLog).toHaveBeenCalledWith(
+      'first_admin_setup_handled_error %o',
+      expect.objectContaining({
+        error: {
+          name: 'Error',
+          type: 'object'
+        },
+        operation: 'first_admin_setup',
+        publicError: {
+          code: 'BAD_REQUEST',
+          status: 400,
+          supportReference: 'request-id:first-admin-signup-1'
+        },
+        reason: 'better_auth_signup_failed',
+        requestId: 'first-admin-signup-1'
+      })
+    )
+    const serializedLogCalls = JSON.stringify(adminSetupTestState.debugLog.mock.calls)
+    expect(serializedLogCalls).not.toContain('raw-auth-token')
+    expect(serializedLogCalls).not.toContain('admin@example.test')
     expect(adminSetupTestState.lockDeleteOne).toHaveBeenCalledWith({
       expiresAt: { $lte: expect.any(Date) },
       key: 'admin-setup:first-admin'
@@ -168,6 +224,10 @@ describe('admin setup RPC', () => {
     })
 
     expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toStrictEqual({
+      code: 'BAD_REQUEST',
+      error: 'Invalid request.'
+    })
     expect(adminSetupTestState.signUpEmail).not.toHaveBeenCalled()
   })
 
@@ -188,22 +248,30 @@ describe('admin setup RPC', () => {
     })
 
     expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toStrictEqual({
+      code: 'CONFLICT',
+      error: 'Request conflict.'
+    })
     expect(adminSetupTestState.updateUserExec).not.toHaveBeenCalled()
   })
 })
 
-async function postFirstAdmin(body: {
-  confirmPassword: string
-  email: string
-  password: string
-}): Promise<Response> {
+async function postFirstAdmin(
+  body: {
+    confirmPassword: string
+    email: string
+    password: string
+  },
+  headers: Record<string, string> = {}
+): Promise<Response> {
   const { default: adminSetup } = await import('./admin-setup')
 
   return adminSetup.handle(
     new Request('https://mail.example.com/admin/setup/first-admin', {
       body: JSON.stringify(body),
       headers: {
-        'content-type': 'application/json'
+        'content-type': 'application/json',
+        ...headers
       },
       method: 'POST'
     })

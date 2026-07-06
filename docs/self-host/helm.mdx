@@ -127,6 +127,20 @@ controlApi:
 
 Secrets rendered into bundled service config files, such as `mailRuntime.loopSecret` and `mailRuntime.zonemtaRelayPassword`, must use inline `value` entries because those values are rendered into ConfigMaps at install time.
 
+## Logging controls
+
+The web server and mail-control-service emit operational info/error logs to stdout/stderr by default. Leave debug namespaces unset for normal production.
+
+```yaml
+webServer:
+  debug:
+    enabled: false
+    hideDate:
+      value: '1'
+```
+
+Set `webServer.debug.enabled` to `true` only for short-lived web-server diagnostics. Helm renders the safe `app:frontend` namespace only; arbitrary `DEBUG` wildcard patterns are not accepted. The mail-control-service does not require a logging environment variable.
+
 ## Install or upgrade
 
 Render before installing:

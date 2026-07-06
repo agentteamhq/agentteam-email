@@ -7,6 +7,8 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"mail-control-service/internal/archive/r2archive"
@@ -14,6 +16,7 @@ import (
 	"mail-control-service/internal/control/messageprovenance"
 	"mail-control-service/internal/modules/poller"
 	"mail-control-service/internal/registry/domainregistry"
+	"mail-control-service/internal/safelog"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
@@ -28,6 +31,8 @@ const (
 	messageProvenanceMethod = "agentMail.message.provenance.get"
 	messageViewMethod       = "agentMail.message.view.get"
 	messageSecurityMethod   = "agentMail.message.security.get"
+
+	publicControlAPIErrorMessage = "internal control API request failed"
 )
 
 type Config struct {
@@ -116,19 +121,20 @@ func WithSendSubmitter(send SendSubmitter) Option {
 func (s *Server) Run(ctx context.Context) error {
 	listener, err := net.Listen("tcp", s.cfg.ListenAddress)
 	if err != nil {
+		log.Printf("agent-mail-control-api event=listener_failed listen_address=%q error=%q", s.cfg.ListenAddress, safelog.Error(err))
 		return fmt.Errorf("listen for admin API: %w", err)
 	}
 	mux := http.NewServeMux()
 	s.register(mux)
 	server := &http.Server{
 		Addr:              s.cfg.ListenAddress,
-		Handler:           mux,
+		Handler:           requestLogMiddleware("agent-mail-control-api", mux),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Printf("agent-mail-control-api event=listener_start listen_address=%s", s.cfg.ListenAddress)
+		log.Printf("agent-mail-control-api event=listener_start listen_address=%q", s.cfg.ListenAddress)
 		errCh <- server.Serve(listener)
 	}()
 
@@ -137,17 +143,20 @@ func (s *Server) Run(ctx context.Context) error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
+			log.Printf("agent-mail-control-api event=shutdown_failed error=%q", safelog.Error(err))
 			return fmt.Errorf("shutdown admin API: %w", err)
 		}
 		err := <-errCh
 		if err == nil || errors.Is(err, http.ErrServerClosed) {
 			return ctx.Err()
 		}
+		log.Printf("agent-mail-control-api event=listener_failed listen_address=%q error=%q", s.cfg.ListenAddress, safelog.Error(err))
 		return err
 	case err := <-errCh:
 		if err == nil || errors.Is(err, http.ErrServerClosed) {
 			return nil
 		}
+		log.Printf("agent-mail-control-api event=listener_failed listen_address=%q error=%q", s.cfg.ListenAddress, safelog.Error(err))
 		return err
 	}
 }
@@ -155,7 +164,7 @@ func (s *Server) Run(ctx context.Context) error {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	s.register(mux)
-	return mux
+	return requestLogMiddleware("agent-mail-control-api", mux)
 }
 
 func (s *Server) register(mux *http.ServeMux) huma.API {
@@ -163,6 +172,7 @@ func (s *Server) register(mux *http.ServeMux) huma.API {
 	config.OpenAPIPath = "/openapi"
 	config.DocsPath = ""
 	config.SchemasPath = "/schemas"
+	config.Transformers = append(config.Transformers, redactControlRPCErrorTransformer)
 	api := humago.New(mux, config)
 
 	huma.Register(api, huma.Operation{
@@ -253,9 +263,9 @@ type StatusInput struct {
 }
 
 type StatusRPCRequest struct {
-	JSONRPC string       `json:"jsonrpc" enum:"2.0" doc:"JSON-RPC protocol version"`
+	JSONRPC string       `json:"jsonrpc" doc:"JSON-RPC protocol version"`
 	ID      string       `json:"id,omitempty" doc:"Caller-supplied request id"`
-	Method  string       `json:"method" enum:"agentMail.status.get" doc:"RPC method name"`
+	Method  string       `json:"method" doc:"RPC method name"`
 	Params  StatusParams `json:"params"`
 }
 
@@ -278,9 +288,9 @@ type RuntimeSyncInput struct {
 }
 
 type RuntimeSyncRPCRequest struct {
-	JSONRPC string            `json:"jsonrpc" enum:"2.0" doc:"JSON-RPC protocol version"`
+	JSONRPC string            `json:"jsonrpc" doc:"JSON-RPC protocol version"`
 	ID      string            `json:"id,omitempty" doc:"Caller-supplied request id"`
-	Method  string            `json:"method" enum:"agentMail.runtime.sync" doc:"RPC method name"`
+	Method  string            `json:"method" doc:"RPC method name"`
 	Params  RuntimeSyncParams `json:"params"`
 }
 
@@ -308,9 +318,9 @@ type IngestEnqueueInput struct {
 }
 
 type IngestEnqueueRPCRequest struct {
-	JSONRPC string              `json:"jsonrpc" enum:"2.0" doc:"JSON-RPC protocol version"`
+	JSONRPC string              `json:"jsonrpc" doc:"JSON-RPC protocol version"`
 	ID      string              `json:"id,omitempty" doc:"Caller-supplied request id"`
-	Method  string              `json:"method" enum:"agentMail.ingest.enqueue" doc:"RPC method name"`
+	Method  string              `json:"method" doc:"RPC method name"`
 	Params  poller.Notification `json:"params"`
 }
 
@@ -334,9 +344,9 @@ type WorkerArchiveCredentialsInput struct {
 }
 
 type WorkerArchiveCredentialsRPCRequest struct {
-	JSONRPC string                         `json:"jsonrpc" enum:"2.0" doc:"JSON-RPC protocol version"`
+	JSONRPC string                         `json:"jsonrpc" doc:"JSON-RPC protocol version"`
 	ID      string                         `json:"id,omitempty" doc:"Caller-supplied request id"`
-	Method  string                         `json:"method" enum:"agentMail.worker.archiveCredentials.issue" doc:"RPC method name"`
+	Method  string                         `json:"method" doc:"RPC method name"`
 	Params  WorkerArchiveCredentialsParams `json:"params"`
 }
 
@@ -377,9 +387,9 @@ type SendSubmitInput struct {
 }
 
 type SendSubmitRPCRequest struct {
-	JSONRPC string           `json:"jsonrpc" enum:"2.0" doc:"JSON-RPC protocol version"`
+	JSONRPC string           `json:"jsonrpc" doc:"JSON-RPC protocol version"`
 	ID      string           `json:"id,omitempty" doc:"Caller-supplied request id"`
-	Method  string           `json:"method" enum:"agentMail.send.submit" doc:"RPC method name"`
+	Method  string           `json:"method" doc:"RPC method name"`
 	Params  SendSubmitParams `json:"params"`
 }
 
@@ -411,9 +421,9 @@ type MessageProvenanceInput struct {
 }
 
 type MessageProvenanceRPCRequest struct {
-	JSONRPC string                   `json:"jsonrpc" enum:"2.0" doc:"JSON-RPC protocol version"`
+	JSONRPC string                   `json:"jsonrpc" doc:"JSON-RPC protocol version"`
 	ID      string                   `json:"id,omitempty" doc:"Caller-supplied request id"`
-	Method  string                   `json:"method" enum:"agentMail.message.provenance.get" doc:"RPC method name"`
+	Method  string                   `json:"method" doc:"RPC method name"`
 	Params  messageprovenance.Params `json:"params"`
 }
 
@@ -432,9 +442,9 @@ type MessageViewInput struct {
 }
 
 type MessageViewRPCRequest struct {
-	JSONRPC string                       `json:"jsonrpc" enum:"2.0" doc:"JSON-RPC protocol version"`
+	JSONRPC string                       `json:"jsonrpc" doc:"JSON-RPC protocol version"`
 	ID      string                       `json:"id,omitempty" doc:"Caller-supplied request id"`
-	Method  string                       `json:"method" enum:"agentMail.message.view.get" doc:"RPC method name"`
+	Method  string                       `json:"method" doc:"RPC method name"`
 	Params  messageprovenance.ViewParams `json:"params"`
 }
 
@@ -453,9 +463,9 @@ type MessageSecurityInput struct {
 }
 
 type MessageSecurityRPCRequest struct {
-	JSONRPC string                   `json:"jsonrpc" enum:"2.0" doc:"JSON-RPC protocol version"`
+	JSONRPC string                   `json:"jsonrpc" doc:"JSON-RPC protocol version"`
 	ID      string                   `json:"id,omitempty" doc:"Caller-supplied request id"`
-	Method  string                   `json:"method" enum:"agentMail.message.security.get" doc:"RPC method name"`
+	Method  string                   `json:"method" doc:"RPC method name"`
 	Params  messageprovenance.Params `json:"params"`
 }
 
@@ -478,15 +488,13 @@ type HealthResponse struct {
 }
 
 func (s *Server) handleStatus(ctx context.Context, input *StatusInput) (*StatusOutput, error) {
-	if input.Body.JSONRPC != "2.0" {
-		return nil, huma.Error400BadRequest("jsonrpc must be 2.0")
-	}
-	if input.Body.Method != statusRPCMethod {
-		return nil, huma.Error400BadRequest("method must be agentMail.status.get")
+	if err := validateRPCEnvelope(input.Body.JSONRPC, input.Body.Method, input.Body.ID, statusRPCMethod); err != nil {
+		return nil, err
 	}
 	snapshot, err := s.provider.Snapshot(time.Now().UTC())
 	if err != nil {
-		return nil, huma.Error500InternalServerError("build status snapshot", err)
+		logControlAPIError("status_snapshot_failed", statusRPCMethod, input.Body.ID, http.StatusInternalServerError, err)
+		return nil, publicControlAPIError(http.StatusInternalServerError)
 	}
 	if !input.Body.Params.IncludeSourceFiles {
 		snapshot.SourceFiles = domainregistry.SourceFiles{}
@@ -501,18 +509,31 @@ func (s *Server) handleStatus(ctx context.Context, input *StatusInput) (*StatusO
 }
 
 func (s *Server) handleRuntimeSync(ctx context.Context, input *RuntimeSyncInput) (*RuntimeSyncOutput, error) {
-	if input.Body.JSONRPC != "2.0" {
-		return nil, huma.Error400BadRequest("jsonrpc must be 2.0")
-	}
-	if input.Body.Method != runtimeSyncMethod {
-		return nil, huma.Error400BadRequest("method must be agentMail.runtime.sync")
+	if err := validateRPCEnvelope(input.Body.JSONRPC, input.Body.Method, input.Body.ID, runtimeSyncMethod); err != nil {
+		return nil, err
 	}
 	if s.runtime == nil {
-		return nil, huma.Error503ServiceUnavailable("runtime sync is not configured")
+		logControlAPIError(
+			"runtime_sync_unavailable",
+			runtimeSyncMethod,
+			input.Body.ID,
+			http.StatusServiceUnavailable,
+			errors.New("control module unavailable"),
+			logField{name: "module", value: "runtime_sync"},
+		)
+		return nil, publicControlAPIError(http.StatusServiceUnavailable)
 	}
 	result, err := s.runtime.SyncRuntime(ctx, input.Body.Params, time.Now().UTC())
 	if err != nil {
-		return nil, huma.Error400BadRequest("sync runtime projection", err)
+		logControlAPIError(
+			"runtime_sync_rejected",
+			runtimeSyncMethod,
+			input.Body.ID,
+			http.StatusBadRequest,
+			err,
+			logField{name: "domains_count", value: fmt.Sprint(len(input.Body.Params.Domains))},
+		)
+		return nil, publicControlAPIError(http.StatusBadRequest)
 	}
 	return &RuntimeSyncOutput{
 		Body: RuntimeSyncRPCResponse{
@@ -524,25 +545,33 @@ func (s *Server) handleRuntimeSync(ctx context.Context, input *RuntimeSyncInput)
 }
 
 func (s *Server) handleIngestEnqueue(ctx context.Context, input *IngestEnqueueInput) (*IngestEnqueueOutput, error) {
-	if input.Body.JSONRPC != "2.0" {
-		return nil, huma.Error400BadRequest("jsonrpc must be 2.0")
-	}
-	if input.Body.Method != ingestEnqueueMethod {
-		return nil, huma.Error400BadRequest("method must be agentMail.ingest.enqueue")
+	if err := validateRPCEnvelope(input.Body.JSONRPC, input.Body.Method, input.Body.ID, ingestEnqueueMethod); err != nil {
+		return nil, err
 	}
 	if s.ingest == nil {
-		return nil, huma.Error503ServiceUnavailable("ingest enqueue is not configured")
+		logControlAPIError(
+			"ingest_enqueue_unavailable",
+			ingestEnqueueMethod,
+			input.Body.ID,
+			http.StatusServiceUnavailable,
+			errors.New("control module unavailable"),
+			logField{name: "module", value: "ingest_enqueue"},
+		)
+		return nil, publicControlAPIError(http.StatusServiceUnavailable)
 	}
 	bundle, err := s.ingest.EnqueueNotification(ctx, input.Body.Params)
 	if err != nil {
-		log.Printf(
-			"agent-mail-control-api event=ingest_enqueue_rejected ingest_id=%s recipient_domain=%s worker_connection_id=%s error=%q",
-			input.Body.Params.IngestID,
-			input.Body.Params.RecipientDomain,
-			input.Body.Params.WorkerConnectionID,
+		logControlAPIError(
+			"ingest_enqueue_rejected",
+			ingestEnqueueMethod,
+			input.Body.ID,
+			http.StatusBadRequest,
 			err,
+			logField{name: "ingest_id", value: input.Body.Params.IngestID},
+			logField{name: "recipient_domain", value: input.Body.Params.RecipientDomain},
+			logField{name: "worker_connection_id", value: input.Body.Params.WorkerConnectionID},
 		)
-		return nil, huma.Error400BadRequest(fmt.Sprintf("enqueue verified ingest notification: %s", err.Error()))
+		return nil, publicControlAPIError(http.StatusBadRequest)
 	}
 	return &IngestEnqueueOutput{
 		Body: IngestEnqueueRPCResponse{
@@ -557,18 +586,33 @@ func (s *Server) handleIngestEnqueue(ctx context.Context, input *IngestEnqueueIn
 }
 
 func (s *Server) handleWorkerArchiveCredentials(ctx context.Context, input *WorkerArchiveCredentialsInput) (*WorkerArchiveCredentialsOutput, error) {
-	if input.Body.JSONRPC != "2.0" {
-		return nil, huma.Error400BadRequest("jsonrpc must be 2.0")
-	}
-	if input.Body.Method != workerArchiveCredMethod {
-		return nil, huma.Error400BadRequest("method must be agentMail.worker.archiveCredentials.issue")
+	if err := validateRPCEnvelope(input.Body.JSONRPC, input.Body.Method, input.Body.ID, workerArchiveCredMethod); err != nil {
+		return nil, err
 	}
 	if s.credentials == nil {
-		return nil, huma.Error503ServiceUnavailable("worker archive credential issuer is not configured")
+		logControlAPIError(
+			"worker_archive_credentials_unavailable",
+			workerArchiveCredMethod,
+			input.Body.ID,
+			http.StatusServiceUnavailable,
+			errors.New("control module unavailable"),
+			logField{name: "module", value: "worker_archive_credentials"},
+		)
+		return nil, publicControlAPIError(http.StatusServiceUnavailable)
 	}
 	result, err := s.credentials.IssueWorkerArchiveCredentials(ctx, input.Body.Params, time.Now().UTC())
 	if err != nil {
-		return nil, huma.Error400BadRequest("issue worker archive credentials", err)
+		logControlAPIError(
+			"worker_archive_credentials_issue_failed",
+			workerArchiveCredMethod,
+			input.Body.ID,
+			http.StatusBadRequest,
+			err,
+			logField{name: "organization_public_id", value: input.Body.Params.OrganizationPublicID},
+			logField{name: "domain", value: input.Body.Params.Domain},
+			logField{name: "worker_connection_id", value: input.Body.Params.WorkerConnectionID},
+		)
+		return nil, publicControlAPIError(http.StatusBadRequest)
 	}
 	return &WorkerArchiveCredentialsOutput{
 		Body: WorkerArchiveCredentialsRPCResponse{
@@ -580,18 +624,34 @@ func (s *Server) handleWorkerArchiveCredentials(ctx context.Context, input *Work
 }
 
 func (s *Server) handleSendSubmit(ctx context.Context, input *SendSubmitInput) (*SendSubmitOutput, error) {
-	if input.Body.JSONRPC != "2.0" {
-		return nil, huma.Error400BadRequest("jsonrpc must be 2.0")
-	}
-	if input.Body.Method != sendSubmitMethod {
-		return nil, huma.Error400BadRequest("method must be agentMail.send.submit")
+	if err := validateRPCEnvelope(input.Body.JSONRPC, input.Body.Method, input.Body.ID, sendSubmitMethod); err != nil {
+		return nil, err
 	}
 	if s.send == nil {
-		return nil, huma.Error501NotImplemented("send submit is not configured")
+		logControlAPIError(
+			"send_submit_unimplemented",
+			sendSubmitMethod,
+			input.Body.ID,
+			http.StatusNotImplemented,
+			errors.New("control module unavailable"),
+			logField{name: "module", value: "send_submit"},
+		)
+		return nil, publicControlAPIError(http.StatusNotImplemented)
 	}
 	result, err := s.send.SubmitSend(ctx, input.Body.Params, time.Now().UTC())
 	if err != nil {
-		return nil, huma.Error400BadRequest("submit send", err)
+		logControlAPIError(
+			"send_submit_rejected",
+			sendSubmitMethod,
+			input.Body.ID,
+			http.StatusBadRequest,
+			err,
+			logField{name: "idempotency_key", value: input.Body.Params.IdempotencyKey},
+			logField{name: "domain", value: input.Body.Params.Domain},
+			logField{name: "from", value: input.Body.Params.From},
+			logField{name: "to", value: input.Body.Params.To},
+		)
+		return nil, publicControlAPIError(http.StatusBadRequest)
 	}
 	return &SendSubmitOutput{
 		Body: SendSubmitRPCResponse{
@@ -603,15 +663,23 @@ func (s *Server) handleSendSubmit(ctx context.Context, input *SendSubmitInput) (
 }
 
 func (s *Server) handleMessageProvenance(ctx context.Context, input *MessageProvenanceInput) (*MessageProvenanceOutput, error) {
-	if input.Body.JSONRPC != "2.0" {
-		return nil, huma.Error400BadRequest("jsonrpc must be 2.0")
-	}
-	if input.Body.Method != messageProvenanceMethod {
-		return nil, huma.Error400BadRequest("method must be agentMail.message.provenance.get")
+	if err := validateRPCEnvelope(input.Body.JSONRPC, input.Body.Method, input.Body.ID, messageProvenanceMethod); err != nil {
+		return nil, err
 	}
 	result, err := s.provenance.Get(ctx, input.Body.Params)
 	if err != nil {
-		return nil, huma.Error502BadGateway("get message provenance", err)
+		logControlAPIError(
+			"message_provenance_failed",
+			messageProvenanceMethod,
+			input.Body.ID,
+			http.StatusBadGateway,
+			err,
+			logField{name: "wildduck_user_id", value: input.Body.Params.WildDuckUserID},
+			logField{name: "wildduck_mailbox_id", value: input.Body.Params.WildDuckMailboxID},
+			logField{name: "wildduck_uid", value: fmt.Sprint(input.Body.Params.WildDuckUID)},
+			logField{name: "wildduck_message_id", value: input.Body.Params.WildDuckMessageID},
+		)
+		return nil, publicControlAPIError(http.StatusBadGateway)
 	}
 	return &MessageProvenanceOutput{
 		Body: MessageProvenanceRPCResponse{
@@ -623,15 +691,23 @@ func (s *Server) handleMessageProvenance(ctx context.Context, input *MessageProv
 }
 
 func (s *Server) handleMessageView(ctx context.Context, input *MessageViewInput) (*MessageViewOutput, error) {
-	if input.Body.JSONRPC != "2.0" {
-		return nil, huma.Error400BadRequest("jsonrpc must be 2.0")
-	}
-	if input.Body.Method != messageViewMethod {
-		return nil, huma.Error400BadRequest("method must be agentMail.message.view.get")
+	if err := validateRPCEnvelope(input.Body.JSONRPC, input.Body.Method, input.Body.ID, messageViewMethod); err != nil {
+		return nil, err
 	}
 	result, err := s.provenance.View(ctx, input.Body.Params)
 	if err != nil {
-		return nil, huma.Error502BadGateway("get message view", err)
+		logControlAPIError(
+			"message_view_failed",
+			messageViewMethod,
+			input.Body.ID,
+			http.StatusBadGateway,
+			err,
+			logField{name: "wildduck_user_id", value: input.Body.Params.WildDuckUserID},
+			logField{name: "wildduck_mailbox_id", value: input.Body.Params.WildDuckMailboxID},
+			logField{name: "wildduck_uid", value: fmt.Sprint(input.Body.Params.WildDuckUID)},
+			logField{name: "wildduck_message_id", value: input.Body.Params.WildDuckMessageID},
+		)
+		return nil, publicControlAPIError(http.StatusBadGateway)
 	}
 	return &MessageViewOutput{
 		Body: MessageViewRPCResponse{
@@ -643,15 +719,23 @@ func (s *Server) handleMessageView(ctx context.Context, input *MessageViewInput)
 }
 
 func (s *Server) handleMessageSecurity(ctx context.Context, input *MessageSecurityInput) (*MessageSecurityOutput, error) {
-	if input.Body.JSONRPC != "2.0" {
-		return nil, huma.Error400BadRequest("jsonrpc must be 2.0")
-	}
-	if input.Body.Method != messageSecurityMethod {
-		return nil, huma.Error400BadRequest("method must be agentMail.message.security.get")
+	if err := validateRPCEnvelope(input.Body.JSONRPC, input.Body.Method, input.Body.ID, messageSecurityMethod); err != nil {
+		return nil, err
 	}
 	result, err := s.provenance.Security(ctx, input.Body.Params)
 	if err != nil {
-		return nil, huma.Error502BadGateway("get message security", err)
+		logControlAPIError(
+			"message_security_failed",
+			messageSecurityMethod,
+			input.Body.ID,
+			http.StatusBadGateway,
+			err,
+			logField{name: "wildduck_user_id", value: input.Body.Params.WildDuckUserID},
+			logField{name: "wildduck_mailbox_id", value: input.Body.Params.WildDuckMailboxID},
+			logField{name: "wildduck_uid", value: fmt.Sprint(input.Body.Params.WildDuckUID)},
+			logField{name: "wildduck_message_id", value: input.Body.Params.WildDuckMessageID},
+		)
+		return nil, publicControlAPIError(http.StatusBadGateway)
 	}
 	return &MessageSecurityOutput{
 		Body: MessageSecurityRPCResponse{
@@ -666,4 +750,209 @@ func (s *Server) handleHealth(ctx context.Context, input *struct{}) (*HealthOutp
 	return &HealthOutput{
 		Body: HealthResponse{Status: "ok"},
 	}, nil
+}
+
+func requestLogMiddleware(component string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		startedAt := time.Now()
+		recorder := &statusRecordingResponseWriter{
+			ResponseWriter: writer,
+			status:         http.StatusOK,
+		}
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				if !recorder.wroteHeader {
+					http.Error(recorder, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+				}
+				log.Printf(
+					"%s event=http_panic method=%s path=%q status=%d duration_ms=%d error=%q",
+					component,
+					safeHTTPMethod(request.Method),
+					safeRequestPath(request),
+					recorder.status,
+					elapsedMilliseconds(startedAt),
+					safelog.Text(fmt.Sprint(recovered)),
+				)
+			}
+			log.Printf(
+				"%s event=http_request method=%s path=%q status=%d duration_ms=%d",
+				component,
+				safeHTTPMethod(request.Method),
+				safeRequestPath(request),
+				recorder.status,
+				elapsedMilliseconds(startedAt),
+			)
+			if recorder.status >= http.StatusInternalServerError {
+				log.Printf(
+					"%s event=http_request_error method=%s path=%q status=%d duration_ms=%d",
+					component,
+					safeHTTPMethod(request.Method),
+					safeRequestPath(request),
+					recorder.status,
+					elapsedMilliseconds(startedAt),
+				)
+			}
+			safelog.Debugf(
+				"%s event=http_request_debug method=%s path=%q proto=%q remote_addr=%q content_length=%d",
+				component,
+				safeHTTPMethod(request.Method),
+				safeRequestPath(request),
+				safelog.Field(request.Proto, 32),
+				safelog.Field(request.RemoteAddr, 128),
+				request.ContentLength,
+			)
+		}()
+		next.ServeHTTP(recorder, request)
+	})
+}
+
+type statusRecordingResponseWriter struct {
+	http.ResponseWriter
+	status      int
+	wroteHeader bool
+}
+
+func (w *statusRecordingResponseWriter) WriteHeader(status int) {
+	if w.wroteHeader {
+		return
+	}
+	w.status = status
+	w.wroteHeader = true
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *statusRecordingResponseWriter) Write(data []byte) (int, error) {
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(data)
+}
+
+func (w *statusRecordingResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
+func safeHTTPMethod(method string) string {
+	return safelog.Field(method, 32)
+}
+
+func safeRequestPath(request *http.Request) string {
+	if request == nil || request.URL == nil {
+		return ""
+	}
+	path := request.URL.EscapedPath()
+	if path == "" {
+		path = "/"
+	}
+	return safelog.Field(path, 200)
+}
+
+func elapsedMilliseconds(startedAt time.Time) int64 {
+	return time.Since(startedAt).Round(time.Millisecond).Milliseconds()
+}
+
+type logField struct {
+	name  string
+	value string
+}
+
+func validateRPCEnvelope(jsonrpc string, method string, rpcID string, expectedMethod string) error {
+	if jsonrpc != "2.0" {
+		logControlAPIError(
+			"rpc_envelope_validation_failed",
+			expectedMethod,
+			rpcID,
+			http.StatusUnprocessableEntity,
+			errors.New("jsonrpc version mismatch"),
+			logField{name: "field", value: "jsonrpc"},
+		)
+		return publicControlAPIError(http.StatusUnprocessableEntity)
+	}
+	if method != expectedMethod {
+		logControlAPIError(
+			"rpc_method_validation_failed",
+			expectedMethod,
+			rpcID,
+			http.StatusUnprocessableEntity,
+			errors.New("rpc method mismatch"),
+			logField{name: "received_method", value: method},
+		)
+		return publicControlAPIError(http.StatusUnprocessableEntity)
+	}
+	return nil
+}
+
+func redactControlRPCErrorTransformer(ctx huma.Context, status string, value any) (any, error) {
+	code, err := strconv.Atoi(status)
+	if err != nil || code < http.StatusBadRequest {
+		return value, nil
+	}
+	op := ctx.Operation()
+	if op == nil || !strings.HasPrefix(op.Path, "/rpc/") {
+		return value, nil
+	}
+
+	switch errModel := value.(type) {
+	case *huma.ErrorModel:
+		return genericControlRPCErrorModel(op, errModel), nil
+	case huma.ErrorModel:
+		return genericControlRPCErrorModel(op, &errModel), nil
+	default:
+		return value, nil
+	}
+}
+
+func genericControlRPCErrorModel(op *huma.Operation, errModel *huma.ErrorModel) *huma.ErrorModel {
+	status := errModel.Status
+	if status == 0 {
+		status = http.StatusInternalServerError
+	}
+	if errModel.Detail != publicControlAPIErrorMessage {
+		logControlAPIError(
+			"rpc_error_response_redacted",
+			strings.TrimPrefix(op.Path, "/rpc/"),
+			"",
+			status,
+			errors.New(errModel.Detail),
+			logField{name: "operation_id", value: op.OperationID},
+		)
+	}
+	return &huma.ErrorModel{
+		Title:  http.StatusText(status),
+		Status: status,
+		Detail: publicControlAPIErrorMessage,
+	}
+}
+
+func logControlAPIError(event string, rpcMethod string, rpcID string, status int, err error, fields ...logField) {
+	var builder strings.Builder
+	fmt.Fprintf(
+		&builder,
+		"agent-mail-control-api event=%s rpc_method=%s rpc_id=%s status=%d",
+		safelog.Field(event, 80),
+		safelog.Field(rpcMethod, 120),
+		safelog.Field(rpcID, 120),
+		status,
+	)
+	for _, field := range fields {
+		if field.name == "" || field.value == "" {
+			continue
+		}
+		fmt.Fprintf(&builder, " %s=%q", field.name, safelog.Field(field.value, 160))
+	}
+	fmt.Fprintf(&builder, " error=%q", safelog.Error(err))
+	log.Print(builder.String())
+}
+
+func publicControlAPIError(status int) error {
+	switch status {
+	case http.StatusBadRequest:
+		return huma.Error400BadRequest(publicControlAPIErrorMessage)
+	case http.StatusBadGateway:
+		return huma.Error502BadGateway(publicControlAPIErrorMessage)
+	case http.StatusInternalServerError:
+		return huma.Error500InternalServerError(publicControlAPIErrorMessage)
+	default:
+		return huma.NewError(status, publicControlAPIErrorMessage)
+	}
 }

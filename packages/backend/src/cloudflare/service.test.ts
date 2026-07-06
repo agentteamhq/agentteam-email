@@ -10,25 +10,41 @@ function currentCloudflareScopes(): string[] {
   return getCloudflareRequiredOAuthScopes()
 }
 
-const cloudflareServiceTestState = vi.hoisted(() => ({
-  applyCloudflareProvisioning: vi.fn(),
-  createAgentMailWorkerCredentials: vi.fn(),
-  decryptSecretValue: vi.fn((value: string) => value.replace(/^encrypted:/u, '')),
-  encryptSecretValue: vi.fn((value: string) => `encrypted:${value}`),
-  globals: vi.fn(),
-  listCloudflareAccounts: vi.fn(),
-  listCloudflareZones: vi.fn(),
-  removeCloudflareProvisioning: vi.fn(),
-  requireAgentMailOrganizationContext: vi.fn(),
-  sanitizeCloudflareError: vi.fn((error: unknown) => ({
-    code:
-      error && typeof error === 'object' && 'status' in error
-        ? `CLOUDFLARE_${error.status}`
-        : 'CLOUDFLARE_REQUEST_FAILED',
-    message: 'Cloudflare request failed. Check the selected account, zone, and permissions.'
-  })),
-  sendCloudflareRawEmail: vi.fn(),
-  syncAgentMailRuntimeProjection: vi.fn()
+const cloudflareServiceTestState = vi.hoisted(() => {
+  const debugLog = vi.fn()
+  return {
+    applyCloudflareProvisioning: vi.fn(),
+    createAgentMailWorkerCredentials: vi.fn(),
+    debugFactory: Object.assign(
+      vi.fn(() => debugLog),
+      {
+        disable: vi.fn(),
+        enable: vi.fn(),
+        enabled: vi.fn()
+      }
+    ),
+    debugLog,
+    decryptSecretValue: vi.fn((value: string) => value.replace(/^encrypted:/u, '')),
+    encryptSecretValue: vi.fn((value: string) => `encrypted:${value}`),
+    globals: vi.fn(),
+    listCloudflareAccounts: vi.fn(),
+    listCloudflareZones: vi.fn(),
+    removeCloudflareProvisioning: vi.fn(),
+    requireAgentMailOrganizationContext: vi.fn(),
+    sanitizeCloudflareError: vi.fn((error: unknown) => ({
+      code:
+        error && typeof error === 'object' && 'status' in error
+          ? `CLOUDFLARE_${error.status}`
+          : 'CLOUDFLARE_REQUEST_FAILED',
+      message: 'Cloudflare request failed. Check the selected account, zone, and permissions.'
+    })),
+    sendCloudflareRawEmail: vi.fn(),
+    syncAgentMailRuntimeProjection: vi.fn()
+  }
+})
+
+vi.mock('debug', () => ({
+  default: cloudflareServiceTestState.debugFactory
 }))
 
 vi.mock('./client', () => ({
@@ -245,6 +261,7 @@ describe('Cloudflare OAuth start service', () => {
     vi.stubEnv('ENCRYPT_SECRET_KEY', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
     vi.stubEnv('NODE_ENV', 'test')
     vi.stubEnv('PUBLIC_HOSTNAME', 'https://mail.example.test')
+    cloudflareServiceTestState.debugLog.mockReset()
     cloudflareServiceTestState.globals.mockReset()
     cloudflareServiceTestState.requireAgentMailOrganizationContext.mockReset()
   })
@@ -892,6 +909,7 @@ describe('Cloudflare domain removal service', () => {
     vi.stubEnv('DATABASE_URL', 'mongodb://localhost:27017/app')
     vi.stubEnv('ENCRYPT_SECRET_KEY', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
     vi.stubEnv('PUBLIC_HOSTNAME', 'https://mail.example.test')
+    cloudflareServiceTestState.debugLog.mockReset()
     cloudflareServiceTestState.globals.mockReset()
     cloudflareServiceTestState.removeCloudflareProvisioning.mockReset()
     cloudflareServiceTestState.requireAgentMailOrganizationContext.mockReset()
@@ -1065,6 +1083,61 @@ describe('Cloudflare domain removal service', () => {
       expect.any(Object),
       { reason: 'cloudflare-domain-remove' }
     )
+  })
+
+  it('redacts sensitive diagnostic names from Cloudflare domain removal logs', async () => {
+    expect.hasAssertions()
+    const { connection, globals, mocks } = cloudflareDomainRemovalGlobals()
+    const headers = new Headers({ authorization: 'Bearer user-token' })
+    const connectionPublicId = publicIdFromUUIDv7(connection._id)
+    const cloudflareError = Object.assign(
+      new Error('Cloudflare OAuth token failed for cf_secret_token_123'),
+      {
+        method: 'DELETE',
+        status: 403
+      }
+    )
+    cloudflareError.name = 'OAuthTokenExchangeError'
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    cloudflareServiceTestState.requireAgentMailOrganizationContext.mockResolvedValue({
+      ability: { cannot: vi.fn(() => false) },
+      organizationId: TEST_ORGANIZATION_ID
+    })
+    cloudflareServiceTestState.removeCloudflareProvisioning.mockRejectedValue(cloudflareError)
+    const { removeCloudflareDomain } = await import('./service')
+
+    await expect(
+      removeCloudflareDomain({
+        connectionPublicId,
+        headers
+      })
+    ).rejects.toBe(cloudflareError)
+
+    expect(cloudflareServiceTestState.debugLog).toHaveBeenCalledWith(
+      'Cloudflare domain removal failed',
+      expect.objectContaining({
+        error: expect.objectContaining({
+          code: 'CLOUDFLARE_403',
+          method: 'DELETE',
+          name: 'object',
+          status: 403
+        }),
+        stage: 'remove-cloudflare-resources'
+      })
+    )
+    expect(mocks.connectionUpdateOne).toHaveBeenLastCalledWith(
+      { _id: connection._id, organizationId: TEST_ORGANIZATION_ID },
+      {
+        $set: {
+          lastErrorCode: 'CLOUDFLARE_403',
+          lastErrorMessage: 'Cloudflare request failed. Check the selected account, zone, and permissions.',
+          status: 'degraded'
+        }
+      }
+    )
+    const serializedLogCalls = JSON.stringify(cloudflareServiceTestState.debugLog.mock.calls)
+    expect(serializedLogCalls).not.toContain('OAuthTokenExchangeError')
+    expect(serializedLogCalls).not.toContain('cf_secret_token_123')
   })
 })
 
@@ -1860,8 +1933,9 @@ function cloudflareDomainRemovalGlobals() {
     agentMailWorkerDeploymentId: '01960000-0000-7000-8000-000000000033' as string | null,
     archivePrefix: 'orgs/org_public_test/domains/example.com/mail/inbound',
     encryptedWorkerHmacSecret: 'encrypted:worker-secret' as string | null,
-    hmacSecretReference:
-      'cloudflare-worker:agentteam-email-example:AGENTTEAM_WORKER_HMAC_SECRET' as string | null,
+    hmacSecretReference: 'cloudflare-worker:agentteam-email-example:AGENTTEAM_WORKER_HMAC_SECRET' as
+      | string
+      | null,
     provisioningStatus: 'succeeded',
     status: 'active',
     workerScriptName: 'agentteam-email-example' as string | null
@@ -1901,12 +1975,14 @@ function cloudflareDomainRemovalGlobals() {
           : null
       )
     ),
-    connectionUpdateOne: vi.fn((query: Record<string, unknown>, update: { $set: Record<string, unknown> }) => {
-      if (recordMatchesQuery(connection, query)) {
-        Object.assign(connection, update.$set)
+    connectionUpdateOne: vi.fn(
+      (query: Record<string, unknown>, update: { $set: Record<string, unknown> }) => {
+        if (recordMatchesQuery(connection, query)) {
+          Object.assign(connection, update.$set)
+        }
+        return execQuery({ modifiedCount: 1 })
       }
-      return execQuery({ modifiedCount: 1 })
-    }),
+    ),
     deploymentFindOne: vi.fn(() => execQuery(deployment)),
     deploymentUpdateMany: vi.fn(() => execQuery({ modifiedCount: 1 })),
     domainUpdateMany: vi.fn(() => execQuery({ modifiedCount: 1 })),

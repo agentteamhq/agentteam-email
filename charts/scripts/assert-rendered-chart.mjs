@@ -33,6 +33,8 @@ requireEnv(webEnv, 'AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN')
 requireEnv(webEnv, 'AT_EMAIL_ADMIN_WILDDUCK_API_BASE_URL')
 requireEnv(webEnv, 'AT_EMAIL_ADMIN_WILDDUCK_ADMIN_ACCESS_TOKEN')
 requireEnv(webEnv, 'DATABASE_MAX_POOL_SIZE')
+requireEnvValue(webEnv, 'DEBUG', '')
+requireEnvValue(webEnv, 'DEBUG_HIDE_DATE', '1')
 requireEnv(webEnv, 'TMP_DIR')
 requireEnv(webEnv, 'AT_EMAIL_ADMIN_TRIAL_ENABLED')
 requireEnv(webEnv, 'AT_EMAIL_ADMIN_TRIAL_ORGANIZATION_ID')
@@ -60,7 +62,7 @@ requireEnv(webEnv, 'STRIPE_SECRET_KEY')
 requireEnv(webEnv, 'SMTP_ADDRESS')
 requireEnv(webEnv, 'SMTP_PORT')
 requireEnvValueContains(webEnv, 'DATABASE_URL', 'replicaSet=rs0')
-forbidEnv(webEnv, 'AT_EMAIL_ADMIN_R2_API_TOKEN')
+forbidEnv(webEnv, 'AT_EMAIL_ADMIN_R2_API_TOKEN', 'web-server')
 
 requireEnv(controlEnv, 'AT_EMAIL_ADMIN_CONTROL_MONGODB_URI')
 requireEnv(controlEnv, 'AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_BASE_URL')
@@ -69,7 +71,9 @@ requireEnv(controlEnv, 'AT_EMAIL_ADMIN_CF_API_BASE_URL')
 requireEnv(controlEnv, 'AT_EMAIL_ADMIN_R2_ACCOUNT_ID')
 requireEnv(controlEnv, 'AT_EMAIL_ADMIN_R2_API_TOKEN')
 requireEnvValueContains(controlEnv, 'AT_EMAIL_ADMIN_CONTROL_MONGODB_URI', 'replicaSet=rs0')
-forbidEnv(controlEnv, 'CLOUDFLARE_OAUTH_CLIENT_ID')
+forbidEnv(controlEnv, 'CLOUDFLARE_OAUTH_CLIENT_ID', 'mail-control-service')
+forbidEnv(controlEnv, 'DEBUG', 'mail-control-service')
+forbidEnv(controlEnv, 'DEBUG_HIDE_DATE', 'mail-control-service')
 
 requireServicePort(mailControlService, 'admin', 8081)
 requireServicePort(mailControlService, 'smtp', 2587)
@@ -133,9 +137,16 @@ function requireEnvValueContains(env, name, expected) {
   }
 }
 
-function forbidEnv(env, name) {
+function requireEnvValue(env, name, expected) {
+  const entry = env.get(name)
+  if (entry?.value !== expected) {
+    throw new Error(`rendered env ${name} must equal ${expected}`)
+  }
+}
+
+function forbidEnv(env, name, containerName) {
   if (env.has(name)) {
-    throw new Error(`rendered chart must not put ${name} in the web-server environment`)
+    throw new Error(`rendered chart must not put ${name} in the ${containerName} environment`)
   }
 }
 

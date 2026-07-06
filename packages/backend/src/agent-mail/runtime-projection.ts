@@ -2,11 +2,14 @@ import { HttpStatusCode } from '@main/common'
 import { normalizeMongooseUUIDv7, publicIdFromUUIDv7 } from '@main/db'
 import debug from 'debug'
 
+import { createSafeErrorLogDetails, createSafeRequestLogDetails } from '../auth/log-redaction'
 import { globals } from '../globals'
+import { createSafeRequestCorrelationLogDetails, mapPublicErrorResponse } from '../public-error-response'
 import { hasValidControlToWebToken } from './control-to-web-auth'
 import { syncAgentMailRuntime } from './control-client'
 import type { AgentMailRuntimeDomainProjection } from './control-client'
 import type { Database } from '../db/db'
+import type { PublicErrorResponse } from '../public-error-response'
 import type {
   AgentMailDomainDocument,
   AgentMailDomainId,
@@ -82,12 +85,11 @@ export async function syncAgentMailRuntimeProjection(
 
 export async function handleAgentMailRuntimeSnapshotRequest(request: Request): Promise<Response> {
   if (!hasValidControlToWebToken(request)) {
-    return Response.json(
-      { message: 'Unauthorized' },
-      {
-        status: HttpStatusCode.Unauthorized
-      }
-    )
+    return createAgentMailRuntimePublicErrorResponse({
+      reason: 'missing_control_to_web_token',
+      request,
+      status: HttpStatusCode.Unauthorized
+    })
   }
 
   const { db } = await globals()
@@ -190,4 +192,46 @@ function normalizeRuntimeDomain(domain: string): string {
     throw new Error('Domain must be a valid hostname')
   }
   return normalized
+}
+
+function createAgentMailRuntimePublicErrorResponse({
+  error,
+  reason,
+  request,
+  status
+}: {
+  error?: unknown
+  reason: string
+  request: Request
+  status: number
+}): Response {
+  const publicError = mapPublicErrorResponse({
+    code: status,
+    error: error ?? { status },
+    request
+  })
+  logAgentMailRuntimeHandledError(error ?? { status }, publicError, request, reason)
+  return Response.json(publicError.body, { status: publicError.status })
+}
+
+function logAgentMailRuntimeHandledError(
+  error: unknown,
+  publicError: PublicErrorResponse,
+  request: Request,
+  reason: string
+) {
+  const errorLogDetails = createSafeErrorLogDetails(error)
+  log('agent_mail_runtime_snapshot_handled_error %o', {
+    error: errorLogDetails,
+    ...(errorLogDetails.code ? { errorCode: errorLogDetails.code } : {}),
+    operation: 'agent_mail_runtime_snapshot',
+    publicError: {
+      code: publicError.body.code,
+      status: publicError.status,
+      ...(publicError.body.supportReference ? { supportReference: publicError.body.supportReference } : {})
+    },
+    reason,
+    ...createSafeRequestCorrelationLogDetails(request),
+    ...createSafeRequestLogDetails(request)
+  })
 }

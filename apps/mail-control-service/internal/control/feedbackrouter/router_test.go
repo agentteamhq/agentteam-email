@@ -42,13 +42,47 @@ body
 }
 
 func TestSanitizeFeedbackLogErrorRedactsMailbox(t *testing.T) {
-	got := sanitizeFeedbackLogError(errors.New("resolve failed for Agent.One+tag@example.com\nwith details"))
+	got := sanitizeFeedbackLogError(errors.New("resolve failed for Agent.One+tag@example.com at https://r2.example.test/archive?token=example-token\nwith details"))
 
-	if strings.Contains(got, "Agent.One") || strings.Contains(got, "\n") {
+	if strings.Contains(got, "Agent.One") || strings.Contains(got, "\n") || strings.Contains(got, "example-token") || strings.Contains(got, "?") {
 		t.Fatalf("sanitized feedback error retained sensitive or multiline value: %q", got)
 	}
 	if !strings.Contains(got, "[email]") {
 		t.Fatalf("sanitized feedback error did not include email redaction marker: %q", got)
+	}
+}
+
+func TestStatusIssuesRedactRouteSourceErrors(t *testing.T) {
+	unsafeErr := errors.New(
+		`load failed for Agent.One+tag@example.com ` +
+			`GET https://r2.example.test/archive?X-Amz-Signature=example-signature&token=example-token ` +
+			`Authorization: Bearer example-bearer Cookie: session=example-cookie`,
+	)
+	router := &Router{
+		cfg: runtimeConfig{
+			IMAPAddress: "wildduck-imap:143",
+			IMAPMailbox: "INBOX",
+		},
+		routeSource: failingFeedbackRouteSource{err: unsafeErr},
+	}
+
+	status := router.Status(context.Background())
+	joined := strings.Join(status.Issues, "\n")
+
+	if !strings.Contains(joined, "feedback_routes_failed:") || !strings.Contains(joined, "[email]") {
+		t.Fatalf("status issues were not redacted: %#v", status.Issues)
+	}
+	for _, forbidden := range []string{
+		"Agent.One",
+		"example-signature",
+		"example-token",
+		"example-bearer",
+		"example-cookie",
+		"?",
+	} {
+		if strings.Contains(joined, forbidden) {
+			t.Fatalf("status issues exposed %q: %#v", forbidden, status.Issues)
+		}
 	}
 }
 
@@ -63,6 +97,14 @@ Subject: loop
 	if err == nil {
 		t.Fatal("ExtractOriginalSender succeeded for feedback mailbox loop")
 	}
+}
+
+type failingFeedbackRouteSource struct {
+	err error
+}
+
+func (s failingFeedbackRouteSource) ActiveFeedbackRoutes(context.Context) ([]Route, error) {
+	return nil, s.err
 }
 
 func TestExtractOriginalSenderUsesParsedAddressDomain(t *testing.T) {

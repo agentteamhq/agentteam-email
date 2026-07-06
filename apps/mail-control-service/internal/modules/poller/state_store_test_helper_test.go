@@ -10,7 +10,9 @@ import (
 )
 
 type testStateStore struct {
-	items map[string]inboundWorkDocument
+	items          map[string]inboundWorkDocument
+	queueStatusErr error
+	lastSweepAtErr error
 }
 
 func newTestStateStore() *testStateStore {
@@ -102,8 +104,19 @@ func (s *testStateStore) SweepStart(context.Context, string, time.Time, time.Dur
 }
 
 func (s *testStateStore) AdvanceSweepCursor(context.Context, string, time.Time) error { return nil }
-func (s *testStateStore) QueueStatus(context.Context) (QueueStatus, error)            { return QueueStatus{}, nil }
-func (s *testStateStore) LastSweepAt(context.Context) (*time.Time, error)             { return nil, nil }
+func (s *testStateStore) QueueStatus(context.Context) (QueueStatus, error) {
+	if s.queueStatusErr != nil {
+		return QueueStatus{}, s.queueStatusErr
+	}
+	return QueueStatus{}, nil
+}
+
+func (s *testStateStore) LastSweepAt(context.Context) (*time.Time, error) {
+	if s.lastSweepAtErr != nil {
+		return nil, s.lastSweepAtErr
+	}
+	return nil, nil
+}
 func (s *testStateStore) RecordDiscoveryDiagnostic(context.Context, string, string, string, error) error {
 	return nil
 }

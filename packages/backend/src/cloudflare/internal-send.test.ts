@@ -1,7 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const internalSendTestState = vi.hoisted(() => ({
+  debugFactory: Object.assign(vi.fn(), {
+    disable: vi.fn(),
+    enable: vi.fn(),
+    enabled: vi.fn()
+  }),
+  debugLog: vi.fn(),
   sendCloudflareRawEmailForControl: vi.fn()
+}))
+
+vi.mock('debug', () => ({
+  default: internalSendTestState.debugFactory
 }))
 
 vi.mock('./service', () => {
@@ -28,6 +38,9 @@ describe('Cloudflare internal control send handler', () => {
     vi.stubEnv('ENCRYPT_SECRET_KEY', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
     vi.stubEnv('PUBLIC_HOSTNAME', 'https://mail.example.test')
     vi.stubEnv('AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN', 'control-to-web-token')
+    internalSendTestState.debugFactory.mockClear()
+    internalSendTestState.debugFactory.mockImplementation(() => internalSendTestState.debugLog)
+    internalSendTestState.debugLog.mockReset()
     internalSendTestState.sendCloudflareRawEmailForControl.mockReset()
   })
 
@@ -38,11 +51,17 @@ describe('Cloudflare internal control send handler', () => {
     const response = await handleCloudflareControlSendRawRequest(
       new Request('https://mail.example.test/rpc/internal/agent-mail/cloudflare/send-raw', {
         body: JSON.stringify(validRequestBody()),
+        headers: { 'x-request-id': 'internal-send-auth-1' },
         method: 'POST'
       })
     )
 
     expect(response.status).toBe(401)
+    await expect(response.json()).resolves.toStrictEqual({
+      code: 'UNAUTHORIZED',
+      error: 'Authentication is required.',
+      supportReference: 'request-id:internal-send-auth-1'
+    })
     expect(internalSendTestState.sendCloudflareRawEmailForControl).not.toHaveBeenCalled()
   })
 
@@ -101,22 +120,87 @@ describe('Cloudflare internal control send handler', () => {
     expect.hasAssertions()
     const { CloudflareControlSendError } = await import('./service')
     internalSendTestState.sendCloudflareRawEmailForControl.mockRejectedValue(
-      new CloudflareControlSendError('Active Agent Mail domain is not authorized for send', 403)
+      new CloudflareControlSendError(
+        'Active Agent Mail domain is not authorized for send with Authorization Bearer raw-token',
+        403
+      )
     )
     const { handleCloudflareControlSendRawRequest } = await import('./internal-send')
 
     const response = await handleCloudflareControlSendRawRequest(
       new Request('https://mail.example.test/rpc/internal/agent-mail/cloudflare/send-raw', {
         body: JSON.stringify(validRequestBody()),
-        headers: { 'X-Agent-Mail-Control-Web-Token': 'control-to-web-token' },
+        headers: {
+          'X-Agent-Mail-Control-Web-Token': 'control-to-web-token',
+          'x-request-id': 'internal-send-request-1'
+        },
         method: 'POST'
       })
     )
 
     expect(response.status).toBe(403)
-    await expect(response.json()).resolves.toStrictEqual({
-      message: 'Active Agent Mail domain is not authorized for send'
+    const body = await response.json()
+    expect(body).toStrictEqual({
+      code: 'FORBIDDEN',
+      error: 'Access denied.',
+      supportReference: 'request-id:internal-send-request-1'
     })
+    expect(JSON.stringify(body)).not.toContain('raw-token')
+    expect(JSON.stringify(body)).not.toContain('Active Agent Mail domain')
+  })
+
+  it('logs control send failures without raw provider payloads or MIME', async () => {
+    expect.hasAssertions()
+    const { CloudflareControlSendError } = await import('./service')
+    internalSendTestState.sendCloudflareRawEmailForControl.mockRejectedValue(
+      new CloudflareControlSendError(
+        'Cloudflare raw send failed with Cookie raw-cookie and From: agent@example.com',
+        502
+      )
+    )
+    const { handleCloudflareControlSendRawRequest } = await import('./internal-send')
+
+    const response = await handleCloudflareControlSendRawRequest(
+      new Request('https://mail.example.test/rpc/internal/agent-mail/cloudflare/send-raw', {
+        body: JSON.stringify(validRequestBody()),
+        headers: {
+          'X-Agent-Mail-Control-Web-Token': 'control-to-web-token',
+          'x-request-id': 'internal-send-request-2'
+        },
+        method: 'POST'
+      })
+    )
+
+    expect(response.status).toBe(502)
+    await expect(response.json()).resolves.toStrictEqual({
+      code: 'BAD_GATEWAY',
+      error: 'Upstream service unavailable.',
+      supportReference: 'request-id:internal-send-request-2'
+    })
+    expect(internalSendTestState.debugLog).toHaveBeenCalledWith(
+      'cloudflare_control_send_raw_failed %o',
+      expect.objectContaining({
+        error: {
+          code: '502',
+          name: 'CloudflareControlSendError',
+          status: '502',
+          statusCode: 502,
+          type: 'object'
+        },
+        operation: 'cloudflare_control_send_raw',
+        publicError: {
+          code: 'BAD_GATEWAY',
+          status: 502,
+          supportReference: 'request-id:internal-send-request-2'
+        },
+        requestId: 'internal-send-request-2'
+      })
+    )
+    const serializedLogCalls = JSON.stringify(internalSendTestState.debugLog.mock.calls)
+    expect(serializedLogCalls).not.toContain('raw-cookie')
+    expect(serializedLogCalls).not.toContain('agent@example.com')
+    expect(serializedLogCalls).not.toContain('Cloudflare raw send failed')
+    expect(serializedLogCalls).not.toContain('From:')
   })
 })
 

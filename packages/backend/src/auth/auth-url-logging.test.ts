@@ -20,6 +20,7 @@ describe('auth URL logging', () => {
       paramKeysMatch: true,
       paramValuesMatch: false,
       pathMatch: true,
+      pathPatternMatch: true,
       strippedPath1: '/verify-email',
       strippedPath2: '/verify-email'
     })
@@ -28,5 +29,35 @@ describe('auth URL logging', () => {
     expect(JSON.stringify(details)).not.toContain('better-auth-secret-token')
     expect(JSON.stringify(details)).not.toContain('manual-secret-token')
     expect(JSON.stringify(details)).not.toContain('/redirect/email-verified/')
+    expect(JSON.stringify(details)).not.toContain('mail.example.test')
+  })
+
+  it('logs path patterns instead of raw auth path tokens', () => {
+    expect.hasAssertions()
+
+    const details = createAuthUrlComparisonLogDetails({
+      betterAuthBasePath: '/api',
+      betterAuthUrl:
+        'https://mail.example.test/api/reset-password/better-auth-reset-token?callbackURL=%2Freset-password%2F',
+      manualBasePath: '/rpc/auth/api',
+      manualUrl:
+        'https://mail.example.test/rpc/auth/api/reset-password/manual-reset-token?callbackURL=%2Freset-password%2F'
+    })
+    const serialized = JSON.stringify(details)
+
+    expect(details).toMatchObject({
+      hostnameMatch: true,
+      paramKeysMatch: true,
+      paramValuesMatch: true,
+      pathMatch: false,
+      pathPatternMatch: true,
+      strippedPath1: '/reset-password/:token',
+      strippedPath2: '/reset-password/:token'
+    })
+    expect(details.betterAuthUrl.path).toBe('/api/reset-password/:token')
+    expect(details.manualUrl.path).toBe('/rpc/auth/api/reset-password/:token')
+    expect(serialized).not.toContain('better-auth-reset-token')
+    expect(serialized).not.toContain('manual-reset-token')
+    expect(serialized).not.toContain('mail.example.test')
   })
 })

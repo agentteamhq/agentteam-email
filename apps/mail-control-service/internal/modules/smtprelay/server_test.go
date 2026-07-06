@@ -45,13 +45,18 @@ func TestUniqueStrings(t *testing.T) {
 }
 
 func TestSanitizeRelayLogErrorRedactsMailbox(t *testing.T) {
-	got := sanitizeRelayLogError(errors.New("delivery failed for Agent.One+tag@example.com\nwith details"))
+	got := sanitizeRelayLogError(errors.New(
+		"delivery failed for Agent.One+tag@example.com\n" +
+			"GET https://r2.example.test/archive?X-Amz-Signature=example-signature&token=example-token " +
+			"Authorization: Bearer example-bearer Cookie: session=example-cookie " +
+			"raw_key=orgs/org_pub_123/domains/example.com/mail/outbound/2026/07/05/raw.eml",
+	))
 
-	if strings.Contains(got, "Agent.One") || strings.Contains(got, "\n") {
+	if strings.Contains(got, "Agent.One") || strings.Contains(got, "\n") || strings.Contains(got, "example-token") || strings.Contains(got, "example-bearer") || strings.Contains(got, "example-cookie") || strings.Contains(got, "orgs/org_pub_123") || strings.Contains(got, "?") {
 		t.Fatalf("sanitized relay error retained sensitive or multiline value: %q", got)
 	}
-	if !strings.Contains(got, "[email]") {
-		t.Fatalf("sanitized relay error did not include email redaction marker: %q", got)
+	if !strings.Contains(got, "[email]") || !strings.Contains(got, "[archive_key]") {
+		t.Fatalf("sanitized relay error did not include redaction markers: %q", got)
 	}
 }
 

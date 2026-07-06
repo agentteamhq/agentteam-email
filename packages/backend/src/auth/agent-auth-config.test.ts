@@ -4,11 +4,27 @@ import { AgentMailCapabilityValues } from '@main/db'
 import type { AgentAuthEvent } from '@better-auth/agent-auth'
 import type { Database } from '../db/db'
 
+const agentAuthConfigTestState = vi.hoisted(() => ({
+  debugFactory: Object.assign(vi.fn(), {
+    disable: vi.fn(),
+    enable: vi.fn(),
+    enabled: vi.fn()
+  }),
+  debugLog: vi.fn()
+}))
+
+vi.mock('debug', () => ({
+  default: agentAuthConfigTestState.debugFactory
+}))
+
 describe('Agent Auth configuration', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.stubEnv('DATABASE_URL', 'mongodb://localhost:27017/app')
     vi.stubEnv('PUBLIC_HOSTNAME', 'https://mail.example.com')
+    agentAuthConfigTestState.debugFactory.mockClear()
+    agentAuthConfigTestState.debugFactory.mockImplementation(() => agentAuthConfigTestState.debugLog)
+    agentAuthConfigTestState.debugLog.mockReset()
   })
 
   it('advertises only backend-owned email capabilities and rejects unknown capability values', async () => {
@@ -201,6 +217,87 @@ describe('Agent Auth configuration', () => {
     })
     expect(JSON.stringify(auditLogCreate.mock.calls)).not.toContain('secret-token')
     expect(JSON.stringify(auditLogCreate.mock.calls)).not.toContain('Authorization')
+  })
+
+  it('records enrollment grant application failures with bounded safe audit error details', async () => {
+    expect.hasAssertions()
+
+    const agentId = '01960000-0000-7000-8000-000000000011'
+    const hostId = '01960000-0000-7000-8000-000000000010'
+    const auditLogCreate = vi.fn()
+    const transaction = vi.fn(() => {
+      throw Object.assign(
+        new Error(
+          'enrollment grant apply failed with Authorization Bearer raw-agent-token for support@example.test'
+        ),
+        {
+          code: 'EAUTH',
+          statusCode: 503
+        }
+      )
+    })
+    const { createAgentAuthOptions } = await import('./agent-auth-config')
+    const options = createAgentAuthOptions({
+      connection: {
+        transaction
+      },
+      models: {
+        auditLog: {
+          create: auditLogCreate
+        }
+      }
+    } as unknown as Database)
+
+    await options.onEvent?.({
+      agentId,
+      hostId,
+      type: 'agent.created'
+    })
+
+    expect(auditLogCreate).toHaveBeenCalledWith({
+      action: 'agent_mail.agent.enrollment_grants.apply_failed',
+      metadata: {
+        agentId,
+        error: {
+          code: 'EAUTH',
+          name: 'Error',
+          statusCode: 503,
+          type: 'object'
+        },
+        hostId
+      },
+      severity: 'high',
+      status: 'failed'
+    })
+    expect(auditLogCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'agent_auth.agent.created',
+        status: 'success'
+      })
+    )
+    expect(agentAuthConfigTestState.debugLog).toHaveBeenCalledWith(
+      'agent_auth_enrollment_grant_apply_failed %o',
+      {
+        agentId,
+        error: {
+          code: 'EAUTH',
+          name: 'Error',
+          statusCode: 503,
+          type: 'object'
+        },
+        errorCode: 'EAUTH',
+        hostId,
+        operation: 'agent_auth_enrollment_grant_apply'
+      }
+    )
+    const serializedAuditCalls = JSON.stringify(auditLogCreate.mock.calls)
+    const serializedLogCalls = JSON.stringify(agentAuthConfigTestState.debugLog.mock.calls)
+    expect(serializedAuditCalls).not.toContain('raw-agent-token')
+    expect(serializedAuditCalls).not.toContain('support@example.test')
+    expect(serializedAuditCalls).not.toContain('Authorization')
+    expect(serializedLogCalls).not.toContain('raw-agent-token')
+    expect(serializedLogCalls).not.toContain('support@example.test')
+    expect(serializedLogCalls).not.toContain('Authorization')
   })
 
   it('applies pending human-approved enrollment grants when an enrolled agent is created', async () => {

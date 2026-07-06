@@ -115,6 +115,28 @@ These values are defaulted by the Compose files. Leave them unset unless you are
 
 </ParamField>
 
+## Logging controls
+
+The web server and mail-control-service emit operational info/error logs to container stdout/stderr by default. Leave these unset for normal production.
+
+<ParamField path="AT_EMAIL_ADMIN_WEB_SERVER_DEBUG" type="string">
+  Enables the web server's safe `app:frontend` debug namespace when set to any non-empty value. The value is not passed through as a `DEBUG` pattern, so wildcards such as `*` or `app:*` are ignored.
+
+**Default:** unset
+
+**Example:** `app:frontend`
+
+</ParamField>
+
+<ParamField path="AT_EMAIL_ADMIN_WEB_SERVER_DEBUG_HIDE_DATE" type="boolean">
+  Passed to the web server as `DEBUG_HIDE_DATE`. Compose defaults this to `1` so container log timestamps remain the primary timestamp when `AT_EMAIL_ADMIN_WEB_SERVER_DEBUG` is enabled.
+
+**Default:** `1`
+
+</ParamField>
+
+The mail-control-service does not require a logging environment variable; its production operational logs are emitted by default.
+
 ## Databases
 
 AgentTeam Email requires three MongoDB databases and one Redis instance. The default `compose.yaml` stack supplies them with bundled services. Set these variables only when using an equivalent external data-service deployment.

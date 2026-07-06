@@ -252,6 +252,13 @@
       "properties": {
         "authSecret": { "$ref": "#/$defs/valueSource" },
         "databaseMaxPoolSize": { "minimum": 1, "type": "integer" },
+        "debug": {
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "hideDate": { "$ref": "#/$defs/valueSource" }
+          },
+          "type": "object"
+        },
         "encryptionKey": { "$ref": "#/$defs/valueSource" },
         "tmpDir": { "$ref": "#/$defs/valueSource" }
       },

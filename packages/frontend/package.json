@@ -32,6 +32,7 @@
     "storybook:screenshots": "node ./scripts/storybook-screenshots.mjs",
     "storybook:test": "vitest run --config vitest.storybook.config.ts",
     "storybook:test:watch": "vitest --config vitest.storybook.config.ts",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "typecheck:debug": "tsc --noEmit --listFiles"
   },

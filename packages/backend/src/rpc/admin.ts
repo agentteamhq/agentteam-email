@@ -1,3 +1,4 @@
+import debug from 'debug'
 import { Elysia, t } from 'elysia'
 
 import {
@@ -5,8 +6,15 @@ import {
   getAdminDashboardSummary,
   isAdminDashboardAccessError
 } from '../admin/dashboard-service'
+import { createSafeErrorLogDetails, createSafeRequestLogDetails } from '../auth/log-redaction'
+import {
+  createSafeRequestCorrelationLogDetails,
+  mapPublicErrorResponse,
+  publicErrorResponseBodySchema
+} from '../public-error-response'
 import { typedResponseSchema } from './response-schema'
 import type { TSchema } from '@sinclair/typebox'
+import type { PublicErrorResponse, PublicErrorResponseBody } from '../public-error-response'
 import type {
   AdminAuditLogList,
   AdminAuditLogPageSize,
@@ -15,13 +23,15 @@ import type {
 } from '../admin/dashboard-service'
 
 const adminDashboardErrorResponseSchemas = {
-  401: t.Object({ error: t.String() }),
-  403: t.Object({ error: t.String() })
+  401: publicErrorResponseBodySchema,
+  403: publicErrorResponseBodySchema
 }
 
 type AdminResponseSet = {
   status?: number | string
 }
+
+const log = debug('app:rpc:admin')
 
 function enumObject<const TValues extends readonly string[]>(
   values: TValues
@@ -141,7 +151,7 @@ const admin = new Elysia({
       try {
         return await getAdminDashboardSummary(request.headers)
       } catch (error) {
-        return adminDashboardErrorResponse(error, set)
+        return adminDashboardErrorResponse(error, request, set, 'admin_dashboard_summary')
       }
     },
     {
@@ -163,7 +173,7 @@ const admin = new Elysia({
           status: query.status
         })
       } catch (error) {
-        return adminDashboardErrorResponse(error, set)
+        return adminDashboardErrorResponse(error, request, set, 'admin_audit_log_list')
       }
     },
     {
@@ -190,12 +200,40 @@ const admin = new Elysia({
     }
   )
 
-function adminDashboardErrorResponse(error: unknown, set: AdminResponseSet): { error: string } {
+function adminDashboardErrorResponse(
+  error: unknown,
+  request: Request,
+  set: AdminResponseSet,
+  operation: string
+): PublicErrorResponseBody {
   if (isAdminDashboardAccessError(error)) {
-    set.status = error.status
-    return { error: error.message }
+    const publicError = mapPublicErrorResponse({ code: error.status, error, request })
+    set.status = publicError.status
+    logHandledAdminError(error, request, publicError, operation)
+    return publicError.body
   }
   throw error
+}
+
+function logHandledAdminError(
+  error: unknown,
+  request: Request,
+  publicError: PublicErrorResponse,
+  operation: string
+) {
+  const errorLogDetails = createSafeErrorLogDetails(error)
+  log('admin_rpc_handled_error %o', {
+    error: errorLogDetails,
+    ...(errorLogDetails.code ? { errorCode: errorLogDetails.code } : {}),
+    operation,
+    publicError: {
+      code: publicError.body.code,
+      status: publicError.status,
+      ...(publicError.body.supportReference ? { supportReference: publicError.body.supportReference } : {})
+    },
+    ...createSafeRequestCorrelationLogDetails(request),
+    ...createSafeRequestLogDetails(request)
+  })
 }
 
 function numberQueryValue(value: number | string | undefined): number | undefined {

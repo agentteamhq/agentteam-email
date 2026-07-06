@@ -28,6 +28,7 @@ import (
 	"mail-control-service/internal/modules/smtprelay"
 	"mail-control-service/internal/provisioning/wildduckprovisioner"
 	"mail-control-service/internal/registry/domainregistry"
+	"mail-control-service/internal/safelog"
 
 	"github.com/golang-jwt/jwt/v5"
 	"go.mongodb.org/mongo-driver/v2/x/mongo/driver/connstring"
@@ -423,11 +424,11 @@ func (a *controlRuntimeAPI) SyncRuntime(ctx context.Context, params controlapi.R
 		}
 		result, err := a.feedbackProvisioner.EnsureFeedback(ctx, active, now)
 		if err != nil {
-			log.Printf("agent-mail-runtime-sync event=feedback_provision_failed active_domains=%d changed=%t error=%q", len(active), changed, err)
+			log.Printf("agent-mail-runtime-sync event=feedback_provision_failed active_domains=%d changed=%t error=%q", len(active), changed, safelog.Error(err))
 			return controlapi.RuntimeSyncResult{}, fmt.Errorf("ensure feedback addresses: %w", err)
 		}
 		if !result.OK {
-			log.Printf("agent-mail-runtime-sync event=feedback_provision_failed active_domains=%d changed=%t issues=%q", len(active), changed, result.Issues)
+			log.Printf("agent-mail-runtime-sync event=feedback_provision_failed active_domains=%d changed=%t issues=%q", len(active), changed, safelog.Text(strings.Join(result.Issues, ",")))
 			return controlapi.RuntimeSyncResult{}, fmt.Errorf("ensure feedback addresses: %s", strings.Join(result.Issues, ","))
 		}
 	}
@@ -440,6 +441,7 @@ func Main(ctx context.Context, args []string) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
+	log.Printf("agent-mail-control-service event=startup admin_listen_address=%q", safelog.Field(*adminListenAddress, 128))
 
 	service, err := New(ctx, Config{
 		AdminListenAddress: *adminListenAddress,
@@ -474,6 +476,14 @@ func New(ctx context.Context, cfg Config) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	log.Printf(
+		"agent-mail-control-service event=runtime_config_loaded admin_listen_address=%q provider_relay_listen_address=%q control_database=%q wildduck_database=%q selected_provider=%s",
+		safelog.Field(cfg.AdminListenAddress, 128),
+		safelog.Field(endpoints.ProviderRelayListenAddress, 128),
+		safelog.Field(databases.ControlMongoDatabase, 80),
+		safelog.Field(databases.WildDuckMongoDatabase, 80),
+		selectedProvider,
+	)
 	stateStore := controlstate.NewMemoryStore()
 	runtimeSource := controlStateRuntimeSource{store: stateStore}
 	moduleConfig := canonicalModuleConfig(secrets, databases, endpoints)
@@ -570,6 +580,7 @@ func New(ctx context.Context, cfg Config) (*Service, error) {
 		_ = pollerModule.Close(context.Background())
 		return nil, fmt.Errorf("initialize admin API module: %w", err)
 	}
+	log.Printf("agent-mail-control-service event=initialized modules=%d", 4)
 
 	return &Service{
 		poller:         pollerModule,
@@ -597,6 +608,7 @@ func (s *Service) Run(ctx context.Context) error {
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	log.Printf("agent-mail-control-service event=run_start modules=poller,provider-relay,feedback-router,admin-api")
 	errCh := make(chan moduleResult, 4)
 	go runModule(runCtx, errCh, "poller", s.poller.Run)
 	go runModule(runCtx, errCh, "provider-relay", s.providerRelay.Run)
@@ -615,8 +627,10 @@ func (s *Service) Run(ctx context.Context) error {
 		}
 	}
 	if resultErr != nil {
+		log.Printf("agent-mail-control-service event=run_failed error=%q", safelog.Error(resultErr))
 		return resultErr
 	}
+	log.Printf("agent-mail-control-service event=run_stop reason=context_done")
 	return ctx.Err()
 }
 
@@ -841,7 +855,7 @@ func (p *controlStatusProvider) Snapshot(now time.Time) (domainregistry.Snapshot
 	active, err := controlstate.ActiveDomainRecords(ctx, p.stateStore, nil)
 	if err != nil {
 		snapshot.ControlState.OK = false
-		snapshot.ControlState.Issues = append(snapshot.ControlState.Issues, "active_domain_load_failed: "+err.Error())
+		snapshot.ControlState.Issues = append(snapshot.ControlState.Issues, safelog.Issue("active_domain_load_failed", err))
 	}
 	snapshot.Modules = p.modulesStatus(ctx)
 	snapshot.Dependencies = p.dependenciesStatus(snapshot.Dependencies)
@@ -1013,8 +1027,10 @@ func envConfigured(keys ...string) bool {
 func runModule(ctx context.Context, errCh chan<- moduleResult, name string, run func(context.Context) error) {
 	log.Printf("agent-mail-control-service event=module_start module=%s", name)
 	err := run(ctx)
-	if err != nil {
-		log.Printf("agent-mail-control-service event=module_stop module=%s error=%q", name, err)
+	if err != nil && !errors.Is(err, context.Canceled) {
+		log.Printf("agent-mail-control-service event=module_stop module=%s error=%q", name, safelog.Error(err))
+	} else if err != nil {
+		log.Printf("agent-mail-control-service event=module_stop module=%s reason=context_canceled", name)
 	} else {
 		log.Printf("agent-mail-control-service event=module_stop module=%s", name)
 	}

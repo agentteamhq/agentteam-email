@@ -2,6 +2,7 @@
 import { createAppModels } from '@main/db'
 import debug from 'debug'
 import mongoose, { STATES } from 'mongoose'
+import { createSafeErrorLogDetails } from '../auth/log-redaction'
 import type { AppModels } from '@main/db'
 import type { Connection } from 'mongoose'
 
@@ -35,7 +36,7 @@ export async function createDatabase(
     log('MongoDB disconnected')
   })
   connection.on('error', (error) => {
-    log('MongoDB connection error', error)
+    log('MongoDB connection error %o', createSafeErrorLogDetails(error))
   })
 
   try {

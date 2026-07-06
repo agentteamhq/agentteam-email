@@ -1,10 +1,12 @@
 import debug from 'debug'
 
+import { createSafeErrorLogDetails } from '../auth/log-redaction'
 import { globals } from '../globals'
 
 const log = debug('app:user:send-verification-email')
 
 const RATE_LIMIT_MS = 2 * 60 * 1000 // 2 minutes
+const SAFE_USER_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/
 
 /**
  * Sends a verification email if one hasn't been sent recently.
@@ -50,18 +52,32 @@ export async function sendUserVerificationEmail(email: string): Promise<string |
       .updateOne({ _id: foundUser._id }, { $set: { lastVerificationEmailSent: new Date() } })
       .exec()
 
-    log('sent verification email to %s', email)
+    log('sent verification email %o', verificationEmailLogDetails(foundUser._id))
     return 'Email not verified. A verification email has been sent, please check your inbox.'
   } catch (e) {
     // better auth may throw rate limit / too many requests errors
     if (e && typeof e === 'object' && 'statusCode' in e) {
       const apiError = e as { statusCode: number; message?: string }
       if (apiError.statusCode === 429) {
-        log('too many verification email attempts for %s', email)
+        log('too many verification email attempts %o', {
+          ...verificationEmailLogDetails(foundUser._id),
+          error: createSafeErrorLogDetails(e)
+        })
         return 'Too many attempts. Please wait a few minutes and try again.'
       }
     }
-    log('error sending verification email to %s: %O', email, e)
+    log('error sending verification email %o', {
+      ...verificationEmailLogDetails(foundUser._id),
+      error: createSafeErrorLogDetails(e)
+    })
     return 'Email not verified. Please check your inbox to verify your email.'
+  }
+}
+
+function verificationEmailLogDetails(userId: unknown) {
+  const serializedUserId = String(userId)
+  return {
+    operation: 'send_user_verification_email',
+    userId: SAFE_USER_ID_PATTERN.test(serializedUserId) ? serializedUserId : 'unavailable'
   }
 }
