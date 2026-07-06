@@ -152,6 +152,7 @@ describe('scheduled jobs', () => {
     expect(scheduledJobsTestState.debugLog).toHaveBeenCalledWith('agenda error %o', {
       error: {
         code: 'ECONNRESET',
+        message: 'worker refresh failed for  email_redacted  with token=secret_redacted',
         name: 'Error',
         statusCode: 503,
         type: 'object'
@@ -161,6 +162,7 @@ describe('scheduled jobs', () => {
     expect(scheduledJobsTestState.debugLog).toHaveBeenCalledWith('scheduled job failed %o', {
       error: {
         code: 'ECONNRESET',
+        message: 'worker refresh failed for  email_redacted  with token=secret_redacted',
         name: 'Error',
         statusCode: 503,
         type: 'object'
@@ -170,6 +172,7 @@ describe('scheduled jobs', () => {
     expect(scheduledJobsTestState.debugLog).toHaveBeenCalledWith('scheduled job failed %o', {
       error: {
         code: 'ECONNRESET',
+        message: 'worker refresh failed for  email_redacted  with token=secret_redacted',
         name: 'Error',
         statusCode: 503,
         type: 'object'
@@ -179,6 +182,7 @@ describe('scheduled jobs', () => {
     expect(scheduledJobsTestState.debugLog).toHaveBeenCalledWith('scheduled job failed %o', {
       error: {
         code: 'ECONNRESET',
+        message: 'worker refresh failed for  email_redacted  with token=secret_redacted',
         name: 'Error',
         statusCode: 503,
         type: 'object'
@@ -188,7 +192,7 @@ describe('scheduled jobs', () => {
     const serializedLogCalls = JSON.stringify(scheduledJobsTestState.debugLog.mock.calls)
     expect(serializedLogCalls).not.toContain('recipient@example.test')
     expect(serializedLogCalls).not.toContain('raw-worker-token')
-    expect(serializedLogCalls).not.toContain('worker refresh failed')
+    expect(serializedLogCalls).toContain('worker refresh failed')
     expect(serializedLogCalls).not.toContain('stack with')
   })
 })

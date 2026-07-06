@@ -95,6 +95,8 @@ describe('backend API routes', () => {
     expect(apiIndexTestState.debugLog).toHaveBeenCalledWith('api_handled_error %o', {
       error: {
         code: '503',
+        message:
+          'Trial provisioning failed for admission_token=secret_redacted and database password=secret_redacted',
         name: 'AgentMailTrialError',
         status: '503',
         statusCode: 503,
@@ -115,7 +117,7 @@ describe('backend API routes', () => {
     expect(serializedLogCalls).not.toContain('raw-admission-token')
     expect(serializedLogCalls).not.toContain('_secret_db')
     expect(serializedLogCalls).not.toContain('raw-query-token')
-    expect(serializedLogCalls).not.toContain('Trial provisioning failed')
+    expect(serializedLogCalls).toContain('Trial provisioning failed')
   })
 
   it('preserves API Bearer challenges for trial authentication failures', async () => {

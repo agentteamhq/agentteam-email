@@ -37,11 +37,11 @@ describe('auth log redaction', () => {
     expect(serialized).not.toContain('raw-cookie')
   })
 
-  it('summarizes errors without raw messages, stacks, tokens, headers, or bodies', () => {
+  it('preserves error diagnostics while redacting known secret values from messages', () => {
     expect.hasAssertions()
 
     const error = new Error(
-      'Token exchange failed with code=raw-oauth-code and Authorization: Bearer raw-bearer-token'
+      'Token exchange failed with authorization code raw-oauth-code-123 and Authorization: Bearer raw-bearer-token'
     ) as Error & {
       body: { code: string }
       headers: { authorization: string; cookie: string }
@@ -63,25 +63,27 @@ describe('auth log redaction', () => {
 
     expect(details).toStrictEqual({
       code: 'EMAIL_NOT_VERIFIED',
-      name: 'object',
+      message:
+        'Token exchange failed with authorization code secret_redacted and Authorization=secret_redacted',
+      name: 'OAuthTokenExchangeError',
       status: 'FORBIDDEN',
       statusCode: 403,
       type: 'object'
     })
-    expect(serialized).not.toContain('OAuthTokenExchangeError')
+    expect(serialized).toContain('OAuthTokenExchangeError')
+    expect(serialized).toContain('Token exchange failed')
     expect(serialized).not.toContain('raw-oauth-code')
     expect(serialized).not.toContain('raw-bearer-token')
     expect(serialized).not.toContain('raw-access-token')
     expect(serialized).not.toContain('raw-cookie')
-    expect(serialized).not.toContain('Token exchange failed')
     expect(serialized).not.toContain('headers')
   })
 
   it.each([
     'sk-secret-request-token',
-    'api-key:raw-key-value',
+    '_secret_oauth_access_raw-token',
     'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyIn0.signature'
-  ])('rejects secret-shaped error names from safe diagnostics: %s', (name) => {
+  ])('rejects known secret values used as error names from safe diagnostics: %s', (name) => {
     expect.hasAssertions()
 
     const error = new Error('failed without exposing raw secret details')
@@ -91,6 +93,7 @@ describe('auth log redaction', () => {
     const serialized = JSON.stringify(details)
 
     expect(details).toStrictEqual({
+      message: 'failed without exposing raw secret details',
       name: 'object',
       type: 'object'
     })
@@ -112,7 +115,7 @@ describe('auth log redaction', () => {
     'ApiKeyRefreshError',
     'not_authorized',
     'authorization_required'
-  ])('rejects semantic credential-bearing error names from safe diagnostics: %s', (name) => {
+  ])('preserves auth-shaped diagnostic error names by default: %s', (name) => {
     expect.hasAssertions()
 
     const error = new Error('failed without exposing raw credential details')
@@ -122,10 +125,11 @@ describe('auth log redaction', () => {
     const serialized = JSON.stringify(details)
 
     expect(details).toStrictEqual({
-      name: 'object',
+      message: 'failed without exposing raw credential details',
+      name,
       type: 'object'
     })
-    expect(serialized).not.toContain(name)
+    expect(serialized).toContain(name)
   })
 
   it.each([
@@ -138,7 +142,7 @@ describe('auth log redaction', () => {
     'CLOUDFLARE_TOKEN_REJECTED',
     'PAPERCLIP_TOKEN_REJECTED',
     'authorization_required'
-  ])('rejects semantic credential-bearing error codes from safe diagnostics: %s', (code) => {
+  ])('preserves auth-shaped diagnostic error codes by default: %s', (code) => {
     expect.hasAssertions()
 
     const error = new Error('failed without exposing raw api key details') as Error & { code: string }
@@ -148,14 +152,16 @@ describe('auth log redaction', () => {
     const serialized = JSON.stringify(details)
 
     expect(details).toStrictEqual({
+      code,
+      message: 'failed without exposing raw api key details',
       name: 'Error',
       type: 'object'
     })
-    expect(serialized).not.toContain(code)
+    expect(serialized).toContain(code)
   })
 
   it.each(['UNAUTHORIZED', 'ERR_UNAUTHORIZED', 'ERR_NOT_AUTHORIZED'])(
-    'rejects auth-shaped body codes and status values from safe diagnostics: %s',
+    'preserves auth-shaped body codes and status values from safe diagnostics: %s',
     (value) => {
       expect.hasAssertions()
 
@@ -172,14 +178,17 @@ describe('auth log redaction', () => {
       const serialized = JSON.stringify(details)
 
       expect(details).toStrictEqual({
+        code: value,
+        message: 'failed without exposing authorization details',
         name: 'Error',
+        status: value,
         type: 'object'
       })
-      expect(serialized).not.toContain(value)
+      expect(serialized).toContain(value)
     }
   )
 
-  it('redacts Better Auth API unauthorized identifiers while preserving numeric status', () => {
+  it('preserves Better Auth API unauthorized identifiers as diagnostic facts', () => {
     expect.hasAssertions()
 
     const error = {
@@ -193,14 +202,16 @@ describe('auth log redaction', () => {
     const serialized = JSON.stringify(details)
 
     expect(details).toStrictEqual({
+      code: 'UNAUTHORIZED',
       name: 'APIError',
+      status: 'UNAUTHORIZED',
       statusCode: 401,
       type: 'object'
     })
-    expect(serialized).not.toContain('UNAUTHORIZED')
+    expect(serialized).toContain('UNAUTHORIZED')
   })
 
-  it('rejects auth-shaped Better Auth metadata from log details', () => {
+  it('preserves auth-shaped Better Auth metadata in log details', () => {
     expect.hasAssertions()
 
     const details = createBetterAuthLogDetails('error', 'Better Auth event', [
@@ -217,18 +228,21 @@ describe('auth log redaction', () => {
     expect(details).toStrictEqual({
       argumentCount: 1,
       argumentTypes: ['object'],
+      code: 'UNAUTHORIZED',
       error: {
+        code: 'UNAUTHORIZED',
+        name: 'UnauthorizedError',
+        status: 'UNAUTHORIZED',
         statusCode: 401,
-        name: 'object',
         type: 'object'
       },
       level: 'error',
       operation: 'better_auth_event',
+      status: 'UNAUTHORIZED',
       statusCode: 401
     })
-    expect(serialized).not.toContain('UNAUTHORIZED')
-    expect(serialized).not.toContain('ERR_NOT_AUTHORIZED')
-    expect(serialized).not.toContain('UnauthorizedError')
+    expect(serialized).toContain('UNAUTHORIZED')
+    expect(serialized).toContain('UnauthorizedError')
   })
 
   it('preserves ordinary safe error names and codes', () => {
@@ -239,6 +253,7 @@ describe('auth log redaction', () => {
 
     expect(createSafeErrorLogDetails(error)).toStrictEqual({
       code: 'ERR_VALIDATION_FAILED',
+      message: 'validation failed',
       name: 'TypeError',
       type: 'object'
     })
@@ -247,6 +262,7 @@ describe('auth log redaction', () => {
     validationError.name = 'ValidationError'
 
     expect(createSafeErrorLogDetails(validationError)).toStrictEqual({
+      message: 'validation failed',
       name: 'ValidationError',
       type: 'object'
     })
@@ -281,11 +297,12 @@ describe('auth log redaction', () => {
       argumentCount: 2,
       argumentTypes: ['object', 'object'],
       error: {
+        message: 'Provider returned access token secret_redacted',
         name: 'Error',
         type: 'object'
       },
       level: 'error',
-      operation: 'token_exchange_failed_for_secret_redacted',
+      operation: 'token_exchange_failed_for_authorization_code_secret_redacted',
       providerId: 'cloudflare',
       statusCode: 403
     })
@@ -305,13 +322,16 @@ describe('auth log redaction', () => {
     expect.hasAssertions()
 
     expect(sanitizePathnameForLogging('/rpc/auth/api/oauth2/callback/cloudflare')).toBe(
-      '/rpc/auth/api/oauth2/callback/:providerId'
+      '/rpc/auth/api/oauth2/callback/cloudflare'
     )
     expect(sanitizePathnameForLogging('/rpc/auth/api/reset-password/raw-reset-token')).toBe(
       '/rpc/auth/api/reset-password/:token'
     )
     expect(sanitizePathnameForLogging('/rpc/auth/api/token/_secret_oauth_access_raw-token')).toBe(
       '/rpc/auth/api/token/:value'
+    )
+    expect(sanitizePathnameForLogging('/rpc/auth/api/session/018f3a9e-42c0-7dc3-8dc7-3051b7867a9a')).toBe(
+      '/rpc/auth/api/session/018f3a9e-42c0-7dc3-8dc7-3051b7867a9a'
     )
   })
 })

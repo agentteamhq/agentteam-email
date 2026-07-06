@@ -260,6 +260,7 @@ describe('Agent Auth configuration', () => {
         agentId,
         error: {
           code: 'EAUTH',
+          message: 'enrollment grant apply failed with Authorization  bearer_redacted  for  email_redacted',
           name: 'Error',
           statusCode: 503,
           type: 'object'
@@ -281,6 +282,7 @@ describe('Agent Auth configuration', () => {
         agentId,
         error: {
           code: 'EAUTH',
+          message: 'enrollment grant apply failed with Authorization  bearer_redacted  for  email_redacted',
           name: 'Error',
           statusCode: 503,
           type: 'object'
@@ -294,10 +296,10 @@ describe('Agent Auth configuration', () => {
     const serializedLogCalls = JSON.stringify(agentAuthConfigTestState.debugLog.mock.calls)
     expect(serializedAuditCalls).not.toContain('raw-agent-token')
     expect(serializedAuditCalls).not.toContain('support@example.test')
-    expect(serializedAuditCalls).not.toContain('Authorization')
+    expect(serializedAuditCalls).toContain('Authorization')
     expect(serializedLogCalls).not.toContain('raw-agent-token')
     expect(serializedLogCalls).not.toContain('support@example.test')
-    expect(serializedLogCalls).not.toContain('Authorization')
+    expect(serializedLogCalls).toContain('Authorization')
   })
 
   it('applies pending human-approved enrollment grants when an enrolled agent is created', async () => {

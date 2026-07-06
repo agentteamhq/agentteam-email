@@ -198,6 +198,7 @@ describe('e2e test support RPC', () => {
       'e2e_test_support_handled_error %o',
       expect.objectContaining({
         error: {
+          message: 'sign-up failed with password=secret_redacted and token=secret_redacted',
           name: 'object',
           type: 'object'
         },
@@ -215,7 +216,7 @@ describe('e2e test support RPC', () => {
     expect(serializedLogCalls).not.toContain('raw-e2e-password')
     expect(serializedLogCalls).not.toContain('raw-provisioning-token')
     expect(serializedLogCalls).not.toContain('sk-secret-provisioning-token')
-    expect(serializedLogCalls).not.toContain('sign-up failed')
+    expect(serializedLogCalls).toContain('sign-up failed')
   })
 
   it('preserves successful test principal provisioning behavior', async () => {

@@ -583,14 +583,14 @@ describe('Agent Mail autonomous trial service', () => {
       action: 'agent_mail.trial.provisioning_failed',
       metadata: expect.objectContaining({
         cleanupStatus: 'deleted',
-        errorName: 'object',
+        errorName: 'AuthError',
         mailboxAddress: expect.stringMatching(/^trial-[a-f0-9]{16}@trial\.example\.test$/u),
         wildDuckUserId: 'wildduck-user-1'
       }),
       severity: 'high',
       status: 'failed'
     })
-    expect(JSON.stringify(trialServiceTestState.auditLogCreate.mock.calls)).not.toContain('AuthError')
+    expect(JSON.stringify(trialServiceTestState.auditLogCreate.mock.calls)).toContain('AuthError')
   })
 
   it('keeps trial startup writes inside a database transaction when a later DB write fails', async () => {
@@ -643,9 +643,9 @@ describe('Agent Mail autonomous trial service', () => {
     expect(trialServiceTestState.auditLogCreate).toHaveBeenCalledWith({
       action: 'agent_mail.trial.provisioning_failed',
       metadata: expect.objectContaining({
-        cleanupErrorName: 'object',
+        cleanupErrorName: 'OAuthTokenExchangeError',
         cleanupStatus: 'failed',
-        errorName: 'object',
+        errorName: 'AuthError',
         mailboxAddress: expect.stringMatching(/^trial-[a-f0-9]{16}@trial\.example\.test$/u),
         wildDuckUserId: 'wildduck-user-1'
       }),
@@ -653,8 +653,8 @@ describe('Agent Mail autonomous trial service', () => {
       status: 'failed'
     })
     const serializedAuditCalls = JSON.stringify(trialServiceTestState.auditLogCreate.mock.calls)
-    expect(serializedAuditCalls).not.toContain('AuthError')
-    expect(serializedAuditCalls).not.toContain('OAuthTokenExchangeError')
+    expect(serializedAuditCalls).toContain('AuthError')
+    expect(serializedAuditCalls).toContain('OAuthTokenExchangeError')
   })
 
   it('requires a signed-in user before looking up an autonomous trial claim token', async () => {

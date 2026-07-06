@@ -182,6 +182,7 @@ describe('Cloudflare internal control send handler', () => {
       expect.objectContaining({
         error: {
           code: '502',
+          message: 'Cloudflare raw send failed with Cookie secret_redacted and From:  email_redacted',
           name: 'CloudflareControlSendError',
           status: '502',
           statusCode: 502,
@@ -199,8 +200,7 @@ describe('Cloudflare internal control send handler', () => {
     const serializedLogCalls = JSON.stringify(internalSendTestState.debugLog.mock.calls)
     expect(serializedLogCalls).not.toContain('raw-cookie')
     expect(serializedLogCalls).not.toContain('agent@example.com')
-    expect(serializedLogCalls).not.toContain('Cloudflare raw send failed')
-    expect(serializedLogCalls).not.toContain('From:')
+    expect(serializedLogCalls).toContain('Cloudflare raw send failed')
   })
 })
 

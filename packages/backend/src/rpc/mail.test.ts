@@ -586,6 +586,7 @@ describe('mail RPC routes', () => {
       expect.objectContaining({
         error: {
           code: 'ECONNRESET',
+          message: 'mail-control returned Authorization  bearer_redacted  for  email_redacted',
           name: 'MailControlTransportError',
           statusCode: 502,
           type: 'object'
@@ -598,6 +599,7 @@ describe('mail RPC routes', () => {
     expect(mailRpcTestState.debugLog.mock.calls[0]?.[1]).toMatchObject({
       error: {
         code: 'ECONNRESET',
+        message: 'mail-control returned Authorization  bearer_redacted  for  email_redacted',
         name: 'MailControlTransportError',
         statusCode: 502,
         type: 'object'
@@ -607,7 +609,7 @@ describe('mail RPC routes', () => {
     const serializedLogCalls = JSON.stringify(mailRpcTestState.debugLog.mock.calls)
     expect(serializedLogCalls).not.toContain('support@example.test')
     expect(serializedLogCalls).not.toContain('raw-mail-token')
-    expect(serializedLogCalls).not.toContain('mail-control returned')
+    expect(serializedLogCalls).toContain('mail-control returned')
     expect(serializedLogCalls).not.toContain('stack with')
   })
 

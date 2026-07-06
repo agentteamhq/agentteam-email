@@ -149,7 +149,8 @@ describe('integrations RPC routes', () => {
     })
     expect(integrationsRpcTestState.debugLog).toHaveBeenCalledWith('integrations_rpc_error %o', {
       error: {
-        code: '401',
+        code: 'PAPERCLIP_TOKEN_REJECTED',
+        message: 'Paperclip OAuth access token secret_redacted failed for  email_redacted',
         name: 'IntegrationsError',
         status: '401',
         statusCode: 401,
@@ -173,8 +174,8 @@ describe('integrations RPC routes', () => {
     expect(serializedBody).not.toContain('Paperclip OAuth access token')
     expect(serializedLogCalls).not.toContain('raw_secret_integration_token')
     expect(serializedLogCalls).not.toContain('user@example.test')
-    expect(serializedLogCalls).not.toContain('Paperclip OAuth access token')
-    expect(serializedLogCalls).not.toContain('PAPERCLIP_TOKEN_REJECTED')
+    expect(serializedLogCalls).toContain('Paperclip OAuth access token')
+    expect(serializedLogCalls).toContain('PAPERCLIP_TOKEN_REJECTED')
     expect(serializedLogCalls).not.toContain('stack with')
   })
 
@@ -207,6 +208,7 @@ describe('integrations RPC routes', () => {
     })
     expect(integrationsRpcTestState.debugLog).toHaveBeenCalledWith('integrations_rpc_error %o', {
       error: {
+        message: 'Mongo connection failed with password=secret_redacted',
         name: 'MongoServerError',
         type: 'object'
       },
@@ -226,7 +228,7 @@ describe('integrations RPC routes', () => {
     expect(serializedBody).not.toContain('integration-db-secret')
     expect(serializedBody).not.toContain('Mongo connection failed')
     expect(serializedLogCalls).not.toContain('integration-db-secret')
-    expect(serializedLogCalls).not.toContain('Mongo connection failed')
+    expect(serializedLogCalls).toContain('Mongo connection failed')
     expect(serializedLogCalls).not.toContain('mongo stack')
   })
 })

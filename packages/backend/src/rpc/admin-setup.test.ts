@@ -188,6 +188,7 @@ describe('admin setup RPC', () => {
       'first_admin_setup_handled_error %o',
       expect.objectContaining({
         error: {
+          message: 'sign-up failed with Authorization  bearer_redacted  for  email_redacted',
           name: 'Error',
           type: 'object'
         },
@@ -204,6 +205,7 @@ describe('admin setup RPC', () => {
     const serializedLogCalls = JSON.stringify(adminSetupTestState.debugLog.mock.calls)
     expect(serializedLogCalls).not.toContain('raw-auth-token')
     expect(serializedLogCalls).not.toContain('admin@example.test')
+    expect(serializedLogCalls).toContain('sign-up failed')
     expect(adminSetupTestState.lockDeleteOne).toHaveBeenCalledWith({
       expiresAt: { $lte: expect.any(Date) },
       key: 'admin-setup:first-admin'

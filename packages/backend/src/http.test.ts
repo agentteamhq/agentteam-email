@@ -148,6 +148,7 @@ describe('backend HTTP boundary', () => {
     expect(httpBoundaryTestState.debugLog).toHaveBeenCalledWith('backend_http_unhandled_error %o', {
       error: {
         code: 'MONGODB_DOWN',
+        message: 'MongoDB connection failed with password=secret_redacted',
         name: 'Error',
         statusCode: 503,
         type: 'object'
@@ -168,7 +169,7 @@ describe('backend HTTP boundary', () => {
     expect(serializedLogCalls).not.toContain('raw-query-token')
     expect(serializedLogCalls).not.toContain('raw-bearer-token')
     expect(serializedLogCalls).not.toContain('raw-cookie')
-    expect(serializedLogCalls).not.toContain('MongoDB connection failed')
+    expect(serializedLogCalls).toContain('MongoDB connection failed')
     expect(serializedLogCalls).not.toContain('stack with')
   })
 
@@ -207,6 +208,7 @@ describe('backend HTTP boundary', () => {
     expect(httpBoundaryTestState.debugLog).toHaveBeenCalledWith('backend_http_unhandled_error %o', {
       cfRay: '8d18f1d2c4a12345-SJC',
       error: {
+        message: 'control snapshot failed with Authorization  bearer_redacted  for  email_redacted',
         name: 'ControlSnapshotTransportError',
         type: 'object'
       },
@@ -225,7 +227,7 @@ describe('backend HTTP boundary', () => {
     expect(serializedLogCalls).not.toContain('raw-oauth-code')
     expect(serializedLogCalls).not.toContain('sk-secret-request-token')
     expect(serializedLogCalls).not.toContain('raw-cookie')
-    expect(serializedLogCalls).not.toContain('control snapshot failed')
+    expect(serializedLogCalls).toContain('control snapshot failed')
     expect(serializedLogCalls).not.toContain('stack with')
   })
 
@@ -264,6 +266,7 @@ describe('backend HTTP boundary', () => {
     expect(httpBoundaryTestState.debugLog).toHaveBeenCalledWith('rpc_unhandled_error %o', {
       cfRay: '8d18f1d2c4a12345-SJC',
       error: {
+        message: 'control snapshot failed with Authorization  bearer_redacted  for  email_redacted',
         name: 'ControlSnapshotTransportError',
         type: 'object'
       },
@@ -282,7 +285,7 @@ describe('backend HTTP boundary', () => {
     expect(serializedLogCalls).not.toContain('raw-oauth-code')
     expect(serializedLogCalls).not.toContain('sk-secret-request-token')
     expect(serializedLogCalls).not.toContain('raw-cookie')
-    expect(serializedLogCalls).not.toContain('control snapshot failed')
+    expect(serializedLogCalls).toContain('control snapshot failed')
     expect(serializedLogCalls).not.toContain('stack with')
   })
 

@@ -1085,7 +1085,7 @@ describe('Cloudflare domain removal service', () => {
     )
   })
 
-  it('redacts sensitive diagnostic names from Cloudflare domain removal logs', async () => {
+  it('preserves diagnostic names in Cloudflare domain removal logs without raw secrets', async () => {
     expect.hasAssertions()
     const { connection, globals, mocks } = cloudflareDomainRemovalGlobals()
     const headers = new Headers({ authorization: 'Bearer user-token' })
@@ -1118,8 +1118,9 @@ describe('Cloudflare domain removal service', () => {
       expect.objectContaining({
         error: expect.objectContaining({
           code: 'CLOUDFLARE_403',
+          message: 'Cloudflare request failed. Check the selected account, zone, and permissions.',
           method: 'DELETE',
-          name: 'object',
+          name: 'OAuthTokenExchangeError',
           status: 403
         }),
         stage: 'remove-cloudflare-resources'
@@ -1136,7 +1137,7 @@ describe('Cloudflare domain removal service', () => {
       }
     )
     const serializedLogCalls = JSON.stringify(cloudflareServiceTestState.debugLog.mock.calls)
-    expect(serializedLogCalls).not.toContain('OAuthTokenExchangeError')
+    expect(serializedLogCalls).toContain('OAuthTokenExchangeError')
     expect(serializedLogCalls).not.toContain('cf_secret_token_123')
   })
 })

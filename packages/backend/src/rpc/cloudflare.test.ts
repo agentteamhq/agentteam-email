@@ -409,7 +409,8 @@ describe('Cloudflare RPC routes', () => {
     })
     expect(cloudflareRpcTestState.debugLog).toHaveBeenCalledWith('cloudflare_rpc_error %o', {
       error: {
-        code: '403',
+        code: 'CLOUDFLARE_TOKEN_REJECTED',
+        message: 'Cloudflare OAuth access token secret_redacted failed for  email_redacted',
         name: 'CloudflareAccessError',
         status: '403',
         statusCode: 403,
@@ -433,8 +434,8 @@ describe('Cloudflare RPC routes', () => {
     expect(serializedResponseBody).not.toContain('Cloudflare OAuth access token')
     expect(serializedLogCalls).not.toContain('sk-cloudflare-secret-token')
     expect(serializedLogCalls).not.toContain('admin@example.test')
-    expect(serializedLogCalls).not.toContain('Cloudflare OAuth access token')
-    expect(serializedLogCalls).not.toContain('CLOUDFLARE_TOKEN_REJECTED')
+    expect(serializedLogCalls).toContain('Cloudflare OAuth access token')
+    expect(serializedLogCalls).toContain('CLOUDFLARE_TOKEN_REJECTED')
     expect(serializedLogCalls).not.toContain('stack with')
   })
 
@@ -466,6 +467,7 @@ describe('Cloudflare RPC routes', () => {
     })
     expect(cloudflareRpcTestState.debugLog).toHaveBeenCalledWith('cloudflare_rpc_error %o', {
       error: {
+        message: 'Cloudflare provider returned  bearer_redacted  for oauth-code=secret_redacted',
         name: 'CloudflareProviderError',
         type: 'object'
       },
@@ -483,7 +485,7 @@ describe('Cloudflare RPC routes', () => {
     const serializedLogCalls = JSON.stringify(cloudflareRpcTestState.debugLog.mock.calls)
     expect(serializedLogCalls).not.toContain('provider-token')
     expect(serializedLogCalls).not.toContain('secret-code')
-    expect(serializedLogCalls).not.toContain('Cloudflare provider returned')
+    expect(serializedLogCalls).toContain('Cloudflare provider returned')
     expect(serializedLogCalls).not.toContain('provider stack')
   })
 

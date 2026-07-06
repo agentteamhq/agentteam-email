@@ -405,7 +405,7 @@ describe('agent Access RPC routes', () => {
     expect.hasAssertions()
 
     const error = new Error(
-      'Passkey provider returned raw-auth-token for Authorization Bearer raw-bearer-token'
+      'Passkey provider returned token=raw-auth-token for Authorization Bearer raw-bearer-token'
     ) as Error & {
       details: {
         code: 'webauthn_required'
@@ -474,6 +474,7 @@ describe('agent Access RPC routes', () => {
     expect(agentAccessRpcTestState.debugLog).toHaveBeenCalledWith('agent_access_rpc_handled_error %o', {
       error: {
         code: '403',
+        message: 'Passkey provider returned token=secret_redacted for Authorization  bearer_redacted',
         name: 'AgentAccessError',
         status: '403',
         statusCode: 403,
@@ -875,7 +876,9 @@ describe('agent Access RPC routes', () => {
   it('returns trial claim authorization failures without a Bearer challenge', async () => {
     expect.hasAssertions()
 
-    const error = new Error('Trial agent claim raw-claim-token is not authorized') as Error & { status: 403 }
+    const error = new Error('Trial agent claim token raw-claim-token is not authorized') as Error & {
+      status: 403
+    }
     error.name = 'AgentMailTrialError'
     error.status = 403
     agentAccessRpcTestState.decideAgentMailTrialClaimForWeb.mockRejectedValue(error)
@@ -901,6 +904,7 @@ describe('agent Access RPC routes', () => {
     expect(agentAccessRpcTestState.debugLog).toHaveBeenCalledWith('agent_access_rpc_handled_error %o', {
       error: {
         code: '403',
+        message: 'Trial agent claim token secret_redacted is not authorized',
         name: 'AgentMailTrialError',
         status: '403',
         statusCode: 403,
@@ -909,7 +913,7 @@ describe('agent Access RPC routes', () => {
       errorCode: '403',
       method: 'POST',
       operation: 'agent_access_trial_claim_decision',
-      path: '/agent-access/trials/claim/:value/decision',
+      path: '/agent-access/trials/claim/:token/decision',
       publicError: {
         code: 'FORBIDDEN',
         status: 403,
@@ -924,7 +928,7 @@ describe('agent Access RPC routes', () => {
     expect.hasAssertions()
 
     const error = new Error(
-      'Agent Mail trial config failed for admission_token=raw-admission-token and claim raw-claim-token'
+      'Agent Mail trial config failed for admission_token=raw-admission-token and claim token raw-claim-token'
     ) as Error & { status: 503 }
     error.name = 'AgentMailTrialError'
     error.status = 503
@@ -957,6 +961,8 @@ describe('agent Access RPC routes', () => {
     expect(agentAccessRpcTestState.debugLog).toHaveBeenCalledWith('agent_access_rpc_handled_error %o', {
       error: {
         code: '503',
+        message:
+          'Agent Mail trial config failed for admission_token=secret_redacted and claim token secret_redacted',
         name: 'AgentMailTrialError',
         status: '503',
         statusCode: 503,
@@ -977,6 +983,6 @@ describe('agent Access RPC routes', () => {
     expect(serializedLogCalls).not.toContain('raw-admission-token')
     expect(serializedLogCalls).not.toContain('raw-claim-token')
     expect(serializedLogCalls).not.toContain('raw-query-token')
-    expect(serializedLogCalls).not.toContain('Agent Mail trial config failed')
+    expect(serializedLogCalls).toContain('Agent Mail trial config failed')
   })
 })

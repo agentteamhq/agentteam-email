@@ -85,6 +85,7 @@ describe('database connection logging', () => {
 
     expect(dbTestState.debugLog).toHaveBeenCalledWith('MongoDB connection error %o', {
       code: 'MONGODB_CONNECTION_FAILED',
+      message: 'SENSITIVE_ERROR_MESSAGE  url_redacted',
       name: 'MongooseServerSelectionError',
       statusCode: 503,
       type: 'object'
@@ -94,7 +95,7 @@ describe('database connection logging', () => {
     expect(serializedLogCalls).not.toContain('SENSITIVE_URI_PASSWORD')
     expect(serializedLogCalls).not.toContain('mongo.example.test')
     expect(serializedLogCalls).not.toContain('SENSITIVE_QUERY_VALUE')
-    expect(serializedLogCalls).not.toContain('SENSITIVE_ERROR_MESSAGE')
+    expect(serializedLogCalls).toContain('SENSITIVE_ERROR_MESSAGE')
     expect(serializedLogCalls).not.toContain('SENSITIVE_STACK_VALUE')
   })
 })

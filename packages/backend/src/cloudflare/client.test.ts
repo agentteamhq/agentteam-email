@@ -358,6 +358,7 @@ describe('Cloudflare email Worker provisioning', () => {
       'Cloudflare Email Routing DNS disable failed during teardown',
       expect.objectContaining({
         error: expect.objectContaining({
+          causeName: expect.any(String),
           name: 'CloudflareProvisioningOperationError',
           operation: 'email-routing-dns-delete',
           status: null
@@ -365,7 +366,7 @@ describe('Cloudflare email Worker provisioning', () => {
       })
     )
     const serializedLogCalls = JSON.stringify(cloudflareClientTestState.debugLog.mock.calls)
-    expect(serializedLogCalls).not.toContain('OAuthTokenExchangeError')
+    expect(serializedLogCalls).toContain('causeName')
     expect(serializedLogCalls).not.toContain('cf_secret_token_123')
   })
 

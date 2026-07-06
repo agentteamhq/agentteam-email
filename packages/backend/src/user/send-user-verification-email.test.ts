@@ -92,6 +92,7 @@ describe('sendUserVerificationEmail', () => {
       'too many verification email attempts %o',
       {
         error: {
+          message: 'rate limited for  email_redacted  with token=secret_redacted',
           name: 'object',
           statusCode: 429,
           type: 'object'
@@ -103,7 +104,7 @@ describe('sendUserVerificationEmail', () => {
     const serializedLogCalls = JSON.stringify(verificationEmailTestState.debugLog.mock.calls)
     expect(serializedLogCalls).not.toContain('recipient@example.test')
     expect(serializedLogCalls).not.toContain('raw-rate-limit-token')
-    expect(serializedLogCalls).not.toContain('rate limited for')
+    expect(serializedLogCalls).toContain('rate limited for')
   })
 
   it('logs verification email failures without raw exception content', async () => {
@@ -132,7 +133,8 @@ describe('sendUserVerificationEmail', () => {
     expect(verificationEmailTestState.debugLog).toHaveBeenCalledWith('error sending verification email %o', {
       error: {
         code: 'EMAIL_SEND_FAILED',
-        name: 'object',
+        message: 'provider failed for  email_redacted  with token=secret_redacted',
+        name: 'BetterAuthEmailError',
         statusCode: 502,
         type: 'object'
       },
@@ -141,9 +143,9 @@ describe('sendUserVerificationEmail', () => {
     })
     const serializedLogCalls = JSON.stringify(verificationEmailTestState.debugLog.mock.calls)
     expect(serializedLogCalls).not.toContain('recipient@example.test')
-    expect(serializedLogCalls).not.toContain('BetterAuthEmailError')
+    expect(serializedLogCalls).toContain('BetterAuthEmailError')
     expect(serializedLogCalls).not.toContain('raw-verification-token')
-    expect(serializedLogCalls).not.toContain('provider failed')
+    expect(serializedLogCalls).toContain('provider failed')
     expect(serializedLogCalls).not.toContain('stack with')
   })
 })

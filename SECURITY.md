@@ -82,9 +82,14 @@ disclose details until coordinated disclosure is complete.
 - Security rules must not be used to suppress server-side diagnostic logs. When
   information is needed to understand an error, failed security-sensitive flow,
   provider failure, or user-visible failure, agents must log it.
-- Server-side logs must redact known secret values when redaction preserves the
-  diagnostic value of the log. For server-side logs, diagnostic visibility has
-  priority over redaction.
+- Server-side diagnostic values must be logged by default. Agents must not
+  redact or drop diagnostic fields merely because they are caller-controlled,
+  provider-controlled, auth-related, token-shaped, long, unfamiliar, or
+  otherwise ambiguous. If a field or value is ambiguous, log it.
+- Server-side logs may omit or redact a value only when the code context makes
+  that specific value known to be an actual credential or secret. Redaction must
+  preserve the diagnostic value of the log. For server-side logs, diagnostic
+  visibility has priority over redaction.
 - Client-visible surfaces, browser state, redirects, support pages, and RPC or
   API responses must not expose raw credentials, cookies, tokens, passwords,
   decrypted secrets, raw secret values, broad payload dumps, or raw external

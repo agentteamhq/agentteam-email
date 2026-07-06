@@ -157,6 +157,7 @@ describe('admin RPC routes', () => {
     expect(adminRpcTestState.debugLog).toHaveBeenCalledWith('admin_rpc_handled_error %o', {
       error: {
         code: '401',
+        message: 'Authentication failed for better-auth.session_token=secret_redacted',
         name: 'AdminDashboardAccessError',
         status: '401',
         statusCode: 401,
@@ -175,7 +176,7 @@ describe('admin RPC routes', () => {
     })
     expect(JSON.stringify(adminRpcTestState.debugLog.mock.calls)).not.toContain('secret-cookie')
     expect(JSON.stringify(adminRpcTestState.debugLog.mock.calls)).not.toContain('raw-query-token')
-    expect(JSON.stringify(adminRpcTestState.debugLog.mock.calls)).not.toContain('Authentication failed')
+    expect(JSON.stringify(adminRpcTestState.debugLog.mock.calls)).toContain('Authentication failed')
   })
 
   it('returns paginated audit logs through the webserver boundary', async () => {

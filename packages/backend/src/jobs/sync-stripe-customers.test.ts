@@ -65,6 +65,7 @@ describe('syncStripeCustomers', () => {
     expect(syncStripeCustomersTestState.debugLog).toHaveBeenCalledWith('stripe customer sync failed %o', {
       error: {
         code: 'STRIPE_RATE_LIMIT',
+        message: 'Stripe request failed for  email_redacted  with Authorization  bearer_redacted',
         name: 'StripeAPIError',
         statusCode: 429,
         type: 'object'
@@ -74,7 +75,7 @@ describe('syncStripeCustomers', () => {
     const serializedLogCalls = JSON.stringify(syncStripeCustomersTestState.debugLog.mock.calls)
     expect(serializedLogCalls).not.toContain('customer@example.test')
     expect(serializedLogCalls).not.toContain('raw-stripe-token')
-    expect(serializedLogCalls).not.toContain('Stripe request failed')
+    expect(serializedLogCalls).toContain('Stripe request failed')
     expect(serializedLogCalls).not.toContain('stack with')
   })
 })

@@ -637,6 +637,7 @@ function readCloudflareProviderErrors(error: unknown): CloudflareProviderErrorSu
 function cloudflareOperationErrorLogFields(error: unknown) {
   if (error instanceof CloudflareProvisioningOperationError) {
     return {
+      causeName: createSafeDiagnosticErrorName(error.cause),
       name: createSafeDiagnosticErrorName(error),
       operation: error.cloudflareProvisioningOperation,
       providerErrorCodes: error.cloudflareProviderErrors.flatMap((entry) =>

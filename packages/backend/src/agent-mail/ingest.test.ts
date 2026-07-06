@@ -305,6 +305,8 @@ describe('Agent Mail web-owned Worker ingest', () => {
     expect(ingestTestState.debugLog).toHaveBeenCalledWith('agent_mail_ingest_handled_error %o', {
       error: {
         code: 'ECONNRESET',
+        message:
+          'mail-control failed at  url_redacted  with Authorization=secret_redacted  Cookie=secret_redacted',
         name: 'Error',
         status: '502',
         statusCode: 503,
@@ -333,6 +335,7 @@ describe('Agent Mail web-owned Worker ingest', () => {
     expect(serializedLogCalls).not.toContain('raw-cookie')
     expect(serializedLogCalls).not.toContain('Subject: secret payload')
     expect(serializedLogCalls).not.toContain('access_token')
+    expect(serializedLogCalls).toContain('mail-control failed')
   })
 
   it('rejects notifications when deployment-owned webhook signing state is unavailable', async () => {

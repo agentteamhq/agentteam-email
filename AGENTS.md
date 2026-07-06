@@ -213,9 +213,12 @@ Application logs must be structured, safe to emit, and recorded at the boundary
 that owns the behavior or failure.
 
 Logs must include stable correlation fields when available. Server-side logs
-must follow [SECURITY.md](SECURITY.md): preserve diagnostic visibility first,
-and redact known secrets only when redaction does not make failures harder to
-understand.
+must follow [SECURITY.md](SECURITY.md): preserve diagnostic visibility first.
+Do not redact or drop fields because they are caller-controlled,
+provider-controlled, auth-related, token-shaped, long, unfamiliar, or otherwise
+ambiguous. If a value is ambiguous, log it. Omit or redact only specific values
+that the code context makes known to be actual credentials or secrets, and only
+when doing so does not make failures harder to understand.
 
 Node runtime diagnostics must use the `debug` package with the existing package
 and domain namespace pattern. Node application diagnostics must not use ad hoc
