@@ -139,7 +139,7 @@ export function createSafeDiagnosticErrorName(error: unknown): string {
 
 export function createSafeDiagnosticMessage(error: unknown): string | undefined {
   const record = toRecord(error)
-  const message = error instanceof Error ? error.message : record?.message
+  const message = error instanceof Error ? error.message : (record?.message ?? record?.statusText)
   return sanitizeDiagnosticMessageForLogging(message)
 }
 
@@ -326,7 +326,14 @@ function findErrorLike(args: readonly unknown[]): Error | Record<string, unknown
     }
 
     const record = toRecord(arg)
-    if (record && ('name' in record || 'statusCode' in record || 'body' in record)) {
+    if (
+      record &&
+      ('name' in record ||
+        'status' in record ||
+        'statusCode' in record ||
+        'body' in record ||
+        'error' in record)
+    ) {
       return record
     }
   }
@@ -535,7 +542,7 @@ function replaceControlCharacters(value: string): string {
 
 function createProtocolDiagnosticMessage(error: unknown): string | undefined {
   const record = toRecord(error)
-  const message = error instanceof Error ? error.message : record?.message
+  const message = error instanceof Error ? error.message : (record?.message ?? record?.statusText)
   return typeof message === 'string'
     ? sanitizeProtocolDiagnosticTextForLogging(message).trim() || undefined
     : undefined

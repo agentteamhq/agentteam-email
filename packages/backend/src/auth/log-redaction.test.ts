@@ -307,6 +307,39 @@ describe('auth log redaction', () => {
     expect(serialized).not.toContain('raw-provider-access-token')
   })
 
+  it('treats status-only Better Fetch failures as error-like diagnostics', () => {
+    expect.hasAssertions()
+
+    const error = {
+      error: {
+        error: 'invalid_client',
+        error_description: 'Client authentication failed'
+      },
+      status: 403,
+      statusText: 'Forbidden'
+    }
+
+    const details = createBetterAuthLogDetails('error', '', [error])
+
+    expect(details).toMatchObject({
+      argumentCount: 1,
+      argumentTypes: ['object'],
+      code: 'invalid_client',
+      error: {
+        code: 'invalid_client',
+        message: 'Forbidden',
+        name: 'object',
+        status: '403',
+        statusCode: 403,
+        type: 'object'
+      },
+      level: 'error',
+      operation: 'better_auth_event',
+      status: '403',
+      statusCode: 403
+    })
+  })
+
   it('preserves ordinary safe error names and codes', () => {
     expect.hasAssertions()
 
