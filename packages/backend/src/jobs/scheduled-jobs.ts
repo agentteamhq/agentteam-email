@@ -3,6 +3,7 @@ import { Agenda } from 'agenda'
 import debug from 'debug'
 
 import { syncAgentMailRuntimeProjection } from '../agent-mail/runtime-projection'
+import { createSafeErrorLogDetails } from '../auth/log-redaction'
 import { refreshDueAgentMailWorkerCredentials } from '../cloudflare/service'
 import { syncStripeCustomers } from './sync-stripe-customers'
 import type { Database } from '../db/db'
@@ -43,17 +44,29 @@ export async function createScheduledJobs(db: Database): Promise<ScheduledJobs> 
   })
 
   agenda.on('error', (error) => {
-    log('agenda error: %O', error)
+    log('agenda error %o', {
+      error: createSafeErrorLogDetails(error),
+      operation: 'agenda_error'
+    })
   })
 
   agenda.on(`fail:${SYNC_STRIPE_CUSTOMERS_JOB}`, (error) => {
-    log('scheduled stripe customer sync failed: %O', error)
+    log('scheduled job failed %o', {
+      error: createSafeErrorLogDetails(error),
+      job: SYNC_STRIPE_CUSTOMERS_JOB
+    })
   })
   agenda.on(`fail:${REFRESH_AT_EMAIL_ADMIN_WORKER_CREDENTIALS_JOB}`, (error) => {
-    log('scheduled Agent Mail Worker credential refresh failed: %O', error)
+    log('scheduled job failed %o', {
+      error: createSafeErrorLogDetails(error),
+      job: REFRESH_AT_EMAIL_ADMIN_WORKER_CREDENTIALS_JOB
+    })
   })
   agenda.on(`fail:${SYNC_AT_EMAIL_ADMIN_RUNTIME_PROJECTION_JOB}`, (error) => {
-    log('scheduled Agent Mail runtime projection sync failed: %O', error)
+    log('scheduled job failed %o', {
+      error: createSafeErrorLogDetails(error),
+      job: SYNC_AT_EMAIL_ADMIN_RUNTIME_PROJECTION_JOB
+    })
   })
 
   agenda.define(

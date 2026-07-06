@@ -26,6 +26,7 @@ import (
 	"mail-control-service/internal/mail/structured"
 	"mail-control-service/internal/providers/cloudflaremail"
 	"mail-control-service/internal/providers/sesmail"
+	"mail-control-service/internal/safelog"
 	"mail-control-service/internal/stores/wildduck"
 
 	"github.com/emersion/go-sasl"
@@ -39,8 +40,6 @@ const (
 	outboundProviderCloudflare = "cloudflare"
 	outboundProviderSES        = "ses"
 )
-
-var relayLogEmailPattern = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
 
 type Config struct {
 	ListenAddress string              `yaml:"listen_address"`
@@ -569,7 +568,13 @@ func (s *Server) Run(ctx context.Context) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Printf("agent-mail-provider-relay listening on %s", s.cfg.ListenAddress)
+		log.Printf(
+			"agent-mail-provider-relay event=listener_start listen_address=%q hostname=%q provider=%s max_message_bytes=%d",
+			s.cfg.ListenAddress,
+			s.cfg.Hostname,
+			s.cfg.Provider,
+			s.cfg.MaxMessageBytes,
+		)
 		errCh <- srv.ListenAndServe()
 	}()
 
@@ -581,6 +586,7 @@ func (s *Server) Run(ctx context.Context) error {
 		if err == nil || errors.Is(err, net.ErrClosed) {
 			return nil
 		}
+		log.Printf("agent-mail-provider-relay event=listener_failed listen_address=%q error=%q", s.cfg.ListenAddress, safelog.Error(err))
 		return err
 	}
 }
@@ -663,7 +669,22 @@ func (s *Session) Rcpt(to string, _ *smtpserver.RcptOptions) error {
 	return nil
 }
 
-func (s *Session) Data(reader io.Reader) error {
+func (s *Session) Data(reader io.Reader) (err error) {
+	startedAt := time.Now()
+	defer func() {
+		if err == nil {
+			return
+		}
+		log.Printf(
+			"agent-mail-provider-relay event=smtp_transaction_failed authenticated=%t mail_from_accepted=%t recipient_count=%d sender_domain=%s duration_ms=%d error=%q",
+			s.authenticated,
+			s.mailFromAccepted,
+			len(s.recipients),
+			domainPart(normalizeAddress(s.envelopeFrom)),
+			time.Since(startedAt).Round(time.Millisecond).Milliseconds(),
+			sanitizeRelayLogError(err),
+		)
+	}()
 	if !s.authenticated {
 		return fmt.Errorf("smtp auth is required before DATA")
 	}
@@ -832,7 +853,7 @@ func (s *Session) deliverProvider(ctx context.Context, archive outboundArchive, 
 	errorMessage := ""
 	if sendErr != nil {
 		status = "provider_failed"
-		errorMessage = sendErr.Error()
+		errorMessage = sanitizeRelayLogError(sendErr)
 	}
 	provider := result.Provider
 	if provider == "" {
@@ -1064,7 +1085,7 @@ func (s *Session) deliverLocal(ctx context.Context, archive outboundArchive, sub
 	if deliverErr != nil {
 		targetStatus = "local_route_failed"
 		sourceStatus = "local_route_failed"
-		errorMessage = deliverErr.Error()
+		errorMessage = sanitizeRelayLogError(deliverErr)
 		delivered = nil
 	}
 
@@ -1200,12 +1221,7 @@ func sanitizeRelayLogError(err error) string {
 	if err == nil {
 		return ""
 	}
-	message := strings.TrimSpace(strings.Join(strings.Fields(err.Error()), " "))
-	message = relayLogEmailPattern.ReplaceAllString(message, "[email]")
-	if len(message) > 240 {
-		return message[:240]
-	}
-	return message
+	return safelog.Error(err)
 }
 
 func (p *localDeliveryProof) FindExisting(ctx context.Context, targetMailbox string, query localRouteProofQuery) (localDeliveryRecord, bool, error) {

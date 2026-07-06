@@ -1,3 +1,4 @@
+import debug from 'debug'
 import { Elysia, t } from 'elysia'
 import parseForwarded from 'forwarded-parse'
 import ipaddr from 'ipaddr.js'
@@ -28,11 +29,15 @@ import {
   isAgentMailTrialError,
   startAgentMailTrial
 } from '../agent-access/trial-service'
+import { createSafeErrorLogDetails, createSafeRequestLogDetails } from '../auth/log-redaction'
+import { createSafeRequestCorrelationLogDetails, mapPublicErrorResponse } from '../public-error-response'
 import { PUBLIC_VARS } from '../vars.public'
 import { typedResponseSchema } from './response-schema'
 import type { IncomingMessage } from 'node:http'
+import type { PublicErrorResponse } from '../public-error-response'
 import type {
   AgentAccessApprovalPreview,
+  AgentAccessPublicErrorCode,
   AgentAccessMutationResult,
   AgentAccessView
 } from '../agent-access/service'
@@ -42,10 +47,25 @@ import type {
 } from '../agent-access/trial-service'
 
 type AgentAccessErrorStatusCode = 400 | 401 | 403 | 404 | 409 | 410 | 412 | 429 | 502 | 503
+type PublicWebAuthnTransport = 'ble' | 'cable' | 'hybrid' | 'internal' | 'nfc' | 'smart-card' | 'usb'
+type PublicWebAuthnUserVerification = 'discouraged' | 'preferred' | 'required'
+type PublicWebAuthnCredentialDescriptor = {
+  id: string
+  transports?: PublicWebAuthnTransport[]
+  type: 'public-key'
+}
+type PublicWebAuthnRequestOptions = {
+  allowCredentials?: PublicWebAuthnCredentialDescriptor[]
+  challenge: string
+  rpId?: string
+  timeout?: number
+  userVerification?: PublicWebAuthnUserVerification
+}
 type AgentAccessErrorBody = {
-  code?: 'webauthn_not_enrolled' | 'webauthn_required' | 'webauthn_verification_failed'
+  code?: string
   error: string
-  webauthnOptions?: Record<string, unknown>
+  supportReference?: string
+  webauthnOptions?: PublicWebAuthnRequestOptions
 }
 type AgentAccessResponseSet = {
   headers: Record<string, number | string>
@@ -65,7 +85,27 @@ const TRIAL_START_RATE_LIMIT = {
   max: 5,
   windowMs: 60_000
 } as const
+const MAX_WEB_AUTHN_CHALLENGE_LENGTH = 4096
+const MAX_WEB_AUTHN_CREDENTIALS = 100
+const MAX_WEB_AUTHN_CREDENTIAL_ID_LENGTH = 4096
+const MAX_WEB_AUTHN_RP_ID_LENGTH = 253
+const MAX_WEB_AUTHN_TIMEOUT_MS = 600_000
+const publicWebAuthnTransports = new Set<PublicWebAuthnTransport>([
+  'ble',
+  'cable',
+  'hybrid',
+  'internal',
+  'nfc',
+  'smart-card',
+  'usb'
+])
+const publicWebAuthnUserVerificationValues = new Set<PublicWebAuthnUserVerification>([
+  'discouraged',
+  'preferred',
+  'required'
+])
 const trialStartRateLimitBuckets = new Map<string, TrialStartRateLimitBucket>()
+const log = debug('app:rpc:agent-access')
 
 const agentMailCapabilitySchema = t.Enum(enumObject(AgentMailCapabilityValues))
 const agentMailTrialCapabilitySchema = t.Enum(enumObject(AgentMailTrialCapabilityValues))
@@ -82,15 +122,42 @@ const agentAccessApprovalStrengthSchema = t.Union([
 ])
 const nullableStringResponseSchema = t.Nullable(t.String())
 const unknownRecordResponseSchema = t.Record(t.String(), t.Any())
-const agentAccessPublicErrorCodeSchema = t.Union([
-  t.Literal('webauthn_not_enrolled'),
-  t.Literal('webauthn_required'),
-  t.Literal('webauthn_verification_failed')
+const publicWebAuthnTransportSchema = t.Union([
+  t.Literal('ble'),
+  t.Literal('cable'),
+  t.Literal('hybrid'),
+  t.Literal('internal'),
+  t.Literal('nfc'),
+  t.Literal('smart-card'),
+  t.Literal('usb')
 ])
+const publicWebAuthnCredentialDescriptorSchema = t.Object(
+  {
+    id: t.String({ maxLength: MAX_WEB_AUTHN_CREDENTIAL_ID_LENGTH, minLength: 1 }),
+    transports: t.Optional(t.Array(publicWebAuthnTransportSchema)),
+    type: t.Literal('public-key')
+  },
+  { additionalProperties: false }
+)
+const publicWebAuthnRequestOptionsSchema = t.Object(
+  {
+    allowCredentials: t.Optional(
+      t.Array(publicWebAuthnCredentialDescriptorSchema, { maxItems: MAX_WEB_AUTHN_CREDENTIALS })
+    ),
+    challenge: t.String({ maxLength: MAX_WEB_AUTHN_CHALLENGE_LENGTH, minLength: 1 }),
+    rpId: t.Optional(t.String({ maxLength: MAX_WEB_AUTHN_RP_ID_LENGTH, minLength: 1 })),
+    timeout: t.Optional(t.Number({ maximum: MAX_WEB_AUTHN_TIMEOUT_MS, minimum: 0 })),
+    userVerification: t.Optional(
+      t.Union([t.Literal('discouraged'), t.Literal('preferred'), t.Literal('required')])
+    )
+  },
+  { additionalProperties: false }
+)
 const agentAccessErrorResponseSchema = t.Object({
-  code: t.Optional(agentAccessPublicErrorCodeSchema),
+  code: t.Optional(t.String()),
   error: t.String(),
-  webauthnOptions: t.Optional(unknownRecordResponseSchema)
+  supportReference: t.Optional(t.String()),
+  webauthnOptions: t.Optional(publicWebAuthnRequestOptionsSchema)
 })
 const agentAccessErrorResponseSchemas = {
   400: agentAccessErrorResponseSchema,
@@ -342,7 +409,12 @@ const agentAccess = new Elysia({
   .get(
     '/',
     async ({ request, set }) =>
-      handleAgentAccessError(() => getAgentAccessViewForWeb({ headers: request.headers }), set),
+      handleAgentAccessError(
+        () => getAgentAccessViewForWeb({ headers: request.headers }),
+        request,
+        set,
+        'agent_access_view'
+      ),
     {
       response: {
         200: typedResponseSchema<AgentAccessView>(agentAccessViewResponseSchema),
@@ -355,7 +427,9 @@ const agentAccess = new Elysia({
     async ({ body, request, set }) =>
       handleAgentAccessError(
         () => getAgentAccessApprovalForWeb({ headers: request.headers, input: body }),
-        set
+        request,
+        set,
+        'agent_access_approval_lookup'
       ),
     {
       body: agentAccessApprovalLookupBodySchema,
@@ -370,7 +444,9 @@ const agentAccess = new Elysia({
     async ({ body, request, set }) =>
       handleAgentAccessError(
         () => decideAgentAccessApprovalForWeb({ headers: request.headers, input: body }),
-        set
+        request,
+        set,
+        'agent_access_approval_decision'
       ),
     {
       body: agentAccessApprovalDecisionBodySchema,
@@ -385,7 +461,9 @@ const agentAccess = new Elysia({
     async ({ params, request, set }) =>
       handleAgentAccessError(
         () => revokeAgentAccessAgentForWeb({ headers: request.headers, input: { agentId: params.agentId } }),
-        set
+        request,
+        set,
+        'agent_access_agent_revoke'
       ),
     {
       params: agentAccessAgentParamsSchema,
@@ -407,7 +485,9 @@ const agentAccess = new Elysia({
               agentId: params.agentId
             }
           }),
-        set
+        request,
+        set,
+        'agent_access_capabilities_revoke'
       ),
     {
       body: agentAccessCapabilityRevokeBodySchema,
@@ -421,10 +501,15 @@ const agentAccess = new Elysia({
   .post(
     '/trials',
     async ({ body, request, set }) =>
-      handleAgentAccessError(async () => {
-        assertTrialStartRateLimit(request)
-        return startAgentMailTrial(body)
-      }, set),
+      handleAgentAccessError(
+        async () => {
+          assertTrialStartRateLimit(request)
+          return startAgentMailTrial(body)
+        },
+        request,
+        set,
+        'agent_access_trial_start'
+      ),
     {
       body: agentMailTrialStartBodySchema,
       response: {
@@ -440,7 +525,9 @@ const agentAccess = new Elysia({
     async ({ params, request, set }) =>
       handleAgentAccessError(
         () => getAgentMailTrialClaimForWeb({ headers: request.headers, token: params.token }),
-        set
+        request,
+        set,
+        'agent_access_trial_claim_preview'
       ),
     {
       params: agentAccessTrialTokenParamsSchema,
@@ -455,7 +542,9 @@ const agentAccess = new Elysia({
     async ({ body, params, request, set }) =>
       handleAgentAccessError(
         () => decideAgentMailTrialClaimForWeb({ headers: request.headers, input: body, token: params.token }),
-        set
+        request,
+        set,
+        'agent_access_trial_claim_decision'
       ),
     {
       body: agentMailTrialClaimDecisionBodySchema,
@@ -471,7 +560,9 @@ const agentAccess = new Elysia({
 
 async function handleAgentAccessError<T>(
   operation: () => Promise<T>,
-  set: AgentAccessResponseSet
+  request: Request,
+  set: AgentAccessResponseSet,
+  operationName: string
 ): Promise<T | AgentAccessErrorBody> {
   try {
     return await operation()
@@ -480,23 +571,202 @@ async function handleAgentAccessError<T>(
       if (error.status === 401) {
         set.headers['WWW-Authenticate'] = 'Bearer realm="agentteam-agent-access"'
       }
+      const publicError = mapPublicErrorResponse({ code: error.status, error, request })
       set.status = error.status satisfies AgentAccessErrorStatusCode
       const details = error.details ?? {}
-      return {
-        ...(details.code ? { code: details.code } : {}),
-        error: error.message,
-        ...(details.webauthnOptions ? { webauthnOptions: details.webauthnOptions } : {})
-      }
+      const publicWebAuthnError = publicWebAuthnAgentAccessError(details, publicError.body)
+      const handledError = publicWebAuthnError
+        ? { body: publicWebAuthnError, status: publicError.status }
+        : publicError
+      logHandledAgentAccessError(error, request, handledError, operationName)
+      return handledError.body
     }
     if (isAgentMailTrialError(error)) {
       if (error.status === 401) {
         set.headers['WWW-Authenticate'] = 'Bearer realm="agentteam-agent-access"'
       }
-      set.status = error.status satisfies AgentAccessErrorStatusCode
-      return { error: error.message }
+      const publicError = mapPublicErrorResponse({ code: error.status, error, request })
+      set.status = error.status
+      logHandledAgentAccessError(error, request, publicError, operationName)
+      return publicError.body
     }
     throw error
   }
+}
+
+function publicWebAuthnAgentAccessError(
+  {
+    code,
+    webauthnOptions
+  }: {
+    code?: AgentAccessPublicErrorCode
+    webauthnOptions?: Record<string, unknown>
+  },
+  publicErrorBody: PublicErrorResponse['body']
+): AgentAccessErrorBody | null {
+  if (!code) {
+    return null
+  }
+
+  const publicWebAuthnOptions =
+    code === 'webauthn_required' ? narrowPublicWebAuthnOptions(webauthnOptions) : null
+
+  return {
+    ...publicErrorBody,
+    code,
+    error: agentAccessPublicErrorFallbackMessage(code),
+    ...(publicWebAuthnOptions ? { webauthnOptions: publicWebAuthnOptions } : {})
+  }
+}
+
+function agentAccessPublicErrorFallbackMessage(code: AgentAccessPublicErrorCode): string {
+  if (code === 'webauthn_not_enrolled') {
+    return 'A registered passkey is required before approving this agent authorization request.'
+  }
+  if (code === 'webauthn_required') {
+    return 'This agent authorization request requires passkey verification.'
+  }
+  return 'Passkey verification failed.'
+}
+
+function narrowPublicWebAuthnOptions(value: unknown): PublicWebAuthnRequestOptions | null {
+  if (!isRecord(value)) {
+    return null
+  }
+
+  const challenge = safeWebAuthnTokenString(value.challenge, MAX_WEB_AUTHN_CHALLENGE_LENGTH)
+  if (!challenge) {
+    return null
+  }
+
+  const options: PublicWebAuthnRequestOptions = { challenge }
+  const allowCredentials = narrowPublicWebAuthnCredentials(value.allowCredentials)
+  const rpId = safeWebAuthnRelyingPartyId(value.rpId)
+  const timeout = safeWebAuthnTimeout(value.timeout)
+  const userVerification = safeWebAuthnUserVerification(value.userVerification)
+
+  if (allowCredentials) {
+    options.allowCredentials = allowCredentials
+  }
+  if (rpId) {
+    options.rpId = rpId
+  }
+  if (timeout !== undefined) {
+    options.timeout = timeout
+  }
+  if (userVerification) {
+    options.userVerification = userVerification
+  }
+
+  return options
+}
+
+function narrowPublicWebAuthnCredentials(value: unknown): PublicWebAuthnCredentialDescriptor[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined
+  }
+
+  const credentials: PublicWebAuthnCredentialDescriptor[] = []
+  for (const candidate of value.slice(0, MAX_WEB_AUTHN_CREDENTIALS)) {
+    const credential = narrowPublicWebAuthnCredential(candidate)
+    if (credential) {
+      credentials.push(credential)
+    }
+  }
+
+  return credentials
+}
+
+function narrowPublicWebAuthnCredential(value: unknown): PublicWebAuthnCredentialDescriptor | null {
+  if (!isRecord(value) || value.type !== 'public-key') {
+    return null
+  }
+
+  const id = safeWebAuthnTokenString(value.id, MAX_WEB_AUTHN_CREDENTIAL_ID_LENGTH)
+  if (!id) {
+    return null
+  }
+
+  const transports = narrowPublicWebAuthnTransports(value.transports)
+  return {
+    id,
+    ...(transports ? { transports } : {}),
+    type: 'public-key'
+  }
+}
+
+function narrowPublicWebAuthnTransports(value: unknown): PublicWebAuthnTransport[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined
+  }
+
+  const transports = value.filter(
+    (transport): transport is PublicWebAuthnTransport =>
+      typeof transport === 'string' && publicWebAuthnTransports.has(transport as PublicWebAuthnTransport)
+  )
+
+  return transports.length > 0 ? transports : undefined
+}
+
+function safeWebAuthnUserVerification(value: unknown): PublicWebAuthnUserVerification | undefined {
+  return typeof value === 'string' &&
+    publicWebAuthnUserVerificationValues.has(value as PublicWebAuthnUserVerification)
+    ? (value as PublicWebAuthnUserVerification)
+    : undefined
+}
+
+function safeWebAuthnTimeout(value: unknown): number | undefined {
+  return typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= 0 &&
+    value <= MAX_WEB_AUTHN_TIMEOUT_MS
+    ? value
+    : undefined
+}
+
+function safeWebAuthnRelyingPartyId(value: unknown): string | undefined {
+  if (typeof value !== 'string' || value.length > MAX_WEB_AUTHN_RP_ID_LENGTH) {
+    return undefined
+  }
+
+  const normalized = value.trim().toLowerCase()
+  return /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u.test(normalized)
+    ? normalized
+    : undefined
+}
+
+function safeWebAuthnTokenString(value: unknown, maxLength: number): string | undefined {
+  return typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= maxLength &&
+    /^[A-Za-z0-9_-]+$/u.test(value)
+    ? value
+    : undefined
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function logHandledAgentAccessError(
+  error: unknown,
+  request: Request,
+  publicError: PublicErrorResponse,
+  operation: string
+) {
+  const errorLogDetails = createSafeErrorLogDetails(error)
+  log('agent_access_rpc_handled_error %o', {
+    error: errorLogDetails,
+    ...(errorLogDetails.code ? { errorCode: errorLogDetails.code } : {}),
+    operation,
+    publicError: {
+      code: publicError.body.code,
+      status: publicError.status,
+      ...(publicError.body.supportReference ? { supportReference: publicError.body.supportReference } : {})
+    },
+    ...createSafeRequestCorrelationLogDetails(request),
+    ...createSafeRequestLogDetails(request)
+  })
 }
 
 function assertTrialStartRateLimit(request: Request) {

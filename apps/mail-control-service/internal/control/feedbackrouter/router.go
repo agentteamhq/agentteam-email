@@ -13,13 +13,13 @@ import (
 	"net/smtp"
 	"net/textproto"
 	"net/url"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
 
 	"mail-control-service/internal/config/configfile"
 	"mail-control-service/internal/mail/structured"
+	"mail-control-service/internal/safelog"
 
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapclient"
@@ -27,8 +27,6 @@ import (
 )
 
 const reconnectDelay = 10 * time.Second
-
-var feedbackLogEmailPattern = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
 
 type Config struct {
 	WildDuck struct {
@@ -193,7 +191,7 @@ func (r *Router) Status(ctx context.Context) Status {
 	routes, err := r.routes(ctx)
 	if err != nil {
 		status.OK = false
-		status.Issues = append(status.Issues, "feedback_routes_failed: "+err.Error())
+		status.Issues = append(status.Issues, safelog.Issue("feedback_routes_failed", err))
 		log.Printf("agent-mail-feedback-router event=feedback_status_degraded domains_source=%s mailbox=%s issue=feedback_routes_failed error=%q", status.DomainsSource, r.cfg.IMAPMailbox, sanitizeFeedbackLogError(err))
 		return status
 	}
@@ -440,12 +438,7 @@ func sanitizeFeedbackLogError(err error) string {
 	if err == nil {
 		return ""
 	}
-	message := strings.TrimSpace(strings.Join(strings.Fields(err.Error()), " "))
-	message = feedbackLogEmailPattern.ReplaceAllString(message, "[email]")
-	if len(message) > 240 {
-		return message[:240]
-	}
-	return message
+	return safelog.Error(err)
 }
 
 func isPermanentSMTPRecipientFailure(err error) bool {

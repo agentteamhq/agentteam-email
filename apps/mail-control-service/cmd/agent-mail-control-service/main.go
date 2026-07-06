@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"mail-control-service/internal/control/controlservice"
+	"mail-control-service/internal/safelog"
 )
 
 func main() {
@@ -15,6 +16,7 @@ func main() {
 	defer cancel()
 
 	if err := controlservice.Main(ctx, os.Args[1:]); err != nil {
-		log.Fatal(err)
+		log.Printf("agent-mail-control-service event=fatal error=%q", safelog.Error(err))
+		os.Exit(1)
 	}
 }

@@ -8,6 +8,12 @@ const scheduledJobsTestState = vi.hoisted(() => ({
   agendaOn: vi.fn(),
   agendaStart: vi.fn(),
   agendaStop: vi.fn(),
+  debugFactory: Object.assign(vi.fn(), {
+    disable: vi.fn(),
+    enable: vi.fn(),
+    enabled: vi.fn()
+  }),
+  debugLog: vi.fn(),
   refreshDueAgentMailWorkerCredentials: vi.fn(),
   syncAgentMailRuntimeProjection: vi.fn(),
   syncStripeCustomers: vi.fn()
@@ -31,6 +37,10 @@ vi.mock('@agendajs/mongo-backend', () => ({
   })
 }))
 
+vi.mock('debug', () => ({
+  default: scheduledJobsTestState.debugFactory
+}))
+
 vi.mock('../agent-mail/runtime-projection', () => ({
   syncAgentMailRuntimeProjection: scheduledJobsTestState.syncAgentMailRuntimeProjection
 }))
@@ -51,6 +61,9 @@ describe('scheduled jobs', () => {
     scheduledJobsTestState.agendaOn.mockReset()
     scheduledJobsTestState.agendaStart.mockReset()
     scheduledJobsTestState.agendaStop.mockReset()
+    scheduledJobsTestState.debugFactory.mockClear()
+    scheduledJobsTestState.debugFactory.mockImplementation(() => scheduledJobsTestState.debugLog)
+    scheduledJobsTestState.debugLog.mockReset()
     scheduledJobsTestState.refreshDueAgentMailWorkerCredentials.mockReset()
     scheduledJobsTestState.syncAgentMailRuntimeProjection.mockReset()
     scheduledJobsTestState.syncStripeCustomers.mockReset()
@@ -97,8 +110,93 @@ describe('scheduled jobs', () => {
       reason: 'scheduled-repair'
     })
   })
+
+  it('logs scheduled job errors with bounded metadata', async () => {
+    expect.hasAssertions()
+    const {
+      createScheduledJobs,
+      REFRESH_AT_EMAIL_ADMIN_WORKER_CREDENTIALS_JOB,
+      SYNC_AT_EMAIL_ADMIN_RUNTIME_PROJECTION_JOB,
+      SYNC_STRIPE_CUSTOMERS_JOB
+    } = await import('./scheduled-jobs')
+    const db = { connection: { db: {} } } as Database
+    const error = new Error(
+      'worker refresh failed for recipient@example.test with token=raw-worker-token'
+    ) as Error & {
+      code: string
+      statusCode: number
+    }
+    error.code = 'ECONNRESET'
+    error.stack = 'stack with raw-worker-token and recipient@example.test'
+    error.statusCode = 503
+
+    await createScheduledJobs(db)
+
+    for (const eventName of [
+      'error',
+      `fail:${SYNC_STRIPE_CUSTOMERS_JOB}`,
+      `fail:${REFRESH_AT_EMAIL_ADMIN_WORKER_CREDENTIALS_JOB}`,
+      `fail:${SYNC_AT_EMAIL_ADMIN_RUNTIME_PROJECTION_JOB}`
+    ]) {
+      const eventCall = scheduledJobsTestState.agendaOn.mock.calls.find(([registeredEventName]) => {
+        return registeredEventName === eventName
+      })
+      expect(eventCall).toBeDefined()
+      const handler = eventCall?.[1]
+      if (!isScheduledJobErrorHandler(handler)) {
+        throw new Error(`Expected ${eventName} handler to be registered.`)
+      }
+      handler(error)
+    }
+
+    expect(scheduledJobsTestState.debugLog).toHaveBeenCalledWith('agenda error %o', {
+      error: {
+        code: 'ECONNRESET',
+        name: 'Error',
+        statusCode: 503,
+        type: 'object'
+      },
+      operation: 'agenda_error'
+    })
+    expect(scheduledJobsTestState.debugLog).toHaveBeenCalledWith('scheduled job failed %o', {
+      error: {
+        code: 'ECONNRESET',
+        name: 'Error',
+        statusCode: 503,
+        type: 'object'
+      },
+      job: SYNC_STRIPE_CUSTOMERS_JOB
+    })
+    expect(scheduledJobsTestState.debugLog).toHaveBeenCalledWith('scheduled job failed %o', {
+      error: {
+        code: 'ECONNRESET',
+        name: 'Error',
+        statusCode: 503,
+        type: 'object'
+      },
+      job: REFRESH_AT_EMAIL_ADMIN_WORKER_CREDENTIALS_JOB
+    })
+    expect(scheduledJobsTestState.debugLog).toHaveBeenCalledWith('scheduled job failed %o', {
+      error: {
+        code: 'ECONNRESET',
+        name: 'Error',
+        statusCode: 503,
+        type: 'object'
+      },
+      job: SYNC_AT_EMAIL_ADMIN_RUNTIME_PROJECTION_JOB
+    })
+    const serializedLogCalls = JSON.stringify(scheduledJobsTestState.debugLog.mock.calls)
+    expect(serializedLogCalls).not.toContain('recipient@example.test')
+    expect(serializedLogCalls).not.toContain('raw-worker-token')
+    expect(serializedLogCalls).not.toContain('worker refresh failed')
+    expect(serializedLogCalls).not.toContain('stack with')
+  })
 })
 
 function isScheduledJobHandler(value: unknown): value is () => Promise<void> | void {
+  return typeof value === 'function'
+}
+
+function isScheduledJobErrorHandler(value: unknown): value is (error: unknown) => void {
   return typeof value === 'function'
 }

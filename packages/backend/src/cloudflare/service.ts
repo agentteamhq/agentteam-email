@@ -15,6 +15,7 @@ import {
 } from '../agent-mail/runtime-projection'
 import { isAgentMailAccessError, requireAgentMailOrganizationContext } from '../agent-mail/service'
 import { AUTH_REDIRECT_ERROR_ROUTE } from '../auth/auth-routes'
+import { createSafeDiagnosticErrorName } from '../auth/log-redaction'
 import { decryptSecretValue, encryptSecretValue } from '../lib/secret-box'
 import { PUBLIC_VARS } from '../vars.public'
 
@@ -1464,12 +1465,15 @@ function provisioningErrorLogFields(
     cloudflareProviderErrorMessages: readCloudflareProviderErrorProperties(error, 'message'),
     message: sanitized.message,
     method: readStringProperty(error, 'method'),
-    name: error instanceof Error ? error.name : typeof error,
+    name: createSafeDiagnosticErrorName(error),
     status: readNumberProperty(error, 'status')
   }
 }
 
-function readCloudflareProviderErrorProperties(value: unknown, key: 'code' | 'message'): unknown[] | undefined {
+function readCloudflareProviderErrorProperties(
+  value: unknown,
+  key: 'code' | 'message'
+): unknown[] | undefined {
   if (!value || typeof value !== 'object') {
     return undefined
   }

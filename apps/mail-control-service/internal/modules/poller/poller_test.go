@@ -3,6 +3,7 @@ package poller
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
@@ -31,13 +32,59 @@ func TestValidateConfigRequiresExactlyTwoRetries(t *testing.T) {
 }
 
 func TestSanitizeLogTextRedactsMailboxAndArchiveKeys(t *testing.T) {
-	got := sanitizeLogText("failed for Agent.One+tag@example.com at orgs/org_123/domains/example.com/mail/inbound/2026/07/01/raw.eml\nwith details")
+	got := sanitizeLogText(
+		"failed for Agent.One+tag@example.com at orgs/org_123/domains/example.com/mail/inbound/2026/07/01/raw.eml\n" +
+			"GET https://r2.example.test/archive?X-Amz-Signature=example-signature&token=example-token Authorization: Bearer example-bearer",
+	)
 
-	if strings.Contains(got, "Agent.One") || strings.Contains(got, "orgs/org_123") {
+	if strings.Contains(got, "Agent.One") || strings.Contains(got, "orgs/org_123") || strings.Contains(got, "example-token") || strings.Contains(got, "example-bearer") || strings.Contains(got, "?") {
 		t.Fatalf("sanitized log text retained sensitive value: %q", got)
 	}
 	if !strings.Contains(got, "[email]") || !strings.Contains(got, "[archive_key]") {
 		t.Fatalf("sanitized log text did not include redaction markers: %q", got)
+	}
+}
+
+func TestStatusIssuesRedactLowerLayerErrors(t *testing.T) {
+	unsafeErr := errors.New(
+		`GET https://r2.example.test/archive?X-Amz-Signature=example-signature&token=example-token ` +
+			`Authorization: Bearer example-bearer Cookie: session=example-cookie ` +
+			`mailbox=agent.one@example.com raw_key=orgs/org_pub_123/domains/example.com/mail/inbound/2026/07/05/raw.eml`,
+	)
+	poller := &Poller{
+		cfg: runtimeConfig{
+			SweepInterval:      time.Hour,
+			RetryDelay:         time.Minute,
+			StateMongoDatabase: "mail_control_state",
+		},
+		domainSource: testPollerDomainSource{err: unsafeErr},
+		state: &testStateStore{
+			items:          map[string]inboundWorkDocument{},
+			queueStatusErr: unsafeErr,
+			lastSweepAtErr: unsafeErr,
+		},
+	}
+
+	status := poller.Status(context.Background())
+	joined := strings.Join(status.Issues, "\n")
+
+	for _, want := range []string{"active_domain_load_failed:", "queue_status_failed:", "sweep_cursor_status_failed:", "[email]", "[archive_key]"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("status issues missing %q: %#v", want, status.Issues)
+		}
+	}
+	for _, forbidden := range []string{
+		"example-signature",
+		"example-token",
+		"example-bearer",
+		"example-cookie",
+		"agent.one@example.com",
+		"orgs/org_pub_123",
+		"?",
+	} {
+		if strings.Contains(joined, forbidden) {
+			t.Fatalf("status issues exposed %q: %#v", forbidden, status.Issues)
+		}
 	}
 }
 
@@ -83,6 +130,18 @@ func TestDecodeManifestAcceptsCloudflareEdgeEvidence(t *testing.T) {
 	if !strings.Contains(string(manifest.CloudflareEdgeEvidence), "worker_message_fields") {
 		t.Fatalf("CloudflareEdgeEvidence missing worker fields: %s", manifest.CloudflareEdgeEvidence)
 	}
+}
+
+type testPollerDomainSource struct {
+	domains []Domain
+	err     error
+}
+
+func (s testPollerDomainSource) ActivePollerDomains(context.Context) ([]Domain, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return append([]Domain(nil), s.domains...), nil
 }
 
 func TestValidateConfigRequiresDSNFeedbackForEachDomain(t *testing.T) {

@@ -57,6 +57,10 @@ spec:
           env:
             - name: NODE_ENV
 {{- include "agentteam-email.envFor" (dict "root" . "name" "NODE_ENV") | nindent 14 }}
+            - name: DEBUG
+{{- include "agentteam-email.envFor" (dict "root" . "name" "DEBUG") | nindent 14 }}
+            - name: DEBUG_HIDE_DATE
+{{- include "agentteam-email.envFor" (dict "root" . "name" "DEBUG_HIDE_DATE") | nindent 14 }}
             - name: PORT
 {{- include "agentteam-email.envFor" (dict "root" . "name" "PORT") | nindent 14 }}
             - name: FRONTEND_HOST

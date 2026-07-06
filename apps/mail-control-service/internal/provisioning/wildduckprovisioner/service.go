@@ -10,17 +10,14 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"regexp"
-	"strings"
 	"time"
 
 	"mail-control-service/internal/control/controlstate"
 	"mail-control-service/internal/mail/structured"
+	"mail-control-service/internal/safelog"
 )
 
 var errNotFound = errors.New("wildduck resource not found")
-
-var logEmailPattern = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
 
 type Config struct {
 	APIBaseURL      string
@@ -123,7 +120,7 @@ func (s *Service) EnsureFeedback(ctx context.Context, records []controlstate.Dom
 		changed, err := s.ensureAddress(ctx, userID, record.FeedbackAddress)
 		if err != nil {
 			log.Printf("agent-mail-wildduck-provisioner event=wildduck_feedback_address_failed operation=ensure_address domain=%s wildduck_user_id=%s error=%q", record.Domain, userID, sanitizeLogError(err))
-			item.Error = err.Error()
+			item.Error = sanitizeLogError(err)
 			item.Action = "failed"
 			result.OK = false
 			result.Issues = append(result.Issues, "feedback_address_failed")
@@ -175,7 +172,7 @@ func (s *Service) Status(ctx context.Context, records []controlstate.DomainRecor
 				log.Printf("agent-mail-wildduck-provisioner event=wildduck_feedback_status_degraded operation=resolve_address domain=%s issue=feedback_address_not_found", record.Domain)
 			default:
 				status.OK = false
-				status.Issues = append(status.Issues, "feedback_address_lookup_failed: "+err.Error())
+				status.Issues = append(status.Issues, safelog.Issue("feedback_address_lookup_failed", err))
 				log.Printf("agent-mail-wildduck-provisioner event=wildduck_feedback_status_degraded operation=resolve_address domain=%s issue=feedback_address_lookup_failed error=%q", record.Domain, sanitizeLogError(err))
 			}
 		}
@@ -192,12 +189,7 @@ func sanitizeLogError(err error) string {
 	if err == nil {
 		return ""
 	}
-	message := strings.TrimSpace(strings.Join(strings.Fields(err.Error()), " "))
-	message = logEmailPattern.ReplaceAllString(message, "[email]")
-	if len(message) > 240 {
-		return message[:240]
-	}
-	return message
+	return safelog.Error(err)
 }
 
 func (s *Service) ensurePrimaryMailbox(ctx context.Context, records []controlstate.DomainRecord) (string, bool, error) {

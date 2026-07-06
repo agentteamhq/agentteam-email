@@ -10,8 +10,18 @@ type RuntimeProjectionTestDatabase = Database & {
 }
 
 const runtimeProjectionTestState = vi.hoisted(() => ({
+  debugFactory: Object.assign(vi.fn(), {
+    disable: vi.fn(),
+    enable: vi.fn(),
+    enabled: vi.fn()
+  }),
+  debugLog: vi.fn(),
   globals: vi.fn(),
   syncAgentMailRuntime: vi.fn()
+}))
+
+vi.mock('debug', () => ({
+  default: runtimeProjectionTestState.debugFactory
 }))
 
 vi.mock('../globals', () => ({
@@ -29,6 +39,9 @@ describe('Agent Mail runtime projection', () => {
     vi.stubEnv('DATABASE_URL', 'mongodb://localhost:27017/app')
     vi.stubEnv('ENCRYPT_SECRET_KEY', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
     vi.stubEnv('PUBLIC_HOSTNAME', 'https://mail.example.test')
+    runtimeProjectionTestState.debugFactory.mockClear()
+    runtimeProjectionTestState.debugFactory.mockImplementation(() => runtimeProjectionTestState.debugLog)
+    runtimeProjectionTestState.debugLog.mockReset()
     runtimeProjectionTestState.globals.mockReset()
     runtimeProjectionTestState.syncAgentMailRuntime.mockReset()
     runtimeProjectionTestState.syncAgentMailRuntime.mockResolvedValue({
@@ -124,10 +137,32 @@ describe('Agent Mail runtime projection', () => {
     const { handleAgentMailRuntimeSnapshotRequest } = await import('./runtime-projection')
 
     const response = await handleAgentMailRuntimeSnapshotRequest(
-      new Request('https://mail.example.test/rpc/internal/agent-mail/runtime/snapshot')
+      new Request('https://mail.example.test/rpc/internal/agent-mail/runtime/snapshot', {
+        headers: {
+          'x-request-id': 'runtime-snapshot-auth-1'
+        }
+      })
     )
 
     expect(response.status).toBe(401)
+    await expect(response.json()).resolves.toStrictEqual({
+      code: 'UNAUTHORIZED',
+      error: 'Authentication is required.',
+      supportReference: 'request-id:runtime-snapshot-auth-1'
+    })
+    expect(runtimeProjectionTestState.debugLog).toHaveBeenCalledWith(
+      'agent_mail_runtime_snapshot_handled_error %o',
+      expect.objectContaining({
+        operation: 'agent_mail_runtime_snapshot',
+        publicError: {
+          code: 'UNAUTHORIZED',
+          status: 401,
+          supportReference: 'request-id:runtime-snapshot-auth-1'
+        },
+        reason: 'missing_control_to_web_token',
+        requestId: 'runtime-snapshot-auth-1'
+      })
+    )
     expect(runtimeProjectionTestState.globals).not.toHaveBeenCalled()
   })
 

@@ -1,4 +1,5 @@
 import debug from 'debug'
+import { createSafeErrorLogDetails } from '../auth/log-redaction'
 import { updateStripeCustomer } from '../payments/update-customer'
 import type { AuthUserRole, UserId } from '@main/db'
 
@@ -7,6 +8,7 @@ import type { Database } from '../db/db'
 const log = debug('app:job:sync-stripe-customers')
 
 const DEFAULT_PAGE_SIZE = 500
+const SAFE_USER_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/
 
 export type SyncStripeCustomersResult = {
   failed: number
@@ -69,7 +71,10 @@ export async function syncStripeCustomers(
         }
       } catch (error) {
         result.failed += 1
-        log('stripe customer sync failed for user %s: %O', user._id, error)
+        log('stripe customer sync failed %o', {
+          error: createSafeErrorLogDetails(error),
+          userId: safeUserIdForLog(user._id)
+        })
       }
     }
 
@@ -85,4 +90,9 @@ export async function syncStripeCustomers(
   }
 
   return result
+}
+
+function safeUserIdForLog(userId: UserId): string {
+  const serializedUserId = String(userId)
+  return SAFE_USER_ID_PATTERN.test(serializedUserId) ? serializedUserId : 'unavailable'
 }

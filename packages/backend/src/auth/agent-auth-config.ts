@@ -4,9 +4,11 @@ import {
   AgentMailMailboxCapabilityRequestConstraints,
   AgentMailOrganizationCapabilityRequestConstraints
 } from '@main/db'
+import debug from 'debug'
 
 import { applyAgentMailEnrollmentGrantRequestForAgent } from '../agent-mail/enrollment-grants'
 import { STRINGS } from '../strings'
+import { createSafeErrorLogDetails } from './log-redaction'
 import type { AgentAuthEvent, AgentAuthOptions, AgentAuthPath, Capability } from '@better-auth/agent-auth'
 import type { Database } from '../db/db'
 
@@ -48,6 +50,7 @@ const AGENT_AUTH_GRANT_TTLS_SECONDS = {
 } as const satisfies Record<AgentMailCapability, number>
 
 export const AGENT_AUTH_AGENT_SESSION_TTL_SECONDS = 60 * 60
+const log = debug('app:auth:agent-auth')
 
 export const AGENT_AUTH_CAPABILITIES = [
   {
@@ -253,11 +256,19 @@ async function applyEnrollmentGrantRequestFromEvent(db: Database, agentId: strin
   try {
     await applyAgentMailEnrollmentGrantRequestForAgent({ agentId, db, hostId })
   } catch (error) {
+    const safeError = createSafeErrorLogDetails(error)
+    log('agent_auth_enrollment_grant_apply_failed %o', {
+      agentId,
+      error: safeError,
+      ...(safeError.code ? { errorCode: safeError.code } : {}),
+      hostId,
+      operation: 'agent_auth_enrollment_grant_apply'
+    })
     await db.models.auditLog.create({
       action: 'agent_mail.agent.enrollment_grants.apply_failed',
       metadata: {
         agentId,
-        error: error instanceof Error ? error.message : 'Unknown enrollment grant application error',
+        error: safeError,
         hostId
       },
       severity: 'high',

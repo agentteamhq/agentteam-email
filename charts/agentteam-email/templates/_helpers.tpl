@@ -80,6 +80,11 @@ value: {{ required (printf "%s.value or %s.valueFrom is required" $name $name) $
 {{- end }}
 {{- end -}}
 
+{{- define "agentteam-email.webServerDebugNamespaces" -}}
+{{- $debug := default dict .Values.webServer.debug -}}
+{{- if $debug.enabled -}}app:frontend{{- end -}}
+{{- end -}}
+
 {{- define "agentteam-email.webOauthEnv" -}}
 - name: CLOUDFLARE_OAUTH_CLIENT_ID
 {{- include "agentteam-email.envFor" (dict "root" . "name" "CLOUDFLARE_OAUTH_CLIENT_ID") | nindent 2 }}
@@ -174,6 +179,8 @@ emptyDir: {}
 {{- else if eq $name "AT_EMAIL_ADMIN_TRIAL_MAX_ACTIVE" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.trial.maxActive) -}}
 {{- else if eq $name "AT_EMAIL_ADMIN_TRIAL_TOTAL_SEND_LIMIT" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" $root.Values.admin.trial.totalSendLimit) -}}
 {{- else if eq $name "NODE_ENV" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" "production")) -}}
+{{- else if eq $name "DEBUG" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (include "agentteam-email.webServerDebugNamespaces" $root))) -}}
+{{- else if eq $name "DEBUG_HIDE_DATE" -}}{{ $debug := default dict $root.Values.webServer.debug -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (default (dict "value" "1") $debug.hideDate)) -}}
 {{- else if eq $name "PORT" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" "4321")) -}}
 {{- else if eq $name "FRONTEND_HOST" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" "0.0.0.0")) -}}
 {{- else if eq $name "PUBLIC_HOSTNAME" -}}{{ include "agentteam-email.valueSourceEnv" (dict "source" (dict "value" (required "publicHostname is required" $root.Values.publicHostname))) -}}

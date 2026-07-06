@@ -18,10 +18,39 @@ export interface WebappProvidersProps extends EnvContextValue {
   sessionCleanupEnabled?: boolean
 }
 
-const SAFE_ERROR_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_.:-]{0,79}$/
+const safeDiagnosticIdentifierPattern = /^[A-Za-z][A-Za-z0-9_.:-]{0,79}$/
+const sensitiveDiagnosticIdentifierTerms = new Set([
+  'api-key',
+  'apikey',
+  'auth',
+  'authentication',
+  'authorization',
+  'authorized',
+  'bearer',
+  'cookie',
+  'credential',
+  'credentials',
+  'jwk',
+  'jwks',
+  'jwt',
+  'key',
+  'oauth',
+  'password',
+  'secret',
+  'session',
+  'token',
+  'unauthorized'
+])
 
 interface ErrorBoundaryInfo {
   componentStack?: string | null
+}
+
+interface ErrorBoundaryDiagnostic {
+  boundaryName: 'webapp-providers'
+  errorName?: string
+  errorType: string
+  hasComponentStack: boolean
 }
 
 function getErrorName(error: unknown) {
@@ -29,7 +58,7 @@ function getErrorName(error: unknown) {
     return undefined
   }
 
-  return SAFE_ERROR_NAME_PATTERN.test(error.name) ? error.name : 'Error'
+  return isSafeDiagnosticIdentifier(error.name) ? error.name : undefined
 }
 
 function getErrorType(error: unknown) {
@@ -48,16 +77,51 @@ function getErrorType(error: unknown) {
   return typeof error
 }
 
-function logWebappProviderError(error: unknown, info: ErrorBoundaryInfo) {
-  const diagnostic = {
+function getWebappProviderErrorDiagnostic(error: unknown, info: ErrorBoundaryInfo): ErrorBoundaryDiagnostic {
+  const diagnostic: ErrorBoundaryDiagnostic = {
     boundaryName: 'webapp-providers',
-    errorName: getErrorName(error),
     errorType: getErrorType(error),
     hasComponentStack: Boolean(info.componentStack)
   }
+  const errorName = getErrorName(error)
+
+  if (errorName) {
+    diagnostic.errorName = errorName
+  }
+
+  return diagnostic
+}
+
+function logWebappProviderError(error: unknown, info: ErrorBoundaryInfo) {
+  const diagnostic = getWebappProviderErrorDiagnostic(error, info)
 
   // eslint-disable-next-line no-console
   console.error('Error boundary caught an error', diagnostic)
+}
+
+function isSafeDiagnosticIdentifier(value: string): boolean {
+  return safeDiagnosticIdentifierPattern.test(value) && !isSensitiveDiagnosticIdentifier(value)
+}
+
+function isSensitiveDiagnosticIdentifier(value: string): boolean {
+  const normalized = value.toLowerCase()
+
+  return (
+    diagnosticIdentifierTerms(value).some((term) => sensitiveDiagnosticIdentifierTerms.has(term)) ||
+    /(?:^|[._:-])(?:api-key|apikey|bearer|jwk|jwks|key|token)(?:$|[._:-])/u.test(normalized) ||
+    /(?:api|decrypt|encrypt|encryption|oauth|private|public|refresh|secret|session|signing)key/u.test(
+      normalized
+    )
+  )
+}
+
+function diagnosticIdentifierTerms(value: string): string[] {
+  return value
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .toLowerCase()
+    .split(/[^a-z0-9-]+/u)
+    .filter(Boolean)
 }
 
 export function WebappProviders(props: PropsWithChildren<WebappProvidersProps>) {

@@ -264,7 +264,7 @@ run = [
 description = "Run the full CI validation gate against the configured environment"
 # Local runs default to the repo-local .env so WT-scoped ports stay isolated.
 # CI overrides AT_EMAIL_ADMIN_TEST_CI_ENV_FILE to validate .env.example.
-env = { _.file = "{{ get_env(name='AT_EMAIL_ADMIN_TEST_CI_ENV_FILE', default='.env') }}", CI = "true", DEBUG = "*", TEST_ARTIFACT_SUBMIT_SKIP = "1" }
+env = { _.file = "{{ get_env(name='AT_EMAIL_ADMIN_TEST_CI_ENV_FILE', default='.env') }}", CI = "true", DEBUG = "", TEST_ARTIFACT_SUBMIT_SKIP = "1" }
 run = [
   { task = ":test:static" },
   { task = ":build" },

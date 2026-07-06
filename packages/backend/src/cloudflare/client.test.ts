@@ -3,16 +3,32 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const TEST_WORKER_WEBHOOK_SIGNING_SECRET = 'whsec_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
 
-const cloudflareClientTestState = vi.hoisted(() => ({
-  catchAllUpdate: vi.fn(),
-  dnsCreate: vi.fn(),
-  dnsDelete: vi.fn(),
-  fetch: vi.fn(),
-  sendingSubdomainCreate: vi.fn(),
-  sendingSubdomainsList: vi.fn(),
-  scriptDelete: vi.fn(),
-  scriptUpdate: vi.fn(),
-  toFile: vi.fn()
+const cloudflareClientTestState = vi.hoisted(() => {
+  const debugLog = vi.fn()
+  return {
+    catchAllUpdate: vi.fn(),
+    debugFactory: Object.assign(
+      vi.fn(() => debugLog),
+      {
+        disable: vi.fn(),
+        enable: vi.fn(),
+        enabled: vi.fn()
+      }
+    ),
+    debugLog,
+    dnsCreate: vi.fn(),
+    dnsDelete: vi.fn(),
+    fetch: vi.fn(),
+    sendingSubdomainCreate: vi.fn(),
+    sendingSubdomainsList: vi.fn(),
+    scriptDelete: vi.fn(),
+    scriptUpdate: vi.fn(),
+    toFile: vi.fn()
+  }
+})
+
+vi.mock('debug', () => ({
+  default: cloudflareClientTestState.debugFactory
 }))
 
 vi.mock('cloudflare', () => ({
@@ -56,6 +72,7 @@ describe('Cloudflare email Worker provisioning', () => {
     vi.stubEnv('ENCRYPT_SECRET_KEY', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
     vi.stubEnv('PUBLIC_HOSTNAME', 'https://mail.example.test')
     cloudflareClientTestState.catchAllUpdate.mockReset()
+    cloudflareClientTestState.debugLog.mockReset()
     cloudflareClientTestState.dnsCreate.mockReset()
     cloudflareClientTestState.dnsDelete.mockReset()
     cloudflareClientTestState.fetch.mockReset()
@@ -308,10 +325,15 @@ describe('Cloudflare email Worker provisioning', () => {
     expect.hasAssertions()
     cloudflareClientTestState.catchAllUpdate.mockResolvedValue({})
     cloudflareClientTestState.scriptDelete.mockResolvedValue({})
-    cloudflareClientTestState.dnsDelete.mockImplementation(async () => {
-      throw Object.assign(new Error('Cloudflare DNS disable failed for Bearer cf_secret_token_123'), {
+    const cloudflareError = Object.assign(
+      new Error('Cloudflare DNS disable failed for Bearer cf_secret_token_123'),
+      {
         status: 403
-      })
+      }
+    )
+    cloudflareError.name = 'OAuthTokenExchangeError'
+    cloudflareClientTestState.dnsDelete.mockImplementation(async () => {
+      throw cloudflareError
     })
     const { removeCloudflareProvisioning } = await import('./client')
 
@@ -332,6 +354,19 @@ describe('Cloudflare email Worker provisioning', () => {
     expect(cloudflareClientTestState.dnsDelete).toHaveBeenCalledWith({
       zone_id: 'cf-zone-example'
     })
+    expect(cloudflareClientTestState.debugLog).toHaveBeenCalledWith(
+      'Cloudflare Email Routing DNS disable failed during teardown',
+      expect.objectContaining({
+        error: expect.objectContaining({
+          name: 'CloudflareProvisioningOperationError',
+          operation: 'email-routing-dns-delete',
+          status: null
+        })
+      })
+    )
+    const serializedLogCalls = JSON.stringify(cloudflareClientTestState.debugLog.mock.calls)
+    expect(serializedLogCalls).not.toContain('OAuthTokenExchangeError')
+    expect(serializedLogCalls).not.toContain('cf_secret_token_123')
   })
 
   it('sends raw email through Cloudflare Email Sending with the user OAuth access token', async () => {

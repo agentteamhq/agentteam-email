@@ -1,49 +1,73 @@
 import { randomUUID } from 'node:crypto'
 
 import { HttpStatusCode } from '@main/common'
+import debug from 'debug'
 import { Elysia, t } from 'elysia'
 
+import { createSafeErrorLogDetails, createSafeRequestLogDetails } from '../auth/log-redaction'
 import { globals } from '../globals'
+import {
+  createSafeRequestCorrelationLogDetails,
+  mapPublicErrorResponse,
+  publicErrorResponseBodySchema
+} from '../public-error-response'
 import { PUBLIC_VARS } from '../vars.public'
+import type { PublicErrorResponse, PublicErrorResponseBody } from '../public-error-response'
 
 const FIRST_ADMIN_SETUP_LOCK_KEY = 'admin-setup:first-admin'
 const FIRST_ADMIN_SETUP_LOCK_TTL_MS = 10 * 60 * 1000
+const log = debug('app:rpc:admin-setup')
 
 type AdminSetupDatabase = Awaited<ReturnType<typeof globals>>['db']
+type AdminSetupResponseSet = {
+  status?: number | string
+}
 
 const adminSetup = new Elysia({
   name: 'admin-setup',
   prefix: '/admin/setup'
 }).post(
   '/first-admin',
-  async ({ body, status }) => {
+  async ({ body, request, set }) => {
     const email = body.email.trim().toLowerCase()
     const name = body.name?.trim() || email.split('@', 1)[0] || 'Admin'
 
     if (body.password !== body.confirmPassword) {
-      return status(HttpStatusCode.BadRequest, {
-        error: 'Passwords do not match.'
+      return adminSetupStatusErrorResponse({
+        reason: 'password_mismatch',
+        request,
+        set,
+        statusCode: HttpStatusCode.BadRequest
       })
     }
 
     const { auth, db } = await globals()
     if (await hasAdminUser(db)) {
-      return status(HttpStatusCode.Conflict, {
-        error: 'Admin setup is already complete.'
+      return adminSetupStatusErrorResponse({
+        reason: 'admin_setup_already_complete',
+        request,
+        set,
+        statusCode: HttpStatusCode.Conflict
       })
     }
 
     const setupLockToken = await tryAcquireFirstAdminSetupLock(db)
     if (!setupLockToken) {
-      return status(HttpStatusCode.Conflict, {
-        error: 'Admin setup is already complete.'
+      return adminSetupStatusErrorResponse({
+        reason: 'first_admin_setup_lock_held',
+        request,
+        set,
+        statusCode: HttpStatusCode.Conflict
       })
     }
 
     try {
       if (await hasAdminUser(db)) {
-        return status(HttpStatusCode.Conflict, {
-          error: 'Admin setup is already complete.'
+        return adminSetupStatusErrorResponse({
+          reason: 'admin_setup_completed_during_lock',
+          request,
+          set,
+          statusCode: HttpStatusCode.Conflict
         })
       }
 
@@ -61,29 +85,42 @@ const adminSetup = new Elysia({
             origin: PUBLIC_VARS.PUBLIC_HOSTNAME
           })
         })
-      } catch {
-        return status(HttpStatusCode.BadRequest, {
-          error: 'Admin account could not be created.'
+      } catch (error) {
+        return adminSetupStatusErrorResponse({
+          error,
+          reason: 'better_auth_signup_failed',
+          request,
+          set,
+          statusCode: HttpStatusCode.BadRequest
         })
       }
 
       const createdUserId = readSignUpUserId(signUpResult)
       if (!createdUserId) {
-        return status(HttpStatusCode.Conflict, {
-          error: 'Admin account could not be created.'
+        return adminSetupStatusErrorResponse({
+          reason: 'missing_signup_user_id',
+          request,
+          set,
+          statusCode: HttpStatusCode.Conflict
         })
       }
 
       const createdUser = await db.models.user.findById(createdUserId).exec()
       if (!createdUser || createdUser.email !== email) {
-        return status(HttpStatusCode.Conflict, {
-          error: 'Admin account could not be created.'
+        return adminSetupStatusErrorResponse({
+          reason: 'created_user_mismatch',
+          request,
+          set,
+          statusCode: HttpStatusCode.Conflict
         })
       }
 
       if (await hasAdminUser(db)) {
-        return status(HttpStatusCode.Conflict, {
-          error: 'Admin setup is already complete.'
+        return adminSetupStatusErrorResponse({
+          reason: 'admin_setup_completed_before_promotion',
+          request,
+          set,
+          statusCode: HttpStatusCode.Conflict
         })
       }
 
@@ -103,8 +140,11 @@ const adminSetup = new Elysia({
         .exec()
 
       if (updateResult.matchedCount !== 1) {
-        return status(HttpStatusCode.Conflict, {
-          error: 'Admin setup is already complete.'
+        return adminSetupStatusErrorResponse({
+          reason: 'admin_promotion_not_matched',
+          request,
+          set,
+          statusCode: HttpStatusCode.Conflict
         })
       }
 
@@ -114,7 +154,8 @@ const adminSetup = new Elysia({
     } finally {
       try {
         await releaseFirstAdminSetupLock(db, setupLockToken)
-      } catch {
+      } catch (error) {
+        logAdminSetupLockReleaseFailure(error, request)
         // The lock has a TTL, and admin existence remains the setup-complete source of truth.
       }
     }
@@ -130,12 +171,8 @@ const adminSetup = new Elysia({
       200: t.Object({
         redirectTo: t.Literal('/signin/')
       }),
-      400: t.Object({
-        error: t.String()
-      }),
-      409: t.Object({
-        error: t.String()
-      })
+      400: publicErrorResponseBodySchema,
+      409: publicErrorResponseBodySchema
     }
   }
 )
@@ -198,6 +235,63 @@ function readSignUpUserId(result: unknown): string | null {
 
   const id = (user as { id?: unknown }).id
   return typeof id === 'string' && id.trim() ? id : null
+}
+
+function adminSetupStatusErrorResponse({
+  error,
+  reason,
+  request,
+  set,
+  statusCode
+}: {
+  error?: unknown
+  reason: string
+  request: Request
+  set: AdminSetupResponseSet
+  statusCode: number
+}): PublicErrorResponseBody {
+  const publicError = mapPublicErrorResponse({
+    code: statusCode,
+    error: error ?? { status: statusCode },
+    request
+  })
+  logAdminSetupHandledError(error ?? { status: statusCode }, publicError, request, reason)
+  set.status = publicError.status
+  return publicError.body
+}
+
+function logAdminSetupHandledError(
+  error: unknown,
+  publicError: PublicErrorResponse,
+  request: Request,
+  reason: string
+) {
+  const errorLogDetails = createSafeErrorLogDetails(error)
+  log('first_admin_setup_handled_error %o', {
+    error: errorLogDetails,
+    ...(errorLogDetails.code ? { errorCode: errorLogDetails.code } : {}),
+    operation: 'first_admin_setup',
+    publicError: {
+      code: publicError.body.code,
+      status: publicError.status,
+      ...(publicError.body.supportReference ? { supportReference: publicError.body.supportReference } : {})
+    },
+    reason,
+    ...createSafeRequestCorrelationLogDetails(request),
+    ...createSafeRequestLogDetails(request)
+  })
+}
+
+function logAdminSetupLockReleaseFailure(error: unknown, request: Request) {
+  const errorLogDetails = createSafeErrorLogDetails(error)
+  log('first_admin_setup_lock_release_failed %o', {
+    error: errorLogDetails,
+    ...(errorLogDetails.code ? { errorCode: errorLogDetails.code } : {}),
+    operation: 'first_admin_setup_lock_release',
+    reason: 'lock_release_failed',
+    ...createSafeRequestCorrelationLogDetails(request),
+    ...createSafeRequestLogDetails(request)
+  })
 }
 
 export default adminSetup

@@ -64,6 +64,10 @@ webServer:
   authSecret: {}
   encryptionKey: {}
   databaseMaxPoolSize: 8
+  debug:
+    enabled: false
+    hideDate:
+      value: '1'
   tmpDir:
     value: /tmp/agentteam-email
 

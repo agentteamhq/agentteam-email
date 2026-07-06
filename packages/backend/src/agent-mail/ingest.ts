@@ -7,19 +7,24 @@ import {
   parseBase62UUIDv7,
   publicIdFromUUIDv7
 } from '@main/db'
+import debug from 'debug'
 import { Webhook } from 'standardwebhooks'
 import { z } from 'zod'
 
+import { createSafeErrorLogDetails, createSafeRequestLogDetails } from '../auth/log-redaction'
 import { globals } from '../globals'
 import { decryptSecretValue } from '../lib/secret-box'
+import { createSafeRequestCorrelationLogDetails, mapPublicErrorResponse } from '../public-error-response'
 
 import { enqueueAgentMailIngest } from './control-client'
 import type { AgentMailIngestNotification } from './control-client'
+import type { PublicErrorResponse } from '../public-error-response'
 import type { CloudflareConnectionId } from '@main/db'
 
 const INGEST_NOTIFICATION_SCHEMA = 'agent-mail.inbound.ingest.v1'
 const MAX_BODY_BYTES = 32 * 1024
 const INGEST_PATH_PREFIX = '/rpc/agent-mail/ingest/v1/'
+const log = debug('app:agent-mail:ingest')
 
 const nonEmptyStringSchema = z.string().trim().min(1)
 const ingestNotificationSchema = z.object({
@@ -52,21 +57,33 @@ export async function handleAgentMailIngestRequest(
   connectionPublicId: string
 ): Promise<Response> {
   if (request.method !== 'POST') {
-    return jsonResponse({ error: 'Method not allowed' }, 405)
+    return createAgentMailIngestPublicErrorResponse({
+      reason: 'method_not_allowed',
+      request,
+      status: 405
+    })
   }
 
   if (!isJsonContentType(request.headers)) {
-    return jsonResponse({ error: 'Content-Type must be application/json' }, 415)
+    return createAgentMailIngestPublicErrorResponse({
+      reason: 'unsupported_media_type',
+      request,
+      status: 415
+    })
   }
 
   const normalizedConnectionPublicId = connectionPublicId.trim()
   if (!normalizedConnectionPublicId) {
-    return unauthorized()
+    return unauthorized(request, 'missing_connection_public_id')
   }
 
   const bodyBytes = new Uint8Array(await request.arrayBuffer())
   if (bodyBytes.byteLength > MAX_BODY_BYTES) {
-    return jsonResponse({ error: 'Request body too large' }, 413)
+    return createAgentMailIngestPublicErrorResponse({
+      reason: 'request_body_too_large',
+      request,
+      status: 413
+    })
   }
 
   let connectionId: CloudflareConnectionId
@@ -75,7 +92,7 @@ export async function handleAgentMailIngestRequest(
       parseBase62UUIDv7(normalizedConnectionPublicId)
     ) as CloudflareConnectionId
   } catch {
-    return unauthorized()
+    return unauthorized(request, 'invalid_connection_public_id')
   }
 
   const { db } = await globals()
@@ -96,35 +113,51 @@ export async function handleAgentMailIngestRequest(
         .exec()
     : null
   if (!connection || !deployment?.encryptedWorkerHmacSecret) {
-    return unauthorized()
+    return unauthorized(request, 'missing_active_worker_deployment')
   }
 
   let secret: string
   try {
     secret = await decryptSecretValue(deployment.encryptedWorkerHmacSecret)
-  } catch {
-    return unauthorized()
+  } catch (error) {
+    return unauthorized(request, 'worker_secret_decrypt_failed', error)
   }
 
   const verifiedPayload = verifyWebhook({ bodyBytes, headers: request.headers, secret })
   if (!verifiedPayload.ok) {
     if (verifiedPayload.reason === 'invalid-payload') {
-      return jsonResponse({ error: 'Invalid notification' }, 400)
+      return createAgentMailIngestPublicErrorResponse({
+        reason: 'invalid_notification_payload',
+        request,
+        status: 400
+      })
     }
-    return unauthorized()
+    return unauthorized(request, 'invalid_worker_signature')
   }
 
   const notification = parseNotification(verifiedPayload.payload)
   if (!notification) {
-    return jsonResponse({ error: 'Invalid notification' }, 400)
+    return createAgentMailIngestPublicErrorResponse({
+      reason: 'invalid_notification_schema',
+      request,
+      status: 400
+    })
   }
 
   if (notification.ingest_id !== request.headers.get('webhook-id')?.trim()) {
-    return jsonResponse({ error: 'Notification webhook id does not match payload' }, 400)
+    return createAgentMailIngestPublicErrorResponse({
+      reason: 'webhook_id_mismatch',
+      request,
+      status: 400
+    })
   }
 
   if (normalizeDomain(notification.recipient_domain) !== normalizeDomain(connection.domain)) {
-    return jsonResponse({ error: 'Notification domain does not match connection' }, 400)
+    return createAgentMailIngestPublicErrorResponse({
+      reason: 'recipient_domain_mismatch',
+      request,
+      status: 400
+    })
   }
 
   const validatedNotification = validateNotificationAuthority({
@@ -133,23 +166,30 @@ export async function handleAgentMailIngestRequest(
     notification
   })
   if (!validatedNotification) {
-    return jsonResponse({ error: 'Notification archive scope does not match connection' }, 400)
+    return createAgentMailIngestPublicErrorResponse({
+      reason: 'notification_authority_mismatch',
+      request,
+      status: 400
+    })
   }
 
   try {
     const result = await enqueueAgentMailIngest(validatedNotification)
     return jsonResponse(result, 202)
   } catch (error) {
-    console.warn(
-      JSON.stringify({
-        event: 'agent_mail_ingest_control_enqueue_failed',
-        ingest_id: validatedNotification.ingest_id,
-        recipient_domain: validatedNotification.recipient_domain,
-        worker_connection_id: normalizedConnectionPublicId,
-        error: sanitizeLogMessage(error)
-      })
-    )
-    return jsonResponse({ error: 'Agent Mail control API unavailable' }, 503)
+    return createAgentMailIngestPublicErrorResponse({
+      details: {
+        ingestId: validatedNotification.ingest_id,
+        organizationId: validatedNotification.organization_id,
+        organizationPublicId: validatedNotification.organization_public_id,
+        recipientDomain: normalizeDomain(validatedNotification.recipient_domain),
+        workerConnectionId: normalizedConnectionPublicId
+      },
+      error,
+      reason: 'control_enqueue_failed',
+      request,
+      status: 503
+    })
   }
 }
 
@@ -252,13 +292,74 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
 }
 
-function sanitizeLogMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error)
-  return message.replace(/\s+/gu, ' ').trim().slice(0, 240)
+function unauthorized(request: Request, reason: string, error?: unknown): Response {
+  return createAgentMailIngestPublicErrorResponse({
+    error,
+    reason,
+    request,
+    status: 401
+  })
 }
 
-function unauthorized(): Response {
-  return jsonResponse({ error: 'Unauthorized' }, 401)
+function createAgentMailIngestPublicErrorResponse({
+  details,
+  error,
+  reason,
+  request,
+  status
+}: {
+  details?: Record<string, unknown>
+  error?: unknown
+  reason: string
+  request: Request
+  status: number
+}): Response {
+  const publicError = mapPublicErrorResponse({
+    code: status,
+    error: error ?? { status },
+    request
+  })
+
+  logAgentMailIngestHandledError({
+    details,
+    error: error ?? { status },
+    publicError,
+    reason,
+    request
+  })
+
+  return jsonResponse(publicError.body, publicError.status)
+}
+
+function logAgentMailIngestHandledError({
+  details,
+  error,
+  publicError,
+  reason,
+  request
+}: {
+  details?: Record<string, unknown>
+  error: unknown
+  publicError: PublicErrorResponse
+  reason: string
+  request: Request
+}) {
+  const errorLogDetails = createSafeErrorLogDetails(error)
+  log('agent_mail_ingest_handled_error %o', {
+    ...(details ?? {}),
+    error: errorLogDetails,
+    ...(errorLogDetails.code ? { errorCode: errorLogDetails.code } : {}),
+    event: 'agent_mail_ingest_handled_error',
+    operation: 'agent_mail_worker_ingest',
+    publicError: {
+      code: publicError.body.code,
+      status: publicError.status,
+      ...(publicError.body.supportReference ? { supportReference: publicError.body.supportReference } : {})
+    },
+    reason,
+    ...createSafeRequestCorrelationLogDetails(request),
+    ...createSafeRequestLogDetails(request)
+  })
 }
 
 function jsonResponse(body: unknown, status: number): Response {

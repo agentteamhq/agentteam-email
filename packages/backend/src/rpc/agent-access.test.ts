@@ -37,6 +37,12 @@ type DecideAgentMailTrialClaimForWebMock = (input: {
 }) => Promise<unknown>
 
 const agentAccessRpcTestState = vi.hoisted(() => ({
+  debugFactory: Object.assign(vi.fn(), {
+    disable: vi.fn(),
+    enable: vi.fn(),
+    enabled: vi.fn()
+  }),
+  debugLog: vi.fn(),
   decideAgentMailTrialClaimForWeb: vi.fn<DecideAgentMailTrialClaimForWebMock>(),
   decideAgentAccessApprovalForWeb: vi.fn<AgentAccessMutationMock>(),
   getAgentMailTrialClaimForWeb: vi.fn<GetAgentMailTrialClaimForWebMock>(),
@@ -47,6 +53,10 @@ const agentAccessRpcTestState = vi.hoisted(() => ({
   revokeAgentAccessAgentForWeb: vi.fn<AgentAccessMutationMock>(),
   revokeAgentAccessCapabilitiesForWeb: vi.fn<AgentAccessMutationMock>(),
   startAgentMailTrial: vi.fn<StartAgentMailTrialMock>()
+}))
+
+vi.mock('debug', () => ({
+  default: agentAccessRpcTestState.debugFactory
 }))
 
 const noAgentAccessAllowedActions = {
@@ -103,6 +113,9 @@ vi.mock(import('../agent-access/trial-service'), () => ({
 describe('agent Access RPC routes', () => {
   beforeEach(() => {
     vi.resetModules()
+    agentAccessRpcTestState.debugFactory.mockClear()
+    agentAccessRpcTestState.debugFactory.mockImplementation(() => agentAccessRpcTestState.debugLog)
+    agentAccessRpcTestState.debugLog.mockReset()
     agentAccessRpcTestState.decideAgentMailTrialClaimForWeb.mockReset()
     agentAccessRpcTestState.decideAgentAccessApprovalForWeb.mockReset()
     agentAccessRpcTestState.getAgentMailTrialClaimForWeb.mockReset()
@@ -155,7 +168,10 @@ describe('agent Access RPC routes', () => {
 
     expect(response.status).toBe(401)
     expect(response.headers.get('www-authenticate')).toBe('Bearer realm="agentteam-agent-access"')
-    await expect(response.json()).resolves.toStrictEqual({ error: 'Authentication required' })
+    await expect(response.json()).resolves.toStrictEqual({
+      code: 'UNAUTHORIZED',
+      error: 'Authentication is required.'
+    })
   })
 
   it('routes user-code approval previews through the webserver Agent Access boundary', async () => {
@@ -245,7 +261,10 @@ describe('agent Access RPC routes', () => {
 
     expect(response.status).toBe(401)
     expect(response.headers.get('www-authenticate')).toBe('Bearer realm="agentteam-agent-access"')
-    await expect(response.json()).resolves.toStrictEqual({ error: 'Authentication required' })
+    await expect(response.json()).resolves.toStrictEqual({
+      code: 'UNAUTHORIZED',
+      error: 'Authentication is required.'
+    })
   })
 
   it('routes approval decisions through the webserver Agent Access boundary', async () => {
@@ -304,7 +323,10 @@ describe('agent Access RPC routes', () => {
 
     expect(response.status).toBe(401)
     expect(response.headers.get('www-authenticate')).toBe('Bearer realm="agentteam-agent-access"')
-    await expect(response.json()).resolves.toStrictEqual({ error: 'Authentication required' })
+    await expect(response.json()).resolves.toStrictEqual({
+      code: 'UNAUTHORIZED',
+      error: 'Authentication is required.'
+    })
   })
 
   it('returns authorization failures from approval mutations without a Bearer challenge', async () => {
@@ -327,14 +349,15 @@ describe('agent Access RPC routes', () => {
     expect(response.status).toBe(403)
     expect(response.headers.get('www-authenticate')).toBeNull()
     await expect(response.json()).resolves.toStrictEqual({
-      error: 'Agent access management is not authorized'
+      code: 'FORBIDDEN',
+      error: 'Access denied.'
     })
   })
 
   it('returns public WebAuthn challenge details from approval mutations', async () => {
     expect.hasAssertions()
 
-    const error = new Error('This approval requires passkey verification') as Error & {
+    const error = new Error('Passkey provider returned raw-auth-token for support@example.test') as Error & {
       details: {
         code: 'webauthn_required'
         webauthnOptions: Record<string, unknown>
@@ -364,15 +387,116 @@ describe('agent Access RPC routes', () => {
 
     expect(response.status).toBe(403)
     expect(response.headers.get('www-authenticate')).toBeNull()
-    await expect(response.json()).resolves.toStrictEqual({
+    const responseBody = await response.text()
+    expect(JSON.parse(responseBody)).toStrictEqual({
       code: 'webauthn_required',
-      error: 'This approval requires passkey verification',
+      error: 'This agent authorization request requires passkey verification.',
       webauthnOptions: {
         challenge: 'challenge-1',
         rpId: 'mail.example.com',
         userVerification: 'required'
       }
     })
+    expect(responseBody).not.toContain('raw-auth-token')
+    expect(responseBody).not.toContain('support@example.test')
+  })
+
+  it('narrows public WebAuthn options and logs handled passkey errors safely', async () => {
+    expect.hasAssertions()
+
+    const error = new Error(
+      'Passkey provider returned raw-auth-token for Authorization Bearer raw-bearer-token'
+    ) as Error & {
+      details: {
+        code: 'webauthn_required'
+        webauthnOptions: Record<string, unknown>
+      }
+      status: 403
+    }
+    error.name = 'AgentAccessError'
+    error.status = 403
+    error.details = {
+      code: 'webauthn_required',
+      webauthnOptions: {
+        allowCredentials: [
+          {
+            extra: 'raw-credential-token',
+            id: 'credential-1',
+            transports: ['internal', 'usb', 'raw-auth-token'],
+            type: 'public-key'
+          },
+          {
+            id: 'credential-2',
+            type: 'password'
+          }
+        ],
+        challenge: 'challenge-1',
+        extensions: {
+          appid: 'raw-extension-token'
+        },
+        rawProviderPayload: 'raw-provider-token',
+        rpId: 'mail.example.com',
+        timeout: 60000,
+        userVerification: 'required'
+      }
+    }
+    agentAccessRpcTestState.decideAgentAccessApprovalForWeb.mockRejectedValue(error)
+
+    const { default: agentAccess } = await import('./agent-access')
+    const response = await agentAccess.handle(
+      new Request('https://mail.example.com/agent-access/approvals/decision?token=raw-query-token', {
+        body: JSON.stringify({ action: 'approve', approvalId: 'approval_public_1' }),
+        headers: { 'content-type': 'application/json', 'x-request-id': 'webauthn-request-1' },
+        method: 'POST'
+      })
+    )
+
+    expect(response.status).toBe(403)
+    const responseBody = await response.text()
+    expect(JSON.parse(responseBody)).toStrictEqual({
+      code: 'webauthn_required',
+      error: 'This agent authorization request requires passkey verification.',
+      supportReference: 'request-id:webauthn-request-1',
+      webauthnOptions: {
+        allowCredentials: [
+          {
+            id: 'credential-1',
+            transports: ['internal', 'usb'],
+            type: 'public-key'
+          }
+        ],
+        challenge: 'challenge-1',
+        rpId: 'mail.example.com',
+        timeout: 60000,
+        userVerification: 'required'
+      }
+    })
+    expect(agentAccessRpcTestState.debugLog).toHaveBeenCalledWith('agent_access_rpc_handled_error %o', {
+      error: {
+        code: '403',
+        name: 'AgentAccessError',
+        status: '403',
+        statusCode: 403,
+        type: 'object'
+      },
+      errorCode: '403',
+      method: 'POST',
+      operation: 'agent_access_approval_decision',
+      path: '/agent-access/approvals/decision',
+      publicError: {
+        code: 'webauthn_required',
+        status: 403,
+        supportReference: 'request-id:webauthn-request-1'
+      },
+      requestId: 'webauthn-request-1'
+    })
+    const serializedOutput = `${responseBody}\n${JSON.stringify(agentAccessRpcTestState.debugLog.mock.calls)}`
+    expect(serializedOutput).not.toContain('raw-auth-token')
+    expect(serializedOutput).not.toContain('raw-bearer-token')
+    expect(serializedOutput).not.toContain('raw-credential-token')
+    expect(serializedOutput).not.toContain('raw-extension-token')
+    expect(serializedOutput).not.toContain('raw-provider-token')
+    expect(serializedOutput).not.toContain('raw-query-token')
   })
 
   it('routes agent revoke requests through the webserver Agent Access boundary', async () => {
@@ -455,7 +579,8 @@ describe('agent Access RPC routes', () => {
     expect(response.status).toBe(403)
     expect(response.headers.get('www-authenticate')).toBeNull()
     await expect(response.json()).resolves.toStrictEqual({
-      error: 'Agent access includes grants outside the active organization'
+      code: 'FORBIDDEN',
+      error: 'Access denied.'
     })
   })
 
@@ -574,7 +699,8 @@ describe('agent Access RPC routes', () => {
     }
     expect(rateLimitedResponse.status).toBe(429)
     await expect(rateLimitedResponse.json()).resolves.toStrictEqual({
-      error: 'Too many requests. Please try again later.'
+      code: 'TOO_MANY_REQUESTS',
+      error: 'Too many requests.'
     })
     expect(agentAccessRpcTestState.startAgentMailTrial).toHaveBeenCalledTimes(5)
   })
@@ -686,7 +812,10 @@ describe('agent Access RPC routes', () => {
 
     expect(response.status).toBe(401)
     expect(response.headers.get('www-authenticate')).toBe('Bearer realm="agentteam-agent-access"')
-    await expect(response.json()).resolves.toStrictEqual({ error: 'Authentication required' })
+    await expect(response.json()).resolves.toStrictEqual({
+      code: 'UNAUTHORIZED',
+      error: 'Authentication is required.'
+    })
   })
 
   it('routes autonomous trial claim decisions through the signed-in webserver boundary', async () => {
@@ -746,51 +875,108 @@ describe('agent Access RPC routes', () => {
   it('returns trial claim authorization failures without a Bearer challenge', async () => {
     expect.hasAssertions()
 
-    const error = new Error('Trial agent claim is not authorized') as Error & { status: 403 }
+    const error = new Error('Trial agent claim raw-claim-token is not authorized') as Error & { status: 403 }
     error.name = 'AgentMailTrialError'
     error.status = 403
     agentAccessRpcTestState.decideAgentMailTrialClaimForWeb.mockRejectedValue(error)
 
     const { default: agentAccess } = await import('./agent-access')
     const response = await agentAccess.handle(
-      new Request('https://mail.example.com/agent-access/trials/claim/claim-token/decision', {
+      new Request('https://mail.example.com/agent-access/trials/claim/raw-claim-token/decision', {
         body: JSON.stringify({ action: 'approve' }),
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'x-request-id': 'claim-request-1' },
         method: 'POST'
       })
     )
 
     expect(response.status).toBe(403)
     expect(response.headers.get('www-authenticate')).toBeNull()
-    await expect(response.json()).resolves.toStrictEqual({
-      error: 'Trial agent claim is not authorized'
+    const responseBody = await response.text()
+    expect(JSON.parse(responseBody)).toStrictEqual({
+      code: 'FORBIDDEN',
+      error: 'Access denied.',
+      supportReference: 'request-id:claim-request-1'
     })
+    expect(responseBody).not.toContain('raw-claim-token')
+    expect(agentAccessRpcTestState.debugLog).toHaveBeenCalledWith('agent_access_rpc_handled_error %o', {
+      error: {
+        code: '403',
+        name: 'AgentMailTrialError',
+        status: '403',
+        statusCode: 403,
+        type: 'object'
+      },
+      errorCode: '403',
+      method: 'POST',
+      operation: 'agent_access_trial_claim_decision',
+      path: '/agent-access/trials/claim/:value/decision',
+      publicError: {
+        code: 'FORBIDDEN',
+        status: 403,
+        supportReference: 'request-id:claim-request-1'
+      },
+      requestId: 'claim-request-1'
+    })
+    expect(JSON.stringify(agentAccessRpcTestState.debugLog.mock.calls)).not.toContain('raw-claim-token')
   })
 
-  it('returns trial service failures without a Bearer challenge', async () => {
+  it('redacts trial service failures and logs safe diagnostics without a Bearer challenge', async () => {
     expect.hasAssertions()
 
-    const error = new Error('Agent Mail trials are not enabled') as Error & { status: 503 }
+    const error = new Error(
+      'Agent Mail trial config failed for admission_token=raw-admission-token and claim raw-claim-token'
+    ) as Error & { status: 503 }
     error.name = 'AgentMailTrialError'
     error.status = 503
     agentAccessRpcTestState.startAgentMailTrial.mockRejectedValue(error)
 
     const { default: agentAccess } = await import('./agent-access')
     const response = await agentAccess.handle(
-      new Request('https://mail.example.com/agent-access/trials', {
+      new Request('https://mail.example.com/agent-access/trials?token=raw-query-token', {
         body: JSON.stringify({
           agent_public_key: { crv: 'Ed25519', kty: 'OKP', x: 'agent-key' },
+          admission_token: 'raw-admission-token',
           host_public_key: { crv: 'Ed25519', kty: 'OKP', x: 'host-key' }
         }),
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'x-request-id': 'trial-request-1' },
         method: 'POST'
       })
     )
 
     expect(response.status).toBe(503)
     expect(response.headers.get('www-authenticate')).toBeNull()
-    await expect(response.json()).resolves.toStrictEqual({
-      error: 'Agent Mail trials are not enabled'
+    const responseBody = await response.text()
+    expect(JSON.parse(responseBody)).toStrictEqual({
+      code: 'SERVICE_UNAVAILABLE',
+      error: 'Service unavailable.',
+      supportReference: 'request-id:trial-request-1'
     })
+    expect(responseBody).not.toContain('raw-admission-token')
+    expect(responseBody).not.toContain('raw-claim-token')
+    expect(responseBody).not.toContain('raw-query-token')
+    expect(agentAccessRpcTestState.debugLog).toHaveBeenCalledWith('agent_access_rpc_handled_error %o', {
+      error: {
+        code: '503',
+        name: 'AgentMailTrialError',
+        status: '503',
+        statusCode: 503,
+        type: 'object'
+      },
+      errorCode: '503',
+      method: 'POST',
+      operation: 'agent_access_trial_start',
+      path: '/agent-access/trials',
+      publicError: {
+        code: 'SERVICE_UNAVAILABLE',
+        status: 503,
+        supportReference: 'request-id:trial-request-1'
+      },
+      requestId: 'trial-request-1'
+    })
+    const serializedLogCalls = JSON.stringify(agentAccessRpcTestState.debugLog.mock.calls)
+    expect(serializedLogCalls).not.toContain('raw-admission-token')
+    expect(serializedLogCalls).not.toContain('raw-claim-token')
+    expect(serializedLogCalls).not.toContain('raw-query-token')
+    expect(serializedLogCalls).not.toContain('Agent Mail trial config failed')
   })
 })

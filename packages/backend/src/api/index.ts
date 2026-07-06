@@ -1,19 +1,32 @@
 import { HttpStatusCode } from '@main/common'
 import { AgentMailTrialCapabilityValues } from '@main/db'
+import debug from 'debug'
 import { Elysia, t } from 'elysia'
 
 import { isAgentMailTrialError, startAgentMailTrial } from '../agent-access/trial-service'
+import { createSafeErrorLogDetails, createSafeRequestLogDetails } from '../auth/log-redaction'
 import { handleBetterAuthProtocolRequest } from '../auth/protocol-handler'
+import {
+  createSafeRequestCorrelationLogDetails,
+  mapPublicErrorResponse,
+  publicErrorResponseBodySchema
+} from '../public-error-response'
 import { typedResponseSchema } from '../rpc/response-schema'
 import { createMailHttpRoutes } from '../rpc/mail'
+import type { PublicErrorResponse } from '../public-error-response'
 import type { AgentMailTrialStartResult } from '../agent-access/trial-service'
 
 type ApiResponseSet = {
   headers: Record<string, number | string>
   status?: number | string
 }
-type ApiErrorBody = { error: string }
+type ApiErrorBody = {
+  code?: string
+  error: string
+  supportReference?: string
+}
 const HTTP_STATUS_UNAUTHORIZED: number = HttpStatusCode.Unauthorized
+const log = debug('app:api')
 
 const publicJwkBodySchema = t.Object(
   {
@@ -72,15 +85,15 @@ const agentMailTrialStartResponseSchema = t.Object({
   trial_id: t.String()
 })
 const apiErrorResponseSchemas = {
-  400: t.Object({ error: t.String() }),
-  401: t.Object({ error: t.String() }),
-  403: t.Object({ error: t.String() }),
-  404: t.Object({ error: t.String() }),
-  409: t.Object({ error: t.String() }),
-  410: t.Object({ error: t.String() }),
-  429: t.Object({ error: t.String() }),
-  502: t.Object({ error: t.String() }),
-  503: t.Object({ error: t.String() })
+  400: publicErrorResponseBodySchema,
+  401: publicErrorResponseBodySchema,
+  403: publicErrorResponseBodySchema,
+  404: publicErrorResponseBodySchema,
+  409: publicErrorResponseBodySchema,
+  410: publicErrorResponseBodySchema,
+  429: publicErrorResponseBodySchema,
+  502: publicErrorResponseBodySchema,
+  503: publicErrorResponseBodySchema
 }
 
 export const backendApiApp = new Elysia({
@@ -93,7 +106,8 @@ export const backendApiApp = new Elysia({
   .mount('/auth', handleBetterAuthProtocolRequest)
   .post(
     '/agent-access/trials',
-    async ({ body, set }) => handleApiError(() => startAgentMailTrial(body), set),
+    async ({ body, request, set }) =>
+      handleApiError(() => startAgentMailTrial(body), request, set, 'api_agent_access_trial_start'),
     {
       body: agentMailTrialStartBodySchema,
       response: {
@@ -105,7 +119,9 @@ export const backendApiApp = new Elysia({
 
 async function handleApiError<T>(
   operation: () => Promise<T>,
-  set: ApiResponseSet
+  request: Request,
+  set: ApiResponseSet,
+  operationName: string
 ): Promise<T | ApiErrorBody> {
   try {
     return await operation()
@@ -114,11 +130,34 @@ async function handleApiError<T>(
       if (error.status === HTTP_STATUS_UNAUTHORIZED) {
         set.headers['WWW-Authenticate'] = 'Bearer realm="agentteam-api"'
       }
-      set.status = error.status
-      return { error: error.message }
+      const publicError = mapPublicErrorResponse({ code: error.status, error, request })
+      set.status = publicError.status
+      logHandledApiError(error, request, publicError, operationName)
+      return publicError.body
     }
     throw error
   }
+}
+
+function logHandledApiError(
+  error: unknown,
+  request: Request,
+  publicError: PublicErrorResponse,
+  operation: string
+) {
+  const errorLogDetails = createSafeErrorLogDetails(error)
+  log('api_handled_error %o', {
+    error: errorLogDetails,
+    ...(errorLogDetails.code ? { errorCode: errorLogDetails.code } : {}),
+    operation,
+    publicError: {
+      code: publicError.body.code,
+      status: publicError.status,
+      ...(publicError.body.supportReference ? { supportReference: publicError.body.supportReference } : {})
+    },
+    ...createSafeRequestCorrelationLogDetails(request),
+    ...createSafeRequestLogDetails(request)
+  })
 }
 
 export type BackendApiAppType = typeof backendApiApp

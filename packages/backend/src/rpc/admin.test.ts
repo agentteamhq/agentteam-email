@@ -4,8 +4,18 @@ type GetAdminDashboardSummaryMock = (headers: Headers) => Promise<unknown>
 type GetAdminAuditLogListMock = (headers: Headers, input: unknown) => Promise<unknown>
 
 const adminRpcTestState = vi.hoisted(() => ({
+  debugFactory: Object.assign(vi.fn(), {
+    disable: vi.fn(),
+    enable: vi.fn(),
+    enabled: vi.fn()
+  }),
+  debugLog: vi.fn(),
   getAdminAuditLogList: vi.fn<GetAdminAuditLogListMock>(),
   getAdminDashboardSummary: vi.fn<GetAdminDashboardSummaryMock>()
+}))
+
+vi.mock('debug', () => ({
+  default: adminRpcTestState.debugFactory
 }))
 
 vi.mock('../admin/dashboard-service', () => {
@@ -31,6 +41,9 @@ vi.mock('../admin/dashboard-service', () => {
 describe('admin RPC routes', () => {
   beforeEach(() => {
     vi.resetModules()
+    adminRpcTestState.debugFactory.mockClear()
+    adminRpcTestState.debugFactory.mockImplementation(() => adminRpcTestState.debugLog)
+    adminRpcTestState.debugLog.mockReset()
     adminRpcTestState.getAdminAuditLogList.mockReset()
     adminRpcTestState.getAdminDashboardSummary.mockReset()
   })
@@ -113,27 +126,56 @@ describe('admin RPC routes', () => {
     )
   })
 
-  it('maps missing credentials to 401 without exposing cookies in the response', async () => {
+  it('maps missing credentials to 401 without exposing cookies or raw auth errors', async () => {
     expect.hasAssertions()
 
     const { AdminDashboardAccessError } = await import('../admin/dashboard-service')
     adminRpcTestState.getAdminDashboardSummary.mockRejectedValue(
-      new AdminDashboardAccessError('Authentication required.', 401)
+      new AdminDashboardAccessError('Authentication failed for better-auth.session_token=secret-cookie', 401)
     )
 
     const { default: admin } = await import('./admin')
     const response = await admin.handle(
-      new Request('https://mail.example.com/admin/dashboard', {
+      new Request('https://mail.example.com/admin/dashboard?token=raw-query-token', {
         headers: {
-          cookie: 'better-auth.session_token=secret-cookie'
+          cookie: 'better-auth.session_token=secret-cookie',
+          'x-request-id': 'request-1'
         }
       })
     )
 
     expect(response.status).toBe(401)
     const body = await response.text()
-    expect(body).toBe('{"error":"Authentication required."}')
+    expect(JSON.parse(body)).toStrictEqual({
+      code: 'UNAUTHORIZED',
+      error: 'Authentication is required.',
+      supportReference: 'request-id:request-1'
+    })
     expect(body).not.toContain('secret-cookie')
+    expect(body).not.toContain('raw-query-token')
+    expect(body).not.toContain('Authentication failed')
+    expect(adminRpcTestState.debugLog).toHaveBeenCalledWith('admin_rpc_handled_error %o', {
+      error: {
+        code: '401',
+        name: 'AdminDashboardAccessError',
+        status: '401',
+        statusCode: 401,
+        type: 'object'
+      },
+      errorCode: '401',
+      operation: 'admin_dashboard_summary',
+      path: '/admin/dashboard',
+      method: 'GET',
+      publicError: {
+        code: 'UNAUTHORIZED',
+        status: 401,
+        supportReference: 'request-id:request-1'
+      },
+      requestId: 'request-1'
+    })
+    expect(JSON.stringify(adminRpcTestState.debugLog.mock.calls)).not.toContain('secret-cookie')
+    expect(JSON.stringify(adminRpcTestState.debugLog.mock.calls)).not.toContain('raw-query-token')
+    expect(JSON.stringify(adminRpcTestState.debugLog.mock.calls)).not.toContain('Authentication failed')
   })
 
   it('returns paginated audit logs through the webserver boundary', async () => {
@@ -226,7 +268,10 @@ describe('admin RPC routes', () => {
 
     expect(response.status).toBe(401)
     const body = await response.text()
-    expect(body).toBe('{"error":"Authentication required."}')
+    expect(JSON.parse(body)).toStrictEqual({
+      code: 'UNAUTHORIZED',
+      error: 'Authentication is required.'
+    })
     expect(body).not.toContain('secret-cookie')
   })
 
@@ -243,7 +288,8 @@ describe('admin RPC routes', () => {
 
     expect(response.status).toBe(403)
     await expect(response.json()).resolves.toStrictEqual({
-      error: 'Admin access is required.'
+      code: 'FORBIDDEN',
+      error: 'Access denied.'
     })
   })
 })

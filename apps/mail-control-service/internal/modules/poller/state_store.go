@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"mail-control-service/internal/archive/r2archive"
+	"mail-control-service/internal/safelog"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -278,6 +279,7 @@ func (s *mongoStateStore) RecordProcessingFailure(ctx context.Context, item work
 	}
 	now := time.Now().UTC()
 	filter := leasedWorkFilter(item)
+	lastError := persistedPollerLastError(failure.err)
 	if failure.retryable && attempt <= maxRetries {
 		nextAttempt := now.Add(retryDelay)
 		_, err := s.work.UpdateOne(ctx, filter, bson.D{
@@ -285,7 +287,7 @@ func (s *mongoStateStore) RecordProcessingFailure(ctx context.Context, item work
 				{"status", statusRetryWait},
 				{"attempt_count", attempt},
 				{"failure_class", failure.class},
-				{"last_error", failure.err.Error()},
+				{"last_error", lastError},
 				{"next_attempt_at", nextAttempt},
 				{"updated_at", now},
 			}},
@@ -298,7 +300,7 @@ func (s *mongoStateStore) RecordProcessingFailure(ctx context.Context, item work
 			{"status", statusBlocked},
 			{"attempt_count", attempt},
 			{"failure_class", failure.class},
-			{"last_error", failure.err.Error()},
+			{"last_error", lastError},
 			{"blocked_at", now},
 			{"updated_at", now},
 		}},
@@ -445,7 +447,7 @@ func (s *mongoStateStore) RecordDiscoveryDiagnostic(ctx context.Context, objectK
 			{"canonical_domain", domain},
 			{"last_seen_at", now},
 			{"failure_class", class},
-			{"last_error", recordErr.Error()},
+			{"last_error", persistedPollerLastError(recordErr)},
 			{"updated_at", now},
 		}},
 		{"$setOnInsert", bson.D{
@@ -454,6 +456,10 @@ func (s *mongoStateStore) RecordDiscoveryDiagnostic(ctx context.Context, objectK
 		}},
 	}, options.UpdateOne().SetUpsert(true))
 	return err
+}
+
+func persistedPollerLastError(err error) string {
+	return safelog.Error(err)
 }
 
 func sweepCursorID(direction string, domain string) string {

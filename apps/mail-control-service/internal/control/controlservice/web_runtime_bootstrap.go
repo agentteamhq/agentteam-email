@@ -11,6 +11,7 @@ import (
 
 	"mail-control-service/internal/control/controlapi"
 	"mail-control-service/internal/control/controlstate"
+	"mail-control-service/internal/safelog"
 )
 
 const controlToWebRuntimeSnapshotPath = "/rpc/internal/agent-mail/runtime/snapshot"
@@ -62,7 +63,7 @@ func bootstrapRuntimeProjectionFromWebWithRetryPolicy(ctx context.Context, synce
 		logRuntimeBootstrapApplied(result)
 		return
 	}
-	log.Printf("agent-mail-control-service event=runtime_bootstrap_failed error=%q", err)
+	log.Printf("agent-mail-control-service event=runtime_bootstrap_failed error=%q", safelog.Error(err))
 
 	if policy.RetryInterval <= 0 || policy.RetryWindow <= 0 {
 		return
@@ -93,13 +94,13 @@ func retryRuntimeProjectionBootstrap(ctx context.Context, syncer runtimeProjecti
 	for {
 		select {
 		case <-retryCtx.Done():
-			log.Printf("agent-mail-control-service event=runtime_bootstrap_retry_exhausted attempts=%d error=%q", attempts, retryCtx.Err())
+			log.Printf("agent-mail-control-service event=runtime_bootstrap_retry_exhausted attempts=%d error=%q", attempts, safelog.Error(retryCtx.Err()))
 			return
 		case <-ticker.C:
 			attempts++
 			result, err := applyRuntimeProjectionSnapshotFromWeb(retryCtx, syncer, cfg, policy.AttemptTimeout)
 			if err != nil {
-				log.Printf("agent-mail-control-service event=runtime_bootstrap_retry_failed attempt=%d error=%q", attempts, err)
+				log.Printf("agent-mail-control-service event=runtime_bootstrap_retry_failed attempt=%d error=%q", attempts, safelog.Error(err))
 				continue
 			}
 			logRuntimeBootstrapApplied(result)
