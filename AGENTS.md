@@ -203,7 +203,8 @@ Runtime code must be diagnostically instrumented by default.
 Agents must add or preserve safe structured logging when changing application
 behavior. Code paths that fail, branch on meaningful decisions, mutate durable
 state, cross process, service, or provider boundaries, enqueue or run work, or
-affect user-visible outcomes must emit logs sufficient to diagnose what happened.
+start up, report readiness, shut down, or affect user-visible outcomes must
+emit logs sufficient to diagnose what happened.
 
 Absence of logging in changed runtime code must be intentional and limited to
 purely declarative, generated, type-only, or otherwise diagnostically empty code.
@@ -211,12 +212,15 @@ purely declarative, generated, type-only, or otherwise diagnostically empty code
 Application logs must be structured, safe to emit, and recorded at the boundary
 that owns the behavior or failure.
 
-Logs must include stable correlation fields when available and must not expose
-secrets, cookies, raw credentials, or broad payload dumps.
+Logs must include stable correlation fields when available. Server-side logs
+must follow [SECURITY.md](SECURITY.md): preserve diagnostic visibility first,
+and redact known secrets only when redaction does not make failures harder to
+understand.
 
 Node runtime diagnostics must use the `debug` package with the existing package
-and domain namespace pattern. Application diagnostics must not use ad hoc
-`console` logging.
+and domain namespace pattern. Node application diagnostics must not use ad hoc
+`console` logging. Non-Node runtime diagnostics must use the existing logging
+convention for that runtime.
 
 ## Frontend
 

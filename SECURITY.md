@@ -27,8 +27,9 @@ disclose details until coordinated disclosure is complete.
 - Cookies, raw API keys, OAuth tokens, JWTs, raw `Authorization` headers,
   passwords, decrypted secrets, service tokens, runtime tokens, signing keys,
   encryption keys, and secret-derived hashes must not be forwarded, returned,
-  logged, exported, or copied into another subsystem unless that subsystem owns
-  the specific credential use.
+  exported, or copied into another subsystem unless that subsystem owns the
+  specific credential use. Server-side diagnostic logging is governed by
+  [Logging And Audit](#logging-and-audit).
 - Better Auth credentials must terminate at the Better Auth-owned boundary.
 - Service credentials must identify the service principal that owns the
   operation.
@@ -40,8 +41,9 @@ disclose details until coordinated disclosure is complete.
 - Encrypted values are write-and-use data.
 - Decrypted values must be available only at the execution boundary that uses the
   value for its intended operation.
-- UI, RPC, API, logs, exports, diagnostics, support tools, and admin surfaces
-  must not return or render decrypted values.
+- UI, RPC, API, exports, support tools, and admin surfaces must not return or
+  render decrypted values. Server-side diagnostic logging is governed by
+  [Logging And Audit](#logging-and-audit).
 - Read surfaces may return operational metadata only when that metadata cannot
   reconstruct the secret value.
 
@@ -75,9 +77,18 @@ disclose details until coordinated disclosure is complete.
 
 ## Logging And Audit
 
-- Logs and audit records must not contain raw credentials, cookies, tokens,
-  passwords, decrypted secrets, raw secret values, broad payload dumps, or raw
-  external `Authorization` headers.
+- Server-side diagnostic logging is required for debugging, incident response,
+  and operational visibility.
+- Security rules must not be used to suppress server-side diagnostic logs. When
+  information is needed to understand an error, failed security-sensitive flow,
+  provider failure, or user-visible failure, agents must log it.
+- Server-side logs must redact known secret values when redaction preserves the
+  diagnostic value of the log. For server-side logs, diagnostic visibility has
+  priority over redaction.
+- Client-visible surfaces, browser state, redirects, support pages, and RPC or
+  API responses must not expose raw credentials, cookies, tokens, passwords,
+  decrypted secrets, raw secret values, broad payload dumps, or raw external
+  `Authorization` headers.
 - Security-sensitive logs and audit records must contain stable correlation
   fields when those fields are available.
 - Audit records for authentication, authorization, credential, session, cookie,
