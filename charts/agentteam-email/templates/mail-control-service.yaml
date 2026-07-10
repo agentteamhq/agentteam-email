@@ -115,7 +115,7 @@ spec:
                 - /bin/sh
                 - -c
                 - wget -qO- http://127.0.0.1:8081/healthz >/dev/null
-            periodSeconds: 10
+            periodSeconds: 30
             timeoutSeconds: 5
           livenessProbe:
             exec:
@@ -123,7 +123,7 @@ spec:
                 - /bin/sh
                 - -c
                 - wget -qO- http://127.0.0.1:8081/healthz >/dev/null
-            periodSeconds: 20
+            periodSeconds: 30
             timeoutSeconds: 5
           {{- with .Values.extraVolumeMounts.mailControlService }}
           volumeMounts:

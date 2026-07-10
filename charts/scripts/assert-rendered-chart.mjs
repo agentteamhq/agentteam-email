@@ -28,6 +28,19 @@ const zonemtaRootConfig = requireConfigMap('atemail-zonemta-root-config')
 const webEnv = containerEnv(webServer, 'web-server')
 const controlEnv = containerEnv(mailControl, 'mail-control-service')
 
+for (const [deploymentName, containerName, hasStartupProbe] of [
+  ['mongodb', 'mongodb', true],
+  ['redis', 'redis', true],
+  ['rspamd', 'rspamd', false],
+  ['atemail-mail-control-service', 'mail-control-service', false],
+  ['wildduck', 'wildduck', true],
+  ['haraka', 'haraka', false],
+  ['zonemta', 'zonemta', false],
+  ['atemail-web-server', 'web-server', false]
+]) {
+  requireProbeTiming(requireDeployment(deploymentName), containerName, hasStartupProbe)
+}
+
 requireEnv(webEnv, 'AT_EMAIL_ADMIN_CONTROL_API_BASE_URL')
 requireEnv(webEnv, 'AT_EMAIL_ADMIN_CONTROL_TO_WEB_API_TOKEN')
 requireEnv(webEnv, 'AT_EMAIL_ADMIN_WILDDUCK_API_BASE_URL')
@@ -106,6 +119,14 @@ function requireResource(kind, name) {
 }
 
 function containerEnv(deployment, containerName) {
+  const container = requireContainer(deployment, containerName)
+  if (!Array.isArray(container.env)) {
+    throw new Error(`Deployment/${deployment.metadata.name} container ${containerName} is missing env`)
+  }
+  return new Map(container.env.map((entry) => [entry.name, entry]))
+}
+
+function requireContainer(deployment, containerName) {
   const containers = deployment.spec?.template?.spec?.containers
   if (!Array.isArray(containers)) {
     throw new Error(`Deployment/${deployment.metadata.name} is missing containers`)
@@ -114,10 +135,34 @@ function containerEnv(deployment, containerName) {
   if (!container) {
     throw new Error(`Deployment/${deployment.metadata.name} is missing container ${containerName}`)
   }
-  if (!Array.isArray(container.env)) {
-    throw new Error(`Deployment/${deployment.metadata.name} container ${containerName} is missing env`)
+  return container
+}
+
+function requireProbeTiming(deployment, containerName, hasStartupProbe) {
+  const container = requireContainer(deployment, containerName)
+  requireProbe(container.readinessProbe, deployment, containerName, 'readiness', 30, 5)
+  requireProbe(container.livenessProbe, deployment, containerName, 'liveness', 30, 5)
+  if (hasStartupProbe) {
+    requireProbe(container.startupProbe, deployment, containerName, 'startup', 10, 5)
+    if (container.startupProbe.failureThreshold !== 30) {
+      throw new Error(
+        `Deployment/${deployment.metadata.name} container ${containerName} startup probe must set failureThreshold to 30`
+      )
+    }
   }
-  return new Map(container.env.map((entry) => [entry.name, entry]))
+}
+
+function requireProbe(probe, deployment, containerName, probeName, periodSeconds, timeoutSeconds) {
+  if (!probe) {
+    throw new Error(
+      `Deployment/${deployment.metadata.name} container ${containerName} is missing ${probeName} probe`
+    )
+  }
+  if (probe.periodSeconds !== periodSeconds || probe.timeoutSeconds !== timeoutSeconds) {
+    throw new Error(
+      `Deployment/${deployment.metadata.name} container ${containerName} ${probeName} probe must set periodSeconds to ${periodSeconds} and timeoutSeconds to ${timeoutSeconds}`
+    )
+  }
 }
 
 function requireEnv(env, name) {

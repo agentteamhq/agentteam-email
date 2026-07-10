@@ -105,7 +105,7 @@ spec:
                 - -ec
                 - |
                   mongosh --host 127.0.0.1:27017 --quiet --eval 'try { const status = rs.status(); quit(status.ok === 1 ? 0 : 1); } catch (error) { quit(1); }'
-            periodSeconds: 10
+            periodSeconds: 30
             timeoutSeconds: 5
           livenessProbe:
             exec:
@@ -114,7 +114,7 @@ spec:
                 - -ec
                 - |
                   mongosh --host 127.0.0.1:27017 --quiet --eval 'try { const status = rs.status(); quit(status.ok === 1 ? 0 : 1); } catch (error) { quit(1); }'
-            periodSeconds: 20
+            periodSeconds: 30
             timeoutSeconds: 5
           volumeMounts:
             - name: mongodb-data
@@ -199,14 +199,14 @@ spec:
               command:
                 - redis-cli
                 - ping
-            periodSeconds: 10
+            periodSeconds: 30
             timeoutSeconds: 5
           livenessProbe:
             exec:
               command:
                 - redis-cli
                 - ping
-            periodSeconds: 20
+            periodSeconds: 30
             timeoutSeconds: 5
           volumeMounts:
             - name: redis-data
@@ -278,12 +278,12 @@ spec:
           readinessProbe:
             tcpSocket:
               port: rspamd
-            periodSeconds: 10
+            periodSeconds: 30
             timeoutSeconds: 5
           livenessProbe:
             tcpSocket:
               port: rspamd
-            periodSeconds: 20
+            periodSeconds: 30
             timeoutSeconds: 5
           volumeMounts:
             - name: rspamd-data

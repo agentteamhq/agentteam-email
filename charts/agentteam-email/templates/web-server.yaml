@@ -167,13 +167,13 @@ spec:
             httpGet:
               path: /health
               port: http
-            periodSeconds: 10
+            periodSeconds: 30
             timeoutSeconds: 5
           livenessProbe:
             httpGet:
               path: /health
               port: http
-            periodSeconds: 20
+            periodSeconds: 30
             timeoutSeconds: 5
           {{- with .Values.extraVolumeMounts.webServer }}
           volumeMounts:

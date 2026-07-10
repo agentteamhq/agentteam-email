@@ -94,7 +94,7 @@ spec:
                 - sh
                 - -c
                 - 'wget -qO- --header="X-Access-Token: ${APPCONF_api_accessToken}" http://127.0.0.1:8080/health >/dev/null'
-            periodSeconds: 10
+            periodSeconds: 30
             timeoutSeconds: 5
           livenessProbe:
             exec:
@@ -102,7 +102,7 @@ spec:
                 - sh
                 - -c
                 - 'wget -qO- --header="X-Access-Token: ${APPCONF_api_accessToken}" http://127.0.0.1:8080/health >/dev/null'
-            periodSeconds: 20
+            periodSeconds: 30
             timeoutSeconds: 5
           volumeMounts:
             - name: wildduck-config
@@ -169,12 +169,12 @@ spec:
           readinessProbe:
             tcpSocket:
               port: smtp
-            periodSeconds: 10
+            periodSeconds: 30
             timeoutSeconds: 5
           livenessProbe:
             tcpSocket:
               port: smtp
-            periodSeconds: 20
+            periodSeconds: 30
             timeoutSeconds: 5
           volumeMounts:
             - name: haraka-config
@@ -281,12 +281,12 @@ spec:
           readinessProbe:
             tcpSocket:
               port: api
-            periodSeconds: 10
+            periodSeconds: 30
             timeoutSeconds: 5
           livenessProbe:
             tcpSocket:
               port: api
-            periodSeconds: 20
+            periodSeconds: 30
             timeoutSeconds: 5
           volumeMounts:
             - name: zonemta-root-config
