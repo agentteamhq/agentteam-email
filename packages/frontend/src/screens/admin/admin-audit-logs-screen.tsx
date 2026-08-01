@@ -6,7 +6,7 @@ import {
   SignOutIcon,
   WarningCircleIcon
 } from '@phosphor-icons/react'
-import { queryOptions, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, queryOptions, useQuery } from '@tanstack/react-query'
 import * as React from 'react'
 
 import { Link } from '../../components/link'
@@ -183,11 +183,18 @@ export function AdminAuditLogsScreen({
   )
 }
 
+/**
+ * The audit log list is keyed on the route search, and every filter or page change is a
+ * navigation. `placeholderData: keepPreviousData` keeps the rendered table and pagination
+ * visible while the next page resolves, so the skeleton renders only on a cold load.
+ */
 function adminAuditLogListQueryOptions(
   auditLogListLoader: AdminAuditLogListLoader,
   routeSearch: AdminAuditLogsRouteSearch
 ) {
+  // eslint-disable-next-line @tanstack/query/exhaustive-deps -- Query keys must hold only JSON-serializable values; the Storybook-injectable loader is a transport seam isolated by the story frame's own QueryClient.
   return queryOptions({
+    placeholderData: keepPreviousData,
     queryFn: () =>
       auditLogListLoader({
         action: routeSearch.action,
@@ -196,7 +203,7 @@ function adminAuditLogListQueryOptions(
         severity: routeSearch.severity,
         status: routeSearch.status
       }),
-    queryKey: ['admin', 'audit-logs', routeSearch, auditLogListLoader] as const
+    queryKey: ['admin', 'audit-logs', routeSearch] as const
   })
 }
 

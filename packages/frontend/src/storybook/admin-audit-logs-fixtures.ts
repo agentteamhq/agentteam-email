@@ -71,6 +71,38 @@ export const adminAuditLogsFilteredList = {
   }
 } satisfies AdminAuditLogList
 
+export const adminAuditLogsSecondPageList = {
+  events: [
+    {
+      action: 'agent_mail.domain.provisioned',
+      createdAt: '2026-06-30T14:31:00.000Z',
+      id: auditEventId('audit-event-5'),
+      severity: 'medium',
+      status: 'success'
+    },
+    {
+      action: 'api-key.created',
+      createdAt: '2026-06-30T14:02:00.000Z',
+      id: auditEventId('audit-event-6'),
+      severity: 'low',
+      status: 'success'
+    }
+  ],
+  filters: {
+    action: null,
+    severity: 'all',
+    status: 'all'
+  },
+  pagination: {
+    hasNextPage: true,
+    hasPreviousPage: true,
+    page: 2,
+    pageSize: 25,
+    totalCount: 128,
+    totalPages: 6
+  }
+} satisfies AdminAuditLogList
+
 export const adminAuditLogsEmptyList = {
   events: [],
   filters: {

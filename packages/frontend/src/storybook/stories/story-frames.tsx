@@ -2,19 +2,29 @@ import * as React from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
 
-import { validateDashboardSearch, validateSettingsSearch } from '../../lib/dashboard-search'
+import { validateDashboardSearch } from '../../lib/dashboard-search'
 import {
+  getSettingsSectionForRoutePathname,
+  getSettingsSectionHref,
   resolveOrganizationRouteSegment,
   resolveSettingsRouteSegment
 } from '../../partials/authenticated/settings-dialog-sections'
 import { DashboardMailController } from '../../screens/dashboard-mail-client-controller'
 import { integrationsEmptyView } from '../integrations-fixtures'
-import type { SettingsRouteSearch } from '../../lib/dashboard-search'
+import type { DashboardSearch } from '../../lib/dashboard-search'
 import type { AgentAccessSettingsState } from '../../partials/authenticated/settings-dialog'
 
 type DashboardMailControllerArgs = React.ComponentProps<typeof DashboardMailController>
 
-export type DashboardMailControllerStoryFrameProps = DashboardMailControllerArgs & {
+/**
+ * `settingsOpen` and `settingsSection` are owned by the route, not by a story: the frame
+ * derives them from `storyPath` through the same `settings-dialog-sections` definition the
+ * authenticated shell route uses. Stories choose the route, never the derived state.
+ */
+export type DashboardMailControllerStoryFrameProps = Omit<
+  DashboardMailControllerArgs,
+  'onSettingsOpenChange' | 'onSettingsSectionChange' | 'settingsOpen' | 'settingsSection'
+> & {
   agentAccessView?: NonNullable<AgentAccessSettingsState['view']>
   storyPath?: string
 }
@@ -25,6 +35,7 @@ export function DashboardMailControllerStoryFrame({
   storyPath = '/dashboard/',
   ...props
 }: DashboardMailControllerStoryFrameProps) {
+  const router = useRouter()
   const queryClient = React.useMemo(
     () =>
       new QueryClient({
@@ -37,6 +48,23 @@ export function DashboardMailControllerStoryFrame({
     []
   )
   const routeSearch = useStoryDashboardSearch(initialRouteSearch, storyPath)
+  const settingsSection = useStorySettingsSection(storyPath)
+  const handleSettingsOpenChange = React.useCallback(
+    (open: boolean) => {
+      router
+        .navigate({
+          href: open ? getSettingsSectionHref('account') : '/dashboard/'
+        })
+        .catch(ignoreAsyncError)
+    },
+    [router]
+  )
+  const handleSettingsSectionChange = React.useCallback(
+    (nextSection: Parameters<typeof getSettingsSectionHref>[0]) => {
+      router.navigate({ href: getSettingsSectionHref(nextSection) }).catch(ignoreAsyncError)
+    },
+    [router]
+  )
   const agentAccessViewLoader = React.useMemo(() => {
     if (agentAccessView === undefined) {
       return props.agentAccessViewLoader
@@ -62,27 +90,38 @@ export function DashboardMailControllerStoryFrame({
         {...props}
         agentAccessViewLoader={agentAccessViewLoader}
         integrationsViewLoader={integrationsViewLoader}
+        onSettingsOpenChange={handleSettingsOpenChange}
+        onSettingsSectionChange={handleSettingsSectionChange}
         routeSearch={routeSearch}
+        settingsOpen={settingsSection !== null}
+        settingsSection={settingsSection ?? undefined}
       />
     </QueryClientProvider>
   )
 }
 
-function useStoryDashboardSearch(initialRouteSearch: SettingsRouteSearch | undefined, storyPath: string) {
+/**
+ * Derives the settings surface from the story's route with the production owner, so the
+ * catalog cannot hand-craft a settings-open/section combination the app cannot reach.
+ */
+function useStorySettingsSection(storyPath: string) {
+  const routerPathname = useRouterState({ select: (state) => state.location.pathname })
+  const appliedPathname = isCanonicalSettingsRoutePath(routerPathname) ? routerPathname : storyPath
+
+  return getSettingsSectionForRoutePathname(appliedPathname)
+}
+
+function useStoryDashboardSearch(initialRouteSearch: DashboardSearch | undefined, storyPath: string) {
   const router = useRouter()
   const initialSearch = React.useMemo(
-    () => validateStorySearch(storyPath, initialRouteSearch ? { ...initialRouteSearch } : {}),
-    [initialRouteSearch, storyPath]
+    () => validateDashboardSearch(initialRouteSearch ? { ...initialRouteSearch } : {}),
+    [initialRouteSearch]
   )
   const initialSearchKey = JSON.stringify(initialSearch)
   const storyRouteKey = `${storyPath}:${initialSearchKey}`
   const [appliedStoryRouteKey, setAppliedStoryRouteKey] = React.useState<string | null>(null)
   const routerSearch = useRouterState({
-    select: (state) =>
-      storyDashboardSearchFromRouterSearch(
-        state.location.pathname,
-        state.location.search as Record<string, unknown>
-      )
+    select: (state) => storyDashboardSearchFromRouterSearch(state.location.search as Record<string, unknown>)
   })
 
   React.useEffect(() => {
@@ -116,11 +155,8 @@ function useStoryDashboardSearch(initialRouteSearch: SettingsRouteSearch | undef
     : initialSearch
 }
 
-function storyDashboardSearchFromRouterSearch(
-  pathname: string,
-  search: Record<string, unknown>
-): SettingsRouteSearch {
-  const directSearch = validateStorySearch(pathname, search)
+function storyDashboardSearchFromRouterSearch(search: Record<string, unknown>): DashboardSearch {
+  const directSearch = validateDashboardSearch(search)
   if (hasDashboardSearchValue(directSearch)) {
     return directSearch
   }
@@ -136,16 +172,10 @@ function storyDashboardSearchFromRouterSearch(
       return directSearch
     }
 
-    return validateStorySearch(redirectUrl.pathname, Object.fromEntries(redirectUrl.searchParams.entries()))
+    return validateDashboardSearch(Object.fromEntries(redirectUrl.searchParams.entries()))
   } catch {
     return directSearch
   }
-}
-
-function validateStorySearch(pathname: string, search: Record<string, unknown>): SettingsRouteSearch {
-  return isCanonicalSettingsRoutePath(pathname)
-    ? validateSettingsSearch(search)
-    : validateDashboardSearch(search)
 }
 
 function isCanonicalSettingsRoutePath(pathname: string) {
@@ -169,7 +199,7 @@ function isCanonicalOrganizationSettingsRoutePath(pathname: string) {
     : false
 }
 
-function hasDashboardSearchValue(search: SettingsRouteSearch) {
+function hasDashboardSearchValue(search: DashboardSearch) {
   return Object.values(search).some((value) => value !== undefined)
 }
 

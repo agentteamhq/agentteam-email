@@ -107,22 +107,22 @@ function oauthConsentClientQueryOptions(
   clientId: string,
   enabled: boolean
 ) {
+  // eslint-disable-next-line @tanstack/query/exhaustive-deps -- Query keys must hold only JSON-serializable values; the Storybook-injectable loader is a transport seam isolated by the story frame's own QueryClient.
   return queryOptions({
     enabled,
-    queryFn: async ({ queryKey }) => {
-      const [, , nextClientId, publicClient] = queryKey
-      const response = await publicClient({
+    queryFn: async () => {
+      const response = await authClient.oauth2.publicClient({
         query: {
-          client_id: nextClientId
+          client_id: clientId
         },
         fetchOptions: {
           throw: true
         }
       })
       const publicClientData = readResponseData(response) as OAuthClient | null
-      return toOAuthConsentClientView(publicClientData, nextClientId)
+      return toOAuthConsentClientView(publicClientData, clientId)
     },
-    queryKey: ['oauth-consent', 'client', clientId, authClient.oauth2.publicClient] as const,
+    queryKey: ['oauth-consent', 'client', clientId] as const,
     retry: false,
     staleTime: 30_000
   })

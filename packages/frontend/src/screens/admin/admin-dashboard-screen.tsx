@@ -114,9 +114,10 @@ export function AdminDashboardScreen({
 }
 
 function adminDashboardSummaryQueryOptions(summaryLoader: AdminDashboardSummaryLoader) {
+  // eslint-disable-next-line @tanstack/query/exhaustive-deps -- Query keys must hold only JSON-serializable values; the Storybook-injectable loader is a transport seam isolated by the story frame's own QueryClient.
   return queryOptions({
     queryFn: summaryLoader,
-    queryKey: ['admin', 'dashboard', summaryLoader] as const
+    queryKey: ['admin', 'dashboard'] as const
   })
 }
 

@@ -1,10 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const webappRouteTestState = vi.hoisted(() => ({
+  agentMailWebErrorStatus: vi.fn(),
   countAdminUsers: vi.fn(),
+  getAgentMailWorkspaceForWeb: vi.fn(),
   getCustomerStripeStatus: vi.fn(),
   getUser: vi.fn(),
   isDelayedData: vi.fn()
+}))
+
+vi.mock('../agent-mail/webmail-service', () => ({
+  agentMailWebErrorStatus: webappRouteTestState.agentMailWebErrorStatus,
+  getAgentMailWorkspaceForWeb: webappRouteTestState.getAgentMailWorkspaceForWeb
 }))
 
 vi.mock('../auth/get-user', () => ({
@@ -37,6 +44,9 @@ describe('webapp auth route state', () => {
     vi.stubEnv('DATABASE_URL', 'mongodb://localhost:27017/app')
     vi.stubEnv('ENCRYPT_SECRET_KEY', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
     vi.stubEnv('PUBLIC_HOSTNAME', 'https://mail.example.com')
+    webappRouteTestState.agentMailWebErrorStatus.mockReset()
+    webappRouteTestState.agentMailWebErrorStatus.mockReturnValue(null)
+    webappRouteTestState.getAgentMailWorkspaceForWeb.mockReset()
     webappRouteTestState.countAdminUsers.mockReset()
     webappRouteTestState.countAdminUsers.mockReturnValue({
       exec: vi.fn(async () => 1)
@@ -309,5 +319,114 @@ describe('webapp auth route state', () => {
       shouldNotFound: true,
       shouldRedirectToAdmin: false
     })
+  })
+  it('server-renders the mail workspace with browser-session-only credentials', async () => {
+    expect.hasAssertions()
+
+    const workspace = { accounts: [], activeAccountId: null, activeFolderId: null }
+    webappRouteTestState.getAgentMailWorkspaceForWeb.mockResolvedValue(workspace)
+
+    const { loadMailWorkspaceRoute } = await import('./webapp')
+    const routeState = await loadMailWorkspaceRoute(
+      new Request('https://mail.example.com/dashboard/', {
+        headers: {
+          authorization: 'Bearer agent-auth-jwt',
+          cookie: 'better-auth.session_token=browser-session',
+          'x-agentteam-mail-auth-surface': 'api',
+          'x-agentteam-mail-route-prefix': '/api/mail',
+          'x-agentteam-organization-id': 'other-organization',
+          'x-agentteam-paperclip-run-id': 'run-1',
+          'x-api-key': 'api-key-value'
+        }
+      }),
+      { folderId: 'inbox-id', limit: 25 }
+    )
+
+    expect(routeState.workspace).toBe(workspace)
+
+    const call = webappRouteTestState.getAgentMailWorkspaceForWeb.mock.calls[0]?.[0] as {
+      headers: Headers
+      input: unknown
+    }
+
+    expect(call.input).toStrictEqual({ folderId: 'inbox-id', limit: 25 })
+    expect(call.headers.get('cookie')).toBe('better-auth.session_token=browser-session')
+    expect(call.headers.get('x-agentteam-mail-auth-surface')).toBe('browser-rpc')
+    expect(call.headers.get('x-agentteam-mail-route-prefix')).toBe('/rpc/mail')
+
+    for (const strippedHeader of [
+      'authorization',
+      'x-api-key',
+      'x-agentteam-organization-id',
+      'x-agentteam-paperclip-run-id',
+      'x-agentteam-request-method',
+      'x-agentteam-request-url'
+    ]) {
+      expect(call.headers.get(strippedHeader)).toBeNull()
+    }
+  })
+
+  it('fails closed without disclosing the failure when the mail workspace read is rejected', async () => {
+    expect.hasAssertions()
+
+    webappRouteTestState.getAgentMailWorkspaceForWeb.mockRejectedValue(new Error('Authentication required'))
+
+    const { loadMailWorkspaceRoute } = await import('./webapp')
+    const routeState = await loadMailWorkspaceRoute(new Request('https://mail.example.com/dashboard/'), {
+      limit: 25
+    })
+
+    expect(routeState).toStrictEqual({ workspace: null })
+  })
+
+  it('classifies an upstream mail failure without changing the fail-closed result', async () => {
+    expect.hasAssertions()
+
+    const upstreamError = new Error('WildDuck request failed')
+    webappRouteTestState.getAgentMailWorkspaceForWeb.mockRejectedValue(upstreamError)
+    webappRouteTestState.agentMailWebErrorStatus.mockReturnValue(502)
+
+    const { loadMailWorkspaceRoute } = await import('./webapp')
+    const routeState = await loadMailWorkspaceRoute(new Request('https://mail.example.com/dashboard/'), {
+      limit: 25
+    })
+
+    expect(routeState).toStrictEqual({ workspace: null })
+    expect(webappRouteTestState.agentMailWebErrorStatus).toHaveBeenCalledWith(upstreamError)
+  })
+
+  it('rejects a mail workspace input that violates the shared request schema', async () => {
+    expect.hasAssertions()
+
+    const { loadMailWorkspaceRoute } = await import('./webapp')
+    const routeState = await loadMailWorkspaceRoute(new Request('https://mail.example.com/dashboard/'), {
+      limit: 5000
+    })
+
+    expect(routeState).toStrictEqual({ workspace: null })
+    expect(webappRouteTestState.getAgentMailWorkspaceForWeb).not.toHaveBeenCalled()
+  })
+
+  it('does not forward unknown mail workspace input fields to the mail service', async () => {
+    expect.hasAssertions()
+
+    webappRouteTestState.getAgentMailWorkspaceForWeb.mockResolvedValue({
+      accounts: [],
+      activeAccountId: null,
+      activeFolderId: null
+    })
+
+    const { loadMailWorkspaceRoute } = await import('./webapp')
+    await loadMailWorkspaceRoute(new Request('https://mail.example.com/dashboard/'), {
+      folderId: 'inbox-id',
+      limit: 25,
+      organizationId: 'other-organization-id'
+    } as never)
+
+    const call = webappRouteTestState.getAgentMailWorkspaceForWeb.mock.calls[0]?.[0] as {
+      input: unknown
+    }
+
+    expect(call.input).toStrictEqual({ folderId: 'inbox-id', limit: 25 })
   })
 })

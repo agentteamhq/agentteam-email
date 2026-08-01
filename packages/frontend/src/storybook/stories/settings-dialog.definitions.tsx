@@ -39,7 +39,7 @@ import { mailWorkspaceEmptyView } from '../mail-workspace-fixtures'
 import { authenticatedSettingsRouteState, storyPublicEnv } from '../screen-fixtures'
 import { getSettingsSectionHref } from '../../partials/authenticated/settings-dialog-sections'
 import { DashboardMailControllerStoryFrame } from './story-frames'
-import type { SettingsRouteSearch } from '../../lib/dashboard-search'
+import type { DashboardSearch } from '../../lib/dashboard-search'
 import type { DomainSettingsState } from '../../partials/authenticated/settings-dialog'
 import type { SettingsSectionId } from '../../partials/authenticated/settings-dialog-sections'
 import type { DashboardMailControllerStoryFrameProps } from './story-frames'
@@ -66,7 +66,7 @@ interface SettingsScreenScenario {
   integrationsError?: Error
   integrationsPending?: boolean
   integrationsView?: IntegrationsView
-  routeSearch?: SettingsRouteSearch
+  routeSearch?: DashboardSearch
   settingsSection: SettingsSectionId
   workspace?: AgentMailWebWorkspace
 }
@@ -211,8 +211,7 @@ function buildSettingsScreenArgs({
     routeSearch: routeSearch ?? {},
     routeState: authenticatedSettingsRouteState,
     sessionCleanupEnabled: false,
-    settingsOpen: true,
-    settingsSection,
+    // The frame derives settings open state and the active section from this route.
     storyPath: getSettingsSectionHref(settingsSection)
   }
 }

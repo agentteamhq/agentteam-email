@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
@@ -69,7 +69,12 @@ import { toMailboxAdminView } from './dashboard-mailbox-admin-view'
 import { invalidateMailboxAdminQueries } from './dashboard-mailbox-admin-query-cache'
 import { mailboxAdminViewQueryForSection } from './dashboard-mailbox-admin-query'
 import { deriveDashboardMailWorkspaceScreenModel } from './dashboard-mail-screen-model'
-import type { MailWorkspaceQuery } from '../lib/mail-rpc'
+import {
+  MAIL_WORKSPACE_QUERY_KEY_PREFIX,
+  mailWorkspaceQueryInput,
+  mailWorkspaceQueryOptions
+} from './dashboard-mail-workspace-query'
+import type { MailWorkspaceLoader } from './dashboard-mail-workspace-query'
 import type { MailboxAdminViewQuery } from '../lib/mail-admin-rpc'
 import type { MailboxAdminControllerActions } from './dashboard-mailbox-admin-view'
 import type {
@@ -98,7 +103,7 @@ import type {
   AuthenticatedMailFolderAction,
   AuthenticatedMailPageChange
 } from '../partials/authenticated/authenticated-shell-models'
-import type { DashboardSearch, SettingsRouteSearch } from '../lib/dashboard-search'
+import type { DashboardSearch } from '../lib/dashboard-search'
 import type { DashboardScreenProps } from './dashboard-screen'
 import type {
   MailboxAdminAccountInput,
@@ -122,65 +127,43 @@ import type {
 
 const AGENT_ACCESS_QUERY_KEY = ['agent-access', 'view'] as const
 const INTEGRATIONS_QUERY_KEY = ['integrations', 'view'] as const
-const MAIL_QUERY_LIMIT = 25
 const MAILBOX_ADMIN_PAGE_SIZE = 25
 function mailboxAdminPrincipalKey(principal: Pick<MailboxAdminExternalPrincipal, 'id' | 'kind'>) {
   return `${principal.kind}:${principal.id}`
 }
 
-function mailWorkspaceQueryOptions(
-  routeSearch: DashboardSearch | undefined,
-  enabled: boolean,
-  mailWorkspaceLoader: MailWorkspaceLoader
-) {
-  const mailboxAdmin = routeSearch?.mailboxAdmin
-  const input = {
-    accountId: routeSearch?.accountId,
-    cursor: mailboxAdmin ? undefined : routeSearch?.cursor,
-    direction: mailboxAdmin ? undefined : routeSearch?.direction,
-    folderId: mailboxAdmin ? undefined : routeSearch?.folderId,
-    limit: MAIL_QUERY_LIMIT,
-    messageId: mailboxAdmin ? undefined : routeSearch?.messageId,
-    query: mailboxAdmin ? undefined : routeSearch?.mailQuery,
-    unreadOnly: mailboxAdmin ? undefined : routeSearch?.unreadOnly
-  } satisfies MailWorkspaceQuery
-
-  return queryOptions({
-    enabled,
-    queryFn: () => mailWorkspaceLoader(input),
-    queryKey: ['mail', 'workspace', input, mailWorkspaceLoader] as const
-  })
-}
-
 type AgentAccessViewLoader = typeof fetchAgentAccessView
 type IntegrationsViewLoader = typeof fetchIntegrationsView
-type MailWorkspaceLoader = typeof fetchMailWorkspace
 type MailboxAdminNavigationLoader = typeof fetchMailboxAdminNavigation
 type MailboxAdminViewLoader = typeof fetchMailboxAdminView
 
 function mailboxAdminNavigationQueryOptions(mailboxAdminNavigationLoader: MailboxAdminNavigationLoader) {
   return queryOptions({
     queryFn: mailboxAdminNavigationLoader,
-    queryKey: ['mail', 'admin', 'navigation', mailboxAdminNavigationLoader] as const
+    queryKey: ['mail', 'admin', 'navigation'] as const
   })
 }
 
+/**
+ * `placeholderData: keepPreviousData` keeps the rendered mailbox administration table
+ * visible while a new section, page, search, or filter key resolves.
+ */
 function mailboxAdminQueryOptions(
   query: MailboxAdminViewQuery | undefined,
   mailboxAdminViewLoader: MailboxAdminViewLoader
 ) {
+  // eslint-disable-next-line @tanstack/query/exhaustive-deps -- Query keys must hold only JSON-serializable values; the Storybook-injectable loader is a transport seam isolated by the story frame's own QueryClient.
   return queryOptions({
     enabled: query !== undefined,
-    queryFn: ({ queryKey }) => {
-      const [, , nextQuery, nextMailboxAdminViewLoader] = queryKey
-
-      if (!nextQuery) {
+    placeholderData: keepPreviousData,
+    queryFn: () => {
+      if (!query) {
         throw new Error('Mailbox admin section is required.')
       }
 
-      return nextMailboxAdminViewLoader(nextQuery)
+      return mailboxAdminViewLoader(query)
     },
-    queryKey: ['mail', 'admin', query, mailboxAdminViewLoader] as const
+    queryKey: ['mail', 'admin', query] as const
   })
 }
 
@@ -1088,7 +1071,7 @@ interface DashboardMailControllerProps extends Pick<
   mailWorkspaceLoader?: MailWorkspaceLoader
   mailboxAdminViewLoader?: MailboxAdminViewLoader
   mailboxAdminNavigationLoader?: MailboxAdminNavigationLoader
-  routeSearch?: SettingsRouteSearch
+  routeSearch?: DashboardSearch
 }
 
 type InitialMailboxAdminControllerState = Partial<
@@ -1239,7 +1222,11 @@ export function DashboardMailController({
 
   const activeMailboxAdminSection = routeSearch?.mailboxAdmin
   const workspaceQueryOptions = React.useMemo(
-    () => mailWorkspaceQueryOptions(routeSearch, true, mailWorkspaceLoader),
+    () =>
+      mailWorkspaceQueryOptions({
+        input: mailWorkspaceQueryInput(routeSearch),
+        mailWorkspaceLoader
+      }),
     [mailWorkspaceLoader, routeSearch]
   )
   const {
@@ -1302,8 +1289,8 @@ export function DashboardMailController({
     await queryClient.invalidateQueries({ queryKey: workspaceQueryOptions.queryKey })
   }, [queryClient, workspaceQueryOptions])
   const invalidateMailWorkspaces = React.useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: workspaceQueryOptions.queryKey.slice(0, 2) })
-  }, [queryClient, workspaceQueryOptions])
+    await queryClient.invalidateQueries({ queryKey: MAIL_WORKSPACE_QUERY_KEY_PREFIX })
+  }, [queryClient])
   const invalidateMailboxAdmin = React.useCallback(async () => {
     await invalidateMailboxAdminQueries(queryClient)
   }, [queryClient])

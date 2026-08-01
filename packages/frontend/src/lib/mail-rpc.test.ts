@@ -92,7 +92,7 @@ describe('mail RPC adapter', () => {
     await expect(
       fetchMailWorkspace({
         accountId: 'support@example.test',
-        cursor: null,
+        cursor: undefined,
         direction: 'next',
         folderId: 'inbox-id',
         limit: 25,

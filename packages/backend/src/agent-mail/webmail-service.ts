@@ -21,6 +21,7 @@ import {
   normalizeMailDomain,
   normalizeMailboxIdentifier
 } from './mailbox-address'
+import { AGENT_MAIL_ROUTE_PREFIX_HEADER } from './browser-mail-request-headers'
 import { WildDuckAPIError, createWildDuckClient } from './wildduck-client'
 import type { AgentMailPaperclipOperation } from './service'
 import type {
@@ -38,7 +39,6 @@ const ACTIVE_MAIL_DOMAIN_STATUSES = ['active', 'degraded'] as const
 const DEFAULT_MESSAGE_LIMIT = 25
 const MAX_MESSAGE_LIMIT = 100
 const THREAD_MESSAGE_LIMIT = 250
-const AGENT_MAIL_ROUTE_PREFIX_HEADER = 'x-agentteam-mail-route-prefix'
 
 const SAFE_INLINE_ATTACHMENT_TYPES = new Set(['image/gif', 'image/jpeg', 'image/png', 'image/webp'])
 const log = debug('app:agent-mail:webmail')

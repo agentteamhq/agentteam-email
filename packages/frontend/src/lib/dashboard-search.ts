@@ -14,15 +14,7 @@ export interface DashboardSearch {
   unreadOnly?: boolean
 }
 
-export type SettingsRouteSearch = DashboardSearch
-
 export function validateDashboardSearch(search: Record<string, unknown>): DashboardSearch {
-  return {
-    ...validateDashboardBaseSearch(search)
-  }
-}
-
-export function validateSettingsSearch(search: Record<string, unknown>): SettingsRouteSearch {
   return {
     ...validateDashboardBaseSearch(search)
   }

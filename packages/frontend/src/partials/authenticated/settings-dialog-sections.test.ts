@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import {
   getOrganizationSettingsSectionFromSegment,
-  getSettingsSectionFromPathname,
+  getSettingsSectionForRoutePathname,
+  getSettingsSectionForRouteSegments,
   getSettingsSectionFromSegment,
   resolveOrganizationRouteSegment,
   resolveSettingsRouteSegment
@@ -32,13 +33,8 @@ describe('settings section routing', () => {
     })
   })
 
-  it('maps settings route pathnames to active settings sections', () => {
-    expect(getSettingsSectionFromPathname('/settings/')).toBe('account')
-    expect(getSettingsSectionFromPathname('/settings/domains/')).toBe('domains')
-    expect(getSettingsSectionFromPathname('/settings/connected-accounts/?cloudflareIntentId=abc')).toBe(
-      'connected-accounts'
-    )
-    expect(getSettingsSectionFromPathname('/dashboard/')).toBeNull()
+  it('maps a missing settings segment to the default settings section', () => {
+    expect(getSettingsSectionFromSegment(undefined)).toBe('account')
   })
 
   it('does not silently accept camelCase route segments', () => {
@@ -52,5 +48,51 @@ describe('settings section routing', () => {
     expect(getOrganizationSettingsSectionFromSegment('people')).toBe('organizationPeople')
     expect(resolveOrganizationRouteSegment('nope')).toStrictEqual({ type: 'notFound' })
     expect(resolveOrganizationRouteSegment('organizationSettings')).toStrictEqual({ type: 'notFound' })
+  })
+
+  it('maps matched route segments to the settings surface the route shows', () => {
+    expect(getSettingsSectionForRouteSegments('settings', undefined)).toBe('account')
+    expect(getSettingsSectionForRouteSegments('settings', 'domains')).toBe('domains')
+    expect(getSettingsSectionForRouteSegments('settings', 'connected-accounts')).toBe('connected-accounts')
+    expect(getSettingsSectionForRouteSegments('organization', 'settings')).toBe('organizationSettings')
+    expect(getSettingsSectionForRouteSegments('organization', 'people')).toBe('organizationPeople')
+  })
+
+  it('closes settings for route segments that are not a settings surface', () => {
+    expect(getSettingsSectionForRouteSegments('settings', 'nope')).toBeNull()
+    expect(getSettingsSectionForRouteSegments('organization', 'nope')).toBeNull()
+    expect(getSettingsSectionForRouteSegments('organization', undefined)).toBeNull()
+    expect(getSettingsSectionForRouteSegments('dashboard', undefined)).toBeNull()
+    expect(getSettingsSectionForRouteSegments(undefined, undefined)).toBeNull()
+  })
+})
+
+describe('settings route pathnames', () => {
+  it('maps canonical settings route pathnames to their settings sections', () => {
+    expect(getSettingsSectionForRoutePathname('/settings/')).toBe('account')
+    expect(getSettingsSectionForRoutePathname('/settings')).toBe('account')
+    expect(getSettingsSectionForRoutePathname('/settings/domains/')).toBe('domains')
+    expect(getSettingsSectionForRoutePathname('/settings/agent-access/')).toBe('agentAccess')
+    expect(getSettingsSectionForRoutePathname('/settings/connected-accounts/?cloudflareIntentId=abc')).toBe(
+      'connected-accounts'
+    )
+  })
+
+  it('maps canonical organization route pathnames to their settings sections', () => {
+    expect(getSettingsSectionForRoutePathname('/organization/settings/')).toBe('organizationSettings')
+    expect(getSettingsSectionForRoutePathname('/organization/people/')).toBe('organizationPeople')
+  })
+
+  it('decodes percent-encoded segments so pathnames agree with matched route params', () => {
+    expect(getSettingsSectionForRoutePathname('/settings/%64omains/')).toBe('domains')
+  })
+
+  it('closes settings for unknown segments, deeper paths, and non-settings routes', () => {
+    expect(getSettingsSectionForRoutePathname('/settings/nope/')).toBeNull()
+    expect(getSettingsSectionForRoutePathname('/organization/nope/')).toBeNull()
+    expect(getSettingsSectionForRoutePathname('/organization/')).toBeNull()
+    expect(getSettingsSectionForRoutePathname('/settings/domains/extra/')).toBeNull()
+    expect(getSettingsSectionForRoutePathname('/dashboard/')).toBeNull()
+    expect(getSettingsSectionForRoutePathname('/')).toBeNull()
   })
 })

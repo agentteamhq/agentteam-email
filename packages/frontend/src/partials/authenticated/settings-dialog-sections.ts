@@ -37,6 +37,9 @@ type OrganizationRouteSegmentResolution =
       type: 'notFound'
     }
 
+const SETTINGS_ROUTE_PATH_SEGMENT = 'settings'
+const ORGANIZATION_ROUTE_PATH_SEGMENT = 'organization'
+
 export const settingsRouteSegments = {
   account: 'account',
   security: 'security',
@@ -134,14 +137,54 @@ export function getSettingsSectionFromSegment(segment: string | undefined): Sett
   return resolution.type === 'section' ? resolution.section : null
 }
 
-export function getSettingsSectionFromPathname(pathname: string): SettingsSectionId | null {
-  const [pathWithoutSearch] = pathname.split(/[?#]/u, 1)
-  const segments = pathWithoutSearch.split('/').filter(Boolean)
-  if (segments[0] !== 'settings') {
+/**
+ * Owning definition for "which settings surface does this route show", expressed in route
+ * segments so it works from decoded route params.
+ *
+ * `/settings/`, `/settings/<section>/`, and `/organization/<section>/` are the canonical
+ * settings routes; every other route renders the product shell with settings closed.
+ */
+export function getSettingsSectionForRouteSegments(
+  routeSegment: string | undefined,
+  sectionSegment: string | undefined
+): SettingsSectionId | null {
+  if (routeSegment === SETTINGS_ROUTE_PATH_SEGMENT) {
+    return getSettingsSectionFromSegment(sectionSegment)
+  }
+
+  if (routeSegment === ORGANIZATION_ROUTE_PATH_SEGMENT) {
+    return getOrganizationSettingsSectionFromSegment(sectionSegment)
+  }
+
+  return null
+}
+
+/**
+ * Pathname-facing entry point for callers that only know the route as a URL, such as
+ * Storybook frames that render a story path instead of a matched route. Production route
+ * components derive from matched route params instead, so they are immune to router
+ * basepaths; this helper decodes segments so both agree on percent-encoded paths.
+ */
+export function getSettingsSectionForRoutePathname(pathname: string): SettingsSectionId | null {
+  const [pathWithoutSearch = ''] = pathname.split(/[?#]/u, 1)
+  const [routeSegment, sectionSegment, ...extraSegments] = pathWithoutSearch
+    .split('/')
+    .filter(Boolean)
+    .map(decodeRouteSegment)
+
+  if (extraSegments.length > 0) {
     return null
   }
 
-  return getSettingsSectionFromSegment(segments[1])
+  return getSettingsSectionForRouteSegments(routeSegment, sectionSegment)
+}
+
+function decodeRouteSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment)
+  } catch {
+    return segment
+  }
 }
 
 export function getOrganizationSettingsSectionFromSegment(

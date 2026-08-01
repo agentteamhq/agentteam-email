@@ -41,8 +41,11 @@ import {
 } from '../mail-workspace-screen-fixtures'
 import { DashboardMailController } from '../../screens/dashboard-mail-client-controller'
 import { MailWorkspaceControllerStoryFrame } from './mail-workspace-story-frame'
-import type { MailWorkspaceQuery } from '../../lib/mail-rpc'
-import type { AgentMailAdminNavigation, AgentMailWebWorkspace } from '@main/backend'
+import type {
+  AgentMailAdminNavigation,
+  AgentMailWebWorkspace,
+  AgentMailWorkspaceInput
+} from '@main/backend'
 import type { Meta, StoryObj } from '@storybook/react'
 import type { ComponentProps } from 'react'
 
@@ -54,8 +57,7 @@ export const mailWorkspaceControllerStoryMeta = {
     publicEnv: authenticatedSectionBaseArgs.publicEnv,
     routeSearch: {},
     routeState: authenticatedSectionBaseArgs.routeState,
-    sessionCleanupEnabled: authenticatedSectionBaseArgs.sessionCleanupEnabled,
-    settingsOpen: false
+    sessionCleanupEnabled: authenticatedSectionBaseArgs.sessionCleanupEnabled
   },
   parameters: {
     layout: 'fullscreen',
@@ -1176,7 +1178,7 @@ function renderMailWorkspaceStory(
     error?: Error
     pending?: boolean
     view?: AgentMailWebWorkspace
-    viewResolver?: (query: MailWorkspaceQuery) => AgentMailWebWorkspace
+    viewResolver?: (query: AgentMailWorkspaceInput) => AgentMailWebWorkspace
   } = {}
 ) {
   return (
@@ -1202,9 +1204,9 @@ function createStoryMailWorkspaceLoader({
   error?: Error
   pending?: boolean
   view: AgentMailWebWorkspace
-  viewResolver?: (query: MailWorkspaceQuery) => AgentMailWebWorkspace
+  viewResolver?: (query: AgentMailWorkspaceInput) => AgentMailWebWorkspace
 }) {
-  return async (query: MailWorkspaceQuery) => {
+  return async (query: AgentMailWorkspaceInput) => {
     if (pending) {
       await new Promise(() => {})
     }
@@ -1221,7 +1223,7 @@ function createStoryMailboxAdminNavigationLoader(navigation: AgentMailAdminNavig
   return async () => navigation
 }
 
-function mailWorkspaceViewForQuery(query: MailWorkspaceQuery) {
+function mailWorkspaceViewForQuery(query: AgentMailWorkspaceInput) {
   if (query.accountId === 'agent-billing') {
     return mailWorkspaceScreenBillingAccountView
   }
@@ -1253,7 +1255,7 @@ function mailWorkspaceViewForQuery(query: MailWorkspaceQuery) {
 
 function mailWorkspaceForQuery(
   view: AgentMailWebWorkspace,
-  query: MailWorkspaceQuery
+  query: AgentMailWorkspaceInput
 ): AgentMailWebWorkspace {
   const activeAccountId = query.accountId ?? view.activeAccountId
   const activeFolderId = query.folderId ?? view.activeFolderId

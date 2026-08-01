@@ -23,6 +23,13 @@ import {
   updateAgentMailPrincipalMailboxGrantsForWeb,
   updateAgentMailPrincipalSystemPermissionsForWeb
 } from '../agent-mail/admin-service'
+// Mail credential-header scope: see the approval note in agent-mail/browser-mail-request-headers.ts.
+import { agentMailWorkspaceInputSchema } from '../agent-mail/webmail-request-schemas'
+import {
+  AGENT_MAIL_AUTH_SURFACE_HEADER,
+  AGENT_MAIL_ROUTE_PREFIX_HEADER,
+  browserSessionMailRequestHeaders
+} from '../agent-mail/browser-mail-request-headers'
 import { isAgentMailAccessError, submitAgentMailOutboundFromWeb } from '../agent-mail/service'
 import {
   agentMailWebErrorStatus,
@@ -940,16 +947,7 @@ export function createMailHttpRoutes() {
         }
       },
       {
-        query: t.Object({
-          accountId: t.Optional(t.String({ minLength: 3 })),
-          cursor: t.Optional(t.String({ minLength: 1 })),
-          direction: t.Optional(t.Union([t.Literal('next'), t.Literal('previous')])),
-          folderId: t.Optional(t.String({ minLength: 1 })),
-          limit: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
-          messageId: t.Optional(t.String({ minLength: 1 })),
-          query: t.Optional(t.String()),
-          unreadOnly: t.Optional(t.Boolean())
-        }),
+        query: agentMailWorkspaceInputSchema,
         response: {
           200: typedResponseSchema<AgentMailWebWorkspace>(mailWebWorkspaceResponseSchema),
           ...mailErrorResponseSchemas
@@ -1400,40 +1398,19 @@ function setMailAuthChallenge(error: unknown, set: MailResponseSet) {
 }
 
 function mailAuthHeaders(request: Request) {
-  const headers = new Headers(request.headers)
   const pathname = new URL(request.url).pathname
 
-  headers.delete('x-agentteam-mail-auth-surface')
-  headers.delete('x-agentteam-mail-route-prefix')
   if (pathname === '/rpc/mail' || pathname.startsWith('/rpc/mail/')) {
-    stripRpcMailCredentialHeaders(headers)
-    headers.set('x-agentteam-mail-auth-surface', 'browser-rpc')
-    headers.set('x-agentteam-mail-route-prefix', '/rpc/mail')
-    return headers
+    return browserSessionMailRequestHeaders(request)
   }
 
-  headers.set('x-agentteam-mail-route-prefix', '/api/mail')
+  const headers = new Headers(request.headers)
+
+  headers.delete(AGENT_MAIL_AUTH_SURFACE_HEADER)
+  headers.set(AGENT_MAIL_ROUTE_PREFIX_HEADER, '/api/mail')
   headers.set('x-agentteam-request-method', request.method)
   headers.set('x-agentteam-request-url', request.url)
   return headers
-}
-
-function stripRpcMailCredentialHeaders(headers: Headers) {
-  for (const name of [
-    'authorization',
-    'x-api-key',
-    'x-agentteam-organization-id',
-    'x-agentteam-paperclip-agent-id',
-    'x-agentteam-paperclip-company-id',
-    'x-agentteam-paperclip-operation',
-    'x-agentteam-paperclip-plugin-id',
-    'x-agentteam-paperclip-project-id',
-    'x-agentteam-paperclip-run-id',
-    'x-agentteam-request-method',
-    'x-agentteam-request-url'
-  ]) {
-    headers.delete(name)
-  }
 }
 
 export default createMailHttpRoutes()

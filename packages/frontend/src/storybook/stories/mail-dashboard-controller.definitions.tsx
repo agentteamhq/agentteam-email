@@ -34,13 +34,17 @@ import {
 import { getMailboxAdminVisibleRecordsForView } from '../../partials/authenticated/mailbox-admin-visible-records'
 import { DashboardMailController } from '../../screens/dashboard-mail-client-controller'
 import { DashboardMailControllerStoryFrame } from './story-frames'
-import type { MailWorkspaceQuery } from '../../lib/mail-rpc'
 import type { MailboxAdminViewQuery } from '../../lib/mail-admin-rpc'
 import type {
   MailboxAdminSectionId,
   MailboxAdminView
 } from '../../partials/authenticated/mailbox-admin-models'
-import type { AgentMailAdminNavigation, AgentMailAdminView, AgentMailWebWorkspace } from '@main/backend'
+import type {
+  AgentMailAdminNavigation,
+  AgentMailAdminView,
+  AgentMailWebWorkspace,
+  AgentMailWorkspaceInput
+} from '@main/backend'
 import type { Meta, StoryObj } from '@storybook/react'
 import type { ComponentProps } from 'react'
 
@@ -52,8 +56,7 @@ export const dashboardMailControllerStoryMeta = {
     publicEnv: authenticatedSectionBaseArgs.publicEnv,
     routeSearch: { mailboxAdmin: 'accounts' },
     routeState: authenticatedSectionBaseArgs.routeState,
-    sessionCleanupEnabled: authenticatedSectionBaseArgs.sessionCleanupEnabled,
-    settingsOpen: false
+    sessionCleanupEnabled: authenticatedSectionBaseArgs.sessionCleanupEnabled
   },
   parameters: {
     layout: 'fullscreen'
@@ -217,6 +220,57 @@ export const WebmailJunk: Story = {
 
     await expect(await canvas.findAllByText('False positive delivery')).toHaveLength(2)
     await expect(await canvas.findAllByRole('button', { name: 'Not spam' })).toHaveLength(1)
+  }
+}
+
+/**
+ * Regression coverage for search-param navigation continuity: selecting a folder builds a
+ * new route-keyed mail workspace query, and the already-rendered mailbox must keep its last
+ * data instead of flashing the cold-load skeleton while the next folder resolves.
+ */
+export const WebmailFolderTransition: Story = {
+  args: {
+    routeSearch: {}
+  },
+  loaders: [loadStoryFolderTransition],
+  render: (args, { loaded }) => (
+    <DashboardMailControllerStoryFrame
+      {...args}
+      agentAccessView={agentAccessActionableState.view}
+      mailWorkspaceLoader={readLoadedFolderTransition(loaded).mailWorkspaceLoader}
+      mailboxAdminNavigationLoader={createStoryMailboxAdminNavigationLoader({
+        allowedSections: mailboxAdminReadyView.allowedSections
+      })}
+      mailboxAdminViewLoader={createStoryMailboxAdminViewLoader({
+        view: mailboxAdminEmptyView
+      })}
+    />
+  ),
+  play: async ({ canvasElement, loaded }) => {
+    const canvas = within(canvasElement)
+    const body = within(canvasElement.ownerDocument.body)
+
+    await expect(await body.findAllByText('Quarterly research packet')).toHaveLength(2)
+
+    await userEvent.click(await canvas.findByRole('button', { name: /^junk(\s+\d+)?$/iu }))
+
+    // The pane header is route-driven, so waiting for it here means the assertions below
+    // describe the real transition window rather than the moment before navigation landed.
+    await waitFor(async () => {
+      await expect(within(requireShellPaneHeader(canvasElement)).getByText('Junk')).toBeInTheDocument()
+    })
+
+    // While the junk folder is still resolving, the inbox messages stay rendered, the junk
+    // messages are not on screen yet, and no region falls back to a skeleton.
+    await expect(await body.findAllByText('Quarterly research packet')).toHaveLength(2)
+    await expect(body.queryByText('False positive delivery')).not.toBeInTheDocument()
+    await expect(canvasElement.ownerDocument.body.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(0)
+
+    readLoadedFolderTransition(loaded).resolveFolder()
+
+    // The replacement data still arrives and replaces the placeholder.
+    await expect(await body.findAllByText('False positive delivery')).toHaveLength(2)
+    await expect(body.queryByText('Quarterly research packet')).not.toBeInTheDocument()
   }
 }
 
@@ -874,7 +928,7 @@ function createStoryMailWorkspaceLoader({
   pending?: boolean
   view: AgentMailWebWorkspace
 }) {
-  return async (query: MailWorkspaceQuery) => {
+  return async (query: AgentMailWorkspaceInput) => {
     if (pending) {
       await new Promise(() => {})
     }
@@ -885,6 +939,57 @@ function createStoryMailWorkspaceLoader({
 
     return mailWorkspaceForQuery(view, query)
   }
+}
+
+/**
+ * Stages a slow folder transition. The starting folder resolves immediately and the target
+ * folder resolves only when the story releases it, so a story can tell the difference
+ * between the retained previous folder and the resolved next folder.
+ */
+function createStoryFolderTransitionMailWorkspaceLoader({
+  folderId,
+  folderView,
+  initialView
+}: {
+  folderId: string
+  folderView: AgentMailWebWorkspace
+  initialView: AgentMailWebWorkspace
+}) {
+  let releaseFolder = () => {}
+  const folderResolved = new Promise<void>((resolve) => {
+    releaseFolder = resolve
+  })
+
+  return {
+    mailWorkspaceLoader: async (query: AgentMailWorkspaceInput) => {
+      if (query.folderId === folderId) {
+        await folderResolved
+        return mailWorkspaceForQuery(folderView, query)
+      }
+
+      return mailWorkspaceForQuery(initialView, query)
+    },
+    resolveFolder: () => {
+      releaseFolder()
+    }
+  }
+}
+
+type StoryFolderTransition = ReturnType<typeof createStoryFolderTransitionMailWorkspaceLoader>
+
+/** Storybook runs loaders once per story run, which keeps the gate fresh on every re-run. */
+function loadStoryFolderTransition() {
+  return {
+    folderTransition: createStoryFolderTransitionMailWorkspaceLoader({
+      folderId: 'junk-id',
+      folderView: mailWorkspaceJunkView,
+      initialView: mailWorkspaceReadyView
+    })
+  }
+}
+
+function readLoadedFolderTransition(loaded: unknown): StoryFolderTransition {
+  return (loaded as { folderTransition: StoryFolderTransition }).folderTransition
 }
 
 function createStoryMailboxAdminNavigationLoader(navigation: AgentMailAdminNavigation) {
@@ -1028,7 +1133,7 @@ function paginateMailboxAdminRecords(
 
 function mailWorkspaceForQuery(
   view: AgentMailWebWorkspace,
-  query: MailWorkspaceQuery
+  query: AgentMailWorkspaceInput
 ): AgentMailWebWorkspace {
   const activeAccountId = query.accountId ?? view.activeAccountId
   const activeFolderId = query.folderId ?? view.activeFolderId
@@ -1041,4 +1146,18 @@ function mailWorkspaceForQuery(
     activeFolderId,
     selectedMessage
   }
+}
+
+/**
+ * The shell's pane header renders the active folder from route state, not from the mail
+ * workspace payload, so it flips as soon as the navigation lands.
+ */
+function requireShellPaneHeader(canvasElement: HTMLElement): HTMLElement {
+  const paneHeader = canvasElement.ownerDocument.body.querySelector('header')
+
+  if (!paneHeader) {
+    throw new Error('Expected the authenticated shell to render its pane header.')
+  }
+
+  return paneHeader
 }

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { loadOrganizationSettingsRouteState } from './organization.$section'
-import type { OrganizationSettingsRouteLoaderInput } from './organization.$section'
+import { loadOrganizationSettingsRouteState } from './_shell.organization.$section'
+import type { OrganizationSettingsRouteLoaderInput } from './_shell.organization.$section'
 
 type SettingsRouteState = NonNullable<
   OrganizationSettingsRouteLoaderInput['context']['authenticatedRouteState']

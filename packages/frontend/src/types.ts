@@ -12,6 +12,7 @@ import type {
   loadDashboardRoute,
   loadDeviceRoute,
   loadHomeRoute,
+  loadMailWorkspaceRoute,
   loadPublicAuthRoute,
   loadSettingsRoute,
   loadSignInRoute,
@@ -34,6 +35,7 @@ export interface FrontendServerRouteHandlers {
   loadDashboardRoute?: typeof loadDashboardRoute
   loadDeviceRoute?: typeof loadDeviceRoute
   loadHomeRoute?: typeof loadHomeRoute
+  loadMailWorkspaceRoute?: typeof loadMailWorkspaceRoute
   loadPublicAuthRoute?: typeof loadPublicAuthRoute
   loadSettingsRoute?: typeof loadSettingsRoute
   loadSignInRoute?: typeof loadSignInRoute

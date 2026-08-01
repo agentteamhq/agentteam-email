@@ -3,7 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import { AdminAuditLogsScreen } from '../screens/admin/admin-audit-logs-screen'
 import { adminAuditLogsDefaultList } from './admin-audit-logs-fixtures'
-import type { AdminAuditLogList } from '@main/backend'
+import type { AdminAuditLogList, AdminAuditLogListInput } from '@main/backend'
+
 import type {
   AdminAuditLogsRouteSearch,
   AdminAuditLogsRouteSearchInput
@@ -17,6 +18,8 @@ export interface AdminAuditLogsStoryFrameProps
     'auditLogListLoader' | 'onSearchChange' | 'routeSearch'
   > {
   auditLogList?: AdminAuditLogList
+  /** Resolves the list per route search so page and filter transitions can differ. */
+  auditLogListForSearch?: (search: AdminAuditLogsRouteSearch) => Promise<AdminAuditLogList>
   auditLogListError?: Error
   loading?: boolean
   routeSearch?: AdminAuditLogsRouteSearch
@@ -31,6 +34,7 @@ const defaultRouteSearch = {
 
 export function AdminAuditLogsStoryFrame({
   auditLogList = adminAuditLogsDefaultList,
+  auditLogListForSearch,
   auditLogListError,
   loading = false,
   routeSearch = defaultRouteSearch,
@@ -49,7 +53,7 @@ export function AdminAuditLogsStoryFrame({
     []
   )
   const auditLogListLoader = React.useMemo(
-    () => async () => {
+    () => async (query: AdminAuditLogListInput) => {
       if (loading) {
         return new Promise<AdminAuditLogList>(() => {})
       }
@@ -58,9 +62,13 @@ export function AdminAuditLogsStoryFrame({
         throw auditLogListError
       }
 
+      if (auditLogListForSearch) {
+        return auditLogListForSearch(query as AdminAuditLogsRouteSearch)
+      }
+
       return auditLogList
     },
-    [auditLogList, auditLogListError, loading]
+    [auditLogList, auditLogListError, auditLogListForSearch, loading]
   )
   const onSearchChange = React.useCallback((nextSearch: AdminAuditLogsRouteSearchInput) => {
     setCurrentSearch((previousSearch) => ({

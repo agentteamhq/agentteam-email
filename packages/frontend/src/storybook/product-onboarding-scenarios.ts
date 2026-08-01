@@ -10,10 +10,14 @@ import { mailWorkspaceEmptyView } from './mail-workspace-fixtures'
 import { authenticatedSettingsRouteState, storyPublicEnv } from './screen-fixtures'
 import type { DashboardSearch } from '../lib/dashboard-search'
 import type { MailboxAdminViewQuery } from '../lib/mail-admin-rpc'
-import type { MailWorkspaceQuery } from '../lib/mail-rpc'
 import type { DomainSettingsState } from '../partials/authenticated/settings-dialog'
 import type { DashboardMailControllerStoryFrameProps } from './stories/story-frames'
-import type { AgentMailAdminNavigation, AgentMailAdminView, AgentMailWebWorkspace } from '@main/backend'
+import type {
+  AgentMailAdminNavigation,
+  AgentMailAdminView,
+  AgentMailWebWorkspace,
+  AgentMailWorkspaceInput
+} from '@main/backend'
 
 interface ProductOnboardingScenario {
   domainSettingsState: DomainSettingsState
@@ -163,12 +167,12 @@ function createProductOnboardingMailboxAdminViewLoader() {
 }
 
 function createProductOnboardingMailWorkspaceLoader(workspace: AgentMailWebWorkspace) {
-  return async (query: MailWorkspaceQuery) => mailWorkspaceForQuery(workspace, query)
+  return async (query: AgentMailWorkspaceInput) => mailWorkspaceForQuery(workspace, query)
 }
 
 function mailWorkspaceForQuery(
   workspace: AgentMailWebWorkspace,
-  query: MailWorkspaceQuery
+  query: AgentMailWorkspaceInput
 ): AgentMailWebWorkspace {
   const activeAccountId = query.accountId ?? workspace.activeAccountId
   const activeFolderId = query.folderId ?? workspace.activeFolderId

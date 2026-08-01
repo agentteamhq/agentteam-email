@@ -31,11 +31,12 @@ import { Route as DeviceCapabilitiesRouteImport } from './routes/device/capabili
 import { Route as DeviceApproveRouteImport } from './routes/device/approve'
 import { Route as AdminSetupRouteImport } from './routes/admin/setup'
 import { Route as AdminAuditLogsRouteImport } from './routes/admin/audit-logs'
-import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
-import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedShellRouteImport } from './routes/_authenticated/_shell'
 import { Route as AgentClaimTokenRouteImport } from './routes/agent/claim.$token'
-import { Route as AuthenticatedSettingsSectionRouteImport } from './routes/_authenticated/settings.$section'
-import { Route as AuthenticatedOrganizationSectionRouteImport } from './routes/_authenticated/organization.$section'
+import { Route as AuthenticatedShellSettingsRouteImport } from './routes/_authenticated/_shell.settings'
+import { Route as AuthenticatedShellDashboardRouteImport } from './routes/_authenticated/_shell.dashboard'
+import { Route as AuthenticatedShellSettingsSectionRouteImport } from './routes/_authenticated/_shell.settings.$section'
+import { Route as AuthenticatedShellOrganizationSectionRouteImport } from './routes/_authenticated/_shell.organization.$section'
 
 const VerifyEmailRoute = VerifyEmailRouteImport.update({
   id: '/verify-email',
@@ -146,14 +147,8 @@ const AdminAuditLogsRoute = AdminAuditLogsRouteImport.update({
   path: '/audit-logs',
   getParentRoute: () => AdminRouteRoute,
 } as any)
-const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
+const AuthenticatedShellRoute = AuthenticatedShellRouteImport.update({
+  id: '/_shell',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AgentClaimTokenRoute = AgentClaimTokenRouteImport.update({
@@ -161,17 +156,29 @@ const AgentClaimTokenRoute = AgentClaimTokenRouteImport.update({
   path: '/agent/claim/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedSettingsSectionRoute =
-  AuthenticatedSettingsSectionRouteImport.update({
+const AuthenticatedShellSettingsRoute =
+  AuthenticatedShellSettingsRouteImport.update({
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => AuthenticatedShellRoute,
+  } as any)
+const AuthenticatedShellDashboardRoute =
+  AuthenticatedShellDashboardRouteImport.update({
+    id: '/dashboard',
+    path: '/dashboard',
+    getParentRoute: () => AuthenticatedShellRoute,
+  } as any)
+const AuthenticatedShellSettingsSectionRoute =
+  AuthenticatedShellSettingsSectionRouteImport.update({
     id: '/$section',
     path: '/$section',
-    getParentRoute: () => AuthenticatedSettingsRoute,
+    getParentRoute: () => AuthenticatedShellSettingsRoute,
   } as any)
-const AuthenticatedOrganizationSectionRoute =
-  AuthenticatedOrganizationSectionRouteImport.update({
+const AuthenticatedShellOrganizationSectionRoute =
+  AuthenticatedShellOrganizationSectionRouteImport.update({
     id: '/organization/$section',
     path: '/organization/$section',
-    getParentRoute: () => AuthenticatedRouteRoute,
+    getParentRoute: () => AuthenticatedShellRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -189,8 +196,6 @@ export interface FileRoutesByFullPath {
   '/signout': typeof SignoutRoute
   '/signup': typeof SignupRoute
   '/verify-email': typeof VerifyEmailRoute
-  '/dashboard': typeof AuthenticatedDashboardRoute
-  '/settings': typeof AuthenticatedSettingsRouteWithChildren
   '/admin/audit-logs': typeof AdminAuditLogsRoute
   '/admin/setup': typeof AdminSetupRoute
   '/device/approve': typeof DeviceApproveRoute
@@ -198,9 +203,11 @@ export interface FileRoutesByFullPath {
   '/oauth/consent': typeof OauthConsentRoute
   '/redirect/error': typeof RedirectErrorRoute
   '/admin/': typeof AdminIndexRoute
-  '/organization/$section': typeof AuthenticatedOrganizationSectionRoute
-  '/settings/$section': typeof AuthenticatedSettingsSectionRoute
+  '/dashboard': typeof AuthenticatedShellDashboardRoute
+  '/settings': typeof AuthenticatedShellSettingsRouteWithChildren
   '/agent/claim/$token': typeof AgentClaimTokenRoute
+  '/organization/$section': typeof AuthenticatedShellOrganizationSectionRoute
+  '/settings/$section': typeof AuthenticatedShellSettingsSectionRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -216,8 +223,6 @@ export interface FileRoutesByTo {
   '/signout': typeof SignoutRoute
   '/signup': typeof SignupRoute
   '/verify-email': typeof VerifyEmailRoute
-  '/dashboard': typeof AuthenticatedDashboardRoute
-  '/settings': typeof AuthenticatedSettingsRouteWithChildren
   '/admin/audit-logs': typeof AdminAuditLogsRoute
   '/admin/setup': typeof AdminSetupRoute
   '/device/approve': typeof DeviceApproveRoute
@@ -225,9 +230,11 @@ export interface FileRoutesByTo {
   '/oauth/consent': typeof OauthConsentRoute
   '/redirect/error': typeof RedirectErrorRoute
   '/admin': typeof AdminIndexRoute
-  '/organization/$section': typeof AuthenticatedOrganizationSectionRoute
-  '/settings/$section': typeof AuthenticatedSettingsSectionRoute
+  '/dashboard': typeof AuthenticatedShellDashboardRoute
+  '/settings': typeof AuthenticatedShellSettingsRouteWithChildren
   '/agent/claim/$token': typeof AgentClaimTokenRoute
+  '/organization/$section': typeof AuthenticatedShellOrganizationSectionRoute
+  '/settings/$section': typeof AuthenticatedShellSettingsSectionRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -246,8 +253,7 @@ export interface FileRoutesById {
   '/signout': typeof SignoutRoute
   '/signup': typeof SignupRoute
   '/verify-email': typeof VerifyEmailRoute
-  '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
-  '/_authenticated/settings': typeof AuthenticatedSettingsRouteWithChildren
+  '/_authenticated/_shell': typeof AuthenticatedShellRouteWithChildren
   '/admin/audit-logs': typeof AdminAuditLogsRoute
   '/admin/setup': typeof AdminSetupRoute
   '/device/approve': typeof DeviceApproveRoute
@@ -255,9 +261,11 @@ export interface FileRoutesById {
   '/oauth/consent': typeof OauthConsentRoute
   '/redirect/error': typeof RedirectErrorRoute
   '/admin/': typeof AdminIndexRoute
-  '/_authenticated/organization/$section': typeof AuthenticatedOrganizationSectionRoute
-  '/_authenticated/settings/$section': typeof AuthenticatedSettingsSectionRoute
+  '/_authenticated/_shell/dashboard': typeof AuthenticatedShellDashboardRoute
+  '/_authenticated/_shell/settings': typeof AuthenticatedShellSettingsRouteWithChildren
   '/agent/claim/$token': typeof AgentClaimTokenRoute
+  '/_authenticated/_shell/organization/$section': typeof AuthenticatedShellOrganizationSectionRoute
+  '/_authenticated/_shell/settings/$section': typeof AuthenticatedShellSettingsSectionRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -276,8 +284,6 @@ export interface FileRouteTypes {
     | '/signout'
     | '/signup'
     | '/verify-email'
-    | '/dashboard'
-    | '/settings'
     | '/admin/audit-logs'
     | '/admin/setup'
     | '/device/approve'
@@ -285,9 +291,11 @@ export interface FileRouteTypes {
     | '/oauth/consent'
     | '/redirect/error'
     | '/admin/'
+    | '/dashboard'
+    | '/settings'
+    | '/agent/claim/$token'
     | '/organization/$section'
     | '/settings/$section'
-    | '/agent/claim/$token'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -303,8 +311,6 @@ export interface FileRouteTypes {
     | '/signout'
     | '/signup'
     | '/verify-email'
-    | '/dashboard'
-    | '/settings'
     | '/admin/audit-logs'
     | '/admin/setup'
     | '/device/approve'
@@ -312,9 +318,11 @@ export interface FileRouteTypes {
     | '/oauth/consent'
     | '/redirect/error'
     | '/admin'
+    | '/dashboard'
+    | '/settings'
+    | '/agent/claim/$token'
     | '/organization/$section'
     | '/settings/$section'
-    | '/agent/claim/$token'
   id:
     | '__root__'
     | '/'
@@ -332,8 +340,7 @@ export interface FileRouteTypes {
     | '/signout'
     | '/signup'
     | '/verify-email'
-    | '/_authenticated/dashboard'
-    | '/_authenticated/settings'
+    | '/_authenticated/_shell'
     | '/admin/audit-logs'
     | '/admin/setup'
     | '/device/approve'
@@ -341,9 +348,11 @@ export interface FileRouteTypes {
     | '/oauth/consent'
     | '/redirect/error'
     | '/admin/'
-    | '/_authenticated/organization/$section'
-    | '/_authenticated/settings/$section'
+    | '/_authenticated/_shell/dashboard'
+    | '/_authenticated/_shell/settings'
     | '/agent/claim/$token'
+    | '/_authenticated/_shell/organization/$section'
+    | '/_authenticated/_shell/settings/$section'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -523,18 +532,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminAuditLogsRouteImport
       parentRoute: typeof AdminRouteRoute
     }
-    '/_authenticated/settings': {
-      id: '/_authenticated/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof AuthenticatedSettingsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/dashboard': {
-      id: '/_authenticated/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+    '/_authenticated/_shell': {
+      id: '/_authenticated/_shell'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedShellRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/agent/claim/$token': {
@@ -544,46 +546,74 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AgentClaimTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/settings/$section': {
-      id: '/_authenticated/settings/$section'
+    '/_authenticated/_shell/settings': {
+      id: '/_authenticated/_shell/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AuthenticatedShellSettingsRouteImport
+      parentRoute: typeof AuthenticatedShellRoute
+    }
+    '/_authenticated/_shell/dashboard': {
+      id: '/_authenticated/_shell/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AuthenticatedShellDashboardRouteImport
+      parentRoute: typeof AuthenticatedShellRoute
+    }
+    '/_authenticated/_shell/settings/$section': {
+      id: '/_authenticated/_shell/settings/$section'
       path: '/$section'
       fullPath: '/settings/$section'
-      preLoaderRoute: typeof AuthenticatedSettingsSectionRouteImport
-      parentRoute: typeof AuthenticatedSettingsRoute
+      preLoaderRoute: typeof AuthenticatedShellSettingsSectionRouteImport
+      parentRoute: typeof AuthenticatedShellSettingsRoute
     }
-    '/_authenticated/organization/$section': {
-      id: '/_authenticated/organization/$section'
+    '/_authenticated/_shell/organization/$section': {
+      id: '/_authenticated/_shell/organization/$section'
       path: '/organization/$section'
       fullPath: '/organization/$section'
-      preLoaderRoute: typeof AuthenticatedOrganizationSectionRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
+      preLoaderRoute: typeof AuthenticatedShellOrganizationSectionRouteImport
+      parentRoute: typeof AuthenticatedShellRoute
     }
   }
 }
 
-interface AuthenticatedSettingsRouteChildren {
-  AuthenticatedSettingsSectionRoute: typeof AuthenticatedSettingsSectionRoute
+interface AuthenticatedShellSettingsRouteChildren {
+  AuthenticatedShellSettingsSectionRoute: typeof AuthenticatedShellSettingsSectionRoute
 }
 
-const AuthenticatedSettingsRouteChildren: AuthenticatedSettingsRouteChildren = {
-  AuthenticatedSettingsSectionRoute: AuthenticatedSettingsSectionRoute,
-}
+const AuthenticatedShellSettingsRouteChildren: AuthenticatedShellSettingsRouteChildren =
+  {
+    AuthenticatedShellSettingsSectionRoute:
+      AuthenticatedShellSettingsSectionRoute,
+  }
 
-const AuthenticatedSettingsRouteWithChildren =
-  AuthenticatedSettingsRoute._addFileChildren(
-    AuthenticatedSettingsRouteChildren,
+const AuthenticatedShellSettingsRouteWithChildren =
+  AuthenticatedShellSettingsRoute._addFileChildren(
+    AuthenticatedShellSettingsRouteChildren,
   )
 
+interface AuthenticatedShellRouteChildren {
+  AuthenticatedShellDashboardRoute: typeof AuthenticatedShellDashboardRoute
+  AuthenticatedShellSettingsRoute: typeof AuthenticatedShellSettingsRouteWithChildren
+  AuthenticatedShellOrganizationSectionRoute: typeof AuthenticatedShellOrganizationSectionRoute
+}
+
+const AuthenticatedShellRouteChildren: AuthenticatedShellRouteChildren = {
+  AuthenticatedShellDashboardRoute: AuthenticatedShellDashboardRoute,
+  AuthenticatedShellSettingsRoute: AuthenticatedShellSettingsRouteWithChildren,
+  AuthenticatedShellOrganizationSectionRoute:
+    AuthenticatedShellOrganizationSectionRoute,
+}
+
+const AuthenticatedShellRouteWithChildren =
+  AuthenticatedShellRoute._addFileChildren(AuthenticatedShellRouteChildren)
+
 interface AuthenticatedRouteRouteChildren {
-  AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
-  AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRouteWithChildren
-  AuthenticatedOrganizationSectionRoute: typeof AuthenticatedOrganizationSectionRoute
+  AuthenticatedShellRoute: typeof AuthenticatedShellRouteWithChildren
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
-  AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
-  AuthenticatedSettingsRoute: AuthenticatedSettingsRouteWithChildren,
-  AuthenticatedOrganizationSectionRoute: AuthenticatedOrganizationSectionRoute,
+  AuthenticatedShellRoute: AuthenticatedShellRouteWithChildren,
 }
 
 const AuthenticatedRouteRouteWithChildren =

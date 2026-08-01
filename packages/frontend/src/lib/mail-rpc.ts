@@ -1,6 +1,7 @@
 import { rpc } from './rpc-api-client'
 import type {
   AgentMailComposeInput,
+  AgentMailWorkspaceInput,
   AgentMailMessageActionInput,
   AgentMailWebFolder,
   AgentMailWebWorkspace
@@ -14,17 +15,6 @@ export class MailRPCError extends Error {
     super(message)
     this.name = 'MailRPCError'
   }
-}
-
-export interface MailWorkspaceQuery {
-  accountId?: string
-  cursor?: string | null
-  direction?: 'next' | 'previous'
-  folderId?: string
-  limit?: number
-  messageId?: string
-  query?: string
-  unreadOnly?: boolean
 }
 
 export type MailDraftInput = AgentMailComposeInput & {
@@ -41,7 +31,7 @@ export interface MailUpdateInput extends AgentMailMessageActionInput {
   seen?: boolean
 }
 
-export async function fetchMailWorkspace(input: MailWorkspaceQuery): Promise<AgentMailWebWorkspace> {
+export async function fetchMailWorkspace(input: AgentMailWorkspaceInput): Promise<AgentMailWebWorkspace> {
   const result = await rpc.mail.workspace.get({ query: mailWorkspaceQuery(input) })
   return readMailRpcResult<AgentMailWebWorkspace>(result)
 }
@@ -131,10 +121,10 @@ export function deleteMailFolder({ accountId, mailboxId }: { accountId: string; 
     .then((result) => readMailRpcResult<{ success: boolean }>(result))
 }
 
-function mailWorkspaceQuery(input: MailWorkspaceQuery) {
+function mailWorkspaceQuery(input: AgentMailWorkspaceInput) {
   return {
     accountId: input.accountId,
-    cursor: input.cursor ?? undefined,
+    cursor: input.cursor,
     direction: input.direction,
     folderId: input.folderId,
     limit: input.limit,

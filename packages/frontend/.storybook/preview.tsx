@@ -1,3 +1,6 @@
+// Imported first: it installs the story `/rpc/*` boundary before the Better Auth client
+// module captures `globalThis.fetch` as its `customFetchImpl`.
+import '../src/storybook/story-app-rpc-boundary'
 import '../src/styles.css'
 
 import { RouterContextProvider } from '@tanstack/react-router'

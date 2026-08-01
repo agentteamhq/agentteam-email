@@ -1,9 +1,19 @@
 import { deleteAllCookies, readFlashCookie, routeSetCookieHeaders } from '@main/common'
+import debug from 'debug'
 
+// Mail credential-header scope: see the approval note in agent-mail/browser-mail-request-headers.ts.
+import { browserSessionMailRequestHeaders } from '../agent-mail/browser-mail-request-headers'
+import { isAgentMailAccessError } from '../agent-mail/service'
+import { validateAgentMailWorkspaceInput } from '../agent-mail/webmail-request-schemas'
+import { agentMailWebErrorStatus, getAgentMailWorkspaceForWeb } from '../agent-mail/webmail-service'
+import { createSafeErrorLogDetails } from '../auth/log-redaction'
 import { getUser } from '../auth/get-user'
 import { globals } from '../globals'
 import { getCustomerStripeStatus } from '../payments/get-customer-status'
 import { isDelayedData } from '../payments/is-delayed-data'
+import type { AgentMailWebWorkspace, AgentMailWorkspaceInput } from '../agent-mail/webmail-service'
+
+const log = debug('app:webapp:route')
 
 export { handleEmailVerifiedRedirect } from './webapp/email-verified'
 export { handleStripeCheckoutRedirect } from './webapp/stripe-checkout'
@@ -51,6 +61,10 @@ export interface SettingsRouteState {
 
 export interface DeviceRouteState extends SettingsRouteState {
   userCode: string | null
+}
+
+export interface MailWorkspaceRouteState {
+  workspace: AgentMailWebWorkspace | null
 }
 
 export interface BillingRouteState extends SettingsRouteState {
@@ -109,6 +123,102 @@ export async function loadHomeRoute(request: Request): Promise<HomeRouteState> {
 
 export async function loadDashboardRoute(request: Request): Promise<SettingsRouteState> {
   return loadSettingsRoute(request)
+}
+
+/**
+ * Server-render read model for the authenticated mail workspace screen.
+ *
+ * This is the same read the browser performs through `GET /rpc/mail/workspace`, resolved
+ * during the server render of the same authenticated browser request so the delivered
+ * HTML carries the screen's data instead of skeleton-only markup.
+ *
+ * Credential boundary: the request's Better Auth browser session is the only accepted
+ * credential. `browserSessionMailRequestHeaders` strips every non-browser credential
+ * class from the inbound headers and pins the Agent Mail authorization surface to
+ * `browser-rpc`, so `getAgentMailWorkspaceForWeb` derives the user, organization, and
+ * CASL permissions from the session exactly as the browser RPC route does. No credential
+ * is copied into another subsystem and the returned DTO is the same public workspace
+ * contract the browser already receives.
+ *
+ * Fails closed: any authentication, authorization, or upstream failure returns
+ * `{ workspace: null }` so the screen falls back to the browser query instead of
+ * server-rendering another organization's data or a partially authorized view.
+ */
+export async function loadMailWorkspaceRoute(
+  request: Request,
+  input: AgentMailWorkspaceInput
+): Promise<MailWorkspaceRouteState> {
+  const validation = validateAgentMailWorkspaceInput(input)
+
+  if (!validation.valid) {
+    log('mail_workspace_route_invalid_input %o', {
+      operation: 'mail_workspace_route_load',
+      requestUrl: request.url,
+      schemaErrors: validation.errors
+    })
+
+    return { workspace: null }
+  }
+
+  try {
+    const workspace = await getAgentMailWorkspaceForWeb({
+      headers: browserSessionMailRequestHeaders(request),
+      input: validation.input
+    })
+
+    log('mail_workspace_route_loaded %o', {
+      accountCount: workspace.accounts.length,
+      activeAccountId: workspace.activeAccountId,
+      activeFolderId: workspace.activeFolderId,
+      operation: 'mail_workspace_route_load',
+      requestUrl: request.url
+    })
+
+    return { workspace }
+  } catch (error) {
+    logMailWorkspaceRouteFailure(error, validation.input, request)
+
+    return { workspace: null }
+  }
+}
+
+/**
+ * Classifies a failed server-render workspace read so an expected authorization or upstream
+ * failure stays distinguishable from a handler bug. Every classification still fails closed:
+ * the server render omits the seed and the browser query surfaces the real error.
+ */
+function logMailWorkspaceRouteFailure(error: unknown, input: AgentMailWorkspaceInput, request: Request) {
+  const errorLogDetails = createSafeErrorLogDetails(error)
+  const upstreamStatus = agentMailWebErrorStatus(error)
+  const details = {
+    error: errorLogDetails,
+    input,
+    operation: 'mail_workspace_route_load',
+    requestUrl: request.url
+  }
+
+  if (isAgentMailAccessError(error)) {
+    log('mail_workspace_route_denied %o', {
+      ...details,
+      classification: 'authorization',
+      status: error.status
+    })
+    return
+  }
+
+  if (upstreamStatus !== null) {
+    log('mail_workspace_route_upstream_error %o', {
+      ...details,
+      classification: 'upstream',
+      status: upstreamStatus
+    })
+    return
+  }
+
+  log('mail_workspace_route_unhandled_error %o', {
+    ...details,
+    classification: 'unexpected'
+  })
 }
 
 export async function loadSignInRoute(request: Request): Promise<AuthRouteState> {

@@ -4,9 +4,12 @@ import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query
 
 import { routeTree } from './routeTree.gen'
 import type { FrontendRouterContext, FrontendStartRequestContext, PublicEnv } from './types'
+import type { RouterHistory } from '@tanstack/react-router'
 import { getRuntimePublicEnv } from '#runtime-public-env'
 
 export interface CreateFrontendRouterOptions {
+  /** Overrides the browser history. Route-level tests and stories drive a memory history. */
+  history?: RouterHistory
   publicEnv: PublicEnv
 }
 
@@ -26,6 +29,7 @@ export function createFrontendRouter(options: CreateFrontendRouterOptions) {
       queryClient
     } satisfies FrontendRouterContext,
     defaultPreload: 'intent',
+    history: options.history,
     scrollRestoration: true,
     trailingSlash: 'always'
   })
