@@ -1,13 +1,21 @@
+import { genericOAuth } from 'better-auth/plugins'
+import debug from 'debug'
 import { z } from 'zod'
 
 import { PRIVATE_VARS } from '../vars.private'
 import { BETTER_AUTH_ROUTE } from '../auth/auth-routes'
 
 import { CLOUDFLARE_OAUTH_PROVIDER_ID } from './constants'
-import { createCloudflareOAuthTokenExchanger } from './oauth-token-exchange'
+import {
+  createCloudflareOAuthTokenExchanger,
+  createCloudflareOAuthTokenRefresher
+} from './oauth-token-exchange'
+import type { CloudflareOAuthTokenExchangeWorkerConfig } from './oauth-token-exchange'
 import type { GenericOAuthConfig } from 'better-auth/plugins'
 
 export { CLOUDFLARE_OAUTH_PROVIDER_ID } from './constants'
+
+const log = debug('app:cloudflare:oauth-token')
 
 const CLOUDFLARE_REQUIRED_OAUTH_SCOPES = [
   'workers-r2.read',
@@ -44,6 +52,8 @@ export const CLOUDFLARE_OAUTH_DEFAULTS = {
 export type CloudflareRequiredOAuthScope = (typeof CLOUDFLARE_REQUIRED_OAUTH_SCOPES)[number]
 
 type CloudflareOAuthGetUserInfo = NonNullable<GenericOAuthConfig['getUserInfo']>
+
+export type CloudflareGenericOAuthPlugin = ReturnType<typeof genericOAuth>
 
 const CLOUDFLARE_WORKERS_DEV_DOMAIN = 'workers.dev'
 const CLOUDFLARE_OAUTH_TOKEN_EXCHANGE_PATH = '/oauth2/token'
@@ -189,11 +199,7 @@ export function createCloudflareGenericOAuthConfig(): GenericOAuthConfig | null 
           getToken: createCloudflareOAuthTokenExchanger({
             clientId,
             redirectURI,
-            worker: {
-              directFirst: CLOUDFLARE_OAUTH_TOKEN_EXCHANGE_DIRECT_FIRST,
-              password: workerConfig.password,
-              tokenExchangeUrl: workerConfig.oauthTokenExchangeUrl
-            },
+            worker: createCloudflareWorkerTokenTransport(workerConfig),
             tokenEndpoint: tokenUrl
           })
         }
@@ -213,6 +219,78 @@ export function createCloudflareGenericOAuthConfig(): GenericOAuthConfig | null 
         name
       }
     }
+  }
+}
+
+/**
+ * Builds the Cloudflare Better Auth provider. Better Auth's generic OAuth
+ * config surface owns the authorization-code exchange only, so the
+ * challenge-resilient refresh-token grant is installed on the provider this
+ * plugin publishes. Both grants are gated on the same service Worker
+ * configuration and fail closed to Better Auth's credential errors when the
+ * grant cannot be renewed.
+ */
+export function createCloudflareGenericOAuthPlugin(): CloudflareGenericOAuthPlugin | null {
+  const config = createCloudflareGenericOAuthConfig()
+
+  if (!config) {
+    return null
+  }
+
+  const plugin = genericOAuth({ config: [config] })
+  const workerConfig = getCloudflareWorkerConfig()
+  const tokenUrl = getCloudflareOAuthTokenUrl()
+
+  if (!workerConfig) {
+    log('cloudflare_oauth_token_refresh_transport %o', {
+      providerId: CLOUDFLARE_OAUTH_PROVIDER_ID,
+      tokenEndpoint: tokenUrl,
+      transport: 'direct',
+      workerTokenExchangeUrl: null
+    })
+    return plugin
+  }
+
+  const refreshAccessToken = createCloudflareOAuthTokenRefresher({
+    accessTokenExpiresIn: config.accessTokenExpiresIn,
+    clientId: config.clientId,
+    tokenEndpoint: tokenUrl,
+    worker: createCloudflareWorkerTokenTransport(workerConfig)
+  })
+
+  log('cloudflare_oauth_token_refresh_transport %o', {
+    directFirst: CLOUDFLARE_OAUTH_TOKEN_EXCHANGE_DIRECT_FIRST,
+    providerId: CLOUDFLARE_OAUTH_PROVIDER_ID,
+    tokenEndpoint: tokenUrl,
+    transport: 'direct_first_worker_fallback',
+    workerTokenExchangeUrl: workerConfig.oauthTokenExchangeUrl
+  })
+
+  return {
+    ...plugin,
+    init: (ctx) => {
+      const initialized = plugin.init(ctx)
+
+      return {
+        ...initialized,
+        context: {
+          ...initialized.context,
+          socialProviders: initialized.context.socialProviders.map((provider) =>
+            provider.id === CLOUDFLARE_OAUTH_PROVIDER_ID ? { ...provider, refreshAccessToken } : provider
+          )
+        }
+      }
+    }
+  }
+}
+
+function createCloudflareWorkerTokenTransport(
+  workerConfig: CloudflareWorkerConfig
+): CloudflareOAuthTokenExchangeWorkerConfig {
+  return {
+    directFirst: CLOUDFLARE_OAUTH_TOKEN_EXCHANGE_DIRECT_FIRST,
+    password: workerConfig.password,
+    tokenExchangeUrl: workerConfig.oauthTokenExchangeUrl
   }
 }
 

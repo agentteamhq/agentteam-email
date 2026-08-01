@@ -116,6 +116,81 @@ test('forwards the exact body and only OAuth content negotiation headers', async
   }
 })
 
+test('proxies refresh_token grants under the same Worker authentication', async () => {
+  const body = 'grant_type=refresh_token&refresh_token=stored%2Brefresh&client_id=cloudflare-client-id'
+  const requests = []
+  const restoreFetch = installFetch(async (input, init = {}) => {
+    requests.push({
+      body: Buffer.from(await new Response(init.body).arrayBuffer()).toString('utf8'),
+      headers: Object.fromEntries(new Headers(init.headers).entries()),
+      method: init.method,
+      url: String(input)
+    })
+    return Response.json(
+      {
+        access_token: 'renewed-access-token',
+        expires_in: 3600,
+        refresh_token: 'renewed-refresh-token',
+        scope: 'offline_access',
+        token_type: 'Bearer'
+      },
+      {
+        headers: {
+          'cf-ray': 'renew-ray-SJC',
+          'content-type': 'application/json;charset=UTF-8'
+        }
+      }
+    )
+  })
+
+  try {
+    const unauthenticated = await worker.fetch(
+      new Request('https://worker.example.test/oauth2/token', {
+        body,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        method: 'POST'
+      }),
+      workerEnv()
+    )
+    const response = await worker.fetch(
+      new Request('https://worker.example.test/oauth2/token', {
+        body,
+        headers: {
+          accept: 'application/json',
+          ...authHeaders(),
+          'content-type': 'application/x-www-form-urlencoded'
+        },
+        method: 'POST'
+      }),
+      workerEnv()
+    )
+
+    assert.equal(unauthenticated.status, 401)
+    assert.equal(response.status, 200)
+    assert.equal(response.headers.get('cf-ray'), 'renew-ray-SJC')
+    assert.deepEqual(await response.json(), {
+      access_token: 'renewed-access-token',
+      expires_in: 3600,
+      refresh_token: 'renewed-refresh-token',
+      scope: 'offline_access',
+      token_type: 'Bearer'
+    })
+    assert.deepEqual(requests, [
+      {
+        body,
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/x-www-form-urlencoded'
+        },
+        method: 'POST',
+        url: CLOUDFLARE_TOKEN_ENDPOINT
+      }
+    ])
+  } finally {
+    restoreFetch()
+  }
+})
+
 test('classifies Cloudflare challenge responses from upstream headers', () => {
   assert.equal(
     classifyResponse(

@@ -13,7 +13,6 @@ import {
   createAccessControl,
   customSession,
   deviceAuthorization,
-  genericOAuth,
   jwt,
   lastLoginMethod,
   magicLink,
@@ -26,7 +25,7 @@ import { adjectives, animals, colors, uniqueNamesGenerator } from 'unique-names-
 
 import {
   CLOUDFLARE_OAUTH_PROVIDER_ID,
-  createCloudflareGenericOAuthConfig,
+  createCloudflareGenericOAuthPlugin,
   isCloudflareOAuthConfigured
 } from '../cloudflare/config'
 import { sendEmail } from '../lib/email'
@@ -62,6 +61,7 @@ import { createMongoSecondaryStorage } from './secondary-storage'
 import type { AgentSession } from '@better-auth/agent-auth'
 import type { refreshToken as betterAuthRefreshToken } from 'better-auth/api'
 import type { BetterAuthOptions } from 'better-auth/minimal'
+import type { genericOAuth } from 'better-auth/plugins'
 import type { OrganizationId, UserId } from '@main/db'
 import type { Database } from '../db/db'
 
@@ -349,7 +349,7 @@ function logBetterAuthApiError(error: unknown) {
 }
 
 export function createGlobalAuth(db: Database): GlobalAuth {
-  const cloudflareOAuthConfig = createCloudflareGenericOAuthConfig()
+  const cloudflareOAuthPlugin = createCloudflareGenericOAuthPlugin()
   const plugins = [
     organization({
       ac: organizationAccessControl,
@@ -371,7 +371,7 @@ export function createGlobalAuth(db: Database): GlobalAuth {
         strategy: 'hash'
       }
     }),
-    ...(cloudflareOAuthConfig ? [genericOAuth({ config: [cloudflareOAuthConfig] })] : []),
+    ...(cloudflareOAuthPlugin ? [cloudflareOAuthPlugin] : []),
     passkey(),
     multiSession(),
     jwt({
