@@ -332,6 +332,15 @@ export async function finalizeCloudflareOAuth({
     .updateOne({ _id: intent._id }, { $set: { status: 'completed' } })
     .exec()
 
+  // TODO: Reconnecting reactivates the grant but does not revalidate the
+  // cloudflareConnection records that reference it, so a domain that went
+  // degraded while the grant was stale keeps showing its degraded
+  // needs-setup state until the user manually triggers provisioning for it
+  // (which succeeds immediately once the grant is active again). Finalize
+  // should automatically re-run a connection health check or provisioning
+  // refresh for this grant's connections so a reconnect heals the domain
+  // state end to end.
+
   return {
     grant: cloudflareOAuthGrantPublicView(grant),
     missingRequiredScopeCount: missingScopes.length
