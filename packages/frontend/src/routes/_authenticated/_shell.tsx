@@ -7,7 +7,7 @@ import { validateDashboardSearch } from '../../lib/dashboard-search'
 import {
   getOrganizationSettingsSectionFromSegment,
   getSettingsSectionFromSegment,
-  getSettingsSectionHref
+  getSettingsSectionRouteTarget
 } from '../../partials/authenticated/settings-dialog-sections'
 import { DashboardMailController } from '../../screens/dashboard-mail-client-controller'
 import {
@@ -22,7 +22,7 @@ import type { QueryClient } from '@tanstack/react-query'
 
 const log = debug('app:frontend:authenticated-shell')
 
-const DASHBOARD_HREF = '/dashboard/'
+const DASHBOARD_ROUTE = '/dashboard/' as const
 const DEFAULT_SETTINGS_SECTION = 'account' satisfies SettingsSectionId
 
 type ShellSettingsProps = Pick<
@@ -128,27 +128,33 @@ function AuthenticatedShellRoute() {
   const router = useRouter()
   const settingsSection = useShellSettingsSection()
 
+  const navigateToSettingsSection = useSettingsSectionNavigation()
+
   // Settings visibility is route state: opening navigates to the settings route, closing
   // returns to the dashboard. The shell never leaves it to the screen's uncontrolled state.
   const handleSettingsOpenChange = React.useCallback(
     (open: boolean) => {
       if (open) {
         log('settings opened; navigating to the settings route')
-        void router.navigate({ href: getSettingsSectionHref(DEFAULT_SETTINGS_SECTION) })
+        navigateToSettingsSection(DEFAULT_SETTINGS_SECTION)
         return
       }
 
       log('settings closed; returning to the dashboard')
-      void router.navigate({ href: DASHBOARD_HREF })
+      // `search: true` keeps the shell's search contract, so the mailbox folder, account,
+      // message, and mailbox administration surface the user had open survive the round trip.
+      router.navigate({ search: true, to: DASHBOARD_ROUTE }).catch((error: unknown) => {
+        log('dashboard navigation failed %o', error)
+      })
     },
-    [router]
+    [navigateToSettingsSection, router]
   )
   const handleSettingsSectionChange = React.useCallback(
     (nextSection: SettingsSectionId) => {
       log('settings section changed %s', nextSection)
-      void router.navigate({ href: getSettingsSectionHref(nextSection) })
+      navigateToSettingsSection(nextSection)
     },
-    [router]
+    [navigateToSettingsSection]
   )
 
   // The shell stays mounted across every product route, so settings visibility must stay
@@ -178,6 +184,46 @@ function AuthenticatedShellRoute() {
       routeState={routeState}
       routeSearch={search}
     />
+  )
+}
+
+/**
+ * Navigates to the settings or organization route that owns a settings surface while
+ * retaining the current search params.
+ *
+ * The settings, organization, and dashboard routes are children of this layout route and
+ * share one validated search contract, so the retained params stay valid on every target.
+ * Navigating with a pre-built href instead would replace the destination search with the
+ * params parsed out of that href, of which there are none, and silently reset the mailbox
+ * folder, account, message, and mailbox administration surface the user had open.
+ *
+ * The route template is chosen by the owning `settings-dialog-sections` definition; the
+ * branch stays here because each template has its own typed `to`/`params` pair.
+ */
+function useSettingsSectionNavigation() {
+  const router = useRouter()
+
+  return React.useCallback(
+    (section: SettingsSectionId) => {
+      const target = getSettingsSectionRouteTarget(section)
+      const navigation =
+        target.route === 'organization'
+          ? router.navigate({
+              params: { section: target.segment },
+              search: true,
+              to: '/organization/$section/'
+            })
+          : router.navigate({
+              params: { section: target.segment },
+              search: true,
+              to: '/settings/$section/'
+            })
+
+      navigation.catch((error: unknown) => {
+        log('settings section navigation failed %s %o', section, error)
+      })
+    },
+    [router]
   )
 }
 

@@ -2,7 +2,7 @@ import { agentAccessActionableState } from './agent-access-fixtures'
 import { integrationsEmptyView } from './integrations-fixtures'
 import { mailWorkspaceReadyView } from './mail-workspace-fixtures'
 import { storyAuthenticatedUser } from './screen-fixtures'
-import type { AgentMailWebWorkspace } from '@main/backend'
+import type { AgentMailAdminNavigation, AgentMailAdminView, AgentMailWebWorkspace } from '@main/backend'
 
 /**
  * Story-side session identity for the mocked auth boundary. The authenticated route
@@ -12,16 +12,45 @@ const STORY_SESSION_USER_ID = '01920000-0000-7000-8000-000000000001'
 
 const STORY_MAILBOX_ADMIN_NAVIGATION = {
   allowedSections: ['accounts', 'groups', 'agents']
-}
+} satisfies AgentMailAdminNavigation
 
 const STORY_CLOUDFLARE_STATUS = {
   connections: [],
   grants: []
 }
 
+/**
+ * Story-side answer for the mailbox administration RPC. `view` answers with the backend
+ * view payload; `failure` answers with the backend's HTTP error contract so a story can
+ * stage the surface's error state through the same client code the app runs. A pending
+ * surface is staged by returning a promise that never resolves.
+ */
+export type StoryAppRpcMailboxAdminResult =
+  | {
+      failure: {
+        message: string
+        status: number
+      }
+    }
+  | {
+      view: AgentMailAdminView
+    }
+
 export interface StoryAppRpcBoundaryFixtures {
+  /** Resolves the mailbox administration view per request so section, search, page, and status keys can return different data. */
+  mailboxAdminForRequest?: (
+    url: URL
+  ) => StoryAppRpcMailboxAdminResult | Promise<StoryAppRpcMailboxAdminResult>
+  /** Overrides the sections the mailbox administration navigation RPC reports as allowed. */
+  mailboxAdminNavigation?: AgentMailAdminNavigation
   /** Resolves the workspace per request so folder transitions can return different data. */
   workspaceForRequest?: (url: URL) => AgentMailWebWorkspace | Promise<AgentMailWebWorkspace>
+}
+
+/** A mocked `/rpc/*` answer: the JSON body plus the status the boundary responds with. */
+interface StoryAppRpcAnswer {
+  body: unknown
+  status: number
 }
 
 /** Identifies the frame that armed the boundary, so a stale frame cannot disarm a live one. */
@@ -85,20 +114,20 @@ function installStoryAppRpcBoundary() {
       typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
       globalThis.location.origin
     )
-    const body = await storyAppRpcBody(url)
+    const answer = await storyAppRpcAnswer(url)
 
-    if (body === undefined) {
+    if (!answer) {
       return forwardFetch(input, init)
     }
 
-    return new Response(JSON.stringify(body), {
+    return new Response(JSON.stringify(answer.body), {
       headers: { 'content-type': 'application/json' },
-      status: 200
+      status: answer.status
     })
   }
 }
 
-async function storyAppRpcBody(url: URL): Promise<unknown> {
+async function storyAppRpcAnswer(url: URL): Promise<StoryAppRpcAnswer | undefined> {
   if (!activeToken) {
     return undefined
   }
@@ -106,7 +135,7 @@ async function storyAppRpcBody(url: URL): Promise<unknown> {
   const { pathname } = url
 
   if (pathname === '/rpc/auth/api/get-session') {
-    return {
+    return storyAppRpcOk({
       session: {
         id: 'story-session-id',
         userId: STORY_SESSION_USER_ID
@@ -115,36 +144,61 @@ async function storyAppRpcBody(url: URL): Promise<unknown> {
         ...storyAuthenticatedUser,
         id: STORY_SESSION_USER_ID
       }
-    }
+    })
   }
 
   if (pathname === '/rpc/mail/workspace') {
     const workspace = (await activeFixtures.workspaceForRequest?.(url)) ?? mailWorkspaceReadyView
 
-    return storyWorkspaceForRequest(workspace, url)
+    return storyAppRpcOk(storyWorkspaceForRequest(workspace, url))
+  }
+
+  if (pathname === '/rpc/mail/admin') {
+    return storyMailboxAdminAnswer(await activeFixtures.mailboxAdminForRequest?.(url))
   }
 
   if (pathname === '/rpc/mail/admin/navigation') {
-    return STORY_MAILBOX_ADMIN_NAVIGATION
+    return storyAppRpcOk(activeFixtures.mailboxAdminNavigation ?? STORY_MAILBOX_ADMIN_NAVIGATION)
   }
 
   if (pathname === '/rpc/agent-access') {
-    return agentAccessActionableState.view
+    return storyAppRpcOk(agentAccessActionableState.view)
   }
 
   if (pathname === '/rpc/integrations') {
-    return integrationsEmptyView
+    return storyAppRpcOk(integrationsEmptyView)
   }
 
   if (pathname === '/rpc/cloudflare/status') {
-    return STORY_CLOUDFLARE_STATUS
+    return storyAppRpcOk(STORY_CLOUDFLARE_STATUS)
   }
 
   if (pathname.startsWith('/rpc/auth/api/')) {
-    return null
+    return storyAppRpcOk(null)
   }
 
   return undefined
+}
+
+function storyAppRpcOk(body: unknown): StoryAppRpcAnswer {
+  return { body, status: 200 }
+}
+
+/**
+ * Answers the mailbox administration RPC. A story that does not stage the surface leaves
+ * the request unanswered so it falls through, which keeps the existing shell stories
+ * unchanged; the mailbox administration query only runs once a story selects a section.
+ */
+function storyMailboxAdminAnswer(
+  result: StoryAppRpcMailboxAdminResult | undefined
+): StoryAppRpcAnswer | undefined {
+  if (!result) {
+    return undefined
+  }
+
+  return 'failure' in result
+    ? { body: { message: result.failure.message }, status: result.failure.status }
+    : storyAppRpcOk(result.view)
 }
 
 /**

@@ -13,6 +13,7 @@ import { organizationPlugin } from '../../lib/auth/organization-plugin'
 import { passkeyPlugin } from '../../lib/auth/passkey-plugin'
 import { themePlugin } from '../../lib/auth/theme-plugin'
 import { authReactClient } from '../../lib/auth-react-client'
+import { settingsNavigationHrefWithRetainedSearch } from '../../lib/settings-navigation-search'
 import { clearPersistedStore } from '../../store/use-store'
 
 import { Link } from '../../components/link'
@@ -69,6 +70,7 @@ export function BetterAuthUIProvider({
 }: BetterAuthUIProviderProps) {
   const { publicEnv } = useEnvContext()
   const currentPath = useLocation({ select: (location) => location.pathname })
+  const currentSearch = useLocation({ select: (location) => location.searchStr })
   const router = useRouter()
 
   const navigateToHref = useCallback(
@@ -101,9 +103,24 @@ export function BetterAuthUIProvider({
         return
       }
 
-      navigateToHref(targetHref, replace)
+      // Settings and organization routes are children of the authenticated shell layout
+      // route and validate its search contract, so a navigation into them keeps the mailbox
+      // folder, account, message, and mailbox administration surface the user had open.
+      // Every other target, including every auth flow target intercepted above, is
+      // navigated with the href the auth UI asked for.
+      const shellHref = settingsNavigationHrefWithRetainedSearch({
+        baseURL: publicEnv.PUBLIC_HOSTNAME,
+        currentSearch,
+        targetHref
+      })
+
+      if (shellHref !== targetHref) {
+        log('retaining shell search on settings navigation', targetHref, shellHref)
+      }
+
+      navigateToHref(shellHref, replace)
     },
-    [currentPath, navigateToHref, publicEnv.PUBLIC_HOSTNAME]
+    [currentPath, currentSearch, navigateToHref, publicEnv.PUBLIC_HOSTNAME]
   )
 
   return (

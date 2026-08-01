@@ -19,6 +19,16 @@ type OrganizationRouteSectionId = Extract<
   'organizationSettings' | 'organizationPeople'
 >
 
+export type SettingsSectionRouteTarget =
+  | {
+      route: 'organization'
+      segment: (typeof organizationRouteSegments)[OrganizationRouteSectionId]
+    }
+  | {
+      route: 'settings'
+      segment: (typeof settingsRouteSegments)[SettingsRouteSectionId]
+    }
+
 type SettingsRouteSegmentResolution =
   | {
       section: SettingsRouteSectionId
@@ -99,6 +109,26 @@ export function isSettingsSectionId(value: string): value is SettingsSectionId {
 
 export function getSettingsSectionHref(section: SettingsSectionId) {
   return settingsSectionHrefs[section]
+}
+
+/**
+ * Owning definition for "which route template and `$section` param does this settings
+ * surface navigate to".
+ *
+ * `settingsSectionHrefs` stays the owner of the public path shape for callers that only
+ * need an href. Callers that navigate through the router need the route template and the
+ * decoded param instead, because a pre-built href replaces the destination search params
+ * with the ones parsed out of that href, which drops the shell's search contract.
+ * Both surfaces are derived from the same segment maps.
+ */
+export function getSettingsSectionRouteTarget(section: SettingsSectionId): SettingsSectionRouteTarget {
+  switch (section) {
+    case 'organizationPeople':
+    case 'organizationSettings':
+      return { route: 'organization', segment: organizationRouteSegments[section] }
+    default:
+      return { route: 'settings', segment: settingsRouteSegments[section] }
+  }
 }
 
 export function resolveSettingsRouteSegment(

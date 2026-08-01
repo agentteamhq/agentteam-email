@@ -1,8 +1,11 @@
 import {
   DashboardRoute as DashboardRouteStory,
   FolderTransitionKeepsRenderedMailbox as FolderTransitionKeepsRenderedMailboxStory,
+  SettingsCloseKeepsMailboxFolder as SettingsCloseKeepsMailboxFolderStory,
   SettingsRoundTripKeepsComposeDraft as SettingsRoundTripKeepsComposeDraftStory,
+  SettingsSectionChangeKeepsMailboxFolder as SettingsSectionChangeKeepsMailboxFolderStory,
   SettingsSectionRoute as SettingsSectionRouteStory,
+  UserMenuSettingsRoundTripKeepsMailboxFolder as UserMenuSettingsRoundTripKeepsMailboxFolderStory,
   authenticatedShellRouteStoryMeta
 } from '../../authenticated-shell-route.definitions'
 import type { Meta, StoryObj } from '@storybook/react'
@@ -34,4 +37,19 @@ export const SettingsRoundTripKeepsComposeDraft: Story = {
 export const FolderTransitionKeepsRenderedMailbox: Story = {
   ...FolderTransitionKeepsRenderedMailboxStory,
   name: 'Shell route folder transition keeps rendered mailbox'
+}
+
+export const SettingsCloseKeepsMailboxFolder: Story = {
+  ...SettingsCloseKeepsMailboxFolderStory,
+  name: 'Shell route settings close keeps mailbox folder'
+}
+
+export const SettingsSectionChangeKeepsMailboxFolder: Story = {
+  ...SettingsSectionChangeKeepsMailboxFolderStory,
+  name: 'Shell route settings section change keeps mailbox folder'
+}
+
+export const UserMenuSettingsRoundTripKeepsMailboxFolder: Story = {
+  ...UserMenuSettingsRoundTripKeepsMailboxFolderStory,
+  name: 'Shell route user menu settings round trip keeps mailbox folder'
 }

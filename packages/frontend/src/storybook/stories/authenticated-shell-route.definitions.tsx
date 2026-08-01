@@ -1,13 +1,23 @@
 import { expect, userEvent, waitFor, within } from 'storybook/test'
 
+import {
+  mailboxAdminAccountsEmptyRpcView,
+  mailboxAdminAccountsRpcView
+} from '../mailbox-admin-fixtures'
 import { mailWorkspaceJunkView, mailWorkspaceReadyView } from '../mail-workspace-fixtures'
 import { getMountedStoryShellRouter } from '../story-shell-router'
 import { AuthenticatedShellRouteStoryFrame } from './authenticated-shell-route-story-frame'
+import type { StoryAppRpcMailboxAdminResult } from '../story-app-rpc-boundary'
 import type { AgentMailWebWorkspace } from '@main/backend'
 import type { Meta, StoryObj } from '@storybook/react'
 
 const COMPOSE_DRAFT_SUBJECT = 'Quarterly research packet follow-up'
+const JUNK_FOLDER_ID = 'junk-id'
+const MAILBOX_ADMIN_ERROR_MESSAGE =
+  'The mailbox administration RPC returned HTTP 502 while loading accounts.'
+const SETTINGS_DIALOG_NAME = /^settings$/i
 const SHELL_SIDEBAR_SELECTOR = '[data-slot="sidebar"]'
+const SKELETON_SELECTOR = '[data-slot="skeleton"]'
 
 /**
  * Gates the target folder response so a story can observe the transition window. A new gate
@@ -195,6 +205,263 @@ export const FolderTransitionKeepsRenderedMailbox: Story = {
     // The replacement data still arrives and replaces the placeholder.
     await expect(await body.findAllByText('False positive delivery')).toHaveLength(2)
     await expect(body.queryByText('Quarterly research packet')).not.toBeInTheDocument()
+  }
+}
+
+/**
+ * Regression coverage for the whole user-visible settings round trip, driven through the
+ * product's own controls: the user menu opens settings, and closing it returns to the
+ * mailbox the user had open. Both navigations must keep the shell's search contract, so the
+ * mailbox folder survives the round trip instead of resetting to the default inbox.
+ */
+export const UserMenuSettingsRoundTripKeepsMailboxFolder: Story = {
+  args: {
+    initialPath: `/dashboard/?folderId=${JUNK_FOLDER_ID}`,
+    workspaceForRequest: storyWorkspaceForFolderRequest
+  },
+  play: async ({ canvasElement }) => {
+    const body = within(canvasElement.ownerDocument.body)
+
+    await waitFor(async () => {
+      await expect(within(requireShellPaneHeader(canvasElement)).getByText('Junk')).toBeInTheDocument()
+    })
+
+    // The user menu is the product's settings entry point.
+    await userEvent.click(await body.findByRole('button', { name: 'Account' }, { timeout: 15000 }))
+    await userEvent.click(await body.findByRole('menuitem', { name: 'Settings' }))
+
+    await expect(
+      await body.findByRole('dialog', { name: SETTINGS_DIALOG_NAME }, { timeout: 15000 })
+    ).toBeInTheDocument()
+    await expect(getMountedStoryShellRouter().state.location.search.folderId).toBe(JUNK_FOLDER_ID)
+
+    await userEvent.keyboard('{Escape}')
+    await waitFor(async () => {
+      await expect(body.queryByRole('dialog', { name: SETTINGS_DIALOG_NAME })).not.toBeInTheDocument()
+    })
+
+    await waitFor(async () => {
+      await expect(getMountedStoryShellRouter().state.location.pathname).toBe('/dashboard/')
+    })
+    await expect(getMountedStoryShellRouter().state.location.search.folderId).toBe(JUNK_FOLDER_ID)
+    await expect(within(requireShellPaneHeader(canvasElement)).getByText('Junk')).toBeInTheDocument()
+    await expect(await body.findAllByText('False positive delivery')).toHaveLength(2)
+  }
+}
+
+/**
+ * Regression coverage for the shell's settings-close navigation. Closing settings is owned
+ * by `_authenticated/_shell`, and it must return to the dashboard with the shell's search
+ * contract intact: the mailbox the user had open is search state, so a close that discards
+ * search silently resets the mailbox to the default inbox view.
+ */
+export const SettingsCloseKeepsMailboxFolder: Story = {
+  args: {
+    initialPath: `/settings/account/?folderId=${JUNK_FOLDER_ID}`,
+    workspaceForRequest: storyWorkspaceForFolderRequest
+  },
+  play: async ({ canvasElement }) => {
+    const body = within(canvasElement.ownerDocument.body)
+
+    await expect(
+      await body.findByRole('dialog', { name: SETTINGS_DIALOG_NAME }, { timeout: 15000 })
+    ).toBeInTheDocument()
+
+    // Closing settings is owned by the shell: it navigates back to the dashboard.
+    await userEvent.keyboard('{Escape}')
+    await waitFor(async () => {
+      await expect(body.queryByRole('dialog', { name: SETTINGS_DIALOG_NAME })).not.toBeInTheDocument()
+    })
+
+    // (a) The dashboard route kept the mailbox search the shell validated.
+    await waitFor(async () => {
+      await expect(getMountedStoryShellRouter().state.location.pathname).toBe('/dashboard/')
+    })
+    await expect(getMountedStoryShellRouter().state.location.search.folderId).toBe(JUNK_FOLDER_ID)
+
+    // (b) The rendered mailbox is still the folder the user had open, not the default inbox.
+    await waitFor(async () => {
+      await expect(within(requireShellPaneHeader(canvasElement)).getByText('Junk')).toBeInTheDocument()
+    })
+    await expect(await body.findAllByText('False positive delivery')).toHaveLength(2)
+    await expect(body.queryByText('Quarterly research packet')).not.toBeInTheDocument()
+
+    // (c) The round trip moves between two loaded views, so no region falls back to a
+    // skeleton on the way back to the dashboard.
+    await expect(canvasElement.ownerDocument.body.querySelectorAll(SKELETON_SELECTOR)).toHaveLength(0)
+  }
+}
+
+/**
+ * Switching settings sections is the same shell-owned navigation, so it must keep the
+ * mailbox search too: the settings routes are children of the shell and validate the same
+ * search contract, and the mailbox is still rendered behind the dialog.
+ */
+export const SettingsSectionChangeKeepsMailboxFolder: Story = {
+  args: {
+    initialPath: `/settings/account/?folderId=${JUNK_FOLDER_ID}`,
+    workspaceForRequest: storyWorkspaceForFolderRequest
+  },
+  play: async ({ canvasElement }) => {
+    const body = within(canvasElement.ownerDocument.body)
+    const settingsDialog = await body.findByRole(
+      'dialog',
+      { name: SETTINGS_DIALOG_NAME },
+      { timeout: 15000 }
+    )
+
+    await userEvent.click(await within(settingsDialog).findByRole('button', { name: 'Domains' }))
+
+    await waitFor(async () => {
+      await expect(getMountedStoryShellRouter().state.location.pathname).toBe('/settings/domains/')
+    })
+    await expect(getMountedStoryShellRouter().state.location.search.folderId).toBe(JUNK_FOLDER_ID)
+
+    // The section route, not a story prop, selected the domains surface.
+    await expect(
+      await within(settingsDialog).findByText('Connect Cloudflare before adding domains to AgentTeam Email.')
+    ).toBeInTheDocument()
+  }
+}
+
+/**
+ * The mailbox administration surface is search state as well, so the same settings round
+ * trip must return to the administration surface the user had open.
+ */
+export const SettingsCloseKeepsMailboxAdminSection: Story = {
+  args: {
+    initialPath: '/settings/account/?mailboxAdmin=accounts',
+    mailboxAdminForRequest: storyMailboxAdminAccountsRequest
+  },
+  play: async ({ canvasElement }) => {
+    const body = within(canvasElement.ownerDocument.body)
+
+    await expect(
+      await body.findByRole('dialog', { name: SETTINGS_DIALOG_NAME }, { timeout: 15000 })
+    ).toBeInTheDocument()
+
+    await userEvent.keyboard('{Escape}')
+    await waitFor(async () => {
+      await expect(body.queryByRole('dialog', { name: SETTINGS_DIALOG_NAME })).not.toBeInTheDocument()
+    })
+
+    await waitFor(async () => {
+      await expect(getMountedStoryShellRouter().state.location.pathname).toBe('/dashboard/')
+    })
+    await expect(getMountedStoryShellRouter().state.location.search.mailboxAdmin).toBe('accounts')
+
+    await expect(
+      await body.findByRole('heading', { name: 'Accounts' }, { timeout: 15000 })
+    ).toBeInTheDocument()
+    await expect(await body.findByRole('row', { name: /research@agentteam\.example/u })).toBeInTheDocument()
+  }
+}
+
+/**
+ * The mailbox administration surface reached through the real route tree: the shell reads
+ * `mailboxAdmin` from its validated search and the controller loads the surface from the
+ * mocked `/rpc/mail/admin` boundary.
+ */
+export const MailboxAdminAccountsRoute: Story = {
+  args: {
+    initialPath: '/dashboard/?mailboxAdmin=accounts',
+    mailboxAdminForRequest: storyMailboxAdminAccountsRequest
+  },
+  play: async ({ canvasElement }) => {
+    const body = within(canvasElement.ownerDocument.body)
+
+    await expect(
+      await body.findByRole('heading', { name: 'Accounts' }, { timeout: 15000 })
+    ).toBeInTheDocument()
+    await expect(
+      await body.findByText('Provision and assign mailbox accounts on this domain.')
+    ).toBeInTheDocument()
+    await expect(await body.findByRole('row', { name: /research@agentteam\.example/u })).toBeInTheDocument()
+    await expect(await body.findByRole('button', { name: 'New account' })).toBeEnabled()
+  }
+}
+
+/** The administration surface with no provisioned accounts yet. */
+export const MailboxAdminAccountsEmptyRoute: Story = {
+  args: {
+    initialPath: '/dashboard/?mailboxAdmin=accounts',
+    mailboxAdminForRequest: storyMailboxAdminAccountsEmptyRequest
+  },
+  play: async ({ canvasElement }) => {
+    const body = within(canvasElement.ownerDocument.body)
+
+    await expect(await body.findByText('No accounts', {}, { timeout: 15000 })).toBeInTheDocument()
+    await expect(
+      await body.findByText('Create the first mailbox account for this domain.')
+    ).toBeInTheDocument()
+  }
+}
+
+/**
+ * The cold-load state of the administration surface: the route is opened with the section
+ * already selected and the mailbox administration RPC has not answered yet.
+ */
+export const MailboxAdminAccountsPendingRoute: Story = {
+  args: {
+    initialPath: '/dashboard/?mailboxAdmin=accounts',
+    mailboxAdminForRequest: storyMailboxAdminPendingRequest
+  },
+  play: async ({ canvasElement }) => {
+    const body = within(canvasElement.ownerDocument.body)
+
+    await expect(
+      await body.findByRole('heading', { name: 'Accounts' }, { timeout: 15000 })
+    ).toBeInTheDocument()
+    await waitFor(async () => {
+      await expect(
+        canvasElement.ownerDocument.body.querySelectorAll(SKELETON_SELECTOR).length
+      ).toBeGreaterThan(0)
+    })
+    await expect(body.queryByRole('row', { name: /research@agentteam\.example/u })).not.toBeInTheDocument()
+  }
+}
+
+/** The administration surface when the mailbox administration RPC fails. */
+export const MailboxAdminAccountsErrorRoute: Story = {
+  args: {
+    initialPath: '/dashboard/?mailboxAdmin=accounts',
+    mailboxAdminForRequest: storyMailboxAdminFailedRequest
+  },
+  play: async ({ canvasElement }) => {
+    const body = within(canvasElement.ownerDocument.body)
+
+    await expect(
+      await body.findByText('Mailbox administration unavailable', {}, { timeout: 25000 })
+    ).toBeInTheDocument()
+    await expect(await body.findByText(MAILBOX_ADMIN_ERROR_MESSAGE)).toBeInTheDocument()
+    await expect(await body.findByRole('button', { name: 'Retry' })).toBeEnabled()
+  }
+}
+
+/** Answers the workspace RPC with the requested folder's mailbox, the way the route does. */
+function storyWorkspaceForFolderRequest(url: URL): AgentMailWebWorkspace {
+  return url.searchParams.get('folderId') === JUNK_FOLDER_ID ? mailWorkspaceJunkView : mailWorkspaceReadyView
+}
+
+function storyMailboxAdminAccountsRequest(): StoryAppRpcMailboxAdminResult {
+  return { view: mailboxAdminAccountsRpcView }
+}
+
+function storyMailboxAdminAccountsEmptyRequest(): StoryAppRpcMailboxAdminResult {
+  return { view: mailboxAdminAccountsEmptyRpcView }
+}
+
+/** Never answers, so the surface stays in its cold-load state for the whole story run. */
+function storyMailboxAdminPendingRequest(): Promise<StoryAppRpcMailboxAdminResult> {
+  return new Promise<StoryAppRpcMailboxAdminResult>(() => {})
+}
+
+function storyMailboxAdminFailedRequest(): StoryAppRpcMailboxAdminResult {
+  return {
+    failure: {
+      message: MAILBOX_ADMIN_ERROR_MESSAGE,
+      status: 502
+    }
   }
 }
 

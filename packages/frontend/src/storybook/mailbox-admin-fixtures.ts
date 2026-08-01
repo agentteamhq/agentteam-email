@@ -1,6 +1,7 @@
 import { agentMailAdminPermissionCatalog } from '@main/db/agent-mail-permission-schema'
 
 import { defaultAuthenticatedSidebarView } from '../partials/authenticated/authenticated-shell-models'
+import type { AgentMailAdminView } from '@main/backend'
 import type { AuthenticatedSidebarView } from '../partials/authenticated/authenticated-shell-models'
 import type {
   MailboxAdminAccount,
@@ -343,6 +344,34 @@ export const mailboxAdminReadyView = {
   section: 'accounts',
   state: 'ready'
 } satisfies MailboxAdminView
+
+/**
+ * Backend-shaped mailbox administration payloads for stories that mock the RPC boundary
+ * instead of injecting a loader. They reuse the view fixtures above so the route-level and
+ * controller-level catalogs describe the same product data.
+ */
+export const mailboxAdminAccountsRpcView = {
+  ...mailboxAdminReadyView,
+  pagination: {
+    filteredRecords: mailboxAdminAccounts.length,
+    page: 1,
+    pageSize: 25,
+    totalRecords: mailboxAdminAccounts.length
+  },
+  state: 'ready'
+} satisfies AgentMailAdminView
+
+export const mailboxAdminAccountsEmptyRpcView = {
+  ...mailboxAdminAccountsRpcView,
+  accounts: [],
+  pagination: {
+    filteredRecords: 0,
+    page: 1,
+    pageSize: 25,
+    totalRecords: 0
+  },
+  state: 'empty'
+} satisfies AgentMailAdminView
 
 export const mailboxAdminLoadingView = {
   ...mailboxAdminReadyView,
