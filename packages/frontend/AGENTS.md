@@ -54,6 +54,52 @@ API keys and device login credentials represent the owning user's access level.
 Agent Auth credentials are separately permissioned by Agent Access grants and
 must not be presented as user-level settings credentials.
 
+## Navigation And Route Transitions
+
+The product web UI is a single-page application. Smooth, continuous
+client-side navigation is a product contract with the same standing as
+Storybook coverage. A change that satisfies a Storybook rule by degrading
+navigation continuity is wrong and must be reworked until both hold.
+
+In-app navigation must use TanStack Router client-side navigation. Product
+navigation must not trigger full document loads and must not use raw anchors
+or `window.location`, except for documented external or OAuth redirect flows.
+
+Client-side navigation, including search-param-only navigation, must not
+replace an already-rendered shell, sidebar, list, or content region with a
+loading, skeleton, or placeholder state. Each rendered region must keep its
+last rendered data visible until the replacement data is ready.
+
+Loading and skeleton states may render only where the session has no prior
+data for that region: initial document load, hard refresh, and cache-empty
+cold loads. They must not render as a transition state between two loaded
+views.
+
+Every route-keyed or search-keyed query must either preserve the previous
+result while the next key resolves (TanStack Query
+`placeholderData: keepPreviousData`) or be resolved by the owning route
+loader (`queryClient.ensureQueryData`) so the router holds the current view
+during the transition. Adding such a query with neither mechanism is a
+defect.
+
+Routes that present the same product shell, including dashboard, settings
+sections, and organization sections, must mount that shell through one shared
+owner such as a layout route. Navigating between them must not unmount and
+remount the shell and must not discard in-progress local state such as
+compose drafts.
+
+Authenticated screen routes must prefetch their first-paint data in the
+owning route loader so server-rendered HTML delivers the screen's data
+instead of skeleton-only markup.
+
+TanStack Query keys must contain only JSON-serializable values. Function
+references must not appear in query keys.
+
+Changes to navigation, route loaders, query keys, or shell mounting must be
+validated in the running app with `pnpm playwright-cli` by exercising the
+changed navigation and confirming previously rendered regions do not flash
+loading states.
+
 ## Storybook
 
 Storybook stories must render canonical product components only.
@@ -69,6 +115,15 @@ screen states. Production routes and Storybook stories must drive the same
 route, page, controller, or canonical component contract with the same
 controller-derived props or the same mocked loader, RPC, API, or service
 boundary data.
+
+Storybook catalogs document which states exist; they do not decide when
+states render. A loading state's presence in the catalog does not permit
+rendering that state during navigation between already-loaded views.
+
+Storybook injection seams, including injectable loader props and fixture
+boundaries, must not alter or motivate weakening production loading, caching,
+or navigation behavior. Production data flow is owned by the app, not by what
+makes a state easy to stage in a story.
 
 Storybook `meta.title` must use the approved sidebar roots (`Screens`, `Components`, `Mocks`, `Showcase`, and existing `Controllers`); story `name` values must be flat human-readable labels and must not contain `/` because story names do not create sidebar groups.
 
