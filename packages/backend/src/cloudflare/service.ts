@@ -53,11 +53,13 @@ import type {
   CloudflareConnectionDocument,
   CloudflareConnectionId,
   CloudflareConnectionPublicId,
+  CloudflareConnectionStatus,
   CloudflareOAuthConnectionIntentId,
   CloudflareOAuthConnectionIntentPublicId,
   CloudflareOAuthGrantDocument,
   CloudflareOAuthGrantId,
   CloudflareOAuthGrantPublicId,
+  CloudflareProvisioningStatus,
   OrganizationId,
   OrganizationPublicId,
   UserId
@@ -89,6 +91,19 @@ const CLOUDFLARE_REAUTHORIZATION_BETTER_AUTH_ERROR_CODES: ReadonlySet<string> = 
 ])
 
 const CLOUDFLARE_GRANT_REAUTHORIZABLE_STATUSES = ['active', 'degraded'] as const
+
+/** Marks provisioning runs that a Cloudflare reconnect triggered, not a user action. */
+const CLOUDFLARE_RECONNECT_REVALIDATION_TRIGGER = 'cloudflare-reconnect'
+
+/**
+ * The reconnect sweep runs inside the OAuth finalize request, so it must stay
+ * bounded. Each connection costs a token leg plus Cloudflare provisioning calls
+ * and can take tens of seconds when Cloudflare is slow; without these bounds a
+ * user with many degraded domains could outlive the ingress timeout. Anything
+ * skipped keeps its existing state and stays one manual setup press away.
+ */
+const CLOUDFLARE_RECONNECT_REVALIDATION_MAX_CONNECTIONS = 5
+const CLOUDFLARE_RECONNECT_REVALIDATION_BUDGET_MS = 30_000
 
 type CloudflareTokenOperation = 'get_access_token' | 'get_stored_access_token' | 'refresh_stored_access_token'
 export const CloudflareOAuthReturnTargetValues = [
@@ -332,19 +347,184 @@ export async function finalizeCloudflareOAuth({
     .updateOne({ _id: intent._id }, { $set: { status: 'completed' } })
     .exec()
 
-  // TODO: Reconnecting reactivates the grant but does not revalidate the
-  // cloudflareConnection records that reference it, so a domain that went
-  // degraded while the grant was stale keeps showing its degraded
-  // needs-setup state until the user manually triggers provisioning for it
-  // (which succeeds immediately once the grant is active again). Finalize
-  // should automatically re-run a connection health check or provisioning
-  // refresh for this grant's connections so a reconnect heals the domain
-  // state end to end.
+  // Not yet validated end to end against real Cloudflare: this auto-heal has
+  // unit and behavior coverage only, and a reconnect after a real degradation in
+  // production is the only true proof.
+  await revalidateCloudflareConnectionsAfterReconnect({ context, db, grant, headers })
 
   return {
     grant: cloudflareOAuthGrantPublicView(grant),
     missingRequiredScopeCount: missingScopes.length
   }
+}
+
+/**
+ * Heals this grant's domain connections after a Cloudflare reconnect.
+ *
+ * Reactivating the grant is not enough on its own: a connection that degraded
+ * while the grant was stale keeps showing its needs-setup state until someone
+ * presses the manual setup button, which succeeds immediately once the grant is
+ * active again. This re-runs that same button's owner for each affected
+ * connection so the reconnect heals the domain state end to end.
+ *
+ * `applyCloudflareConnectionProvisioning` is the single owner of provisioning:
+ * it re-derives the organization context from the request and applies the
+ * domain-scoped Agent Mail CASL check for each connection, so revalidation is
+ * authorized exactly like the manual `/connections/:id/provision` route. No
+ * authority is re-derived or relaxed here.
+ *
+ * Only connections that are not already healthy are revalidated. Re-provisioning
+ * a healthy connection was proven safe and idempotent in production, but it can
+ * only lose here: a transient Cloudflare failure during the sweep would flip a
+ * working domain to degraded and turn a successful reconnect into a visibly
+ * broken one. Healthy connections are already kept current by the scheduled
+ * worker credential refresh.
+ *
+ * Nothing in the sweep may reject. Finalize has already consumed the OAuth intent
+ * and reactivated the grant by this point, and it only accepts pending intents,
+ * so any rejection here would hand the user a failed reconnect with no retry path
+ * despite the reconnect itself having succeeded.
+ */
+async function revalidateCloudflareConnectionsAfterReconnect({
+  context,
+  db,
+  grant,
+  headers
+}: {
+  context: CloudflareOrganizationContext
+  db: Database
+  grant: CloudflareOAuthGrantDocument
+  headers: Headers
+}): Promise<void> {
+  let grantPublicId: CloudflareOAuthGrantPublicId | null = null
+
+  try {
+    grantPublicId = cloudflareGrantPublicId(grant)
+    await runCloudflareReconnectRevalidationSweep({ context, db, grant, grantPublicId, headers })
+  } catch (error) {
+    // Covers everything outside the per-connection isolation below: the grant id
+    // encode, the connection query, and any unexpected sweep failure.
+    log('Cloudflare reconnect connection revalidation sweep failed', {
+      error: createSafeErrorLogDetails(error),
+      grantPublicId,
+      organizationPublicId: context.organizationPublicId,
+      trigger: CLOUDFLARE_RECONNECT_REVALIDATION_TRIGGER
+    })
+  }
+}
+
+async function runCloudflareReconnectRevalidationSweep({
+  context,
+  db,
+  grant,
+  grantPublicId,
+  headers
+}: {
+  context: CloudflareOrganizationContext
+  db: Database
+  grant: CloudflareOAuthGrantDocument
+  grantPublicId: CloudflareOAuthGrantPublicId
+  headers: Headers
+}): Promise<void> {
+  const connections = await db.models.cloudflareConnection
+    .find({
+      grantId: grant._id,
+      organizationId: context.organizationId,
+      status: { $ne: 'disconnected' }
+    })
+    .exec()
+  const staleConnections = connections.filter(cloudflareConnectionNeedsRevalidation)
+  const selectedConnections = staleConnections.slice(0, CLOUDFLARE_RECONNECT_REVALIDATION_MAX_CONNECTIONS)
+  const skippedConnections = staleConnections
+    .slice(CLOUDFLARE_RECONNECT_REVALIDATION_MAX_CONNECTIONS)
+    .map((connection) => ({
+      connectionPublicId: publicIdFromUUIDv7(connection._id),
+      domain: connection.domain,
+      reason: 'connection-cap'
+    }))
+  const deadline = Date.now() + CLOUDFLARE_RECONNECT_REVALIDATION_BUDGET_MS
+
+  log('Cloudflare reconnect connection revalidation evaluated', {
+    connectionCount: connections.length,
+    grantPublicId,
+    organizationPublicId: context.organizationPublicId,
+    selectedConnectionCount: selectedConnections.length,
+    staleConnectionCount: staleConnections.length,
+    trigger: CLOUDFLARE_RECONNECT_REVALIDATION_TRIGGER
+  })
+
+  for (const connection of selectedConnections) {
+    const connectionLogContext = {
+      connectionPublicId: publicIdFromUUIDv7(connection._id),
+      domain: connection.domain,
+      grantPublicId,
+      organizationPublicId: context.organizationPublicId,
+      trigger: CLOUDFLARE_RECONNECT_REVALIDATION_TRIGGER
+    }
+
+    if (Date.now() >= deadline) {
+      skippedConnections.push({
+        connectionPublicId: connectionLogContext.connectionPublicId,
+        domain: connection.domain,
+        reason: 'time-budget'
+      })
+      continue
+    }
+
+    log('Cloudflare reconnect connection revalidation started', {
+      ...connectionLogContext,
+      provisioningStatus: connection.provisioningStatus,
+      status: connection.status
+    })
+
+    try {
+      const revalidated = await applyCloudflareConnectionProvisioning({
+        connectionPublicId: connectionLogContext.connectionPublicId,
+        headers
+      })
+
+      log('Cloudflare reconnect connection revalidation finished', {
+        ...connectionLogContext,
+        healed: isHealthyCloudflareConnectionState(revalidated),
+        provisioningStatus: revalidated.provisioningStatus,
+        status: revalidated.status
+      })
+    } catch (error) {
+      // The reconnect itself succeeded, so a provisioning failure must not fail
+      // finalize. The provisioning owner already recorded the sanitized failure on
+      // the connection before rethrowing, so this only has to report it.
+      log('Cloudflare reconnect connection revalidation failed', {
+        ...connectionLogContext,
+        error: createSafeErrorLogDetails(error)
+      })
+    }
+  }
+
+  if (skippedConnections.length > 0) {
+    // Never truncate silently: skipped connections keep their current state and
+    // stay one manual setup press away.
+    log('Cloudflare reconnect connection revalidation skipped connections', {
+      grantPublicId,
+      organizationPublicId: context.organizationPublicId,
+      skippedConnectionCount: skippedConnections.length,
+      skippedConnections,
+      trigger: CLOUDFLARE_RECONNECT_REVALIDATION_TRIGGER
+    })
+  }
+}
+
+function cloudflareConnectionNeedsRevalidation(connection: CloudflareConnectionDocument): boolean {
+  return !isHealthyCloudflareConnectionState(connection)
+}
+
+function isHealthyCloudflareConnectionState({
+  provisioningStatus,
+  status
+}: {
+  provisioningStatus: CloudflareProvisioningStatus
+  status: CloudflareConnectionStatus
+}): boolean {
+  return status === 'active' && provisioningStatus === 'succeeded'
 }
 
 export async function listConnectedCloudflareAccounts(headers: Headers): Promise<CloudflareAccountSummary[]> {

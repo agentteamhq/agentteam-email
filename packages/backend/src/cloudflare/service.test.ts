@@ -387,6 +387,370 @@ describe('Cloudflare OAuth finalize service', () => {
   })
 })
 
+describe('Cloudflare reconnect connection revalidation', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.stubEnv('DATABASE_URL', 'mongodb://localhost:27017/app')
+    vi.stubEnv('ENCRYPT_SECRET_KEY', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
+    vi.stubEnv('PUBLIC_HOSTNAME', 'https://mail.example.test')
+    cloudflareServiceTestState.applyCloudflareProvisioning.mockReset()
+    cloudflareServiceTestState.createAgentMailWorkerCredentials.mockReset()
+    cloudflareServiceTestState.debugLog.mockReset()
+    cloudflareServiceTestState.globals.mockReset()
+    cloudflareServiceTestState.requireAgentMailOrganizationContext.mockReset()
+    cloudflareServiceTestState.syncAgentMailRuntimeProjection.mockReset()
+    cloudflareServiceTestState.requireAgentMailOrganizationContext.mockResolvedValue({
+      ability: { cannot: vi.fn(() => false) },
+      organizationId: TEST_ORGANIZATION_ID
+    })
+    // The control API issues credentials scoped to the archive prefix it was asked
+    // for, so echo the requested prefix instead of pinning one domain.
+    cloudflareServiceTestState.createAgentMailWorkerCredentials.mockImplementation(
+      async ({ archive_prefix }: { archive_prefix: string }) => ({
+        ...issuedWorkerCredentials(),
+        archive_prefix
+      })
+    )
+    cloudflareServiceTestState.applyCloudflareProvisioning.mockResolvedValue({
+      r2BucketName: 'agent-mail-archive',
+      r2Endpoint: 'https://example.r2.cloudflarestorage.com',
+      r2Region: 'auto',
+      webhookSigningSecret: EXISTING_WORKER_WEBHOOK_SIGNING_SECRET,
+      webhookSigningSecretReference: 'cloudflare-worker:script:AGENTTEAM_WORKER_HMAC_SECRET',
+      workerScriptName: 'agentteam-email-example-com'
+    })
+    cloudflareServiceTestState.syncAgentMailRuntimeProjection.mockResolvedValue(undefined)
+  })
+
+  it('reprovisions a degraded connection for the reconnected grant', async () => {
+    expect.hasAssertions()
+    const { connections, globals, mocks } = cloudflareReconnectRevalidationGlobals()
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    const { finalizeCloudflareOAuth } = await import('./service')
+
+    await expect(
+      finalizeCloudflareOAuth({
+        headers: new Headers(),
+        intentPublicId: TEST_INTENT_PUBLIC_ID
+      })
+    ).resolves.toMatchObject({
+      grant: {
+        isUsable: true,
+        publicId: TEST_CURRENT_USER_GRANT_PUBLIC_ID,
+        requiresReconnect: false,
+        status: 'active'
+      }
+    })
+
+    expect(mocks.connectionFind).toHaveBeenCalledWith({
+      grantId: TEST_CURRENT_USER_GRANT_ID,
+      organizationId: TEST_ORGANIZATION_ID,
+      status: { $ne: 'disconnected' }
+    })
+    expect(cloudflareServiceTestState.applyCloudflareProvisioning).toHaveBeenCalledTimes(1)
+    expect(cloudflareServiceTestState.applyCloudflareProvisioning).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cloudflareAccountId: connections[0]?.cloudflareAccountId,
+        cloudflareZoneId: connections[0]?.cloudflareZoneId,
+        connectionPublicId: publicIdFromUUIDv7(connections[0]?._id),
+        domain: connections[0]?.domain,
+        organizationId: TEST_ORGANIZATION_ID
+      })
+    )
+    expect(connections[0]).toMatchObject({
+      provisioningStatus: 'succeeded',
+      status: 'active'
+    })
+  })
+
+  it('keeps finalize successful and records the connection failure when reprovisioning fails', async () => {
+    expect.hasAssertions()
+    const { connections, globals } = cloudflareReconnectRevalidationGlobals()
+    const cloudflareError = Object.assign(new Error('Cloudflare rejected the worker deployment'), {
+      name: 'CloudflareProvisioningError',
+      status: 502
+    })
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    cloudflareServiceTestState.applyCloudflareProvisioning.mockRejectedValue(cloudflareError)
+    const { finalizeCloudflareOAuth } = await import('./service')
+
+    await expect(
+      finalizeCloudflareOAuth({
+        headers: new Headers(),
+        intentPublicId: TEST_INTENT_PUBLIC_ID
+      })
+    ).resolves.toMatchObject({
+      grant: {
+        isUsable: true,
+        status: 'active'
+      }
+    })
+
+    expect(connections[0]).toMatchObject({
+      lastErrorCode: 'CLOUDFLARE_502',
+      provisioningStatus: 'failed',
+      status: 'degraded'
+    })
+    expect(cloudflareServiceTestState.debugLog).toHaveBeenCalledWith(
+      'Cloudflare reconnect connection revalidation started',
+      expect.objectContaining({
+        connectionPublicId: publicIdFromUUIDv7(connections[0]?._id),
+        domain: connections[0]?.domain,
+        grantPublicId: TEST_CURRENT_USER_GRANT_PUBLIC_ID,
+        trigger: 'cloudflare-reconnect'
+      })
+    )
+    expect(cloudflareServiceTestState.debugLog).toHaveBeenCalledWith(
+      'Cloudflare reconnect connection revalidation finished',
+      expect.objectContaining({
+        connectionPublicId: publicIdFromUUIDv7(connections[0]?._id),
+        grantPublicId: TEST_CURRENT_USER_GRANT_PUBLIC_ID,
+        healed: false,
+        provisioningStatus: 'failed',
+        status: 'degraded',
+        trigger: 'cloudflare-reconnect'
+      })
+    )
+  })
+
+  it('revalidates only the reconnected grant and organization connections', async () => {
+    expect.hasAssertions()
+    const otherGrantConnection = reconnectConnection({
+      _id: '01960000-0000-7000-8000-000000000053',
+      domain: 'other-grant.example.com',
+      grantId: TEST_OLDER_GRANT_ID
+    })
+    const otherOrganizationConnection = reconnectConnection({
+      _id: '01960000-0000-7000-8000-000000000054',
+      domain: 'other-org.example.com',
+      organizationId: TEST_OTHER_ORGANIZATION_ID
+    })
+    const { connections, globals } = cloudflareReconnectRevalidationGlobals({
+      connections: [reconnectConnection(), otherGrantConnection, otherOrganizationConnection]
+    })
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    const { finalizeCloudflareOAuth } = await import('./service')
+
+    await expect(
+      finalizeCloudflareOAuth({
+        headers: new Headers(),
+        intentPublicId: TEST_INTENT_PUBLIC_ID
+      })
+    ).resolves.toMatchObject({ grant: { status: 'active' } })
+
+    // The call-count and call-argument assertions are the real proof of isolation:
+    // exactly one provisioning run, for this grant's connection only. The state
+    // assertions below are a weaker backstop, because an out-of-scope connection
+    // that had wrongly been provisioned and then failed would land on the same
+    // degraded/failed pair it started from.
+    expect(cloudflareServiceTestState.applyCloudflareProvisioning).toHaveBeenCalledTimes(1)
+    expect(cloudflareServiceTestState.applyCloudflareProvisioning).toHaveBeenCalledWith(
+      expect.objectContaining({ domain: connections[0]?.domain })
+    )
+    expect(cloudflareServiceTestState.applyCloudflareProvisioning).not.toHaveBeenCalledWith(
+      expect.objectContaining({ domain: otherGrantConnection.domain })
+    )
+    expect(cloudflareServiceTestState.applyCloudflareProvisioning).not.toHaveBeenCalledWith(
+      expect.objectContaining({ domain: otherOrganizationConnection.domain })
+    )
+    expect(otherGrantConnection).toMatchObject({
+      provisioningStatus: 'failed',
+      status: 'degraded'
+    })
+    expect(otherOrganizationConnection).toMatchObject({
+      provisioningStatus: 'failed',
+      status: 'degraded'
+    })
+  })
+
+  it('skips connections that are already healthy', async () => {
+    expect.hasAssertions()
+    const healthyConnection = reconnectConnection({
+      provisioningStatus: 'succeeded',
+      status: 'active'
+    })
+    const { globals, mocks } = cloudflareReconnectRevalidationGlobals({
+      connections: [healthyConnection]
+    })
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    const { finalizeCloudflareOAuth } = await import('./service')
+
+    await expect(
+      finalizeCloudflareOAuth({
+        headers: new Headers(),
+        intentPublicId: TEST_INTENT_PUBLIC_ID
+      })
+    ).resolves.toMatchObject({ grant: { status: 'active' } })
+
+    expect(mocks.connectionFind).toHaveBeenCalled()
+    expect(cloudflareServiceTestState.applyCloudflareProvisioning).not.toHaveBeenCalled()
+    expect(cloudflareServiceTestState.createAgentMailWorkerCredentials).not.toHaveBeenCalled()
+    expect(mocks.connectionUpdateOne).not.toHaveBeenCalled()
+    expect(healthyConnection).toMatchObject({
+      provisioningStatus: 'succeeded',
+      status: 'active'
+    })
+    expect(cloudflareServiceTestState.debugLog).toHaveBeenCalledWith(
+      'Cloudflare reconnect connection revalidation evaluated',
+      expect.objectContaining({
+        connectionCount: 1,
+        grantPublicId: TEST_CURRENT_USER_GRANT_PUBLIC_ID,
+        staleConnectionCount: 0,
+        trigger: 'cloudflare-reconnect'
+      })
+    )
+  })
+
+  it('keeps finalize successful when the connection lookup itself fails', async () => {
+    expect.hasAssertions()
+    const { globals, mocks } = cloudflareReconnectRevalidationGlobals()
+    const lookupError = new Error('connection lookup failed')
+    mocks.connectionFind.mockImplementation(() => ({
+      exec: vi.fn(() => Promise.reject(lookupError))
+    }))
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    const { finalizeCloudflareOAuth } = await import('./service')
+
+    // The intent is already consumed and the grant is already active at this
+    // point, and finalize only accepts pending intents, so a rejection here would
+    // leave the user with no retry path.
+    await expect(
+      finalizeCloudflareOAuth({
+        headers: new Headers(),
+        intentPublicId: TEST_INTENT_PUBLIC_ID
+      })
+    ).resolves.toMatchObject({
+      grant: {
+        isUsable: true,
+        publicId: TEST_CURRENT_USER_GRANT_PUBLIC_ID,
+        status: 'active'
+      }
+    })
+
+    expect(mocks.intentUpdateOne).toHaveBeenCalledWith(
+      { _id: TEST_INTENT_ID },
+      { $set: { status: 'completed' } }
+    )
+    expect(cloudflareServiceTestState.applyCloudflareProvisioning).not.toHaveBeenCalled()
+    expect(cloudflareServiceTestState.debugLog).toHaveBeenCalledWith(
+      'Cloudflare reconnect connection revalidation sweep failed',
+      expect.objectContaining({
+        error: expect.objectContaining({ message: 'connection lookup failed' }),
+        grantPublicId: TEST_CURRENT_USER_GRANT_PUBLIC_ID,
+        trigger: 'cloudflare-reconnect'
+      })
+    )
+  })
+
+  it('caps how many stale connections one reconnect reprovisions and logs the remainder', async () => {
+    expect.hasAssertions()
+    const staleConnections = Array.from({ length: 7 }, (_, index) =>
+      reconnectConnection({
+        _id: `01960000-0000-7000-8000-00000000006${index}`,
+        domain: `domain-${index}.example.com`
+      })
+    )
+    const { globals } = cloudflareReconnectRevalidationGlobals({ connections: staleConnections })
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    const { finalizeCloudflareOAuth } = await import('./service')
+
+    await expect(
+      finalizeCloudflareOAuth({
+        headers: new Headers(),
+        intentPublicId: TEST_INTENT_PUBLIC_ID
+      })
+    ).resolves.toMatchObject({ grant: { status: 'active' } })
+
+    expect(cloudflareServiceTestState.applyCloudflareProvisioning).toHaveBeenCalledTimes(5)
+    expect(staleConnections.slice(0, 5)).toSatisfy((connections: { status: string }[]) =>
+      connections.every((connection) => connection.status === 'active')
+    )
+    expect(staleConnections.slice(5)).toSatisfy((connections: { status: string }[]) =>
+      connections.every((connection) => connection.status === 'degraded')
+    )
+    expect(cloudflareServiceTestState.debugLog).toHaveBeenCalledWith(
+      'Cloudflare reconnect connection revalidation skipped connections',
+      expect.objectContaining({
+        grantPublicId: TEST_CURRENT_USER_GRANT_PUBLIC_ID,
+        skippedConnectionCount: 2,
+        skippedConnections: [
+          expect.objectContaining({ domain: 'domain-5.example.com', reason: 'connection-cap' }),
+          expect.objectContaining({ domain: 'domain-6.example.com', reason: 'connection-cap' })
+        ],
+        trigger: 'cloudflare-reconnect'
+      })
+    )
+  })
+
+  it('stops reprovisioning once the reconnect time budget is spent', async () => {
+    expect.hasAssertions()
+    const staleConnections = Array.from({ length: 3 }, (_, index) =>
+      reconnectConnection({
+        _id: `01960000-0000-7000-8000-00000000007${index}`,
+        domain: `slow-${index}.example.com`
+      })
+    )
+    const { globals } = cloudflareReconnectRevalidationGlobals({ connections: staleConnections })
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date('2026-08-01T10:00:00.000Z'))
+    cloudflareServiceTestState.applyCloudflareProvisioning.mockImplementation(() => {
+      // Each Cloudflare provisioning leg burns more than the whole sweep budget.
+      vi.advanceTimersByTime(45_000)
+      return Promise.resolve({
+        r2BucketName: 'agent-mail-archive',
+        r2Endpoint: 'https://example.r2.cloudflarestorage.com',
+        r2Region: 'auto',
+        webhookSigningSecret: EXISTING_WORKER_WEBHOOK_SIGNING_SECRET,
+        webhookSigningSecretReference: 'cloudflare-worker:script:AGENTTEAM_WORKER_HMAC_SECRET',
+        workerScriptName: 'agentteam-email-example-com'
+      })
+    })
+
+    try {
+      const { finalizeCloudflareOAuth } = await import('./service')
+
+      await expect(
+        finalizeCloudflareOAuth({
+          headers: new Headers(),
+          intentPublicId: TEST_INTENT_PUBLIC_ID
+        })
+      ).resolves.toMatchObject({ grant: { status: 'active' } })
+
+      expect(cloudflareServiceTestState.applyCloudflareProvisioning).toHaveBeenCalledTimes(1)
+      expect(cloudflareServiceTestState.debugLog).toHaveBeenCalledWith(
+        'Cloudflare reconnect connection revalidation skipped connections',
+        expect.objectContaining({
+          skippedConnectionCount: 2,
+          skippedConnections: [
+            expect.objectContaining({ domain: 'slow-1.example.com', reason: 'time-budget' }),
+            expect.objectContaining({ domain: 'slow-2.example.com', reason: 'time-budget' })
+          ],
+          trigger: 'cloudflare-reconnect'
+        })
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not fail finalize when the grant has no connections', async () => {
+    expect.hasAssertions()
+    const { globals } = cloudflareReconnectRevalidationGlobals({ connections: [] })
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    const { finalizeCloudflareOAuth } = await import('./service')
+
+    await expect(
+      finalizeCloudflareOAuth({
+        headers: new Headers(),
+        intentPublicId: TEST_INTENT_PUBLIC_ID
+      })
+    ).resolves.toMatchObject({ grant: { status: 'active' } })
+
+    expect(cloudflareServiceTestState.applyCloudflareProvisioning).not.toHaveBeenCalled()
+  })
+})
+
 describe('Cloudflare domain authorization', () => {
   beforeEach(() => {
     vi.resetModules()
@@ -2020,7 +2384,10 @@ function cloudflareOAuthFinalizeGlobals({
     ),
     intentUpdateOne: vi.fn(() => execQuery({ modifiedCount: 1 })),
     memberFindOne: vi.fn(() => execQuery({ role: 'member' })),
-    organizationFindById: vi.fn(() => execQuery({ _id: TEST_ORGANIZATION_ID }))
+    organizationFindById: vi.fn(() => execQuery({ _id: TEST_ORGANIZATION_ID })),
+    // These scenarios have no domain connections, so the reconnect revalidation
+    // sweep finds nothing to reprovision.
+    connectionFind: vi.fn(() => execQuery([]))
   }
   return {
     globals: {
@@ -2033,6 +2400,9 @@ function cloudflareOAuthFinalizeGlobals({
         models: {
           account: {
             findOne: mocks.accountFindOne
+          },
+          cloudflareConnection: {
+            find: mocks.connectionFind
           },
           cloudflareOAuthConnectionIntent: {
             findOne: mocks.intentFindOne,
@@ -2572,6 +2942,182 @@ function cloudflareGrantSelectionGlobals() {
   }
 }
 
+interface ReconnectConnectionOverrides {
+  _id?: string
+  domain?: string
+  grantId?: string
+  organizationId?: string
+  provisioningStatus?: string
+  status?: string
+}
+
+function reconnectConnection(overrides: ReconnectConnectionOverrides = {}) {
+  return {
+    ...cloudflareSelectionConnection(),
+    _id: '01960000-0000-7000-8000-000000000051',
+    grantId: TEST_CURRENT_USER_GRANT_ID,
+    organizationId: TEST_ORGANIZATION_ID,
+    provisioningStatus: 'failed',
+    status: 'degraded',
+    userId: TEST_USER_ID,
+    ...overrides
+  }
+}
+
+/**
+ * Drives `finalizeCloudflareOAuth` all the way through the real provisioning owner
+ * so reconnect revalidation is asserted on observable provisioning effects rather
+ * than on an internal call.
+ */
+function cloudflareReconnectRevalidationGlobals({
+  connections = [reconnectConnection()]
+}: { connections?: ReturnType<typeof reconnectConnection>[] } = {}) {
+  const now = new Date('2026-08-01T10:00:00.000Z')
+  const grant = {
+    _id: TEST_CURRENT_USER_GRANT_ID,
+    betterAuthAccountId: '01960000-0000-7000-8000-000000000044',
+    cloudflareEmail: null,
+    cloudflareUserId: 'cloudflare-user-shared',
+    createdAt: now,
+    grantedScopes: currentCloudflareScopes(),
+    lastErrorCode: 'CLOUDFLARE_REAUTHORIZATION_REQUIRED',
+    lastErrorMessage: 'Cloudflare access expired. Reconnect your Cloudflare account.',
+    lastRefreshAt: null,
+    lastTokenCheckAt: now,
+    organizationId: TEST_ORGANIZATION_ID,
+    requiredScopes: currentCloudflareScopes(),
+    status: 'degraded',
+    updatedAt: now,
+    userId: TEST_USER_ID
+  }
+  const domain = {
+    _id: '01960000-0000-7000-8000-000000000052',
+    archivePrefix: 'orgs/org_public_test/domains/example.com/mail/inbound',
+    domain: connections[0]?.domain ?? 'example.com',
+    organizationId: TEST_ORGANIZATION_ID,
+    organizationPublicId: 'org_public_test',
+    status: 'provisioning',
+    userId: TEST_USER_ID
+  }
+  const mocks = {
+    accountFindOne: vi.fn(() =>
+      sortedQuery({
+        _id: '01960000-0000-7000-8000-000000000044',
+        accountId: 'cloudflare-user-shared',
+        providerId: 'cloudflare',
+        scope: currentCloudflareScopes().join(' '),
+        userId: TEST_USER_ID
+      })
+    ),
+    authGetAccessToken: vi.fn(() => Promise.resolve({ accessToken: 'better-auth-cloudflare-access-token' })),
+    authGetSession: vi.fn(() =>
+      Promise.resolve({
+        session: {
+          activeOrganizationId: TEST_ORGANIZATION_ID,
+          id: 'session-1'
+        },
+        user: {
+          id: TEST_USER_ID
+        }
+      })
+    ),
+    connectionFind: vi.fn((query: Record<string, unknown>) =>
+      execQuery(connections.filter((connection) => recordMatchesQuery(connection, query)))
+    ),
+    connectionFindByIdAndUpdate: vi.fn((_id: string, update: { $set: Record<string, unknown> }) => {
+      const connection = connections.find((candidate) => candidate._id === _id)
+      if (connection) {
+        Object.assign(connection, update.$set)
+      }
+      return execQuery(connection ?? null)
+    }),
+    connectionFindOne: vi.fn((query: Record<string, unknown>) =>
+      execQuery(connections.find((connection) => recordMatchesQuery(connection, query)) ?? null)
+    ),
+    connectionUpdateOne: vi.fn(() => execQuery({ modifiedCount: 1 })),
+    credentialRefreshCreate: vi.fn(() => Promise.resolve({ _id: 'refresh-1' })),
+    deploymentFindOne: vi.fn(() => execQuery(null)),
+    deploymentFindOneAndUpdate: vi.fn(() => execQuery({ _id: 'deployment-1' })),
+    domainFindOneAndUpdate: vi.fn(() => execQuery(domain)),
+    domainUpdateOne: vi.fn(() => execQuery({ modifiedCount: 1 })),
+    grantFindOne: vi.fn((query: Record<string, unknown>) =>
+      execQuery(recordMatchesQuery(grant, query) ? grant : null)
+    ),
+    grantFindOneAndUpdate: vi.fn((_query: unknown, update: { $set: Record<string, unknown> }) => {
+      Object.assign(grant, update.$set, { updatedAt: now })
+      return execQuery(grant)
+    }),
+    grantUpdateOne: vi.fn(() => execQuery({ modifiedCount: 1 })),
+    intentFindOne: vi.fn(() =>
+      execQuery({
+        _id: TEST_INTENT_ID,
+        callbackPath: '/settings/connected-accounts/',
+        expiresAt: new Date(Date.now() + 60_000),
+        organizationId: TEST_ORGANIZATION_ID,
+        status: 'pending',
+        userId: TEST_USER_ID
+      })
+    ),
+    intentUpdateOne: vi.fn(() => execQuery({ modifiedCount: 1 })),
+    memberFindOne: vi.fn(() => execQuery({ role: 'member' })),
+    organizationFindById: vi.fn(() => execQuery({ _id: TEST_ORGANIZATION_ID }))
+  }
+
+  return {
+    connections,
+    domain,
+    globals: {
+      auth: {
+        api: {
+          getAccessToken: mocks.authGetAccessToken,
+          getSession: mocks.authGetSession
+        }
+      },
+      db: {
+        models: {
+          account: {
+            findOne: mocks.accountFindOne
+          },
+          agentMailDomain: {
+            findOneAndUpdate: mocks.domainFindOneAndUpdate,
+            updateOne: mocks.domainUpdateOne
+          },
+          agentMailWorkerCredentialRefresh: {
+            create: mocks.credentialRefreshCreate
+          },
+          agentMailWorkerDeployment: {
+            findOne: mocks.deploymentFindOne,
+            findOneAndUpdate: mocks.deploymentFindOneAndUpdate
+          },
+          cloudflareConnection: {
+            find: mocks.connectionFind,
+            findByIdAndUpdate: mocks.connectionFindByIdAndUpdate,
+            findOne: mocks.connectionFindOne,
+            updateOne: mocks.connectionUpdateOne
+          },
+          cloudflareOAuthConnectionIntent: {
+            findOne: mocks.intentFindOne,
+            updateOne: mocks.intentUpdateOne
+          },
+          cloudflareOAuthGrant: {
+            findOne: mocks.grantFindOne,
+            findOneAndUpdate: mocks.grantFindOneAndUpdate,
+            updateOne: mocks.grantUpdateOne
+          },
+          member: {
+            findOne: mocks.memberFindOne
+          },
+          organization: {
+            findById: mocks.organizationFindById
+          }
+        }
+      }
+    },
+    grant,
+    mocks
+  }
+}
+
 function cloudflareProvisioningGlobals() {
   const connection = cloudflareSelectionConnection()
   const domain = {
@@ -2803,6 +3349,10 @@ function recordMatchesQuery(record: Record<string, unknown>, query: Record<strin
     if (value && typeof value === 'object' && '$in' in value) {
       const allowedValues = value.$in
       return Array.isArray(allowedValues) && allowedValues.includes(record[key])
+    }
+
+    if (value && typeof value === 'object' && '$ne' in value) {
+      return record[key] !== value.$ne
     }
 
     return record[key] === value
