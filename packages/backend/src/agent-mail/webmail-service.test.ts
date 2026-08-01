@@ -1608,6 +1608,47 @@ describe('Agent Mail WildDuck webmail service', () => {
     expect(JSON.stringify(workspace)).not.toContain('admin-token')
   }, 15_000)
 
+  it('displays the reserved IMAP INBOX mailbox with product casing without renaming user folders', async () => {
+    expect.hasAssertions()
+    webmailTestState.listMailboxes.mockResolvedValueOnce({
+      results: [
+        {
+          id: 'inbox-id',
+          name: 'INBOX',
+          path: 'INBOX',
+          specialUse: '\\Inbox',
+          total: 1,
+          unseen: 1
+        },
+        {
+          id: 'acme-id',
+          name: 'ACME',
+          path: 'ACME',
+          total: 0,
+          unseen: 0
+        },
+        {
+          id: 'nested-inbox-id',
+          name: 'inbox',
+          path: 'Work/inbox',
+          total: 0,
+          unseen: 0
+        }
+      ]
+    })
+    const { getAgentMailWorkspaceForWeb } = await import('./webmail-service')
+
+    const workspace = await getAgentMailWorkspaceForWeb({
+      headers: new Headers(),
+      input: {}
+    })
+
+    const folderNamesByPath = new Map(workspace.folders.map((folder) => [folder.path, folder.name]))
+    expect(folderNamesByPath.get('INBOX')).toBe('Inbox')
+    expect(folderNamesByPath.get('ACME')).toBe('ACME')
+    expect(folderNamesByPath.get('Work/inbox')).toBe('inbox')
+  }, 15_000)
+
   it('passes previous page cursors through to WildDuck list calls and normalizes pagination cursors', async () => {
     expect.hasAssertions()
     webmailTestState.listMessages.mockResolvedValueOnce({

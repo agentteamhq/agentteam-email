@@ -968,10 +968,11 @@ function normalizeListResults<TResult>(response: { results?: TResult[] } | TResu
 function toFolderView(mailbox: WildDuckMailbox): AgentMailWebFolder {
   const id = requireString(mailbox.id, 'mailbox id')
   const specialUse = mailbox.specialUse?.trim() || undefined
+  const path = mailbox.path?.trim() || mailbox.name?.trim() || id
   return {
     id,
-    name: mailbox.name?.trim() || mailbox.path?.trim() || id,
-    path: mailbox.path?.trim() || mailbox.name?.trim() || id,
+    name: isReservedInboxMailbox(path, specialUse) ? 'Inbox' : mailbox.name?.trim() || path,
+    path,
     protected: isProtectedMailbox(specialUse),
     specialUse,
     total: finiteNumber(mailbox.total),
@@ -1756,6 +1757,12 @@ function isOutboundMailbox(mailbox: WildDuckMailbox) {
     name === 'drafts' ||
     name === 'sent'
   )
+}
+
+// IMAP reserves the literal mailbox name INBOX (RFC 3501); only that reserved
+// mailbox gets product casing so user folders like "ACME" are never renamed.
+function isReservedInboxMailbox(path: string, specialUse: string | undefined) {
+  return specialUse?.toLowerCase() === '\\inbox' || path.toLowerCase() === 'inbox'
 }
 
 function isProtectedMailbox(specialUse: string | null | undefined) {
