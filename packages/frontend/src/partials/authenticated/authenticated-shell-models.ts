@@ -283,6 +283,13 @@ export interface AuthenticatedSidebarView {
   retryLabel?: string
   searchQuery?: string
   selectedMailId?: string
+  /**
+   * Whether the shell header's sidebar toggle has a mail pane to collapse and expand. The
+   * mail pane is only mounted on the mail workspace, so a management section leaves the
+   * toggle with nothing to act on and it is rendered disabled. Defaults to the value on
+   * `defaultAuthenticatedSidebarView`.
+   */
+  sidebarToggleEnabled?: boolean
   state: AuthenticatedViewState
   unreadOnly?: boolean
   workspaceSwitcher?: AuthenticatedWorkspaceSwitcherView
@@ -467,6 +474,7 @@ export const defaultAuthenticatedSidebarView = {
   mails: [],
   paneTitle: 'Inbox',
   searchQuery: '',
+  sidebarToggleEnabled: true,
   state: 'ready',
   workspaceSwitcher: {
     activeWorkspaceId: 'agentteam-email',

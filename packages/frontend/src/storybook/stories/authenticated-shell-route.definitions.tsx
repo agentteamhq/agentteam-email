@@ -17,6 +17,7 @@ const MAILBOX_ADMIN_ERROR_MESSAGE =
   'The mailbox administration RPC returned HTTP 502 while loading accounts.'
 const SETTINGS_DIALOG_NAME = /^settings$/i
 const SHELL_SIDEBAR_SELECTOR = '[data-slot="sidebar"]'
+const SIDEBAR_TOGGLE_NAME = /^toggle sidebar$/i
 const SKELETON_SELECTOR = '[data-slot="skeleton"]'
 
 /**
@@ -103,6 +104,9 @@ export const SettingsSectionRoute: Story = {
 /**
  * The dashboard route renders the same shell with settings closed, proving the shell
  * controls settings visibility rather than falling back to uncontrolled screen state.
+ *
+ * The mail workspace is also the surface that mounts the collapsible mail pane, so the
+ * header's sidebar toggle is live here and collapses that pane.
  */
 export const DashboardRoute: Story = {
   args: {
@@ -115,6 +119,19 @@ export const DashboardRoute: Story = {
       2
     )
     await expect(body.queryByRole('dialog', { name: /^settings$/i })).not.toBeInTheDocument()
+
+    const sidebarToggle = await body.findByRole('button', { name: SIDEBAR_TOGGLE_NAME })
+    await expect(sidebarToggle).toBeEnabled()
+
+    await userEvent.click(sidebarToggle)
+    await waitFor(async () => {
+      await expect(requireShellSidebar(canvasElement)).toHaveAttribute('data-state', 'collapsed')
+    })
+
+    await userEvent.click(sidebarToggle)
+    await waitFor(async () => {
+      await expect(requireShellSidebar(canvasElement)).toHaveAttribute('data-state', 'expanded')
+    })
   }
 }
 
@@ -354,6 +371,7 @@ export const SettingsCloseKeepsMailboxAdminSection: Story = {
       await body.findByRole('heading', { name: 'Accounts' }, { timeout: 15000 })
     ).toBeInTheDocument()
     await expect(await body.findByRole('row', { name: /research@agentteam\.example/u })).toBeInTheDocument()
+    await expect(await body.findByRole('button', { name: SIDEBAR_TOGGLE_NAME })).toBeDisabled()
   }
 }
 
@@ -378,6 +396,10 @@ export const MailboxAdminAccountsRoute: Story = {
     ).toBeInTheDocument()
     await expect(await body.findByRole('row', { name: /research@agentteam\.example/u })).toBeInTheDocument()
     await expect(await body.findByRole('button', { name: 'New account' })).toBeEnabled()
+
+    // The administration surface does not mount the collapsible mail pane, so the header's
+    // sidebar toggle has nothing to act on and is rendered disabled instead of inert.
+    await expect(await body.findByRole('button', { name: SIDEBAR_TOGGLE_NAME })).toBeDisabled()
   }
 }
 
@@ -394,6 +416,7 @@ export const MailboxAdminAccountsEmptyRoute: Story = {
     await expect(
       await body.findByText('Create the first mailbox account for this domain.')
     ).toBeInTheDocument()
+    await expect(await body.findByRole('button', { name: SIDEBAR_TOGGLE_NAME })).toBeDisabled()
   }
 }
 
@@ -418,6 +441,7 @@ export const MailboxAdminAccountsPendingRoute: Story = {
       ).toBeGreaterThan(0)
     })
     await expect(body.queryByRole('row', { name: /research@agentteam\.example/u })).not.toBeInTheDocument()
+    await expect(await body.findByRole('button', { name: SIDEBAR_TOGGLE_NAME })).toBeDisabled()
   }
 }
 
@@ -435,6 +459,7 @@ export const MailboxAdminAccountsErrorRoute: Story = {
     ).toBeInTheDocument()
     await expect(await body.findByText(MAILBOX_ADMIN_ERROR_MESSAGE)).toBeInTheDocument()
     await expect(await body.findByRole('button', { name: 'Retry' })).toBeEnabled()
+    await expect(await body.findByRole('button', { name: SIDEBAR_TOGGLE_NAME })).toBeDisabled()
   }
 }
 
@@ -463,6 +488,19 @@ function storyMailboxAdminFailedRequest(): StoryAppRpcMailboxAdminResult {
       status: 502
     }
   }
+}
+
+/**
+ * The shell's sidebar element carries the expanded/collapsed state the header toggle drives.
+ */
+function requireShellSidebar(canvasElement: HTMLElement): HTMLElement {
+  const sidebar = canvasElement.ownerDocument.body.querySelector<HTMLElement>(SHELL_SIDEBAR_SELECTOR)
+
+  if (!sidebar) {
+    throw new Error('Expected the authenticated shell to render its sidebar.')
+  }
+
+  return sidebar
 }
 
 /**

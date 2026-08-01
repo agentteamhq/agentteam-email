@@ -34,7 +34,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 
 const meta = {
   ...dashboardMailControllerStoryMeta,
-  title: 'Screens/Mail Admin/Integration'
+  title: 'Screens/Mail Admin/Integration - Controller'
 } satisfies Meta<typeof dashboardMailControllerStoryMeta.component>
 
 export default meta

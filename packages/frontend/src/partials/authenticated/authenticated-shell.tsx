@@ -118,7 +118,8 @@ import { SettingsDialog } from './settings-dialog'
 import { WorkspaceMailboxSwitcher } from './workspace-mailbox-switcher'
 import {
   defaultAuthenticatedDashboardView,
-  defaultAuthenticatedEmailToolbarActions
+  defaultAuthenticatedEmailToolbarActions,
+  defaultAuthenticatedSidebarView
 } from './authenticated-shell-models'
 import type { EmailIframeThemeMode } from '../../lib/email-safety'
 import type {
@@ -257,6 +258,12 @@ export function AuthenticatedShell({
     (item) => item.id === sidebarView.activeItemId
   )
   const headerTitle = title ?? sidebarView.paneTitle
+  // The view model owns whether the header toggle has a mail pane to act on. The local
+  // `hasActiveManagementItem` derivation above and `activeManagementItem` in
+  // `AuthenticatedSidebar` still gate the controlled sidebar state and the mail pane mount,
+  // because hand-built views that do not carry this field must keep their current layout.
+  const sidebarToggleEnabled =
+    sidebarView.sidebarToggleEnabled ?? defaultAuthenticatedSidebarView.sidebarToggleEnabled
 
   return (
     <SidebarProvider
@@ -291,7 +298,9 @@ export function AuthenticatedShell({
       />
       <SidebarInset>
         <header className='bg-background sticky top-0 flex h-14 shrink-0 items-center gap-2 border-b px-4'>
-          <SidebarTrigger />
+          {/* hasActiveManagementItem also disables during the optimistic-navigation
+              render before the route commits and the view model re-derives. */}
+          <SidebarTrigger disabled={!sidebarToggleEnabled || hasActiveManagementItem} />
           <span className='text-sm font-medium'>{headerTitle}</span>
         </header>
         {children}
@@ -2222,7 +2231,7 @@ function EmailPreviewPane({
                   ? (attachment) => {
                       onAttachmentPreview(attachment, email)
                     }
-                : undefined
+                  : undefined
               }
             />
           </div>
@@ -2293,9 +2302,10 @@ function EmailPreviewHeader({
               selectedThreadMessageIsCollapsed ? 'Expand' : 'Collapse'
             } ${selectedThreadMessage.senderName} message`}
             aria-expanded={!selectedThreadMessageIsCollapsed}
-            className='h-auto min-w-0 flex-1 shrink justify-start whitespace-normal rounded-none !bg-transparent
-              px-4 py-3 text-left hover:!bg-transparent hover:text-inherit active:!bg-transparent
-              focus-visible:!bg-transparent focus-visible:border-transparent focus-visible:ring-0'
+            className='h-auto min-w-0 flex-1 shrink justify-start rounded-none !bg-transparent px-4 py-3
+              text-left whitespace-normal hover:!bg-transparent hover:text-inherit
+              focus-visible:border-transparent focus-visible:!bg-transparent focus-visible:ring-0
+              active:!bg-transparent'
             onClick={() => {
               onEmailAction?.(selectedThreadMessageAction, selectedThreadActionTarget)
             }}
@@ -2378,7 +2388,7 @@ function EmailThreadRowActions({
               aria-label={`${starAction.label} ${senderName} message`}
               aria-pressed={starIsActive}
               className={cn(
-                'size-8 shrink-0 text-muted-foreground opacity-70 transition-opacity',
+                'text-muted-foreground size-8 shrink-0 opacity-70 transition-opacity',
                 'hover:text-foreground hover:opacity-100 focus-visible:opacity-100',
                 'group-hover/thread-row:opacity-100 motion-reduce:transition-none',
                 starIsActive && 'text-foreground opacity-100'
@@ -2414,9 +2424,9 @@ function EmailThreadRowActions({
           <DropdownMenuTrigger asChild>
             <Button
               aria-label={`More actions for ${senderName} message`}
-              className='size-8 shrink-0 text-muted-foreground opacity-70 transition-opacity
-                hover:text-foreground hover:opacity-100 focus-visible:opacity-100
-                group-hover/thread-row:opacity-100 motion-reduce:transition-none'
+              className='text-muted-foreground hover:text-foreground size-8 shrink-0 opacity-70
+                transition-opacity group-hover/thread-row:opacity-100 hover:opacity-100
+                focus-visible:opacity-100 motion-reduce:transition-none'
               size='icon'
               title={`More actions for ${senderName} message`}
               type='button'
@@ -2445,7 +2455,11 @@ function EmailThreadRowActions({
                     title={actionTitle(action)}
                     variant={isDestructiveEmailAction(action.action) ? 'destructive' : 'default'}
                   >
-                    {action.pending ? <Spinner data-icon='inline-start' /> : <Icon data-icon='inline-start' />}
+                    {action.pending ? (
+                      <Spinner data-icon='inline-start' />
+                    ) : (
+                      <Icon data-icon='inline-start' />
+                    )}
                     {action.label}
                   </DropdownMenuItem>
                 </React.Fragment>
@@ -2534,10 +2548,7 @@ function EmailMessageMeta({
   )
 }
 
-function isSelectedThreadMessage(
-  email: AuthenticatedEmailPreview,
-  message: AuthenticatedEmailThreadMessage
-) {
+function isSelectedThreadMessage(email: AuthenticatedEmailPreview, message: AuthenticatedEmailThreadMessage) {
   return message.id === email.id && message.folderId === email.folderId
 }
 
@@ -3086,16 +3097,17 @@ function EmailThreadMessageItem({
       data-email-message-state='expanded'
     >
       <div
-        className='group/thread-row bg-muted/15 flex min-w-0 items-stretch transition-colors duration-150 ease-out
-          hover:bg-muted/25 focus-within:bg-muted/25 active:bg-muted/30 motion-reduce:transition-none
-          dark:bg-muted/20 dark:hover:bg-muted/25 dark:focus-within:bg-muted/25 dark:active:bg-muted/30'
+        className='group/thread-row bg-muted/15 hover:bg-muted/25 focus-within:bg-muted/25 active:bg-muted/30
+          dark:bg-muted/20 dark:hover:bg-muted/25 dark:focus-within:bg-muted/25 dark:active:bg-muted/30 flex
+          min-w-0 items-stretch transition-colors duration-150 ease-out motion-reduce:transition-none'
       >
         <Button
           aria-label={`Collapse ${message.senderName} message`}
           aria-expanded
-          className='h-auto min-w-0 flex-1 shrink justify-start whitespace-normal rounded-none !bg-transparent
-            px-4 py-3 text-left hover:!bg-transparent hover:text-inherit active:!bg-transparent
-            focus-visible:!bg-transparent focus-visible:border-transparent focus-visible:ring-0'
+          className='h-auto min-w-0 flex-1 shrink justify-start rounded-none !bg-transparent px-4 py-3
+            text-left whitespace-normal hover:!bg-transparent hover:text-inherit
+            focus-visible:border-transparent focus-visible:!bg-transparent focus-visible:ring-0
+            active:!bg-transparent'
           onClick={() => {
             triggerMessageAction('collapse-thread-message')
           }}
@@ -3186,16 +3198,17 @@ function EmailCollapsedThreadMessage({
       data-email-message-state='collapsed'
     >
       <div
-        className='group/thread-row flex min-w-0 items-stretch transition-colors duration-150 ease-out
-          hover:bg-muted/25 focus-within:bg-muted/25 active:bg-muted/30 motion-reduce:transition-none
-          dark:hover:bg-muted/25 dark:focus-within:bg-muted/25 dark:active:bg-muted/30'
+        className='group/thread-row hover:bg-muted/25 focus-within:bg-muted/25 active:bg-muted/30
+          dark:hover:bg-muted/25 dark:focus-within:bg-muted/25 dark:active:bg-muted/30 flex min-w-0
+          items-stretch transition-colors duration-150 ease-out motion-reduce:transition-none'
       >
         <Button
           aria-label={`Expand ${message.senderName} message`}
           aria-expanded={false}
-          className='h-auto min-w-0 flex-1 shrink justify-start whitespace-normal rounded-none !bg-transparent
-            px-4 py-3 text-left hover:!bg-transparent hover:text-inherit active:!bg-transparent
-            focus-visible:!bg-transparent focus-visible:border-transparent focus-visible:ring-0'
+          className='h-auto min-w-0 flex-1 shrink justify-start rounded-none !bg-transparent px-4 py-3
+            text-left whitespace-normal hover:!bg-transparent hover:text-inherit
+            focus-visible:border-transparent focus-visible:!bg-transparent focus-visible:ring-0
+            active:!bg-transparent'
           onClick={onExpand}
           type='button'
           variant='ghost'

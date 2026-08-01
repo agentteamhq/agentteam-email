@@ -93,6 +93,9 @@ export function toSidebarView(
     firstUseWorkspace && Boolean(activeManagementSection) && mailboxAdminNav.length > 0
   const managementNav = showFirstUseSetupNav ? [FIRST_USE_SETUP_NAV_ITEM, ...mailboxAdminNav] : mailboxAdminNav
   const managementNavGroups = groupedManagementNav(showFirstUseSetupNav, mailboxAdminNav)
+  // The shell mounts the collapsible mail pane only on the mail workspace, so the header's
+  // sidebar toggle has nothing to collapse while a management section is active.
+  const sidebarToggleEnabled = !activeManagementSection
 
   if (status === 'pending') {
     return {
@@ -100,6 +103,7 @@ export function toSidebarView(
       activeItemId: activeManagementSection ?? defaultAuthenticatedSidebarView.activeItemId,
       managementNav,
       managementNavGroups,
+      sidebarToggleEnabled,
       state: 'loading'
     }
   }
@@ -113,6 +117,7 @@ export function toSidebarView(
       managementNav,
       managementNavGroups,
       retryLabel: 'Retry',
+      sidebarToggleEnabled,
       state: 'error'
     }
   }
@@ -186,6 +191,7 @@ export function toSidebarView(
     retryLabel: 'Retry',
     searchQuery: firstUseWorkspace ? '' : (routeSearch?.mailQuery ?? ''),
     selectedMailId: workspace?.selectedMessage?.id,
+    sidebarToggleEnabled,
     unreadOnly: firstUseWorkspace ? undefined : routeSearch?.unreadOnly,
     state: messages.length ? 'ready' : 'empty'
   }

@@ -83,7 +83,8 @@ export function mailboxAdminSidebarView(section: MailboxAdminSectionId): Authent
     activeItemId: section,
     managementNav: mailboxAdminManagementNav,
     mails: [],
-    selectedMailId: undefined
+    selectedMailId: undefined,
+    sidebarToggleEnabled: false
   }
 }
 

@@ -12,7 +12,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 
 const meta = {
   ...authenticatedShellRouteStoryMeta,
-  title: 'Screens/Mail Workspace/Integration'
+  title: 'Screens/Mail Workspace/Integration - Routes'
 } satisfies Meta<typeof authenticatedShellRouteStoryMeta.component>
 
 export default meta
