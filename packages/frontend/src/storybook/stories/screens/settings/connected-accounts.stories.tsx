@@ -1,4 +1,5 @@
 import {
+  ConnectedAccountsAccessExpired as ConnectedAccountsAccessExpiredStory,
   ConnectedAccountsCloudflare as ConnectedAccountsCloudflareStory,
   ConnectedAccountsDisconnectConfirmation as ConnectedAccountsDisconnectConfirmationStory,
   ConnectedAccountsEmpty as ConnectedAccountsEmptyStory,
@@ -29,6 +30,11 @@ export const ConnectedAccountsCloudflare: Story = {
 export const ConnectedAccountsReconnectRequired: Story = {
   ...ConnectedAccountsReconnectRequiredStory,
   name: 'Reconnect required'
+}
+
+export const ConnectedAccountsAccessExpired: Story = {
+  ...ConnectedAccountsAccessExpiredStory,
+  name: 'Cloudflare access expired'
 }
 
 export const ConnectedAccountsDisconnectConfirmation: Story = {

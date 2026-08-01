@@ -130,6 +130,59 @@ describe('Cloudflare RPC adapter', () => {
     })
   })
 
+  it('classifies the backend reconnect contract from a 401 Cloudflare accounts response', async () => {
+    expect.hasAssertions()
+    cloudflareRpcTestState.accountsGet.mockResolvedValue({
+      data: null,
+      error: {
+        status: 401,
+        value: {
+          code: 'CLOUDFLARE_REAUTHORIZATION_REQUIRED',
+          error: 'Cloudflare access expired. Reconnect your Cloudflare account.',
+          supportReference: 'request-id:cloudflare_accounts_req-1'
+        }
+      },
+      status: 401
+    })
+    const { fetchCloudflareAccounts, isCloudflareReauthorizationRequiredError } =
+      await import('./cloudflare-rpc')
+
+    const error = await fetchCloudflareAccounts().catch((caught: unknown) => caught)
+
+    expect(error).toMatchObject({
+      code: 'CLOUDFLARE_REAUTHORIZATION_REQUIRED',
+      message: 'Cloudflare access expired. Reconnect your Cloudflare account.',
+      name: 'CloudflareRPCError',
+      status: 401
+    })
+    expect(isCloudflareReauthorizationRequiredError(error)).toBe(true)
+  })
+
+  it('does not classify generic Cloudflare failures as reconnect-required', async () => {
+    expect.hasAssertions()
+    cloudflareRpcTestState.accountsGet.mockResolvedValue({
+      data: null,
+      error: {
+        status: 500,
+        value: {
+          code: 'INTERNAL_SERVER_ERROR',
+          error: 'Internal server error.'
+        }
+      },
+      status: 500
+    })
+    const { fetchCloudflareAccounts, isCloudflareReauthorizationRequiredError } =
+      await import('./cloudflare-rpc')
+
+    const error = await fetchCloudflareAccounts().catch((caught: unknown) => caught)
+
+    expect(error).toMatchObject({
+      code: 'INTERNAL_SERVER_ERROR',
+      status: 500
+    })
+    expect(isCloudflareReauthorizationRequiredError(error)).toBe(false)
+  })
+
   it('passes grantPublicId and accountId when loading Cloudflare zones', async () => {
     expect.hasAssertions()
     const grantPublicId = cloudflareGrantPublicId('grant-public-id')

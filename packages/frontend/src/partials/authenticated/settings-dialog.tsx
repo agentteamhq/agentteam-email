@@ -1321,9 +1321,12 @@ function domainSettingsControllerFromState(state?: DomainSettingsState): DomainS
       null)
     : (connections[0] ?? null)
   const mode = state?.mode ?? (connections.length > 0 ? 'domain' : 'addDomain')
-  const activeGrants = grants.filter((grant) => grant.status === 'active')
-  const usableGrants = activeGrants.filter((grant) => grant.isUsable)
-  const activeGrant = usableGrants[0] ?? activeGrants[0] ?? null
+  // A grant whose token renewal failed is reported as `degraded`. It is still the
+  // account the user reconnects, so it stays selectable here while `usableGrants`
+  // keeps gating everything that needs working Cloudflare access.
+  const connectedGrants = grants.filter((grant) => grant.status !== 'revoked')
+  const usableGrants = connectedGrants.filter((grant) => grant.isUsable)
+  const activeGrant = usableGrants[0] ?? connectedGrants[0] ?? null
   const missingRequiredScopeCount = activeGrant?.missingRequiredScopeCount ?? 0
   const action =
     <TArgs extends unknown[]>(handler: ((...args: TArgs) => void) | undefined) =>
@@ -1638,11 +1641,13 @@ function formatCloudflareGrantStatus(grant: CloudflareGrantView): string {
   if (grant.isUsable) {
     return 'Connected'
   }
-  if (grant.missingRequiredScopeCount > 0) {
-    return 'Reconnect required'
+  if (grant.status === 'revoked') {
+    return formatStatusLabel(grant.status)
   }
 
-  return formatStatusLabel(grant.status)
+  // Covers missing permissions and expired access alike: both are resolved by
+  // reconnecting the account, so the badge must never keep reading "Connected".
+  return 'Reconnect required'
 }
 
 function formatCloudflareGrantHelper(grant: CloudflareGrantView): string {

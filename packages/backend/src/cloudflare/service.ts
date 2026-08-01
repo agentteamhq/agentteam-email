@@ -4,6 +4,7 @@ import {
   parseBase62UUIDv7,
   publicIdFromUUIDv7
 } from '@main/db'
+import { APIError } from 'better-auth'
 import debug from 'debug'
 
 import { globals } from '../globals'
@@ -15,7 +16,7 @@ import {
 } from '../agent-mail/runtime-projection'
 import { isAgentMailAccessError, requireAgentMailOrganizationContext } from '../agent-mail/service'
 import { AUTH_REDIRECT_ERROR_ROUTE } from '../auth/auth-routes'
-import { createSafeDiagnosticErrorName } from '../auth/log-redaction'
+import { createSafeDiagnosticErrorName, createSafeErrorLogDetails } from '../auth/log-redaction'
 import { decryptSecretValue, encryptSecretValue } from '../lib/secret-box'
 import { PUBLIC_VARS } from '../vars.public'
 
@@ -33,6 +34,10 @@ import {
   getCloudflareRequiredOAuthScopes,
   isCloudflareOAuthConfigured
 } from './config'
+import {
+  CLOUDFLARE_REAUTHORIZATION_REQUIRED_ERROR_CODE,
+  CLOUDFLARE_REAUTHORIZATION_REQUIRED_MESSAGE
+} from './public-errors'
 import {
   cloudflareConnectionPublicView,
   cloudflareOAuthConnectionIntentPublicView,
@@ -66,6 +71,26 @@ const ACTIVE_SEND_CONNECTION_STATUSES = ['active', 'degraded'] as const
 const CLOUDFLARE_EMAIL_SEND_SCOPE = 'email-sending.write'
 const log = debug('app:cloudflare:provisioning')
 const sendLog = debug('app:cloudflare:send')
+const tokenLog = debug('app:cloudflare:token')
+
+/**
+ * Better Auth account-endpoint error codes that mean the stored Cloudflare OAuth
+ * credential can no longer produce a usable access token. These are credential
+ * failures, not request-validation failures, so they map to reauthorization.
+ * Provider-configuration codes such as `PROVIDER_NOT_SUPPORTED` and
+ * `TOKEN_REFRESH_NOT_SUPPORTED` are deliberately excluded: those are deployment
+ * defects that must stay visible as unexpected server errors.
+ */
+const CLOUDFLARE_REAUTHORIZATION_BETTER_AUTH_ERROR_CODES: ReadonlySet<string> = new Set([
+  'ACCOUNT_NOT_FOUND',
+  'FAILED_TO_GET_ACCESS_TOKEN',
+  'FAILED_TO_REFRESH_ACCESS_TOKEN',
+  'REFRESH_TOKEN_NOT_FOUND'
+])
+
+const CLOUDFLARE_GRANT_REAUTHORIZABLE_STATUSES = ['active', 'degraded'] as const
+
+type CloudflareTokenOperation = 'get_access_token' | 'get_stored_access_token' | 'refresh_stored_access_token'
 export const CloudflareOAuthReturnTargetValues = [
   'dashboard-onboarding',
   'settings-connected-accounts',
@@ -159,6 +184,20 @@ export class CloudflareAccessError extends Error {
   }
 }
 
+/**
+ * Raised when the stored Cloudflare connected-account grant can no longer produce
+ * an access token. The caller's own browser session is still valid, so this is an
+ * upstream credential failure that the user resolves by reconnecting Cloudflare.
+ */
+export class CloudflareReauthorizationRequiredError extends CloudflareAccessError {
+  public readonly code = CLOUDFLARE_REAUTHORIZATION_REQUIRED_ERROR_CODE
+
+  constructor(message: string = CLOUDFLARE_REAUTHORIZATION_REQUIRED_MESSAGE) {
+    super(message, 401)
+    this.name = 'CloudflareReauthorizationRequiredError'
+  }
+}
+
 export class CloudflareControlSendError extends Error {
   constructor(
     message: string,
@@ -171,6 +210,12 @@ export class CloudflareControlSendError extends Error {
 
 export function isCloudflareAccessError(error: unknown): error is CloudflareAccessError {
   return error instanceof CloudflareAccessError
+}
+
+export function isCloudflareReauthorizationRequiredError(
+  error: unknown
+): error is CloudflareReauthorizationRequiredError {
+  return error instanceof CloudflareReauthorizationRequiredError
 }
 
 export async function startCloudflareOAuth({
@@ -953,7 +998,7 @@ export async function disconnectCloudflare({
   await requireCloudflareDomainManagement(headers, context)
   const userId = context.userId
   const requestedGrantPublicId = requireNonEmptyString(grantPublicId, 'Cloudflare grant public id')
-  const grant = await getActiveGrantByPublicIdForUser(
+  const grant = await getReauthorizableGrantByPublicIdForUser(
     db,
     requestedGrantPublicId,
     userId,
@@ -1410,6 +1455,12 @@ function sanitizeCloudflareProvisioningError(
   stage: string,
   error: unknown
 ): { code: string; message: string } {
+  if (isCloudflareReauthorizationRequiredError(error)) {
+    return {
+      code: CLOUDFLARE_REAUTHORIZATION_REQUIRED_ERROR_CODE,
+      message: CLOUDFLARE_REAUTHORIZATION_REQUIRED_MESSAGE
+    }
+  }
   if (isCloudflareAccessError(error)) {
     return {
       code: `CLOUDFLARE_ACCESS_${error.status}`,
@@ -1586,17 +1637,125 @@ async function requireCloudflareDomainManagement(
   }
 }
 
+/**
+ * Reads the Better Auth API error code for a failed Cloudflare token call.
+ * Returns `undefined` for anything that is not a Better Auth API error so that
+ * unknown failures keep their unexpected-server-error classification.
+ */
+function betterAuthApiErrorCode(error: unknown): string | undefined {
+  if (!(error instanceof APIError)) {
+    return undefined
+  }
+
+  const code = error.body?.code
+
+  return typeof code === 'string' ? code : undefined
+}
+
+function isCloudflareReauthorizationBetterAuthError(error: unknown): boolean {
+  const code = betterAuthApiErrorCode(error)
+
+  return code !== undefined && CLOUDFLARE_REAUTHORIZATION_BETTER_AUTH_ERROR_CODES.has(code)
+}
+
+/**
+ * Runs a Better Auth Cloudflare token call and owns failure classification for the
+ * grant. Credential failures are recorded on the grant as `degraded` and rethrown
+ * as a typed reauthorization error; every other failure is rethrown unchanged so it
+ * keeps reporting as an unexpected server error.
+ */
+async function callCloudflareGrantTokenApi<TResult>({
+  db,
+  grant,
+  operation,
+  request
+}: {
+  db: Database
+  grant: CloudflareOAuthGrantDocument
+  operation: CloudflareTokenOperation
+  request: () => Promise<TResult>
+}): Promise<TResult> {
+  try {
+    return await request()
+  } catch (error) {
+    const betterAuthErrorCode = betterAuthApiErrorCode(error)
+    const reauthorizationRequired = isCloudflareReauthorizationBetterAuthError(error)
+
+    tokenLog('cloudflare_grant_token_call_failed %o', {
+      betterAuthErrorCode: betterAuthErrorCode ?? null,
+      betterAuthStatusCode: error instanceof APIError ? error.statusCode : null,
+      cloudflareUserId: grant.cloudflareUserId,
+      error: createSafeErrorLogDetails(error),
+      grantPublicId: publicIdFromUUIDv7(grant._id),
+      grantStatus: grant.status,
+      operation,
+      organizationId: grant.organizationId ? normalizeMongooseUUIDv7(grant.organizationId) : null,
+      reauthorizationRequired,
+      userId: normalizeMongooseUUIDv7(grant.userId)
+    })
+
+    if (!reauthorizationRequired) {
+      throw error
+    }
+
+    await recordCloudflareGrantReauthorizationRequired({ db, grant, operation })
+
+    throw new CloudflareReauthorizationRequiredError()
+  }
+}
+
+async function recordCloudflareGrantReauthorizationRequired({
+  db,
+  grant,
+  now = new Date(),
+  operation
+}: {
+  db: Database
+  grant: CloudflareOAuthGrantDocument
+  now?: Date
+  operation: CloudflareTokenOperation
+}): Promise<void> {
+  await db.models.cloudflareOAuthGrant
+    .updateOne(
+      { _id: grant._id },
+      {
+        $set: {
+          lastErrorCode: CLOUDFLARE_REAUTHORIZATION_REQUIRED_ERROR_CODE,
+          lastErrorMessage: CLOUDFLARE_REAUTHORIZATION_REQUIRED_MESSAGE,
+          lastTokenCheckAt: now,
+          status: 'degraded'
+        }
+      }
+    )
+    .exec()
+
+  tokenLog('cloudflare_grant_marked_degraded %o', {
+    grantPublicId: publicIdFromUUIDv7(grant._id),
+    lastErrorCode: CLOUDFLARE_REAUTHORIZATION_REQUIRED_ERROR_CODE,
+    operation,
+    organizationId: grant.organizationId ? normalizeMongooseUUIDv7(grant.organizationId) : null,
+    status: 'degraded',
+    userId: normalizeMongooseUUIDv7(grant.userId)
+  })
+}
+
 async function getCloudflareAccessToken(
   headers: Headers,
   grant: CloudflareOAuthGrantDocument
 ): Promise<string> {
   const { auth, db } = await globals()
-  const result = await auth.api.getAccessToken({
-    body: {
-      accountId: grant.cloudflareUserId,
-      providerId: CLOUDFLARE_OAUTH_PROVIDER_ID
-    },
-    headers
+  const result = await callCloudflareGrantTokenApi({
+    db,
+    grant,
+    operation: 'get_access_token',
+    request: () =>
+      auth.api.getAccessToken({
+        body: {
+          accountId: grant.cloudflareUserId,
+          providerId: CLOUDFLARE_OAUTH_PROVIDER_ID
+        },
+        headers
+      })
   })
 
   await db.models.cloudflareOAuthGrant
@@ -1622,12 +1781,18 @@ async function getStoredCloudflareAccessToken(
   now = new Date()
 ): Promise<string> {
   const { auth } = await globals()
-  const result = await auth.api.getAccessToken({
-    body: {
-      accountId: grant.cloudflareUserId,
-      providerId: CLOUDFLARE_OAUTH_PROVIDER_ID,
-      userId: normalizeMongooseUUIDv7(grant.userId)
-    }
+  const result = await callCloudflareGrantTokenApi({
+    db,
+    grant,
+    operation: 'get_stored_access_token',
+    request: () =>
+      auth.api.getAccessToken({
+        body: {
+          accountId: grant.cloudflareUserId,
+          providerId: CLOUDFLARE_OAUTH_PROVIDER_ID,
+          userId: normalizeMongooseUUIDv7(grant.userId)
+        }
+      })
   })
 
   await db.models.cloudflareOAuthGrant
@@ -1654,15 +1819,27 @@ async function refreshStoredCloudflareAccessToken(
   now = new Date()
 ): Promise<string> {
   const { auth } = await globals()
-  const result = await auth.api.refreshToken({
-    body: {
-      accountId: grant.cloudflareUserId,
-      providerId: CLOUDFLARE_OAUTH_PROVIDER_ID,
-      userId: normalizeMongooseUUIDv7(grant.userId)
-    }
+  const result = await callCloudflareGrantTokenApi({
+    db,
+    grant,
+    operation: 'refresh_stored_access_token',
+    request: () =>
+      auth.api.refreshToken({
+        body: {
+          accountId: grant.cloudflareUserId,
+          providerId: CLOUDFLARE_OAUTH_PROVIDER_ID,
+          userId: normalizeMongooseUUIDv7(grant.userId)
+        }
+      })
   })
   if (!result.accessToken) {
-    throw new Error('Cloudflare OAuth refresh did not return an access token')
+    await recordCloudflareGrantReauthorizationRequired({
+      db,
+      grant,
+      now,
+      operation: 'refresh_stored_access_token'
+    })
+    throw new CloudflareReauthorizationRequiredError()
   }
   const grantedScopes = parseOAuthScopeString(result.scope)
 
@@ -1746,6 +1923,7 @@ async function listActiveGrantsForUser(
     .exec()
 
   if (grants.length === 0) {
+    await throwWhenCloudflareGrantNeedsReauthorization(db, { organizationId, userId })
     throw new Error('Cloudflare OAuth is not connected')
   }
 
@@ -1785,6 +1963,7 @@ async function getGrantById(
     .exec()
 
   if (!grant) {
+    await throwWhenCloudflareGrantNeedsReauthorization(db, { _id: grantId, organizationId, userId })
     throw new CloudflareAccessError('Cloudflare OAuth grant is not active', 403)
   }
   if (!hasCurrentRequiredCloudflareScopes(grant)) {
@@ -1792,6 +1971,78 @@ async function getGrantById(
   }
 
   return grant
+}
+
+/**
+ * Grant lookup for actions the user must still be able to perform on a Cloudflare
+ * account whose token renewal failed, such as disconnecting the degraded account.
+ *
+ * Removal must stay available for every grant the user can still see, so this
+ * lookup intentionally accepts `degraded` grants and, unlike `getGrantById`, does
+ * not apply `hasCurrentRequiredCloudflareScopes`. Scope and token checks gate
+ * *using* a grant against Cloudflare; they must not strand a user with an
+ * unusable connected account they cannot remove. Authority is unchanged: the
+ * grant must still match the authenticated `userId` and the active
+ * `organizationId`, and revoked grants stay rejected.
+ */
+async function getReauthorizableGrantByPublicIdForUser(
+  db: Database,
+  grantPublicId: CloudflareOAuthGrantPublicId | string,
+  userId: UserId,
+  organizationId: OrganizationId
+): Promise<CloudflareOAuthGrantDocument> {
+  let grantId: CloudflareOAuthGrantId
+
+  try {
+    grantId = parseCloudflareGrantPublicId(grantPublicId)
+  } catch {
+    throw new CloudflareAccessError('Cloudflare OAuth grant is not active', 403)
+  }
+
+  const grant = await db.models.cloudflareOAuthGrant
+    .findOne({
+      _id: grantId,
+      organizationId,
+      userId,
+      status: { $in: [...CLOUDFLARE_GRANT_REAUTHORIZABLE_STATUSES] }
+    })
+    .exec()
+
+  if (!grant) {
+    throw new CloudflareAccessError('Cloudflare OAuth grant is not active', 403)
+  }
+
+  return grant
+}
+
+/**
+ * Reports an expired Cloudflare connected account as a reauthorization failure
+ * instead of a missing connection, so the browser receives `401` with the
+ * reconnect contract rather than an unexpected server error.
+ */
+async function throwWhenCloudflareGrantNeedsReauthorization(
+  db: Database,
+  filter: {
+    _id?: CloudflareOAuthGrantId
+    organizationId: OrganizationId
+    userId: UserId
+  }
+): Promise<void> {
+  const degradedGrant = await db.models.cloudflareOAuthGrant.findOne({ ...filter, status: 'degraded' }).exec()
+
+  if (!degradedGrant) {
+    return
+  }
+
+  tokenLog('cloudflare_grant_reauthorization_required %o', {
+    grantPublicId: publicIdFromUUIDv7(degradedGrant._id),
+    lastErrorCode: degradedGrant.lastErrorCode ?? null,
+    organizationId: normalizeMongooseUUIDv7(filter.organizationId),
+    status: degradedGrant.status,
+    userId: normalizeMongooseUUIDv7(filter.userId)
+  })
+
+  throw new CloudflareReauthorizationRequiredError()
 }
 
 function hasCurrentRequiredCloudflareScopes(grant: CloudflareOAuthGrantDocument): boolean {

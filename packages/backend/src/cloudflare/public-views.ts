@@ -1,6 +1,10 @@
 import { publicIdFromUUIDv7 } from '@main/db'
 
 import { getCloudflareRequiredOAuthScopes } from './config'
+import {
+  CLOUDFLARE_REAUTHORIZATION_REQUIRED_MESSAGE,
+  isCloudflareReauthorizationRequiredErrorCode
+} from './public-errors'
 import type {
   CloudflareConnectionDocument,
   CloudflareConnectionPublicId,
@@ -118,6 +122,9 @@ function publicCloudflareOperationalMessage(
 ): string | null {
   if (!code && !storedMessage) {
     return null
+  }
+  if (isCloudflareReauthorizationRequiredErrorCode(code)) {
+    return CLOUDFLARE_REAUTHORIZATION_REQUIRED_MESSAGE
   }
   if (code === 'AT_EMAIL_ADMIN_CONTROL_SYNC_FAILED') {
     return 'Agent Mail runtime sync failed. Try again or check runtime health.'

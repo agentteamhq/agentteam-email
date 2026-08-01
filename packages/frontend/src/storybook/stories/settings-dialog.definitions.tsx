@@ -1,6 +1,12 @@
-import { expect, fn, userEvent, within } from 'storybook/test'
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test'
 
 import {
+  mockCloudflareRpcBoundary,
+  requireActiveCloudflareRpcBoundaryMock
+} from '../cloudflare-rpc-boundary-mock'
+import {
+  cloudflareStatusExpiredGrantResponse,
+  cloudflareStatusUsableGrantResponse,
   domainSettingsAddDomainAuthorizeCloudflareState,
   domainSettingsAddDomainSelectZoneState,
   domainSettingsDenseDomainListState,
@@ -9,7 +15,9 @@ import {
   domainSettingsDomainNeedsAttentionState,
   domainSettingsDomainRemovedState,
   domainSettingsDomainRetryBusyState,
+  domainSettingsDomainsLoadFailedState,
   domainSettingsEmptyFirstUseState,
+  domainSettingsExpiredCloudflareAccessState,
   domainSettingsLoadDomainsBusyState,
   domainSettingsLoadDomainsState,
   domainSettingsLoadErrorState,
@@ -62,7 +70,12 @@ interface SettingsScreenScenario {
   agentAccessPending?: boolean
   agentAccessView?: AgentAccessView
   authClient?: SettingsStoryArgs['authClient']
-  domainSettingsState?: DomainSettingsState
+  /**
+   * `null` leaves the settings controller as the runtime owner of Cloudflare state,
+   * so the story exercises its real request behavior through the mocked RPC
+   * boundary instead of rendering injected state.
+   */
+  domainSettingsState?: DomainSettingsState | null
   integrationsError?: Error
   integrationsPending?: boolean
   integrationsView?: IntegrationsView
@@ -621,6 +634,119 @@ export const ConnectedAccountsReconnectRequired: Story = {
   }
 }
 
+export const ConnectedAccountsAccessExpired: Story = {
+  args: buildSettingsScreenArgs({
+    domainSettingsState: domainSettingsExpiredCloudflareAccessState,
+    settingsSection: 'connected-accounts'
+  }),
+  play: async ({ canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+
+    await expect(await canvas.findByText('admin@example.com')).toBeInTheDocument()
+    await expect(await canvas.findByText('Reconnect required')).toBeInTheDocument()
+    await expect(canvas.queryByText('Connected', { selector: 'span' })).not.toBeInTheDocument()
+    await expect(
+      (await canvas.findAllByText('Cloudflare access expired. Reconnect your Cloudflare account.')).length
+    ).toBeGreaterThan(0)
+    await expect(await canvas.findByRole('button', { name: /^reconnect account$/i })).toBeEnabled()
+    await expect(await canvas.findByRole('button', { name: /^disconnect account$/i })).toBeEnabled()
+    await expect(canvas.queryByRole('progressbar')).not.toBeInTheDocument()
+  }
+}
+
+/**
+ * Regression cover for the production incident where a failing
+ * `/rpc/cloudflare/accounts` load re-fired the settings controller effect on every
+ * render, producing thousands of requests in minutes. The status route keeps
+ * reporting a usable grant for the whole story, so the failure latch is the only
+ * thing that can stop the loop.
+ */
+export const ConnectedAccountsLoadFailureStopsRetrying: Story = {
+  args: buildSettingsScreenArgs({
+    domainSettingsState: null,
+    settingsSection: 'connected-accounts'
+  }),
+  beforeEach: () => {
+    const boundary = mockCloudflareRpcBoundary({
+      accounts: () => ({
+        body: { code: 'INTERNAL_SERVER_ERROR', error: 'Internal server error.' },
+        status: 500
+      }),
+      status: () => ({ body: cloudflareStatusUsableGrantResponse, status: 200 })
+    })
+
+    return () => {
+      boundary.restore()
+    }
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+    const boundary = requireActiveCloudflareRpcBoundaryMock()
+
+    await expect(await canvas.findByText('admin@example.com')).toBeInTheDocument()
+    await waitFor(async () => {
+      await expect(boundary.requestCount('accounts')).toBe(1)
+    })
+    await expect(await canvas.findByText('Internal server error.')).toBeInTheDocument()
+
+    // Give the effect several more render/settle passes to re-fire if unlatched.
+    await new Promise((resolve) => {
+      globalThis.setTimeout(resolve, 750)
+    })
+
+    await expect(boundary.requestCount('accounts')).toBe(1)
+  }
+}
+
+/**
+ * Drives the reconnect contract end to end through the production controller: the
+ * backend answers the accounts load with `401 CLOUDFLARE_REAUTHORIZATION_REQUIRED`
+ * and marks the grant degraded, so the re-read status renders the reconnect state
+ * instead of a generic failure message.
+ */
+export const ConnectedAccountsRuntimeAccessExpired: Story = {
+  args: buildSettingsScreenArgs({
+    domainSettingsState: null,
+    settingsSection: 'connected-accounts'
+  }),
+  beforeEach: () => {
+    const boundary = mockCloudflareRpcBoundary({
+      accounts: () => ({
+        body: {
+          code: 'CLOUDFLARE_REAUTHORIZATION_REQUIRED',
+          error: 'Cloudflare access expired. Reconnect your Cloudflare account.'
+        },
+        status: 401
+      }),
+      status: (callIndex) => ({
+        body: callIndex === 0 ? cloudflareStatusUsableGrantResponse : cloudflareStatusExpiredGrantResponse,
+        status: 200
+      })
+    })
+
+    return () => {
+      boundary.restore()
+    }
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = storyBody(canvasElement)
+    const boundary = requireActiveCloudflareRpcBoundaryMock()
+
+    await expect(await canvas.findByText('Reconnect required')).toBeInTheDocument()
+    await expect(
+      (await canvas.findAllByText('Cloudflare access expired. Reconnect your Cloudflare account.')).length
+    ).toBeGreaterThan(0)
+    await expect(await canvas.findByRole('button', { name: /^reconnect account$/i })).toBeEnabled()
+    await expect(canvas.queryByText('Connected', { selector: 'span' })).not.toBeInTheDocument()
+
+    await new Promise((resolve) => {
+      globalThis.setTimeout(resolve, 750)
+    })
+
+    await expect(boundary.requestCount('accounts')).toBe(1)
+  }
+}
+
 export const ConnectedAccountsDisconnectConfirmation: Story = {
   args: buildSettingsScreenArgs({
     domainSettingsState: {
@@ -710,6 +836,36 @@ export const DomainsMissingCloudflarePermissions: Story = {
     const canvas = await expectSettingsDomainsDialog(args, canvasElement)
 
     await expect(await canvas.findByRole('button', { name: /cloudflare/i })).toBeEnabled()
+  }
+}
+
+export const DomainsCloudflareAccessExpired: Story = {
+  args: buildSettingsScreenArgs({
+    domainSettingsState: domainSettingsExpiredCloudflareAccessState,
+    settingsSection: 'domains'
+  }),
+  play: async ({ args, canvasElement }) => {
+    const canvas = await expectSettingsDomainsDialog(args, canvasElement)
+
+    await expect(await canvas.findByText('Reconnect Cloudflare account')).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /^reconnect cloudflare$/i })).toBeEnabled()
+    await expect(
+      await canvas.findByText('Cloudflare access expired. Reconnect your Cloudflare account.')
+    ).toBeInTheDocument()
+    await expect(canvas.queryByRole('button', { name: /load domains/i })).not.toBeInTheDocument()
+  }
+}
+
+export const DomainsLoadDomainsFailed: Story = {
+  args: buildSettingsScreenArgs({
+    domainSettingsState: domainSettingsDomainsLoadFailedState,
+    settingsSection: 'domains'
+  }),
+  play: async ({ args, canvasElement }) => {
+    const canvas = await expectSettingsDomainsDialog(args, canvasElement)
+
+    await expect(await canvas.findByText('Internal server error.')).toBeInTheDocument()
+    await expect(await canvas.findByRole('button', { name: /load domains/i })).toBeEnabled()
   }
 }
 

@@ -20,6 +20,9 @@ type CloudflareZonesMock = (input: {
   headers: Headers
 }) => Promise<unknown>
 type IsCloudflareAccessErrorMock = (error: unknown) => error is Error & { status: 401 | 403 }
+type IsCloudflareReauthorizationRequiredErrorMock = (
+  error: unknown
+) => error is Error & { code: string; status: 401 }
 
 const cloudflareRpcTestState = vi.hoisted(() => ({
   applyCloudflareConnectionProvisioning: vi.fn<CloudflareProvisionMock>(),
@@ -34,6 +37,7 @@ const cloudflareRpcTestState = vi.hoisted(() => ({
   finalizeCloudflareOAuth: vi.fn<CloudflareFinalizeMock>(),
   getCloudflareStatus: vi.fn<CloudflareHeadersMock>(),
   isCloudflareAccessError: vi.fn<IsCloudflareAccessErrorMock>(),
+  isCloudflareReauthorizationRequiredError: vi.fn<IsCloudflareReauthorizationRequiredErrorMock>(),
   listConnectedCloudflareAccounts: vi.fn<CloudflareHeadersMock>(),
   listConnectedCloudflareZones: vi.fn<CloudflareZonesMock>(),
   removeCloudflareDomain: vi.fn<CloudflareRemoveDomainMock>(),
@@ -56,6 +60,7 @@ vi.mock('../cloudflare/service', () => ({
   finalizeCloudflareOAuth: cloudflareRpcTestState.finalizeCloudflareOAuth,
   getCloudflareStatus: cloudflareRpcTestState.getCloudflareStatus,
   isCloudflareAccessError: cloudflareRpcTestState.isCloudflareAccessError,
+  isCloudflareReauthorizationRequiredError: cloudflareRpcTestState.isCloudflareReauthorizationRequiredError,
   listConnectedCloudflareAccounts: cloudflareRpcTestState.listConnectedCloudflareAccounts,
   listConnectedCloudflareZones: cloudflareRpcTestState.listConnectedCloudflareZones,
   removeCloudflareDomain: cloudflareRpcTestState.removeCloudflareDomain,
@@ -74,13 +79,19 @@ describe('Cloudflare RPC routes', () => {
     cloudflareRpcTestState.finalizeCloudflareOAuth.mockReset()
     cloudflareRpcTestState.getCloudflareStatus.mockReset()
     cloudflareRpcTestState.isCloudflareAccessError.mockReset()
+    cloudflareRpcTestState.isCloudflareReauthorizationRequiredError.mockReset()
     cloudflareRpcTestState.listConnectedCloudflareAccounts.mockReset()
     cloudflareRpcTestState.listConnectedCloudflareZones.mockReset()
     cloudflareRpcTestState.removeCloudflareDomain.mockReset()
     cloudflareRpcTestState.startCloudflareOAuth.mockReset()
     cloudflareRpcTestState.isCloudflareAccessError.mockImplementation(
       (error: unknown): error is Error & { status: 401 | 403 } =>
-        error instanceof Error && error.name === 'CloudflareAccessError'
+        error instanceof Error &&
+        (error.name === 'CloudflareAccessError' || error.name === 'CloudflareReauthorizationRequiredError')
+    )
+    cloudflareRpcTestState.isCloudflareReauthorizationRequiredError.mockImplementation(
+      (error: unknown): error is Error & { code: string; status: 401 } =>
+        error instanceof Error && error.name === 'CloudflareReauthorizationRequiredError'
     )
   })
 
@@ -437,6 +448,63 @@ describe('Cloudflare RPC routes', () => {
     expect(serializedLogCalls).toContain('Cloudflare OAuth access token')
     expect(serializedLogCalls).toContain('CLOUDFLARE_TOKEN_REJECTED')
     expect(serializedLogCalls).not.toContain('stack with')
+  })
+
+  it('answers 401 with the reconnect contract when the Cloudflare grant needs reauthorization', async () => {
+    expect.hasAssertions()
+
+    const error = new Error('Cloudflare access expired. Reconnect your Cloudflare account.') as Error & {
+      code: string
+      status: 401
+    }
+    error.name = 'CloudflareReauthorizationRequiredError'
+    error.code = 'CLOUDFLARE_REAUTHORIZATION_REQUIRED'
+    error.status = 401
+    cloudflareRpcTestState.listConnectedCloudflareAccounts.mockRejectedValue(error)
+
+    const { default: cloudflare } = await import('./cloudflare')
+    const response = await cloudflare.handle(
+      new Request('https://mail.example.com/cloudflare/accounts', {
+        headers: {
+          'x-request-id': 'cloudflare_accounts_req-1'
+        }
+      })
+    )
+
+    expect(response.status).toBe(401)
+    expect(response.headers.get('www-authenticate')).toBeNull()
+    await expect(response.json()).resolves.toStrictEqual({
+      code: 'CLOUDFLARE_REAUTHORIZATION_REQUIRED',
+      error: 'Cloudflare access expired. Reconnect your Cloudflare account.',
+      supportReference: 'request-id:cloudflare_accounts_req-1'
+    })
+    expect(cloudflareRpcTestState.debugLog).toHaveBeenCalledWith(
+      'cloudflare_rpc_error %o',
+      expect.objectContaining({
+        operation: 'cloudflare_accounts',
+        publicError: {
+          code: 'CLOUDFLARE_REAUTHORIZATION_REQUIRED',
+          status: 401,
+          supportReference: 'request-id:cloudflare_accounts_req-1'
+        },
+        status: 401
+      })
+    )
+  })
+
+  it('keeps request validation failures out of the Cloudflare reauthorization contract', async () => {
+    expect.hasAssertions()
+
+    const { default: cloudflare } = await import('./cloudflare')
+    const response = await cloudflare.handle(
+      new Request('https://mail.example.com/cloudflare/zones?grantPublicId=')
+    )
+
+    expect(response.status).toBe(422)
+    await expect(response.json()).resolves.not.toMatchObject({
+      code: 'CLOUDFLARE_REAUTHORIZATION_REQUIRED'
+    })
+    expect(cloudflareRpcTestState.listConnectedCloudflareZones).not.toHaveBeenCalled()
   })
 
   it('maps unexpected Cloudflare provider failures to generic public errors', async () => {

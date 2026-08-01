@@ -33,6 +33,13 @@
       },
       "default": "./dist/server-only.mjs"
     },
+    "./cloudflare/public-errors": {
+      "import": {
+        "types": "./dist/src/cloudflare/public-errors.d.ts",
+        "import": "./dist/public-errors.mjs"
+      },
+      "default": "./dist/public-errors.mjs"
+    },
     "./routes/signin": {
       "import": {
         "types": "./dist/src/routes/signin.d.ts",

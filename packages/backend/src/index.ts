@@ -128,6 +128,7 @@ export {
   provisionCloudflareWorkerOnStartup,
   type CloudflareWorkerProvisioningResult
 } from './cloudflare/worker-provisioning'
+export * from './cloudflare/public-errors'
 export * from './cloudflare/service'
 export * from './payments/is-delayed-data'
 // HMR - invalidate importers when this module changes

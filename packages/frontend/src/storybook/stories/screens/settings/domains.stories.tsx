@@ -1,6 +1,7 @@
 import {
   DomainsAddDomainAuthorizeCloudflare as DomainsAddDomainAuthorizeCloudflareStory,
   DomainsAddDomainSelectZone as DomainsAddDomainSelectZoneStory,
+  DomainsCloudflareAccessExpired as DomainsCloudflareAccessExpiredStory,
   DomainsDenseDomainList as DomainsDenseDomainListStory,
   DomainsDomainDisconnected as DomainsDomainDisconnectedStory,
   DomainsDomainLive as DomainsDomainLiveStory,
@@ -8,6 +9,7 @@ import {
   DomainsDomainRemoved as DomainsDomainRemovedStory,
   DomainsDomainRetryBusy as DomainsDomainRetryBusyStory,
   DomainsLoadDomainsBusy as DomainsLoadDomainsBusyStory,
+  DomainsLoadDomainsFailed as DomainsLoadDomainsFailedStory,
   DomainsLoadDomains as DomainsLoadDomainsStory,
   DomainsLoadErrorMessage as DomainsLoadErrorMessageStory,
   DomainsLoading as DomainsLoadingStory,
@@ -45,9 +47,19 @@ export const DomainsMissingCloudflarePermissions: Story = {
   name: 'Missing Cloudflare permissions'
 }
 
+export const DomainsCloudflareAccessExpired: Story = {
+  ...DomainsCloudflareAccessExpiredStory,
+  name: 'Cloudflare access expired'
+}
+
 export const DomainsLoadDomains: Story = {
   ...DomainsLoadDomainsStory,
   name: 'Load domains'
+}
+
+export const DomainsLoadDomainsFailed: Story = {
+  ...DomainsLoadDomainsFailedStory,
+  name: 'Load domains failed'
 }
 
 export const DomainsLoadDomainsBusy: Story = {

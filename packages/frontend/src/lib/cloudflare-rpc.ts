@@ -1,3 +1,5 @@
+import { isCloudflareReauthorizationRequiredErrorCode } from '@main/backend/cloudflare/public-errors'
+
 import { rpc } from './rpc-api-client'
 import type {
   CloudflareAccountSummary,
@@ -15,11 +17,21 @@ type FetchCloudflareZonesInput = Pick<CloudflareAccountSummary, 'grantPublicId'>
 export class CloudflareRPCError extends Error {
   constructor(
     message: string,
-    public readonly status: number
+    public readonly status: number,
+    public readonly code: string | null = null
   ) {
     super(message)
     this.name = 'CloudflareRPCError'
   }
+}
+
+/**
+ * True when the backend classified the failure as an expired Cloudflare connected
+ * account. The code and the user-facing copy are owned by
+ * `@main/backend/cloudflare/public-errors`; this only forwards that decision.
+ */
+export function isCloudflareReauthorizationRequiredError(error: unknown): error is CloudflareRPCError {
+  return error instanceof CloudflareRPCError && isCloudflareReauthorizationRequiredErrorCode(error.code)
 }
 
 export async function fetchCloudflareStatus(): Promise<CloudflareStatusResult> {
@@ -96,7 +108,8 @@ function readCloudflareRpcResult<TResult>(
   if (result.error) {
     throw new CloudflareRPCError(
       readRpcErrorMessage(result.error) ?? `Cloudflare request failed with HTTP ${result.status}`,
-      result.status
+      result.status,
+      readRpcErrorCode(result.error)
     )
   }
 
@@ -156,6 +169,31 @@ function readRpcErrorMessage(error: unknown): string | null {
   }
 
   return readRpcErrorValueMessage(error)
+}
+
+function readRpcErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== 'object') {
+    return null
+  }
+
+  if ('value' in error) {
+    const valueCode = readRpcErrorValueCode(error.value)
+    if (valueCode) {
+      return valueCode
+    }
+  }
+
+  return readRpcErrorValueCode(error)
+}
+
+function readRpcErrorValueCode(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || !('code' in value)) {
+    return null
+  }
+
+  const code = value.code
+
+  return typeof code === 'string' && code.trim() ? code : null
 }
 
 function readRpcErrorValueMessage(value: unknown): string | null {

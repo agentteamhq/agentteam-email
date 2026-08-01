@@ -23,14 +23,26 @@ type DashboardMailControllerArgs = React.ComponentProps<typeof DashboardMailCont
  */
 export type DashboardMailControllerStoryFrameProps = Omit<
   DashboardMailControllerArgs,
-  'onSettingsOpenChange' | 'onSettingsSectionChange' | 'settingsOpen' | 'settingsSection'
+  | 'domainSettingsState'
+  | 'onSettingsOpenChange'
+  | 'onSettingsSectionChange'
+  | 'settingsOpen'
+  | 'settingsSection'
 > & {
   agentAccessView?: NonNullable<AgentAccessSettingsState['view']>
+  /**
+   * `null` hands Cloudflare settings state back to the controller so a story can
+   * exercise its real request behavior. Storybook merges component args into story
+   * args, so an omitted key would silently inherit the meta default; `null` is the
+   * explicit opt-out the frame translates back to "no injected state".
+   */
+  domainSettingsState?: DashboardMailControllerArgs['domainSettingsState'] | null
   storyPath?: string
 }
 
 export function DashboardMailControllerStoryFrame({
   agentAccessView,
+  domainSettingsState,
   routeSearch: initialRouteSearch,
   storyPath = '/dashboard/',
   ...props
@@ -88,6 +100,7 @@ export function DashboardMailControllerStoryFrame({
     <QueryClientProvider client={queryClient}>
       <DashboardMailController
         {...props}
+        domainSettingsState={domainSettingsState ?? undefined}
         agentAccessViewLoader={agentAccessViewLoader}
         integrationsViewLoader={integrationsViewLoader}
         onSettingsOpenChange={handleSettingsOpenChange}

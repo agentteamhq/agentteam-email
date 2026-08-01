@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { validateDashboardSearch } from '../lib/dashboard-search'
 import { cloudflareConnectionInputForSelectedDomain } from './dashboard-cloudflare-connection-input'
+import { shouldAutoLoadCloudflareDomains } from './dashboard-cloudflare-domains-autoload'
 import { cloudflareOAuthCompletionPath } from './dashboard-cloudflare-oauth-routing'
 import { DashboardMailController } from './dashboard-mail-client-controller'
 import type { DashboardSearch } from '../lib/dashboard-search'
@@ -217,6 +218,75 @@ describe('DashboardMailController Cloudflare OAuth routing', () => {
       accountId: 'cloudflare-account-secondary',
       grantPublicId: 'grant-secondary-public-id'
     })
+  })
+
+  /**
+   * Guard-level cover only. This package's Vitest project runs in Node with no DOM
+   * (no `jsdom`/`happy-dom` dependency) and the existing controller tests render
+   * through `renderToStaticMarkup`, which never runs effects, so the controller's
+   * effect wiring cannot be driven here. The wiring itself — latch set before
+   * `busy` clears, effect dependencies, and the reconnect re-read — is covered in a
+   * real browser by the `Screens/Settings/Integration/Connected Accounts` stories
+   * ("RPC accounts load failure stops retrying" and "RPC reauthorization required
+   * renders reconnect"), which drive the production controller against a mocked
+   * `/rpc/cloudflare/*` boundary and assert a bounded request count.
+   */
+  it('stops the automatic Cloudflare domains load after one failure instead of retrying forever', async () => {
+    expect.hasAssertions()
+    const loadCloudflareDomains = vi.fn(() => Promise.reject(new Error('Internal server error.')))
+    const autoLoadState = {
+      accountCount: 0,
+      busy: false,
+      injected: false,
+      loadFailed: false,
+      readOnly: false,
+      usableGrantCount: 1,
+      zoneCount: 0
+    }
+
+    // Replays the controller's own state-transition sequence for a failed load:
+    // `busy` is set, the load rejects, the latch is set, then `busy` is cleared,
+    // which is the render pass that re-fired the request loop before the fix.
+    for (let renderPass = 0; renderPass < 50; renderPass += 1) {
+      if (!shouldAutoLoadCloudflareDomains(autoLoadState)) {
+        continue
+      }
+
+      autoLoadState.busy = true
+      try {
+        await loadCloudflareDomains()
+      } catch {
+        autoLoadState.loadFailed = true
+      } finally {
+        autoLoadState.busy = false
+      }
+    }
+
+    expect(loadCloudflareDomains).toHaveBeenCalledTimes(1)
+    expect(autoLoadState.loadFailed).toBe(true)
+    expect(autoLoadState.busy).toBe(false)
+  })
+
+  it('resumes the Cloudflare domains load only after an explicit retry clears the failure latch', () => {
+    expect.hasAssertions()
+    const autoLoadState = {
+      accountCount: 0,
+      busy: false,
+      injected: false,
+      loadFailed: false,
+      readOnly: false,
+      usableGrantCount: 1,
+      zoneCount: 0
+    }
+
+    expect(shouldAutoLoadCloudflareDomains(autoLoadState)).toBe(true)
+    expect(shouldAutoLoadCloudflareDomains({ ...autoLoadState, loadFailed: true })).toBe(false)
+    expect(shouldAutoLoadCloudflareDomains({ ...autoLoadState, busy: true })).toBe(false)
+    expect(shouldAutoLoadCloudflareDomains({ ...autoLoadState, usableGrantCount: 0 })).toBe(false)
+    expect(shouldAutoLoadCloudflareDomains({ ...autoLoadState, accountCount: 2 })).toBe(false)
+    expect(shouldAutoLoadCloudflareDomains({ ...autoLoadState, zoneCount: 3 })).toBe(false)
+    expect(shouldAutoLoadCloudflareDomains({ ...autoLoadState, injected: true })).toBe(false)
+    expect(shouldAutoLoadCloudflareDomains({ ...autoLoadState, readOnly: true })).toBe(false)
   })
 
   it('builds Cloudflare domain setup input with the selected zone grantPublicId', () => {

@@ -18,6 +18,7 @@ import {
   fetchCloudflareStatus,
   fetchCloudflareZones,
   finalizeCloudflareOAuth,
+  isCloudflareReauthorizationRequiredError,
   provisionCloudflareConnection,
   removeCloudflareDomain,
   startCloudflareOAuth
@@ -62,6 +63,7 @@ import {
 import { mailboxAddress, mailboxLocalPart } from '../lib/mail-addresses'
 import { isMailboxAdminSectionId } from '../partials/authenticated/mailbox-admin-models'
 import { cloudflareConnectionInputForSelectedDomain } from './dashboard-cloudflare-connection-input'
+import { shouldAutoLoadCloudflareDomains } from './dashboard-cloudflare-domains-autoload'
 import { cloudflareOAuthCompletionPath } from './dashboard-cloudflare-oauth-routing'
 import { FIRST_USE_SETUP_NAV_ITEM_ID, findSystemFolder } from './dashboard-mail-sidebar-view'
 import { DashboardScreen } from './dashboard-screen'
@@ -453,6 +455,7 @@ function useDomainSettingsController({
   const [runtimeDraftDomain, setRuntimeDraftDomain] = React.useState('')
   const [runtimeMessage, setRuntimeMessage] = React.useState<string | null>(null)
   const [runtimeBusy, setRuntimeBusy] = React.useState(false)
+  const [runtimeDomainsLoadFailed, setRuntimeDomainsLoadFailed] = React.useState(false)
   const handledCloudflareIntentIdsRef = React.useRef(new Set<string>())
 
   const selectedAccount =
@@ -515,6 +518,30 @@ function useDomainSettingsController({
     setRuntimeBusy(false)
   }, [])
 
+  /**
+   * Reports a failed Cloudflare accounts/zones load. An expired connected account
+   * is answered by the backend with the reconnect contract, so the stale account
+   * and zone lists are dropped and `/rpc/cloudflare/status` is re-read to render
+   * the backend-owned reconnect state instead of a generic failure message.
+   */
+  const reportCloudflareDomainsLoadFailure = React.useCallback(
+    async (error: unknown, fallbackMessage: string) => {
+      if (!isCloudflareReauthorizationRequiredError(error)) {
+        setRuntimeMessage(errorMessage(error, fallbackMessage))
+        return
+      }
+
+      setRuntimeMessage(error.message)
+      setRuntimeAccounts([])
+      setRuntimeZones([])
+      setRuntimeSelectedGrantPublicId('')
+      setRuntimeSelectedAccountId('')
+      setRuntimeSelectedZoneId('')
+      await refreshStatus().catch(() => null)
+    },
+    [refreshStatus]
+  )
+
   React.useEffect(() => {
     if (isInjectedState) {
       return
@@ -531,12 +558,15 @@ function useDomainSettingsController({
 
   React.useEffect(() => {
     if (
-      isInjectedState ||
-      readOnly ||
-      runtimeBusy ||
-      runtimeAccounts.length > 0 ||
-      runtimeZones.length > 0 ||
-      usableCloudflareGrantPublicIds(runtimeStatus).size === 0
+      !shouldAutoLoadCloudflareDomains({
+        accountCount: runtimeAccounts.length,
+        busy: runtimeBusy,
+        injected: isInjectedState,
+        loadFailed: runtimeDomainsLoadFailed,
+        readOnly,
+        usableGrantCount: usableCloudflareGrantPublicIds(runtimeStatus).size,
+        zoneCount: runtimeZones.length
+      })
     ) {
       return
     }
@@ -546,8 +576,11 @@ function useDomainSettingsController({
         setRuntimeBusy(true)
         return loadCloudflareDomainsForStatus(runtimeStatus)
       })
-      .catch((error: unknown) => {
-        setRuntimeMessage(errorMessage(error, 'Failed to load Cloudflare domains.'))
+      .catch(async (error: unknown) => {
+        // Latch the failure first: this effect re-runs as soon as `busy` clears, and
+        // without the latch a persistent backend failure loops the request forever.
+        setRuntimeDomainsLoadFailed(true)
+        await reportCloudflareDomainsLoadFailure(error, 'Failed to load Cloudflare domains.')
       })
       .finally(() => {
         setRuntimeBusy(false)
@@ -556,8 +589,10 @@ function useDomainSettingsController({
     isInjectedState,
     loadCloudflareDomainsForStatus,
     readOnly,
+    reportCloudflareDomainsLoadFailure,
     runtimeAccounts.length,
     runtimeBusy,
+    runtimeDomainsLoadFailed,
     runtimeStatus,
     runtimeZones.length
   ])
@@ -577,6 +612,7 @@ function useDomainSettingsController({
 
     const finalize = async () => {
       setRuntimeBusy(true)
+      setRuntimeDomainsLoadFailed(false)
 
       if (oauthError) {
         throw new Error('Cloudflare authorization was not completed')
@@ -656,14 +692,22 @@ function useDomainSettingsController({
 
     setRuntimeBusy(true)
     setRuntimeMessage(null)
+    setRuntimeDomainsLoadFailed(false)
     try {
       await loadCloudflareDomainsForStatus(runtimeStatus)
     } catch (error) {
-      setRuntimeMessage(errorMessage(error, 'Failed to load Cloudflare domains.'))
+      setRuntimeDomainsLoadFailed(true)
+      await reportCloudflareDomainsLoadFailure(error, 'Failed to load Cloudflare domains.')
     } finally {
       setRuntimeBusy(false)
     }
-  }, [isInjectedState, loadCloudflareDomainsForStatus, readOnly, runtimeStatus])
+  }, [
+    isInjectedState,
+    loadCloudflareDomainsForStatus,
+    readOnly,
+    reportCloudflareDomainsLoadFailure,
+    runtimeStatus
+  ])
 
   const loadZones = React.useCallback(async () => {
     if (isInjectedState || readOnly || !runtimeSelectedAccountId || !runtimeSelectedGrantPublicId) {
@@ -672,6 +716,7 @@ function useDomainSettingsController({
 
     setRuntimeBusy(true)
     setRuntimeMessage(null)
+    setRuntimeDomainsLoadFailed(false)
     try {
       const zones = await fetchCloudflareZones({
         accountId: runtimeSelectedAccountId,
@@ -683,11 +728,19 @@ function useDomainSettingsController({
       setRuntimeSelectedZoneId(firstZone?.id ?? '')
       setRuntimeDraftDomain(firstZone?.name ?? '')
     } catch (error) {
-      setRuntimeMessage(errorMessage(error, 'Failed to load Cloudflare zones.'))
+      setRuntimeDomainsLoadFailed(true)
+      await reportCloudflareDomainsLoadFailure(error, 'Failed to load Cloudflare zones.')
     } finally {
       setRuntimeBusy(false)
     }
-  }, [isInjectedState, readOnly, runtimeSelectedAccountId, runtimeSelectedGrantPublicId, runtimeStatus])
+  }, [
+    isInjectedState,
+    readOnly,
+    reportCloudflareDomainsLoadFailure,
+    runtimeSelectedAccountId,
+    runtimeSelectedGrantPublicId,
+    runtimeStatus
+  ])
 
   const provisionDomain = React.useCallback(
     async (connectionPublicId: NonNullable<DomainSettingsState['selectedDomainPublicId']>) => {
@@ -774,6 +827,7 @@ function useDomainSettingsController({
       try {
         const nextStatus = await disconnectCloudflareConnection(grantPublicId)
         const nextSelectedDomainPublicId = selectCloudflareConnectionPublicId(nextStatus)
+        setRuntimeDomainsLoadFailed(false)
         setRuntimeStatus(nextStatus)
         setRuntimeSelectedDomainPublicId(nextSelectedDomainPublicId)
         setRuntimeMode(nextSelectedDomainPublicId ? 'domain' : 'addDomain')

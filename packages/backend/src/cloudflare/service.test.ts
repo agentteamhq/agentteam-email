@@ -1,4 +1,5 @@
 import { publicIdFromUUIDv7 } from '@main/db'
+import { APIError } from 'better-auth'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { getCloudflareRequiredOAuthScopes } from './config'
@@ -799,6 +800,217 @@ describe('Cloudflare domain authorization', () => {
   })
 })
 
+describe('Cloudflare connected-account token renewal', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.stubEnv('DATABASE_URL', 'mongodb://localhost:27017/app')
+    vi.stubEnv('ENCRYPT_SECRET_KEY', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
+    vi.stubEnv('PUBLIC_HOSTNAME', 'https://mail.example.test')
+    cloudflareServiceTestState.globals.mockReset()
+    cloudflareServiceTestState.listCloudflareAccounts.mockReset()
+    cloudflareServiceTestState.listCloudflareZones.mockReset()
+    cloudflareServiceTestState.requireAgentMailOrganizationContext.mockReset()
+    cloudflareServiceTestState.requireAgentMailOrganizationContext.mockResolvedValue({
+      ability: { cannot: vi.fn(() => false) },
+      organizationId: TEST_ORGANIZATION_ID
+    })
+  })
+
+  it('degrades the Cloudflare grant and requires reauthorization when Better Auth token renewal fails', async () => {
+    expect.hasAssertions()
+    const { globals, grant, mocks } = cloudflareTokenRenewalGlobals({
+      accessTokenError: betterAuthTokenFailure('FAILED_TO_GET_ACCESS_TOKEN')
+    })
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    const { listConnectedCloudflareAccounts } = await import('./service')
+
+    await expect(listConnectedCloudflareAccounts(new Headers())).rejects.toMatchObject({
+      code: 'CLOUDFLARE_REAUTHORIZATION_REQUIRED',
+      message: 'Cloudflare access expired. Reconnect your Cloudflare account.',
+      name: 'CloudflareReauthorizationRequiredError',
+      status: 401
+    })
+
+    expect(mocks.grantUpdateOne).toHaveBeenCalledWith(
+      { _id: TEST_OLDER_GRANT_ID },
+      {
+        $set: {
+          lastErrorCode: 'CLOUDFLARE_REAUTHORIZATION_REQUIRED',
+          lastErrorMessage: 'Cloudflare access expired. Reconnect your Cloudflare account.',
+          lastTokenCheckAt: expect.any(Date),
+          status: 'degraded'
+        }
+      }
+    )
+    expect(grant.status).toBe('degraded')
+    expect(cloudflareServiceTestState.listCloudflareAccounts).not.toHaveBeenCalled()
+  })
+
+  it.each(['FAILED_TO_REFRESH_ACCESS_TOKEN', 'REFRESH_TOKEN_NOT_FOUND', 'ACCOUNT_NOT_FOUND'] as const)(
+    'degrades the Cloudflare grant for the %s Better Auth credential failure',
+    async (betterAuthErrorCode) => {
+      expect.hasAssertions()
+      const { globals, grant } = cloudflareTokenRenewalGlobals({
+        accessTokenError: betterAuthTokenFailure(betterAuthErrorCode)
+      })
+      cloudflareServiceTestState.globals.mockResolvedValue(globals)
+      const { listConnectedCloudflareAccounts } = await import('./service')
+
+      await expect(listConnectedCloudflareAccounts(new Headers())).rejects.toMatchObject({
+        name: 'CloudflareReauthorizationRequiredError',
+        status: 401
+      })
+      expect(grant.status).toBe('degraded')
+    }
+  )
+
+  it('keeps unexpected Cloudflare token failures unclassified so they stay server errors', async () => {
+    expect.hasAssertions()
+    const { globals, grant, mocks } = cloudflareTokenRenewalGlobals({
+      accessTokenError: new Error('better auth storage is unavailable')
+    })
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    const { listConnectedCloudflareAccounts } = await import('./service')
+
+    await expect(listConnectedCloudflareAccounts(new Headers())).rejects.toThrow(
+      'better auth storage is unavailable'
+    )
+    expect(grant.status).toBe('active')
+    expect(mocks.grantUpdateOne).not.toHaveBeenCalled()
+  })
+
+  it('keeps Better Auth provider-configuration failures unclassified so they stay server errors', async () => {
+    expect.hasAssertions()
+    const { globals, grant, mocks } = cloudflareTokenRenewalGlobals({
+      accessTokenError: betterAuthTokenFailure('PROVIDER_NOT_SUPPORTED')
+    })
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    const { listConnectedCloudflareAccounts } = await import('./service')
+
+    await expect(listConnectedCloudflareAccounts(new Headers())).rejects.toMatchObject({
+      name: 'APIError'
+    })
+    expect(grant.status).toBe('active')
+    expect(mocks.grantUpdateOne).not.toHaveBeenCalled()
+  })
+
+  it('requires reauthorization for an already degraded grant instead of reporting a missing connection', async () => {
+    expect.hasAssertions()
+    const { globals, mocks } = cloudflareTokenRenewalGlobals({ grantStatus: 'degraded' })
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    const { listConnectedCloudflareAccounts } = await import('./service')
+
+    await expect(listConnectedCloudflareAccounts(new Headers())).rejects.toMatchObject({
+      code: 'CLOUDFLARE_REAUTHORIZATION_REQUIRED',
+      name: 'CloudflareReauthorizationRequiredError',
+      status: 401
+    })
+    expect(mocks.authGetAccessToken).not.toHaveBeenCalled()
+    expect(mocks.grantFindOne).toHaveBeenCalledWith({
+      organizationId: TEST_ORGANIZATION_ID,
+      status: 'degraded',
+      userId: TEST_USER_ID
+    })
+  })
+
+  it('requires reauthorization when zones are requested for a degraded grant public id', async () => {
+    expect.hasAssertions()
+    const { globals, mocks } = cloudflareTokenRenewalGlobals({ grantStatus: 'degraded' })
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    const { listConnectedCloudflareZones } = await import('./service')
+
+    await expect(
+      listConnectedCloudflareZones({
+        cloudflareAccountId: 'cf-account-old',
+        grantPublicId: TEST_OLDER_GRANT_PUBLIC_ID,
+        headers: new Headers()
+      })
+    ).rejects.toMatchObject({
+      code: 'CLOUDFLARE_REAUTHORIZATION_REQUIRED',
+      status: 401
+    })
+    expect(cloudflareServiceTestState.listCloudflareZones).not.toHaveBeenCalled()
+    expect(mocks.authGetAccessToken).not.toHaveBeenCalled()
+  })
+
+  it('publishes a degraded grant as reconnect-required product state without provider diagnostics', async () => {
+    expect.hasAssertions()
+    const { cloudflareOAuthGrantPublicView } = await import('./public-views')
+
+    const grantView = cloudflareOAuthGrantPublicView({
+      _id: TEST_OLDER_GRANT_ID,
+      betterAuthAccountId: '01960000-0000-7000-8000-000000000041',
+      cloudflareEmail: 'admin@example.test',
+      cloudflareUserId: 'cloudflare-user-old',
+      createdAt: new Date('2026-07-06T10:00:00.000Z'),
+      grantedScopes: currentCloudflareScopes(),
+      lastErrorCode: 'CLOUDFLARE_REAUTHORIZATION_REQUIRED',
+      lastErrorMessage: 'Cloudflare access expired. Reconnect your Cloudflare account.',
+      lastRefreshAt: null,
+      lastTokenCheckAt: new Date('2026-07-31T10:00:00.000Z'),
+      organizationId: TEST_ORGANIZATION_ID,
+      requiredScopes: currentCloudflareScopes(),
+      status: 'degraded',
+      updatedAt: new Date('2026-07-31T10:00:00.000Z'),
+      userId: TEST_USER_ID
+    } as never)
+
+    expect(grantView).toStrictEqual({
+      cloudflareEmail: 'admin@example.test',
+      isUsable: false,
+      lastErrorMessage: 'Cloudflare access expired. Reconnect your Cloudflare account.',
+      missingRequiredScopeCount: 0,
+      publicId: TEST_OLDER_GRANT_PUBLIC_ID,
+      requiresReconnect: true,
+      status: 'degraded'
+    })
+    expect(JSON.stringify(grantView)).not.toContain('cloudflare-user-old')
+    expect(JSON.stringify(grantView)).not.toContain('FAILED_TO_GET_ACCESS_TOKEN')
+  })
+
+  it('clears the degraded grant state when the Cloudflare account is reconnected', async () => {
+    expect.hasAssertions()
+    const degradedGrant = {
+      _id: TEST_CURRENT_USER_GRANT_ID,
+      betterAuthAccountId: '01960000-0000-7000-8000-000000000044',
+      cloudflareEmail: 'admin@example.test',
+      cloudflareUserId: 'cloudflare-user-shared',
+      createdAt: new Date('2026-07-06T10:00:00.000Z'),
+      grantedScopes: currentCloudflareScopes(),
+      lastErrorCode: 'CLOUDFLARE_REAUTHORIZATION_REQUIRED',
+      lastErrorMessage: 'Cloudflare access expired. Reconnect your Cloudflare account.',
+      lastRefreshAt: null,
+      lastTokenCheckAt: new Date('2026-07-31T10:00:00.000Z'),
+      organizationId: TEST_ORGANIZATION_ID,
+      requiredScopes: currentCloudflareScopes(),
+      status: 'degraded',
+      updatedAt: new Date('2026-07-31T10:00:00.000Z'),
+      userId: TEST_USER_ID
+    }
+    const { globals } = cloudflareOAuthFinalizeGlobals({ currentUserGrant: degradedGrant })
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    const { finalizeCloudflareOAuth } = await import('./service')
+
+    const result = await finalizeCloudflareOAuth({
+      headers: new Headers(),
+      intentPublicId: TEST_INTENT_PUBLIC_ID
+    })
+
+    expect(result.grant).toMatchObject({
+      isUsable: true,
+      lastErrorMessage: null,
+      publicId: TEST_CURRENT_USER_GRANT_PUBLIC_ID,
+      requiresReconnect: false,
+      status: 'active'
+    })
+    expect(degradedGrant).toMatchObject({
+      lastErrorCode: null,
+      lastErrorMessage: null,
+      status: 'active'
+    })
+  })
+})
+
 describe('Cloudflare disconnect service', () => {
   beforeEach(() => {
     vi.resetModules()
@@ -842,7 +1054,7 @@ describe('Cloudflare disconnect service', () => {
     expect(mocks.grantFindOne).toHaveBeenCalledWith({
       _id: TEST_OLDER_GRANT_ID,
       organizationId: TEST_ORGANIZATION_ID,
-      status: 'active',
+      status: { $in: ['active', 'degraded'] },
       userId: TEST_USER_ID
     })
     expect(mocks.grantUpdateOne).toHaveBeenCalledWith(
@@ -876,6 +1088,153 @@ describe('Cloudflare disconnect service', () => {
       expect.any(Object),
       { reason: 'cloudflare-disconnect' }
     )
+  })
+
+  it('disconnects a degraded Cloudflare account so an expired grant stays removable', async () => {
+    expect.hasAssertions()
+    const { globals, mocks } = cloudflareDisconnectGlobals({ olderGrant: { status: 'degraded' } })
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    cloudflareServiceTestState.requireAgentMailOrganizationContext.mockResolvedValue({
+      ability: { cannot: vi.fn(() => false) },
+      organizationId: TEST_ORGANIZATION_ID
+    })
+    const { disconnectCloudflare } = await import('./service')
+
+    await expect(
+      disconnectCloudflare({
+        grantPublicId: TEST_OLDER_GRANT_PUBLIC_ID,
+        headers: new Headers()
+      })
+    ).resolves.toMatchObject({
+      grants: expect.arrayContaining([
+        expect.objectContaining({
+          publicId: TEST_OLDER_GRANT_PUBLIC_ID,
+          status: 'revoked'
+        })
+      ])
+    })
+
+    expect(mocks.grantUpdateOne).toHaveBeenCalledWith(
+      { _id: TEST_OLDER_GRANT_ID },
+      {
+        $set: {
+          lastErrorCode: null,
+          lastErrorMessage: null,
+          status: 'revoked'
+        }
+      }
+    )
+    expect(mocks.authUnlinkAccount).toHaveBeenCalled()
+  })
+
+  it('disconnects a Cloudflare account that is missing required scopes', async () => {
+    expect.hasAssertions()
+    const { globals, mocks } = cloudflareDisconnectGlobals({ olderGrant: { grantedScopes: [] } })
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    cloudflareServiceTestState.requireAgentMailOrganizationContext.mockResolvedValue({
+      ability: { cannot: vi.fn(() => false) },
+      organizationId: TEST_ORGANIZATION_ID
+    })
+    const { disconnectCloudflare } = await import('./service')
+
+    await expect(
+      disconnectCloudflare({
+        grantPublicId: TEST_OLDER_GRANT_PUBLIC_ID,
+        headers: new Headers()
+      })
+    ).resolves.toMatchObject({
+      grants: expect.arrayContaining([
+        expect.objectContaining({
+          publicId: TEST_OLDER_GRANT_PUBLIC_ID,
+          status: 'revoked'
+        })
+      ])
+    })
+    expect(mocks.authUnlinkAccount).toHaveBeenCalled()
+  })
+
+  it('rejects disconnecting an already revoked Cloudflare grant', async () => {
+    expect.hasAssertions()
+    const { globals, mocks } = cloudflareDisconnectGlobals({ olderGrant: { status: 'revoked' } })
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    cloudflareServiceTestState.requireAgentMailOrganizationContext.mockResolvedValue({
+      ability: { cannot: vi.fn(() => false) },
+      organizationId: TEST_ORGANIZATION_ID
+    })
+    const { disconnectCloudflare } = await import('./service')
+
+    await expect(
+      disconnectCloudflare({
+        grantPublicId: TEST_OLDER_GRANT_PUBLIC_ID,
+        headers: new Headers()
+      })
+    ).rejects.toMatchObject({
+      message: 'Cloudflare OAuth grant is not active',
+      name: 'CloudflareAccessError',
+      status: 403
+    })
+    expect(mocks.grantUpdateOne).not.toHaveBeenCalled()
+    expect(mocks.connectionUpdateMany).not.toHaveBeenCalled()
+    expect(mocks.authUnlinkAccount).not.toHaveBeenCalled()
+  })
+
+  it('rejects disconnecting a degraded Cloudflare grant owned by another user', async () => {
+    expect.hasAssertions()
+    const { globals, mocks } = cloudflareDisconnectGlobals({
+      olderGrant: { status: 'degraded', userId: TEST_OTHER_USER_ID }
+    })
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    cloudflareServiceTestState.requireAgentMailOrganizationContext.mockResolvedValue({
+      ability: { cannot: vi.fn(() => false) },
+      organizationId: TEST_ORGANIZATION_ID
+    })
+    const { disconnectCloudflare } = await import('./service')
+
+    await expect(
+      disconnectCloudflare({
+        grantPublicId: TEST_OLDER_GRANT_PUBLIC_ID,
+        headers: new Headers()
+      })
+    ).rejects.toMatchObject({
+      message: 'Cloudflare OAuth grant is not active',
+      name: 'CloudflareAccessError',
+      status: 403
+    })
+    expect(mocks.grantFindOne).toHaveBeenCalledWith({
+      _id: TEST_OLDER_GRANT_ID,
+      organizationId: TEST_ORGANIZATION_ID,
+      status: { $in: ['active', 'degraded'] },
+      userId: TEST_USER_ID
+    })
+    expect(mocks.grantUpdateOne).not.toHaveBeenCalled()
+    expect(mocks.authUnlinkAccount).not.toHaveBeenCalled()
+  })
+
+  it('rejects disconnecting a degraded Cloudflare grant owned by another organization', async () => {
+    expect.hasAssertions()
+    const { globals, mocks } = cloudflareDisconnectGlobals({
+      olderGrant: { status: 'degraded', organizationId: TEST_OTHER_ORGANIZATION_ID }
+    })
+    cloudflareServiceTestState.globals.mockResolvedValue(globals)
+    cloudflareServiceTestState.requireAgentMailOrganizationContext.mockResolvedValue({
+      ability: { cannot: vi.fn(() => false) },
+      organizationId: TEST_ORGANIZATION_ID
+    })
+    const { disconnectCloudflare } = await import('./service')
+
+    await expect(
+      disconnectCloudflare({
+        grantPublicId: TEST_OLDER_GRANT_PUBLIC_ID,
+        headers: new Headers()
+      })
+    ).rejects.toMatchObject({
+      message: 'Cloudflare OAuth grant is not active',
+      name: 'CloudflareAccessError',
+      status: 403
+    })
+    expect(mocks.grantUpdateOne).not.toHaveBeenCalled()
+    expect(mocks.connectionUpdateMany).not.toHaveBeenCalled()
+    expect(mocks.authUnlinkAccount).not.toHaveBeenCalled()
   })
 
   it('rejects omitted grant public ids after authz without selecting the newest active grant', async () => {
@@ -1499,6 +1858,7 @@ describe('Cloudflare control raw sending', () => {
 const TEST_ORGANIZATION_ID = '01960000-0000-7000-8000-000000000010'
 const TEST_USER_ID = '01960000-0000-7000-8000-000000000011'
 const TEST_OTHER_USER_ID = '01960000-0000-7000-8000-000000000012'
+const TEST_OTHER_ORGANIZATION_ID = '01960000-0000-7000-8000-000000000019'
 const TEST_INTENT_ID = '01960000-0000-7000-8000-000000000013'
 const TEST_INTENT_PUBLIC_ID = publicIdFromUUIDv7(TEST_INTENT_ID)
 const TEST_OLDER_GRANT_ID = '01960000-0000-7000-8000-000000000021'
@@ -1578,9 +1938,12 @@ function cloudflareOAuthStartGlobals() {
   }
 }
 
-function cloudflareOAuthFinalizeGlobals() {
+function cloudflareOAuthFinalizeGlobals({
+  currentUserGrant
+}: { currentUserGrant?: Record<string, unknown> } = {}) {
   const now = new Date('2026-06-23T10:00:00.000Z')
   const grants = [
+    ...(currentUserGrant ? [currentUserGrant as Record<string, unknown> & { _id: string }] : []),
     {
       _id: TEST_OTHER_USER_GRANT_ID,
       betterAuthAccountId: '01960000-0000-7000-8000-000000000043',
@@ -1641,7 +2004,7 @@ function cloudflareOAuthFinalizeGlobals() {
           ...update.$setOnInsert,
           ...update.$set
         }
-        grants.push(insertedGrant as (typeof grants)[number])
+        grants.push(insertedGrant)
         return execQuery(insertedGrant)
       }
     ),
@@ -1836,8 +2199,94 @@ function cloudflareAuthorizationGlobals() {
   }
 }
 
-function cloudflareDisconnectGlobals() {
-  const grants = [cloudflareSelectionGrant('older'), cloudflareSelectionGrant('newer')]
+function betterAuthTokenFailure(code: string): Error {
+  return APIError.from('BAD_REQUEST', {
+    code,
+    message: 'Failed to get a valid access token'
+  })
+}
+
+function cloudflareTokenRenewalGlobals({
+  accessTokenError,
+  grantStatus = 'active'
+}: {
+  accessTokenError?: Error
+  grantStatus?: 'active' | 'degraded'
+} = {}) {
+  const grant = { ...cloudflareSelectionGrant('older'), status: grantStatus as string }
+  const mocks = {
+    authGetAccessToken: vi.fn(() =>
+      accessTokenError
+        ? Promise.reject(accessTokenError)
+        : Promise.resolve({ accessToken: 'token-for-cloudflare-user-old' })
+    ),
+    authGetSession: vi.fn(() =>
+      Promise.resolve({
+        session: {
+          activeOrganizationId: TEST_ORGANIZATION_ID,
+          id: 'session-1'
+        },
+        user: {
+          id: TEST_USER_ID
+        }
+      })
+    ),
+    grantFind: vi.fn((query: Record<string, unknown>) =>
+      sortedQuery(recordMatchesQuery(grant, query) ? [grant] : [])
+    ),
+    grantFindOne: vi.fn((query: Record<string, unknown>) =>
+      execQuery(recordMatchesQuery(grant, query) ? grant : null)
+    ),
+    grantUpdateOne: vi.fn((query: Record<string, unknown>, update: { $set: Record<string, unknown> }) => {
+      if (recordMatchesQuery(grant, query)) {
+        Object.assign(grant, update.$set)
+      }
+      return execQuery({ modifiedCount: 1 })
+    }),
+    memberFindOne: vi.fn(() => execQuery({ role: 'member' })),
+    organizationFindById: vi.fn(() => execQuery({ _id: TEST_ORGANIZATION_ID }))
+  }
+
+  return {
+    globals: {
+      auth: {
+        api: {
+          getAccessToken: mocks.authGetAccessToken,
+          getSession: mocks.authGetSession
+        }
+      },
+      db: {
+        models: {
+          cloudflareOAuthGrant: {
+            find: mocks.grantFind,
+            findOne: mocks.grantFindOne,
+            updateOne: mocks.grantUpdateOne
+          },
+          member: {
+            findOne: mocks.memberFindOne
+          },
+          organization: {
+            findById: mocks.organizationFindById
+          }
+        }
+      }
+    },
+    grant,
+    mocks
+  }
+}
+
+function cloudflareDisconnectGlobals({
+  olderGrant
+}: {
+  olderGrant?: {
+    grantedScopes?: string[]
+    organizationId?: string
+    status?: string
+    userId?: string
+  }
+} = {}) {
+  const grants = [{ ...cloudflareSelectionGrant('older'), ...olderGrant }, cloudflareSelectionGrant('newer')]
   const connections = [cloudflareSelectionConnection()]
   const mocks = {
     authGetSession: vi.fn(() =>
@@ -2350,7 +2799,14 @@ function execQuery(value: unknown) {
 }
 
 function recordMatchesQuery(record: Record<string, unknown>, query: Record<string, unknown>): boolean {
-  return Object.entries(query).every(([key, value]) => record[key] === value)
+  return Object.entries(query).every(([key, value]) => {
+    if (value && typeof value === 'object' && '$in' in value) {
+      const allowedValues = value.$in
+      return Array.isArray(allowedValues) && allowedValues.includes(record[key])
+    }
+
+    return record[key] === value
+  })
 }
 
 function workerDeployment() {

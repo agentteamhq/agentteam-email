@@ -1,3 +1,4 @@
+import { HttpStatusCode } from '@main/common'
 import debug from 'debug'
 import { Elysia, t } from 'elysia'
 
@@ -9,12 +10,17 @@ import {
   finalizeCloudflareOAuth,
   getCloudflareStatus,
   isCloudflareAccessError,
+  isCloudflareReauthorizationRequiredError,
   listConnectedCloudflareAccounts,
   listConnectedCloudflareZones,
   removeCloudflareDomain,
   startCloudflareOAuth
 } from '../cloudflare/service'
 import { createSafeErrorLogDetails, createSafeRequestLogDetails } from '../auth/log-redaction'
+import {
+  CLOUDFLARE_REAUTHORIZATION_REQUIRED_ERROR_CODE,
+  CLOUDFLARE_REAUTHORIZATION_REQUIRED_MESSAGE
+} from '../cloudflare/public-errors'
 import {
   createSafeRequestCorrelationLogDetails,
   mapPublicErrorResponse,
@@ -27,7 +33,9 @@ import type {
   CloudflareZoneSummary,
   FinalizeCloudflareOAuthResult
 } from '../cloudflare/service'
-import type { PublicErrorResponseBody } from '../public-error-response'
+import type { PublicErrorResponse, PublicErrorResponseBody } from '../public-error-response'
+
+const HTTP_STATUS_INTERNAL_SERVER_ERROR = 500
 
 const cloudflareErrorResponseSchemas = {
   401: publicErrorResponseBodySchema,
@@ -350,8 +358,7 @@ function cloudflareErrorResponse(
   request: Request,
   operation: CloudflareRpcOperation
 ): PublicErrorResponseBody {
-  const status = isCloudflareAccessError(error) ? error.status : 500
-  const publicError = mapPublicErrorResponse({ code: status, error, request })
+  const publicError = cloudflarePublicErrorResponse(error, request)
   set.status = publicError.status
   log('cloudflare_rpc_error %o', {
     error: createSafeErrorLogDetails(error),
@@ -366,6 +373,37 @@ function cloudflareErrorResponse(
     status: publicError.status
   })
   return publicError.body
+}
+
+/**
+ * Maps Cloudflare service failures onto the public RPC error contract.
+ *
+ * An expired or otherwise unusable Cloudflare connected-account credential is an
+ * invalid-credential condition, so it answers `401` with the stable
+ * `CLOUDFLARE_REAUTHORIZATION_REQUIRED` code and actionable reconnect copy. It
+ * carries no `WWW-Authenticate` challenge because the browser session that
+ * authenticated the request is still valid; the failed credential is the upstream
+ * provider grant. Request-validation failures never reach this helper: Elysia
+ * rejects them at the route schema boundary with `422`. Anything unclassified
+ * keeps the generic `500` mapping.
+ */
+function cloudflarePublicErrorResponse(error: unknown, request: Request): PublicErrorResponse {
+  if (isCloudflareReauthorizationRequiredError(error)) {
+    const mapped = mapPublicErrorResponse({ code: HttpStatusCode.Unauthorized, error, request })
+
+    return {
+      body: {
+        ...mapped.body,
+        code: CLOUDFLARE_REAUTHORIZATION_REQUIRED_ERROR_CODE,
+        error: CLOUDFLARE_REAUTHORIZATION_REQUIRED_MESSAGE
+      },
+      status: mapped.status
+    }
+  }
+
+  const status = isCloudflareAccessError(error) ? error.status : HTTP_STATUS_INTERNAL_SERVER_ERROR
+
+  return mapPublicErrorResponse({ code: status, error, request })
 }
 
 function getSetCookieHeaders(headers: Headers): string[] {

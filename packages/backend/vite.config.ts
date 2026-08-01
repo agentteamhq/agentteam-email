@@ -25,6 +25,7 @@ export default defineConfig({
         'src/vars.public.ts',
         'src/vars.build.ts',
         'src/server-only.ts',
+        'src/cloudflare/public-errors.ts',
         'src/routes/signin.ts',
         'src/routes/webapp.ts'
       ],

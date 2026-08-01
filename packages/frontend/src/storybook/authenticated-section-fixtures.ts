@@ -50,6 +50,21 @@ const missingPermissionCloudflareGrant = {
   requiresReconnect: true
 } satisfies CloudflareGrantFixture
 
+/**
+ * Mirrors `/rpc/cloudflare/status` after Cloudflare token renewal failed: the
+ * backend marks the grant `degraded` and publishes the reconnect message.
+ */
+const expiredCloudflareGrant = {
+  ...activeCloudflareGrant,
+  publicId: cloudflareGrantPublicId('9m4tLz6W2qF7bH3rXe8VkN'),
+  cloudflareEmail: 'admin@example.com',
+  isUsable: false,
+  lastErrorMessage: 'Cloudflare access expired. Reconnect your Cloudflare account.',
+  missingRequiredScopeCount: 0,
+  requiresReconnect: true,
+  status: 'degraded'
+} satisfies CloudflareGrantFixture
+
 const connectedCloudflareAccounts = [
   {
     grantPublicId: activeCloudflareGrant.publicId,
@@ -200,6 +215,41 @@ export const domainSettingsMissingCloudflarePermissionsState = {
     connections: [],
     grants: [missingPermissionCloudflareGrant]
   }
+} satisfies DomainSettingsState
+
+/**
+ * `/rpc/cloudflare/status` response bodies for stories that drive the settings
+ * controller through the real RPC boundary instead of injected state.
+ */
+export const cloudflareStatusUsableGrantResponse = {
+  connections: [],
+  grants: [activeCloudflareGrant]
+} satisfies DomainSettingsStatus
+
+export const cloudflareStatusExpiredGrantResponse = {
+  connections: [],
+  grants: [expiredCloudflareGrant]
+} satisfies DomainSettingsStatus
+
+export const domainSettingsExpiredCloudflareAccessState = {
+  message: 'Cloudflare access expired. Reconnect your Cloudflare account.',
+  mode: 'addDomain',
+  status: {
+    connections: [],
+    grants: [expiredCloudflareGrant]
+  }
+} satisfies DomainSettingsState
+
+export const domainSettingsDomainsLoadFailedState = {
+  // Matches the public error body the backend returns for an unclassified failure:
+  // the controller renders `error` from the RPC response, not a synthesized string.
+  message: 'Internal server error.',
+  mode: 'addDomain',
+  status: {
+    connections: [],
+    grants: [activeCloudflareGrant]
+  },
+  zones: []
 } satisfies DomainSettingsState
 
 export const domainSettingsLoadDomainsState = {
