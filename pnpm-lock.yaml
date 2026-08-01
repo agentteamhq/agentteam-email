@@ -384,8 +384,8 @@ catalogs:
       specifier: 4.4.3
       version: 4.4.3
     dompurify:
-      specifier: 3.4.11
-      version: 3.4.11
+      specifier: 3.4.12
+      version: 3.4.12
     elysia:
       specifier: 1.4.29
       version: 1.4.29
@@ -910,7 +910,7 @@ importers:
         version: link:../../packages/db
       '@main/frontend':
         specifier: workspace:*
-        version: file:packages/frontend(0abba931f717d56ad4d53d7d8960da55)
+        version: file:packages/frontend(d2b4b64b80f3acadc0fde5c569b6adfb)
       '@main/shutdown-manager':
         specifier: workspace:*
         version: link:../../packages/shutdown-manager
@@ -1117,7 +1117,7 @@ importers:
         version: 4.4.3(supports-color@10.2.2)
       dompurify:
         specifier: 'catalog:'
-        version: 3.4.11
+        version: 3.4.12
       elysia:
         specifier: 'catalog:'
         version: 1.4.29(e11b0d924cd98d6f1819b4a553c5cb0c)
@@ -1985,7 +1985,7 @@ importers:
         version: 4.4.3(supports-color@10.2.2)
       dompurify:
         specifier: 'catalog:'
-        version: 3.4.11
+        version: 3.4.12
       elysia:
         specifier: 'catalog:'
         version: 1.4.29(e11b0d924cd98d6f1819b4a553c5cb0c)
@@ -7101,8 +7101,8 @@ packages:
     resolution: {integrity: sha512-cgwlv/1iFQiFnU96XXgROh8xTeetsnJiDsTc7TYCLFd9+/WNkIqPTxiM/8pSd8VIrhXGTf1Ny1q1hquVqDJB5w==}
     engines: {node: '>= 4'}
 
-  dompurify@3.4.11:
-    resolution: {integrity: sha512-zhlUV12GsaRzMsf9q5M254YhA4+VuF0fG+QFqu6aYpoGlKtz+w8//jBcGVYBgQkR5GHjUomejY84AV+/uPbWdw==}
+  dompurify@3.4.12:
+    resolution: {integrity: sha512-zQvGet8Z2sWbQhCmfFz/T5QWH2oBmjnqK3qvOjaqaNLrLEF912WamU+ohnTp0TCep/MFVHpdJuCZEdFOdTnEFg==}
 
   domutils@3.2.2:
     resolution: {integrity: sha512-6kZKyUajlDuqlHKVX1w7gyslj9MPIXzIFiz/rGu35uC1wMi+kMhQwGhl4lt9unC9Vb9INnY9Z3/ZA3+FhASLaw==}
@@ -10777,7 +10777,7 @@ snapshots:
       uuid: 14.0.0
       zod: 4.4.3
 
-  '@main/frontend@file:packages/frontend(0abba931f717d56ad4d53d7d8960da55)':
+  '@main/frontend@file:packages/frontend(d2b4b64b80f3acadc0fde5c569b6adfb)':
     dependencies:
       '@agendajs/mongo-backend': 4.0.2(f85595a9325ffde548f7db927ea1b6a7)
       '@base-ui/react': 1.6.0(6dab3ab8b285aa871f9aa69505023584)
@@ -10875,7 +10875,7 @@ snapshots:
       d3-shape: 3.2.0
       date-fns: 4.4.0
       debug: 4.4.3(supports-color@10.2.2)
-      dompurify: 3.4.11
+      dompurify: 3.4.12
       elysia: 1.4.29(e11b0d924cd98d6f1819b4a553c5cb0c)
       email-addresses: 5.0.0
       embla-carousel-react: 8.6.0(react@19.2.7)
@@ -14420,7 +14420,7 @@ snapshots:
     dependencies:
       domelementtype: 2.3.0
 
-  dompurify@3.4.11:
+  dompurify@3.4.12:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
